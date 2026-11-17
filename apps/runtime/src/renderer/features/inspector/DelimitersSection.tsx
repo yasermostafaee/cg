@@ -311,12 +311,12 @@ function RenameDelimiterDialog({
     <RecordDialog
       title="Rename delimiter"
       confirmLabel="Save name"
-      confirmDisabled={saving}
+      confirmDisabled={saving || label.trim() === delimiter.label}
       onCancel={() => {
         if (!saving) onClose();
       }}
       onSubmit={() => {
-        if (saving) return null;
+        if (saving || label.trim() === delimiter.label) return null;
         if (label.trim() === '')
           return 'Give the delimiter a name — that is what the picker shows.';
         setSaving(true);

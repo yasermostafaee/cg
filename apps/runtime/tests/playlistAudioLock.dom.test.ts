@@ -136,6 +136,7 @@ describe('the LIVE PLATES strip', () => {
     const el = mount(
       createElement(PlateAudioStrip, {
         row: row('guest-1', 60),
+        plateName: 'Plate 1',
         siblings: ['guest-1', 'guest-2'],
         refusal: undefined,
         onApply: () => Promise.resolve({ ok: true, refused: [] }),
@@ -154,6 +155,7 @@ describe('the LIVE PLATES strip', () => {
     const camera = mount(
       createElement(PlateAudioStrip, {
         row: row('guest-2', 61),
+        plateName: 'Plate 2',
         siblings: ['guest-1', 'guest-2'],
         refusal: undefined,
         onApply: () => Promise.resolve({ ok: true, refused: [] }),

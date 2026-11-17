@@ -544,18 +544,15 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const thirdShot = editorStage.locator('[data-layout-preview-shot][data-frame-number="3"]');
     await editor.getByLabel('Border color', { exact: true }).fill('#fec352');
     await editor.getByLabel('Border width (px)', { exact: true }).fill('18');
-    await editor.getByLabel('Border radius (px)', { exact: true }).fill('36');
+    await expect(editor.getByLabel('Border radius (px)', { exact: true })).toHaveCount(0);
     const authoredBorder = thirdShot.locator('.cg-live-layout-shot-border');
     await expect(authoredBorder).toHaveCSS('border-top-color', 'rgb(254, 195, 82)');
-    await expect(authoredBorder).toHaveCSS('border-top-left-radius', /[1-9][0-9.]*px/);
+    await expect(authoredBorder).toHaveCSS('border-top-left-radius', '0px');
     await expect(thirdShot).toHaveCSS('outline-offset', '2px');
     await expect(thirdShot).toHaveCSS('outline-style', 'solid');
     const pictureClip = thirdShot.locator('.cg-live-layout-shot-source');
     await expect(pictureClip).toHaveCSS('overflow', 'hidden');
-    await expect(pictureClip).toHaveCSS(
-      'border-top-left-radius',
-      await authoredBorder.evaluate((node) => getComputedStyle(node).borderTopLeftRadius),
-    );
+    await expect(pictureClip).toHaveCSS('border-top-left-radius', '0px');
     const pictureWindows = thirdShot.locator('.cg-live-layout-shot-picture');
     const windowRatios = (window: Locator) =>
       window.evaluate((node) => {
@@ -868,7 +865,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     ]);
     await expect(push).toHaveCount(0);
     const focusedBorder = previewFrame.locator(thirdPlateBorder).filter({ visible: true });
-    await expect(focusedBorder).toHaveCSS('border-top-left-radius', '36px');
+    await expect(focusedBorder).toHaveCSS('border-top-left-radius', '0px');
     await localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }).click();
     const outgoing = push.locator('[data-cg-pvw-focus-plane="outgoing"]');
     await Promise.all([
@@ -1223,28 +1220,21 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       const x = width / node.offsetWidth;
       const y = height / node.offsetHeight;
       const style = getComputedStyle(node);
-      const [rx, ry = rx] = style.borderTopLeftRadius.split(' ').map(Number.parseFloat);
       return {
         left: Number.parseFloat(style.borderLeftWidth) * x,
         right: Number.parseFloat(style.borderRightWidth) * x,
         top: Number.parseFloat(style.borderTopWidth) * y,
-        radiusX: (rx ?? 0) * x,
-        radiusY: (ry ?? 0) * y,
       };
     });
     expect(borderEdges.top).toBeGreaterThan(0);
     expect(Math.abs(borderEdges.left - borderEdges.top)).toBeLessThan(0.5);
     expect(Math.abs(borderEdges.right - borderEdges.top)).toBeLessThan(0.5);
-    expect(borderEdges.radiusY).toBeGreaterThan(0);
-    expect(Math.abs(borderEdges.radiusX - borderEdges.radiusY)).toBeLessThan(0.5);
+    await expect(portraitBorder).toHaveCSS('border-top-left-radius', '0px');
     const portraitClip = transparentFrame
       .locator(`[data-cg-element-id="${portraitFrameId}-plate"]`)
       .filter({ visible: true });
     await expect(portraitClip).toHaveCSS('overflow', 'hidden');
-    await expect(portraitClip).toHaveCSS(
-      'border-top-left-radius',
-      await portraitBorder.evaluate((node) => getComputedStyle(node).borderTopLeftRadius),
-    );
+    await expect(portraitClip).toHaveCSS('border-top-left-radius', '0px');
     await expect(transparentFrame.locator('body')).toHaveCSS(
       'background-color',
       'rgba(0, 0, 0, 0)',

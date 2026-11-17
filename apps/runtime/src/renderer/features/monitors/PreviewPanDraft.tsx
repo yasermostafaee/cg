@@ -201,7 +201,7 @@ export function PreviewPanRow({
             <PreviewPanDraft
               // JPEG refreshes preserve the current gesture. New producer geometry does not.
               key={JSON.stringify([key, sourcePicture?.geometry?.revision, sourcePicture?.aspect])}
-              plateId={plate.plateId}
+              plateLabel={plate.plateLabel ?? 'Plate'}
               width={plate.width}
               height={plate.height}
               sourceAspect={
@@ -261,7 +261,7 @@ interface PointerOrigin {
 
 /** Draw the full guide or practice source, keeping movement and resizing local until release. */
 function PreviewPanDraft({
-  plateId,
+  plateLabel,
   width,
   height,
   sourceAspect,
@@ -276,7 +276,7 @@ function PreviewPanDraft({
   stagedFocus,
   onFocusChange,
 }: {
-  plateId: string;
+  plateLabel: string;
   width: number;
   height: number;
   sourceAspect: number;
@@ -425,7 +425,7 @@ function PreviewPanDraft({
       <Button
         variant="ghost"
         className="cg-pan-draft__handle"
-        aria-label={`Pan ${sourcePicture !== undefined ? 'source picture' : guide ? 'crop guide' : 'practice image'} in ${plateId}`}
+        aria-label={`Pan ${sourcePicture !== undefined ? 'source picture' : guide ? 'crop guide' : 'practice image'} in ${plateLabel}`}
         aria-disabled={blocked || (!horizontal && !vertical)}
         data-pan-practice-axis={
           horizontal && vertical
@@ -530,7 +530,7 @@ function PreviewPanDraft({
               variant="ghost"
               className="cg-pan-draft__resize"
               data-pan-resize-corner={corner.name}
-              aria-label={`Resize ${corner.name} crop corner in ${plateId}`}
+              aria-label={`Resize ${corner.name} crop corner in ${plateLabel}`}
               title="Resize crop"
               {...gestureProps(corner)}
               onKeyDown={(event) => {
@@ -567,7 +567,7 @@ function PreviewPanDraft({
               : 'Preview picture'
             : label}
         </span>
-        <bdi>{plateId}</bdi>
+        <bdi>{plateLabel}</bdi>
       </span>
       <Button
         variant="secondary"

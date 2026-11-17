@@ -915,10 +915,10 @@ impl App {
             step_t,
             mark_t: self.progress_of(self.mark_at, 600),
             activity_t: if self.reduced_motion {
-                0.5
+                None
             } else {
                 let phase = (self.page_at.elapsed().as_secs_f32() / 1.4) % 2.0;
-                (1.0 - (phase - 1.0).abs()).clamp(0.0, 1.0)
+                Some((1.0 - (phase - 1.0).abs()).clamp(0.0, 1.0))
             },
             dwm_border: self.win11,
             scale,
@@ -1014,6 +1014,8 @@ impl App {
             WM_GETMINMAXINFO => None,
             WM_SETTINGCHANGE => {
                 self.reduced_motion = win::reduced_motion();
+                self.invalidate();
+                self.ensure_timer();
                 None
             }
             WM_TIMER if wparam.0 == TIMER_FRAME => {

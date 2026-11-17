@@ -534,7 +534,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       if (label === this.primary) this.recordPrimaryResult(result);
       return { ...result, winner: label };
     } catch (err) {
-      if (label === this.primary && signal?.aborted !== true) this.recordPrimaryFailure();
+      if (label === this.primary && signal?.aborted !== true && !(err instanceof AmcpAbortedError))
+        this.recordPrimaryFailure();
       throw err instanceof Error ? err : new Error(String(err));
     }
   }

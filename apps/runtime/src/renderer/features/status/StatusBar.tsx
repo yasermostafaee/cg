@@ -1,16 +1,20 @@
-import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
+import {
+  PLAYOUT_ENGINE_NAME,
+  playoutEngineWording,
+  useEngineName,
+} from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
 import {
   backupMappedSummary,
-  ENGINE_LABEL,
   ENGINE_SERVER,
   engineChipText,
   engineNeedsAttention,
   engineStateText,
   stoppedChannelsOf,
   type BackupChannelsState,
+  type ConnectionHealth,
   type EngineLine,
   type EngineSessions,
 } from '@cg/shared-ipc';
@@ -336,6 +340,12 @@ const MAPPED_TONE_STYLE = {
   alarm: { color: colors.errorText, fontWeight: 700 },
 } as const;
 
+const STRATEGY_LABEL: Record<ConnectionHealth['strategy'], string> = {
+  'mirror-sync': 'Synchronous mirroring',
+  'mirror-async': 'Asynchronous mirroring',
+  'journal-replay': 'Journal replay',
+};
+
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
 export function StatusBar({
   engines,
@@ -354,6 +364,8 @@ export function StatusBar({
   backupChannels?: BackupChannelsState | null;
 }): JSX.Element {
   const engine = useEngineName();
+  const playoutLinked = engine === PLAYOUT_ENGINE_NAME;
+  const programmeScope = playoutLinked ? ' Apasai Playout switches programme separately.' : '';
   const health = useConnections();
   // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
   // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
@@ -447,6 +459,41 @@ export function StatusBar({
           ? { ...sessionLabel(health.backup.state), style: styles.stale }
           : sessionLabel(health.backup.state);
 
+  const servers = [
+    { server: health.primary, label: primary, deaf: primaryDeaf, active: true },
+    ...(health.backup !== undefined && backup !== null
+      ? [{ server: health.backup, label: backup, deaf: backupDeaf, active: false }]
+      : []),
+  ].sort((left, right) => left.server.label.localeCompare(right.server.label));
+  const mapped =
+    stale || health.backup === undefined || backupChannels == null
+      ? null
+      : backupMappedSummary(backupChannels);
+  const failoverTarget = health.currentPrimary === 'A' ? 'B' : 'A';
+  const targetSession = stale
+    ? undefined
+    : failoverTarget === 'A'
+      ? engines?.primary
+      : engines?.backup;
+  const failoverBlock =
+    health.backup === undefined
+      ? 'No CG backup configured'
+      : targetSession?.state === 'core-held'
+        ? engineChipText(failoverTarget, targetSession.state)
+        : undefined;
+  const failoverNotice = [
+    targetSession != null && engineNeedsAttention(targetSession.state)
+      ? engineChipText(failoverTarget, targetSession.state)
+      : undefined,
+    failoverTarget === 'B' && mapped !== null && mapped.tone !== 'ok' ? mapped.text : undefined,
+  ].filter((notice) => notice !== undefined);
+  const failoverTitle =
+    failoverBlock ??
+    [
+      `Switch graphics control to Server ${failoverTarget}.` + programmeScope,
+      ...failoverNotice,
+    ].join(' ');
+
   /*
    * 🔴 `CONSOLE-MATCH-03` §5 — THE FOUR UNICODE GLYPHS ARE GONE FROM THIS BAR.
    *
@@ -475,63 +522,31 @@ export function StatusBar({
         </Tag>
       ) : (
         <>
-          {/* B-081 — while `stale`, the whole pill mutes: the green ● dot is a claim too. */}
-          <Tag
-            className="cg-pill"
-            {...(stale
-              ? { title: staleTitle(health.primary.state) }
-              : primaryDeaf
-                ? { title: AMCP_ONLY_TITLE }
-                : {})}
-          >
-            {/*
-              THE DOT IS THE ONLY THING THAT MAY BE GREEN (owner). The label keeps
-              the no-hue treatment; a 6px LED reads as "this light is on", where a
-              green WORD in the footer can be glanced at as an air claim.
-
-              `--r-success`, never `--r-onair` — the soft ack/healthy emerald, kept
-              under its own name in `theme.ts` precisely so a tweak to one cannot
-              move the other.
-
-              B-081 STILL HOLDS: while `stale` or AMCP-deaf the dot mutes WITH the
-              label, because a confident green light beside an UNKNOWN word is the
-              same contradiction this pill exists to end — "the green ● dot is a
-              claim too".
-            */}
-            <span style={healthDotStyle(primary)}>●</span>{' '}
-            <span style={stale || primaryDeaf ? styles.stale : styles.primary}>
-              CG PRIMARY {health.primary.label}
-            </span>{' '}
-            <span style={primary.style}>{primary.text}</span>
-          </Tag>
-          {health.backup !== undefined && backup !== null ? (
+          {servers.map(({ server, label, deaf, active }) => (
             <Tag
+              key={server.label}
               className="cg-pill"
-              {...(stale
-                ? { title: staleTitle(health.backup.state) }
-                : backupDeaf
-                  ? { title: AMCP_ONLY_TITLE }
-                  : {})}
+              title={
+                stale
+                  ? staleTitle(server.state)
+                  : deaf
+                    ? AMCP_ONLY_TITLE
+                    : `Server ${server.label} is the ${active ? 'primary' : 'standby'} target for CG Bridge commands.` +
+                      programmeScope
+              }
             >
-              {/*
-                THE BACKUP'S LED FOLLOWS ITS OWN STATE TOO (owner) — it used to be
-                permanently muted, so a backup that was DEFINED and OFFLINE showed
-                a neutral light beside a red word. Same defect as the primary's,
-                one pill along, and the same fix: `healthDotStyle` derives it from
-                the resolved label, so the light and the word cannot disagree.
-
-                The SHAPE stays `○` against the primary's `●`. That distinction is
-                which server is in charge, not how healthy it is, and it has to
-                survive the two now sharing a colour vocabulary — an operator must
-                be able to tell the pair apart without reading either word.
-              */}
-              <span style={healthDotStyle(backup)}>○</span>{' '}
-              <span style={styles.backup}>CG BACKUP {health.backup.label}</span>{' '}
-              <span style={backup.style}>{backup.text}</span>
+              <span style={healthDotStyle(label)}>{active && !stale ? '●' : '○'}</span>{' '}
+              <span style={active && !stale && !deaf ? styles.primary : styles.backup}>
+                Server {server.label}
+                {stale ? '' : active ? ' · CG active' : ' · CG standby'}
+              </span>
+              {' · '}
+              <span style={label.style}>{label.text}</span>
             </Tag>
-          ) : (
+          ))}
+          {health.backup === undefined && (
             <Tag className="cg-pill">
-              <span style={styles.backup}>○ NO CG BACKUP</span>
+              <span style={styles.backup}>No CG backup</span>
             </Tag>
           )}
           {/*
@@ -540,20 +555,11 @@ export function StatusBar({
             failover: the alarm ink when none is mapped, the warning when some are not. Words only; which
             channel and why is in each channel's own view. While the link is down it cannot be read: nothing.
           */}
-          {(() => {
-            const mapped =
-              stale ||
-              health.backup === undefined ||
-              backupChannels === null ||
-              backupChannels === undefined
-                ? null
-                : backupMappedSummary(backupChannels);
-            return mapped === null ? null : (
-              <Tag className="cg-pill" data-backup-mapped={mapped.tone}>
-                <span style={MAPPED_TONE_STYLE[mapped.tone]}>{mapped.text}</span>
-              </Tag>
-            );
-          })()}
+          {mapped !== null && (
+            <Tag className="cg-pill" data-backup-mapped={mapped.tone}>
+              <span style={MAPPED_TONE_STYLE[mapped.tone]}>{mapped.text}</span>
+            </Tag>
+          )}
           {/*
             🔴 `RELEASE-0112-01` (`R-085`) — AN ENGINE'S CG BRIDGE SESSION, BESIDE ITS SERVER: a chip
             for an engine that needs a person (a sign-in, a license, an approval, an engine that does
@@ -566,8 +572,11 @@ export function StatusBar({
               <Tag
                 key={line.engine}
                 className="cg-pill"
-                title={`${ENGINE_LABEL[line.engine]}: ${engineStateText(line)}`}
-                aria-label={`${ENGINE_LABEL[line.engine]}: ${engineStateText(line)}`}
+                title={playoutEngineWording(`Server ${server}: ${engineStateText(line)}`, engine)}
+                aria-label={playoutEngineWording(
+                  `Server ${server}: ${engineStateText(line)}`,
+                  engine,
+                )}
                 data-engine-chip={line.engine}
                 data-engine-state={line.state}
               >
@@ -654,10 +663,11 @@ export function StatusBar({
               </span>
             </Tag>
           )}
-          {/* The strategy is CONFIG, not health — it does not go stale with the link. */}
-          <Tag className="cg-pill" title="CG Bridge command strategy">
-            {health.strategy}
-          </Tag>
+          {!playoutLinked && health.backup !== undefined && (
+            <Tag className="cg-pill" title="CG Bridge command strategy">
+              {STRATEGY_LABEL[health.strategy]}
+            </Tag>
+          )}
         </>
       )}
       {/*
@@ -696,18 +706,14 @@ export function StatusBar({
           press this" actually belongs.
         */
           aria-label="Manual CG failover"
-          disabled={health.backup === undefined}
-          title={
-            health.backup === undefined
-              ? 'No CG backup configured'
-              : `Switch CG primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
-          }
+          disabled={failoverBlock !== undefined}
+          title={failoverTitle}
           run={() =>
             window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
           }
         >
           <Icon icon={ArrowLeftRight} />
-          CG FAILOVER
+          CG failover
         </AsyncButton>
       )}
       {/*

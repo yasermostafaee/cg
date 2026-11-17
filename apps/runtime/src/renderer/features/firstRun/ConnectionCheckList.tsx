@@ -154,7 +154,15 @@ export function ConnectionCheckList({
   const [showAll, setShowAll] = useState(readShowAll);
   const operatorLines = lines.map((line) => ({
     ...line,
-    text: playoutEngineWording(line.text, engineName),
+    text: playoutEngineWording(
+      line.id === 'amcp' && line.status === 'pass'
+        ? line.text.replace(
+            /answered VERSION: (\d+\.\d+\.\d+(?:-[\w]+(?:[.-][\w]+)*)?)\b.*$/,
+            'answered VERSION: $1.',
+          )
+        : line.text,
+      engineName,
+    ),
   }));
   const checking = lines.some((l) => l.status === 'checking');
   if (grouped) {
@@ -253,7 +261,7 @@ function CheckLineItems({
           hidden={hidePasses && line.status === 'pass'}
         >
           <span
-            style={{ color: ICON_INK[line.status], paddingTop: 2 }}
+            style={{ color: ICON_INK[checkLineTone(line)], paddingTop: 2 }}
             aria-label={line.status}
             data-check-icon=""
           >
@@ -266,7 +274,7 @@ function CheckLineItems({
                 : {})}
             />
           </span>
-          <span style={{ color: line.status === 'pass' ? colors.text : INK[line.status] }}>
+          <span style={{ color: line.status === 'pass' ? colors.text : INK[checkLineTone(line)] }}>
             {line.text}
           </span>
           {line.command !== undefined && (
@@ -295,4 +303,8 @@ function CheckLineItems({
       ))}
     </>
   );
+}
+
+function checkLineTone(line: ShownCheckLine): ShownCheckLine['status'] {
+  return line.id === 'bridge-version' && line.status === 'fail' ? 'warn' : line.status;
 }

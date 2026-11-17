@@ -120,10 +120,11 @@ describe('B-235 — the Station layers panel names a layer another system is usi
     // `expect(undefined).toBe(undefined)`.
     expect(text.length).toBeGreaterThan(0);
     // The empty state is still honest about the DECLARED half…
-    expect(text).toContain('No playout layers are declared');
+    expect(text).toContain('No reserved Playout layers.');
     // …and the panel is no longer silent about the layer that is actually in use.
     expect(el.querySelector('[data-undeclared-layer="42"]')).not.toBeNull();
-    expect(text).toContain('never declared');
+    expect(text).toContain('Occupied outside reserved ranges');
+    expect(text).not.toMatch(/--reserved-layers|bridge-live-layers\.json|\.cg-runtime/);
   });
 
   it('lists them alongside the declared rows when both exist', async () => {
@@ -135,13 +136,13 @@ describe('B-235 — the Station layers panel names a layer another system is usi
   it('POSITIVE CONTROL: with no orphans the group is absent — it is real, not always-on', async () => {
     const el = await render([DECLARED], []);
     expect(el.querySelector('[data-playout-layer="61"]')).not.toBeNull();
-    expect(el.textContent ?? '').not.toContain('never declared');
+    expect(el.textContent ?? '').not.toContain('Occupied outside reserved ranges');
   });
 
   it('offers NO second Clear — one dangerous action, one implementation', async () => {
     const el = await render([], [ORPHAN]);
     const group = el.querySelector('[data-undeclared-layer="42"]');
     expect(group?.querySelector('button')).toBeNull();
-    expect(el.textContent ?? '').toContain('warning strip above the layer list');
+    expect(el.textContent ?? '').toContain('Channel 1, layer 42');
   });
 });

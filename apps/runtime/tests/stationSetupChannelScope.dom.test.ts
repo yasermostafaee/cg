@@ -321,10 +321,16 @@ describe('A7 — Station setup follows the channel on screen', () => {
     expect(names(dialog)).not.toContain('CLOCK-TWO');
     // Channel 2's draft did not follow onto channel 1…
     expect(showTick(dialog, 71)?.checked).toBe(true);
-    // …and applying here writes channel 1 as it is, and channel 2 as it is — nothing hidden anywhere.
+    // An untouched channel 1 sends nothing; its own edit still goes only to channel 1.
+    expect(buttonNamed(dialog, /^Apply layers$/)?.disabled).toBe(true);
+    await act(async () => {
+      showTick(dialog, 71)?.click();
+    });
     await press(buttonNamed(dialog, /^Apply layers$/));
     expect(s.fixedSetBanks).toHaveBeenCalledTimes(1);
-    expect(s.fixedSetBanks.mock.calls[0]?.[0]).toEqual({ banks: [CH1, CH2] });
+    expect(s.fixedSetBanks.mock.calls[0]?.[0]).toEqual({
+      banks: [{ ...CH1, visibility: { '71': false } }, CH2],
+    });
   });
 });
 

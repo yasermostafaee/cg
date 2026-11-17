@@ -4,6 +4,7 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { InputCatalogueServer } from '../sources/InputCatalogueServer.js';
 import { MediaPlaybackControl } from '../sources/MediaPlayback.js';
@@ -204,7 +205,7 @@ export function TemplateDefaultsDialog({
         <p style={styles.intro} data-defaults-intro="">
           Edit the starting source mappings for{' '}
           <strong>
-            <IsolatedName title={templateId}>{templateName}</IsolatedName>
+            <IsolatedName>{templateName}</IsolatedName>
           </strong>
           {`. These defaults apply to every row on CH ${String(channel)} using this template; row overrides remain separate.`}
         </p>
@@ -221,24 +222,14 @@ export function TemplateDefaultsDialog({
         ) : (
           <>
             <InputCatalogueServer server={currentSourceCatalog().inputsServer} />
-            {plates.map((plate, i) => {
+            {plates.map((plate) => {
+              const label = plateDisplayName(plate.sourceId, plates, layout);
               const authored = authoredDefaults?.[plate.sourceId];
               const picked = valueOf(plate.sourceId);
               return (
                 <div key={plate.elementId} style={styles.field}>
-                  {/*
-                  ⚠ **`Plate N` IS THE LABEL AND THE PLATE ID IS ON THE `title`** — golden rule
-                  11, and the drawing agrees. `plate.sourceId` is the template AUTHOR's
-                  identifier for a hole in a layout (`guest-1`); the operator reads a position.
-                  The id is RELOCATED rather than deleted: it is what an author correlates
-                  against, so it rides the hover.
-                */}
-                  <label
-                    htmlFor={`plate-default-${plate.sourceId}`}
-                    style={styles.fieldLabel}
-                    title={plate.sourceId}
-                  >
-                    Plate {i + 1}
+                  <label htmlFor={`plate-default-${plate.sourceId}`} style={styles.fieldLabel}>
+                    <IsolatedName>{label}</IsolatedName>
                   </label>
                   {/*
                   🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER. It only returns a choice; this
@@ -248,7 +239,7 @@ export function TemplateDefaultsDialog({
                   <span className="cg-source-field">
                     <SourcePicker
                       id={`plate-default-${plate.sourceId}`}
-                      aria-label={`Default source for ${plate.sourceId}`}
+                      aria-label={`Default source for ${label}`}
                       data={{ 'data-defaults-select': plate.sourceId }}
                       value={picked}
                       onChange={(sourceId) => stage(plate.sourceId, sourceId)}

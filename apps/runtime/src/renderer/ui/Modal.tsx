@@ -765,7 +765,7 @@ interface ModalProps {
    * own frame rather than a near-miss of one, because that family also has its own head, body
    * and footer paddings and its own footer ground.
    */
-  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record';
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record' | 'history';
   /**
    * 🔴 `PLATES-AUDIO-11` §5 — **TAKE THE FRAMED HEIGHT, on a size that does not imply it.**
    *
@@ -820,13 +820,14 @@ interface ModalProps {
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
-const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record', string> = {
+const WIDTHS: Record<NonNullable<ModalProps['size']>, string> = {
   prose: cssVars['--r-modal-w-prose'],
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
   ledger: cssVars['--r-modal-w-ledger'],
   library: 'var(--r-modal-w-library)',
   record: cssVars['--r-modal-w-record'],
+  history: 'calc(100vw - 32px)',
 };
 
 export function Modal({
@@ -848,6 +849,7 @@ export function Modal({
   const ref = useRef<HTMLDivElement>(null);
   /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
   const fixed = size === 'fixed';
+  const history = size === 'history';
   /*
     `MODAL-CHROME-10` §4 — the two LIST dialogs take the fixed frame's height discipline. Read
     once, here, so the style and any future consumer cannot come to disagree about which
@@ -857,7 +859,7 @@ export function Modal({
     opt-in, for a dialog whose size is shared with one that must not be framed. Still one
     read, still one style, still one height expression.
   */
-  const framed = size === 'library' || size === 'ledger' || frame === 'fixed';
+  const framed = size === 'library' || size === 'ledger' || history || frame === 'fixed';
   /*
    * `MONITORS-01` audit row 74 — the `fixed` frame takes the drawing's own 19 px / 650 for
    * its title; every other dialog keeps the one shared treatment. Composed here rather than
@@ -960,6 +962,7 @@ export function Modal({
           ...styles.dialog,
           ...(fixed ? styles.dialogFixed : {}),
           ...(framed ? styles.dialogFramed : {}),
+          ...(history ? { height: 'calc(100dvh - 32px)', maxHeight: 'calc(100dvh - 32px)' } : {}),
           ...(size === 'record' ? styles.dialogRecord : {}),
           width: WIDTHS[size],
         }}
@@ -1049,7 +1052,7 @@ export function Modal({
                     INLINE style: a `[data-modal-size='library'] .cg-modal-body` rule loses to
                     it every time, silently, and the column just renders 44 px narrow.
                   */
-                  size === 'fixed' || size === 'library'
+                  size === 'fixed' || size === 'library' || history
                     ? { ...styles.body, ...styles.bodyFixed }
                     : frame === 'fixed'
                       ? { ...styles.body, ...styles.bodyFlush }

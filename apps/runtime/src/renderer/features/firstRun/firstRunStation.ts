@@ -318,19 +318,16 @@ export function consoleCheckLines(facts: ConsoleCheckFacts): ShownCheckLine[] {
     }
   }
   if (facts.bridgeVersion !== undefined) {
-    lines.push(
-      sameReleaseLine(facts.consoleVersion, facts.bridgeVersion)
-        ? {
-            id: 'bridge-version',
-            status: 'pass',
-            text: `CG Bridge ${facts.bridgeVersion ?? ''} · this console ${facts.consoleVersion}.`,
-          }
-        : {
-            id: 'bridge-version',
-            status: 'fail',
-            text: versionMismatchRefusal(facts.consoleVersion, facts.bridgeVersion),
-          },
-    );
+    const compatible = sameReleaseLine(facts.consoleVersion, facts.bridgeVersion);
+    const matches = facts.bridgeVersion === facts.consoleVersion;
+    const pair = `CG Bridge ${facts.bridgeVersion ?? ''} · this console ${facts.consoleVersion}.`;
+    lines.push({
+      id: 'bridge-version',
+      status: compatible ? (matches ? 'pass' : 'warn') : 'fail',
+      text: compatible
+        ? `${pair}${matches ? '' : ' Version mismatch.'}`
+        : versionMismatchRefusal(facts.consoleVersion, facts.bridgeVersion),
+    });
   }
   const auth = facts.auth;
   if (auth.kind === 'signed-in') {

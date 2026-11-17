@@ -5,13 +5,17 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { directionOf } from '../../ui/OperatorNames.js';
+import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { colors } from '../../theme.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
+import { videoModeWords } from '../stationSetup/videoModeWords.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import { InputCatalogueServer } from './InputCatalogueServer.js';
+import { InputViewSwitch, type InputView } from './InputViewSwitch.js';
 import {
   commitSourceBand,
   currentPlateBand,
@@ -20,6 +24,7 @@ import {
   sourcesVersion,
   subscribeSources,
 } from './sourceStore.js';
+import './sources-section.css';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §2.C — **STATION SETUP ▸ LIVE SOURCES: THE PLAYOUT'S INPUTS, AS READ, AND
@@ -43,8 +48,6 @@ import {
 
 const styles = {
   empty: { fontSize: '0.82rem', color: colors.textMuted },
-  /** The row's middle column — it takes the remaining width and may shrink to nothing. */
-  rowText: { minWidth: 0 },
   /** One labelled part of the row's detail line, inline with its value. */
   part: { display: 'inline-flex', gap: '0.35rem', alignItems: 'baseline', minWidth: 0 },
   /** The band sits its own distance below the list — the reference's `.band-card`. */
@@ -53,6 +56,16 @@ const styles = {
 
 /** The last good read, as a time an operator can check against the clock. */
 const READ_TIME = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium' });
+
+function inputFormatLabel(format: string | undefined): string {
+  if (format === undefined || format.toUpperCase() === 'AUTO') return 'Auto';
+  const mode = videoModeWords(format);
+  return mode.scan === 'Interlaced' || mode.scan === 'Progressive'
+    ? `${mode.word} · ${mode.rate}`
+    : mode.scan === '—'
+      ? mode.word
+      : 'Unknown';
+}
 
 function parseLayerNumber(raw: string): number | null {
   if (!/^\d+$/.test(raw.trim())) return null;
@@ -71,8 +84,10 @@ export function SourcesSection({
   const { surface, inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
-  const [bandStart, setBandStart] = useState('');
-  const [bandEnd, setBandEnd] = useState('');
+  const [view, setView] = useState<InputView>('grid');
+  const [bandStart, setBandStart] = useState<string | null>(null);
+  const [bandEnd, setBandEnd] = useState<string | null>(null);
+  const [applyingBand, setApplyingBand] = useState(false);
   /*
     🔴 `MULTI-CHANNEL-01` §2 I — the band is `sources.set-config`, a `station-admin` route. For
     anyone else it is the band IN FORCE, as a value: no fields and no Apply band — absent, not
@@ -92,18 +107,17 @@ export function SourcesSection({
   const inForce = currentPlateBand();
   const band = inForce?.range;
 
-  /*
-    🔴 **WHAT THE FIELD SHOWS AND WHAT `Apply band` READS ARE ONE VALUE, READ ONCE.** An untouched
-    field is the operator accepting the band already in force, which is exactly what it shows — a
-    default included: applying it untouched DECLARES it, by a station-admin's own press, and never
-    on its own.
-  */
-  const bandStartText = bandStart === '' && band !== undefined ? String(band.start) : bandStart;
-  const bandEndText = bandEnd === '' && band !== undefined ? String(band.end) : bandEnd;
+  const bandStartText = bandStart ?? (band === undefined ? '' : String(band.start));
+  const bandEndText = bandEnd ?? (band === undefined ? '' : String(band.end));
+  const start = parseLayerNumber(bandStartText);
+  const end = parseLayerNumber(bandEndText);
+  const bandChanged =
+    band === undefined
+      ? bandStartText !== '' || bandEndText !== ''
+      : start !== band.start || end !== band.end;
 
   const applyBand = (): void => {
-    const start = parseLayerNumber(bandStartText);
-    const end = parseLayerNumber(bandEndText);
+    if (!bandChanged || applyingBand) return;
     if (start === null || end === null) {
       // `LAYER-BANDS-16` — the example is DERIVED from the suggested band, never restated.
       refuse(
@@ -115,7 +129,13 @@ export function SourcesSection({
       refuse('The band ends before it starts — swap the two numbers.');
       return;
     }
+    setApplyingBand(true);
     void commitSourceBand({ start, end }).then((refusal) => {
+      setApplyingBand(false);
+      if (refusal === null) {
+        setBandStart(null);
+        setBandEnd(null);
+      }
       report(refusal === null ? null : { role: 'refusal', ...refusal });
     });
   };
@@ -134,11 +154,20 @@ export function SourcesSection({
               : `Last read ${READ_TIME.format(new Date(catalog.inputsReadAt))}`}
           </span>
         </div>
+        <InputViewSwitch view={view} onChange={setView} />
       </div>
       <LiveInputCheckCard surface={surface} />
-      <section className="cg-card cg-resource-list" aria-label="Inputs from the Playout">
+      <section
+        className={
+          view === 'grid'
+            ? 'cg-setup-source-catalogue'
+            : 'cg-setup-source-catalogue cg-card cg-resource-list'
+        }
+        data-input-view={view}
+        aria-label="Inputs from the Playout"
+      >
         {inputs.length === 0 ? (
-          <div className="cg-card__body">
+          <div className={view === 'grid' ? 'cg-card cg-card__body' : 'cg-card__body'}>
             <span style={styles.empty} role="status" data-sources-empty="">
               No inputs from the Playout.
             </span>
@@ -151,13 +180,25 @@ export function SourcesSection({
               data-source-input=""
               {...(source.status === 'unusable' ? { 'data-source-unusable': '' } : {})}
             >
+              <InputThumbnail
+                source={source}
+                channel={channel}
+                meterChannel={source.status === undefined ? channel : undefined}
+                onCheck={
+                  inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel)
+                    ? inputCheck.start
+                    : undefined
+                }
+              />
               <span className="cg-resource__icon" aria-hidden="true">
                 <Icon icon={KIND_ICON[source.producer.kind]} size={20} />
               </span>
-              <div style={styles.rowText}>
+              <div className="cg-setup-source-caption">
                 <div className="cg-resource__title">
                   {/* The Playout operators' NAME — data, isolated (golden rule 11). */}
-                  <bdi className="cg-resource__name">{source.name}</bdi>
+                  <bdi className="cg-resource__name" dir={directionOf(source.name)}>
+                    {sourceDisplayName(source.name, source.origin)}
+                  </bdi>
                   <span
                     className="cg-resource__type"
                     data-source-kind={KIND_WORD[source.producer.kind]}
@@ -178,20 +219,10 @@ export function SourcesSection({
                 <div className="cg-resource__detail">
                   <span style={styles.part}>
                     <span>Format</span>
-                    <bdi className="cg-resource__value">{source.format ?? 'AUTO'}</bdi>
+                    <bdi className="cg-resource__value">{inputFormatLabel(source.format)}</bdi>
                   </span>
                 </div>
               </div>
-              <InputThumbnail
-                source={source}
-                channel={channel}
-                meterChannel={source.status === undefined ? channel : undefined}
-                onCheck={
-                  inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel)
-                    ? inputCheck.start
-                    : undefined
-                }
-              />
             </div>
           ))
         )}
@@ -225,6 +256,7 @@ export function SourcesSection({
                   placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}
                   value={bandStartText}
                   onValueChange={setBandStart}
+                  disabled={applyingBand}
                 />
               </div>
               <span className="cg-setup-band-dash" aria-hidden="true">
@@ -240,9 +272,10 @@ export function SourcesSection({
                   placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}
                   value={bandEndText}
                   onValueChange={setBandEnd}
+                  disabled={applyingBand}
                 />
               </div>
-              <Button variant="primary" onClick={applyBand}>
+              <Button variant="primary" onClick={applyBand} disabled={!bandChanged || applyingBand}>
                 Apply band
               </Button>
             </div>

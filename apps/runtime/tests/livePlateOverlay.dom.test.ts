@@ -277,7 +277,8 @@ describe('R-049 — the two states, distinguishable without reading', () => {
     });
     const box = plate(el, 'guest-1');
     expect(box.dataset['livePlateState']).toBe('assigned');
-    expect(box.textContent).toContain('guest-1');
+    expect(box.textContent).toContain('Plate 1');
+    expect(box.textContent).not.toContain('guest-1');
     // The join no exported page can make: the INSTALLATION's name for the source.
     expect(box.textContent).toContain('Studio A');
   });

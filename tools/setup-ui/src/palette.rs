@@ -35,6 +35,9 @@ pub const LOGO_SWOOSH: Rgb = rgb(0x5c6a7c);
 pub const BRAND: Rgb = rgb(0x00aeef);
 /// `--cg-brand-deep`
 pub const BRAND_DEEP: Rgb = rgb(0x0090c9);
+/// Violet and lilac from Designer's product tile.
+pub const DESIGNER_VIOLET: Rgb = rgb(0x6d4d9b);
+pub const DESIGNER_LILAC: Rgb = rgb(0xbea7ff);
 /// `--r-splash-glow` is the brand blue at 0.5; the glow is drawn from `BRAND` at that alpha.
 pub const GLOW_ALPHA: f32 = 0.5;
 

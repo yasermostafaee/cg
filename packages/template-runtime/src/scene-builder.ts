@@ -212,32 +212,27 @@ export function buildScene(
   };
 }
 
-function styleLayoutPlateEdges(node: HTMLElement, element: SceneElement, ctx: BuildCtx): void {
-  const picture = element.type === 'video-placeholder';
+function styleLayoutPlateBorder(node: HTMLElement, element: SceneElement, ctx: BuildCtx): void {
   const border = element.type === 'shape' ? element.stroke : undefined;
-  if ((!picture && border === undefined) || ctx.instance === undefined) return;
-  const suffix = picture ? '-plate' : '-border';
+  if (border === undefined || ctx.instance === undefined) return;
   const frame = ctx.scene.controlLiveLayout?.frames.find(
-    ({ id }) => element.id === id + suffix && ctx.instance?.compositionId === 'layout-frame-' + id,
+    ({ id }) =>
+      element.id === id + '-border' && ctx.instance?.compositionId === 'layout-frame-' + id,
   );
   if (frame === undefined) return;
+  // A previously exported layout can still carry a rounded border shape.
+  node.style.borderRadius = '0';
   const { w, h } = ctx.instance.transform.size;
   const { width, height } = ctx.scene.resolution;
   if (w <= 0 || h <= 0 || width <= 0 || height <= 0) return;
-  const radius = Math.min(frame.border?.radius ?? 0, width / 2, height / 2);
-  if (picture && radius === 0) return;
   const ratio = (h * width) / (w * height);
   const horizontal = (px: number): string =>
     `calc(${String(px * ratio)}px * var(${PLATE_EDGES_MOTION_RATIO}, 1))`;
-  // The nested plate artwork stretches to fill its box. Match the editor's height-relative
-  // edges on both axes, including interpolated placement. The separate native input needs
-  // its own alpha clip. This radius also clips JPEGs mounted inside the PVW picture node.
+  // The nested border stretches to fill its box. Keep the editor's height-relative stroke
+  // on both axes, including during animated placement.
   node.dataset['cgLayoutPlateEdges'] = '';
-  if (border !== undefined) {
-    node.style.borderLeftWidth = horizontal(border.width);
-    node.style.borderRightWidth = horizontal(border.width);
-  }
-  if (radius > 0) node.style.borderRadius = `${horizontal(radius)} / ${String(radius)}px`;
+  node.style.borderLeftWidth = horizontal(border.width);
+  node.style.borderRightWidth = horizontal(border.width);
 }
 
 function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
@@ -268,7 +263,7 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     const drawn = instanceHiddenText ? { ...built, visible: false } : built;
     const elementNode = buildElement(drawn, ctx);
     if (elementNode === null) continue;
-    styleLayoutPlateEdges(elementNode, element, ctx);
+    styleLayoutPlateBorder(elementNode, element, ctx);
     if (instanceHiddenText) elementNode.dataset['cgInstanceHiddenText'] = '';
     const instanceKey = ctx.instancePrefix + element.id;
     if (element.type === 'text' && ctx.presetDepartureKeys !== undefined)

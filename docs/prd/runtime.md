@@ -5266,7 +5266,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN choosing Digits under Title style Advanced THEN Persian, Latin or Arabic-Indic digits appear in authored titles, the exported VCG, and dynamic title updates.
 - WHEN opening Advanced plate controls THEN Plate appearance contains the authored fit, aspect ratio, border and mask. Operator permissions in CG Control contains access to moving, resizing and editing the mask. The editor uses Plate consistently with Designer.
 - WHEN selecting a saved live layout in Templates THEN Export .vcg saves its verified package as a file. Using Import a .vcg restores the layout, embedded assets and editor access.
-- WHEN setting a plate border THEN the operator can set its color, width and corner radius. Width zero hides the border. The visible border has the same thickness on all edges, follows the plate through presets and Focus, and saves with the VCG. The editor shows its selection outline outside the authored border. The editor and PVW clip the picture to the authored radius. The existing native programme clip applies rectangular boundaries.
+- WHEN setting a plate border THEN the operator can set its color and width. Width zero hides the border. The rectangular border has the same thickness on all edges, follows the plate through presets and Focus, and saves with the VCG. The editor shows its selection outline outside the authored border.
 - WHEN editing a preset in Arrange THEN the operator can set the default aspect ratio and input fit for that preset. Each plate can override either value in that preset. Aspect ratio sets the shape of the plate. Crop edges fills that shape with a centered crop and Fit whole picture contains the entire input. A portrait panel and a 16:9 single-plate preset can show the same source with different framing. Focus continues to fill the programme canvas.
 - WHEN selecting a position in a preset THEN the selected frame swaps with its occupant. A frame's optional Focus label identifies it on both PVW and PGM controls.
 - WHEN adding text to a frame THEN each text can inherit the frame's style and have its own editable value, position and overrides.
@@ -5287,8 +5287,6 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN the operator attaches multiple graphics THEN they can reorder and position them independently. WHEN the operator moves or resizes an attachment THEN the preview updates and Save, Edit and Duplicate preserve the order, placement and packaged assets.
 - WHEN moving a frame or switching preset, Focus or Return THEN its artwork moves and takes the same effect with it. Regular presets restore their saved placements and the shared input mask follows the same frame.
 
-**Feasibility:** Assess corner radius for the live picture itself. Verify a rounded alpha aperture in PVW and on the target Playout Engine, including overlapping plates and frame transitions.
-
 The frame graphics importer renders verified still artwork and can carry one shared masked plate per frame.
 A masked attachment uses the frame's selected input. Save keeps the original attachment sources so Edit and Duplicate
 remain self-contained. Older presets keep their authored placements until that frame's graphics are edited.
@@ -5299,7 +5297,8 @@ Repeatable playback and independent timeline animation within imported artwork n
 
 The source picker, assigned-input fields, and Station setup show vertical source meters flush with the
 picture of each live input and Playlist output. Equal-width rails display every channel delivered with
-the measurement. An input with no channel count yet shows two empty rails. The New live layout preview
+the measurement. An input with no channel count yet shows two empty rails with a neutral outline.
+Station setup opens Live sources in Grid view and also offers List view. The New live layout preview
 offers an off-by-default VU toggle.
 When on, meters beside eligible frames use their full frame height. PGM meters stay with their respective
 engine pictures, including when all pictures and meters are visible.
@@ -5309,3 +5308,10 @@ The Bridge groups visible live inputs and Playlist outputs into bounded, authent
 engine that supplied the source list. On an engine without independent source telemetry, a currently
 checked input can use fresh readings from its preview lease. Unavailable or stale readings leave the
 meter empty. Media clips and stills have no meter in the layout or input picker.
+
+## [~] R-122 — Restore programme graphics after a short Apasai Playout outage
+
+- WHEN the active engine reconnects within the configured window THEN Bridge may re-take only previously confirmed programme rows that are verified empty on that same engine. The default window is five seconds. A value of zero disables automatic recovery.
+- WHEN playback survived the outage, a row was deliberately stopped or cleared, or the active engine changed THEN automatic recovery sends no new take for that row.
+- WHEN the window expires or a row cannot be recovered THEN the remaining affected rows use the operator-confirmed recovery notice.
+- WHEN a station admin edits the window in Connection → Advanced THEN Apply servers saves it with the connection settings.

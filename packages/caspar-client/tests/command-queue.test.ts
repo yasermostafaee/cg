@@ -212,6 +212,29 @@ describe('CommandQueue', () => {
     expect(seen).toBe(1);
   });
 
+  it('checks a conditional command at dispatch without interrupting a command already sent', async () => {
+    const { queue, mock } = await setup();
+    let allow = true;
+    let seen = 0;
+    mock.setHandler('PLAY', () => {
+      seen++;
+      allow = false;
+      return { kind: 'ok', code: 202, verb: 'PLAY' };
+    });
+    const canDispatch = () => allow;
+    await expect(queue.enqueue('PLAY 1-10 "a" HTML', { canDispatch })).resolves.toMatchObject({
+      response: { code: 202 },
+    });
+    allow = true;
+    queue.pause();
+    const waiting = queue.enqueue('PLAY 1-10 "b" HTML', { canDispatch });
+    allow = false;
+    const refused = expect(waiting).rejects.toBeInstanceOf(AmcpAbortedError);
+    queue.resume();
+    await refused;
+    expect(seen).toBe(1);
+  });
+
   it('emits backpressure once depth crosses the threshold', async () => {
     const { mock, transport } = await setup();
     mock.setHandler('SLOW', async () => {

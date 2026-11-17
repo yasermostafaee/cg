@@ -49,9 +49,13 @@ A condition that is IN FORCE before anything is pressed SHALL NOT be shown there
 
 - **WHEN** a section's action is refused — the bank refusing to untick an occupied row, the catalog refusing an empty name, the raster refused while something is on air **THEN** the refusal is rendered by the shared notice in the pinned region, outside the scrolling body, prefixed with that section's name
 
-### Requirement: Each section states its commit contract, and the footer commits Servers only
+### Requirement: Each section states its commit contract
 
-Every section of Station setup SHALL carry a legend beside its heading stating how its edits reach the bridge — applied by the footer, applied by a control in the section, saved as you go, or read-only — and each tab's footer SHALL carry that section's commit action and no other's, in sentence case.
+Every section of Station setup SHALL state how its edits reach the bridge. An Apply or Save action SHALL be disabled when its draft has no effective changes. Connection SHALL keep its staged Apply action inside Advanced.
+
+#### Scenario: CG Bridge and CG Control report different versions
+
+- **WHEN** the Connection check reports different CG Bridge and CG Control versions **THEN** the version line is shown in amber and remains visible while passing checks are folded
 
 A section's stated commit contract SHALL be TRUE OF EVERY CONTROL IN IT: a section holding a control that is applied SHALL NOT say that nothing is waiting to be applied.
 
@@ -60,7 +64,7 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 #### Scenario: The on-air block is scoped to Servers
 
 - **WHEN** anything is on air or unsettled **THEN** `Apply servers` is disabled and the Servers section's (the Connection tab's since 2026-10-11, `SERVERS-SIMPLIFY-01`) standing notice reads that Apply is blocked for Servers and every other section stays editable, while the pinned message region carries no copy of it
-- **WHEN** anything is on air or unsettled **THEN** that notice sits between the section head and the first card, on the same left and right edges as the cards below it, and the footer's clause reads `Unavailable while on air` in the caution ink
+- **WHEN** anything is on air or unsettled **THEN** Connection explains why the Advanced Apply action is unavailable
 
 #### Scenario: Each tab's footer carries its own commit, in sentence case
 
@@ -69,13 +73,15 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 > Revert, and reads as read-only for this sign-in — the read-only case below. The two lines naming
 > a commit hold for a station-admin.
 
-- **WHEN** the Connection tab (named `Servers` until 2026-10-11, `SERVERS-SIMPLIFY-01`) is shown to a station-admin **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
+- **WHEN** the Connection tab is shown to a station admin **THEN** the main Change controls confirm and apply their own edits, and Advanced holds `Apply servers` for its staged edits
+- **AND** when the connection uses Apasai Playout, the legacy Strategy and Automatic failover choices are absent from the editable form
 - **WHEN** the Layers tab is shown to a station-admin **THEN** its footer holds `Apply layers`, and no other tab's action
 - **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds its commit contract and a single `Close` (amended by `SETTINGS-MATCH-02`, 2026-09-11 — see **One job, one control, one name in the dialog's footer** below)
 
 #### Scenario: The Live sources footer tells the truth about the layer band
 
 - **WHEN** the Live sources tab is shown **THEN** its footer names the band's own `Apply band` as the one thing that applies there, and does NOT read that there is nothing waiting to be applied (amended by `PLAYOUT-SOURCES-01`, 2026-09-27: the catalogue it used to say saves as you go is the Playout's now, listed read-only)
+- **AND** it opens in Grid view and offers List view with larger input previews and vertical meters attached in both views
 - **WHEN** the Text file delimiters tab is shown **THEN** its footer does read that there is nothing waiting to be applied, because that is true of every control in it
 
 > ⚠ **SUPERSEDED by `STATION-CHROME-01` §2/§4 (2026-09-07):** each TAB owns its own
@@ -296,17 +302,17 @@ Station setup SHALL offer, for each channel the install declares, its configured
 
 - **WHEN** a width or height is not a whole number between 1 and the schema's maximum **THEN** the section refuses locally and `channelSettings.set` is not sent
 
-### Requirement: The reserved and live layers are shown read-only, with their source named
+### Requirement: Station layers summarises reserved and occupied live layers
 
-Station setup SHALL show the reserved playout layers per channel as ranges and the live-layer ledger's seated coordinates, name the CLI flag and the file each is declared or persisted by, state that they are changed at bridge start and not here, and say what the console cannot see. The section SHALL render no input and no button.
+The Station layers tab SHALL show reserved Playout ranges and seated live plate coordinates in read-only summaries. The summaries SHALL omit configuration flags and filenames.
 
 #### Scenario: Reserved layers are listed as ranges, read-only
 
-- **WHEN** the bridge declares layers 60–69 and 105 on channel 1 **THEN** the section reads `Channel 1: 60–69, 105`, names `--reserved-layers` and `bridge-reserved-layers.json`, and offers no control
+- **WHEN** the bridge declares layers 60–69 and 105 on channel 1 **THEN** the summary reads `Channel 1: 60–69, 105` and offers no control
 
-#### Scenario: The ledger is listed by coordinate and admits what is unknown
+#### Scenario: Occupied live plate layers are listed by coordinate
 
-- **WHEN** the bridge has seated layers 1-12 and 1-13 **THEN** the section lists them by coordinate, names `bridge-live-layers.json`, `--live-layers-path` and `--no-live-layers`, states that the console cannot see which is in force, and names no row
+- **WHEN** the bridge has seated layers 1-12 and 1-13 **THEN** the summary shows their count and coordinates and refers the operator to Live plates to see which rows own them
 
 ### Requirement: Six settings stay where the operator reaches them today
 

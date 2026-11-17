@@ -319,6 +319,8 @@ const ServerEndpointSchema = z.object({
 
 // R-010 — exported: the bridge validates its persisted config file against
 // this exact schema, and `connections.set-config` takes it as the request.
+export const DEFAULT_QUICK_RESTORE_SECONDS = 5;
+
 export const ConnectionConfigSchema = z.object({
   // B-046 — the backup is DECLARED, not assumed: a single-server station omits
   // it, and only declared intent distinguishes "no backup" (quiet) from
@@ -326,6 +328,7 @@ export const ConnectionConfigSchema = z.object({
   servers: z.object({ A: ServerEndpointSchema, B: ServerEndpointSchema.optional() }),
   strategy: z.enum(['mirror-sync', 'mirror-async', 'journal-replay']),
   autoFailoverEnabled: z.boolean(),
+  quickRestoreSeconds: z.number().int().min(0).max(30).optional(),
   /**
    * `C-024` — **the address those servers fetch templates from, PERSISTED.**
    *

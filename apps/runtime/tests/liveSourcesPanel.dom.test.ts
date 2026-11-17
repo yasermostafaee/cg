@@ -216,7 +216,10 @@ async function render(
 }
 
 /** Render an explicit row array — the panel derives nothing, so this IS its whole input. */
-async function renderGiven(rows: readonly LiveLayerRowView[]): Promise<{ el: HTMLElement }> {
+async function renderGiven(
+  rows: readonly LiveLayerRowView[],
+  plateLabelOf?: (itemId: string, plateId: string) => string,
+): Promise<{ el: HTMLElement }> {
   const { el } = await render([]);
   const r = root;
   await act(async () => {
@@ -233,6 +236,7 @@ async function renderGiven(rows: readonly LiveLayerRowView[]): Promise<{ el: HTM
             Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
           onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
           onOpenAudio: () => undefined,
+          ...(plateLabelOf === undefined ? {} : { plateLabelOf }),
           panicChannel: null,
         }),
       ),
@@ -339,9 +343,32 @@ describe('4.1 — seated live layers appear in the list', () => {
 
     const row = rowFor(el, '1-10');
     expect(row, 'the seated layer has a row at all').not.toBeNull();
-    expect(row?.textContent).toContain('guest-1');
+    expect(row?.querySelector('.cg-plate-slot')?.textContent).toBe('Plate');
+    expect(row?.textContent).not.toContain('guest-1');
     expect(row?.textContent).toContain('route://1-1');
     expect(row?.textContent).toContain('On screen');
+  });
+
+  it('shows the authored plate name with the source and keeps internal UUIDs off the row', async () => {
+    const id = 'frame-7a2e4060-82e2-4ac2-9762-9ba7506e15d3';
+    const sourceId = 'b19ea6df-1768-42cb-a0b1-07284dca264b';
+    const rows = liveLayerRows([layer({ sourceId: id })], OWNED, null).map((row) => ({
+      ...row,
+      sourceName: sourceId,
+    }));
+    const { el } = await renderGiven(rows, () => 'استودیو');
+    const row = rowFor(el, '1-10');
+    expect(row?.querySelector('.cg-plate-slot')?.textContent).toBe('استودیو');
+    expect(row?.querySelector('.cg-plate-producer')?.textContent).toBe('Input');
+    expect(row?.getAttribute('aria-label')).toContain('استودیو');
+    expect(row?.getAttribute('aria-label')).not.toContain(id);
+    expect(
+      [...(row?.querySelectorAll('[aria-label], [title]') ?? [])]
+        .map((node) => [node.getAttribute('aria-label'), node.getAttribute('title')])
+        .flat()
+        .join(' '),
+    ).not.toContain(id);
+    expect(row?.textContent).not.toContain(sourceId);
   });
 
   it('every seated layer gets its own row, in the order the bridge sent them', async () => {
@@ -432,7 +459,8 @@ describe('🔴 the gate — a STRANDED layer is the one that gets a control', ()
 
     const dialog = openDialog();
     expect(dialog, 'a confirm gate stands between the click and the wire').not.toBeNull();
-    expect(dialog?.textContent).toContain('guest-1');
+    expect(dialog?.textContent).toContain('Plate');
+    expect(dialog?.textContent).not.toContain('guest-1');
     expect(dialog?.textContent).toContain('route://1-1');
     expect(remove, 'nothing is sent before the operator confirms').not.toHaveBeenCalled();
   });
@@ -806,8 +834,7 @@ describe('🔴 RELEASE IS ITEM-SCOPED — the wording must not name one layer an
     const dialog = openDialog();
     expect(dialog?.textContent).toContain('1-10');
     expect(dialog?.textContent).toContain('1-11');
-    expect(dialog?.textContent).toContain('guest-1');
-    expect(dialog?.textContent).toContain('guest-2');
+    expect(dialog?.textContent).not.toMatch(/guest-[12]/);
     expect(dialog?.textContent, 'and says plainly that one release takes both').toContain(
       'releasing one releases them all',
     );
@@ -919,20 +946,9 @@ describe('liveLayerRows — the gate as pure functions', () => {
     expect(unnamed('item-a')).toEqual({ row: 'comp1', detail: null });
   });
 
-  it('an item whose template is unknown falls back to its ID, never to "unknown template"', () => {
-    /*
-      An id is ugly, but it is the HANDLE — and a row labelled "Unknown template" would be
-      indistinguishable at a glance from the stranded state, which is the one thing on this
-      surface that means an emergency.
-    */
+  it('identifies an unnamed owner as a live layer', () => {
     const labelFor = ownerLabelFor([item('item-a')], () => undefined);
-    /*
-      🔴 `PLATES-AUDIO-11` §1 — the answer is an OWNER now, two fields: the name that goes in
-      the sentence and the composition that goes on a `title`. With no row name and no template
-      name there is nothing to say but the id, and `shortId` is what says it — an ugly HANDLE,
-      never a friendly placeholder that two different unnamed rows would share.
-    */
-    expect(labelFor('item-a')).toEqual({ row: 'item-a', detail: null });
+    expect(labelFor('item-a')).toEqual({ row: 'Live layer', detail: null });
   });
 });
 
@@ -1892,7 +1908,7 @@ describe('the LIVE PLATES source column', () => {
     () => 'bed1',
   );
 
-  it('shows the catalogue NAME, with the producer relocated to the title', async () => {
+  it('shows the catalogue name in the cell and tooltip', async () => {
     const rows = liveLayerRows(
       [layer({ sourceId: 'l1', producer: 'DECKLINK DEVICE 1' })],
       NAMED,
@@ -1905,9 +1921,7 @@ describe('the LIVE PLATES source column', () => {
     const cell = el.querySelector('.cg-plate-source');
     expect(cell?.textContent).toContain('sdi');
     expect(cell?.textContent, 'the AMCP argument is not the sentence').not.toContain('DECKLINK');
-    expect(cell?.querySelector('.cg-plate-producer')?.getAttribute('title')).toContain(
-      'DECKLINK DEVICE 1',
-    );
+    expect(cell?.querySelector('.cg-plate-producer')?.getAttribute('title')).toBe('sdi');
   });
 
   it('🔴 falls back to the PRODUCER when nothing names the plate — never to an invented name', async () => {
@@ -1926,7 +1940,7 @@ describe('the LIVE PLATES source column', () => {
     const producer = el.querySelector('.cg-plate-source .cg-plate-producer');
     expect(producer?.textContent).toBe('DECKLINK DEVICE 1');
     expect(producer?.getAttribute('data-plate-unnamed')).toBe('true');
-    expect(producer?.getAttribute('title')).toMatch(/no source assigned in Station setup/i);
+    expect(producer?.getAttribute('title')).toContain('no source name available');
   });
 
   it('a declared frame that is not seated still names the input it WILL carry', async () => {

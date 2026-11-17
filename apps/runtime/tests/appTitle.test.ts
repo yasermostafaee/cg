@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * 🔴 `FIELD-FIXES-01` G — **THE BROWSER TAB CARRIES THE TITLE AND THE APASAI LOGO**, and nothing in
  * the page repeats the name. The favicon is `brand/apasai-icon.svg`: the logo, its content
- * unchanged, centred on a white square (the same source the installed app's icons are made from).
+ * unchanged, on Control's product tile (the source for the installed app's icons).
  */
 
 const read = (rel: string): string => fs.readFileSync(new URL(rel, import.meta.url), 'utf8');

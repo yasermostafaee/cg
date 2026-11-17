@@ -497,7 +497,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
     await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
     await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
     await pan.click();
-    await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
+    await expect(pvw.getByRole('button', { name: 'Pan source picture in Plate 1' })).toBeEnabled();
   };
   const leavePreview = () => plateRow.getByRole('button', { name: 'OFF PVW', exact: true }).click();
   await startPan();
@@ -573,7 +573,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   expect(reveal).toBeGreaterThan(play);
 
   await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
-  await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
+  await expect(pvw.getByRole('button', { name: 'Pan source picture in Plate 1' })).toBeEnabled();
   const reloadWireStart = engine.receivedCommands().length;
   const revisedMarker = 'pvw-crop-revised';
   const reloaded = await page.evaluate((request) => window.cg.templates.import(request), {
@@ -591,7 +591,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(pan).toBeEnabled();
   if ((await pan.getAttribute('aria-pressed')) !== 'true') await pan.click();
-  await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
+  await expect(pvw.getByRole('button', { name: 'Pan source picture in Plate 1' })).toBeEnabled();
   await expect(saved).toBeVisible();
   const before = engine.layerState(slot);
   if (before?.fill === undefined || before.clip === undefined)
@@ -600,7 +600,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   const beforeClip = { ...before.clip };
   const beforeResize = engine.receivedCommands().length;
   await pvw
-    .getByRole('button', { name: 'Resize top left crop corner in guest' })
+    .getByRole('button', { name: 'Resize top left crop corner in Plate 1' })
     .press('ArrowRight');
   await expect(draft).toBeVisible();
   expect(engine.layerState(slot)?.fill).toEqual(beforeFill);
@@ -3254,7 +3254,7 @@ async function verifyInterruptedPresetEffects(
   expect(await recordedPvwPresetPhases(body)).toEqual([]);
 
   await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
-  const input = inspector.getByRole('combobox', { name: 'Input for common in look Solo' });
+  const input = inspector.getByRole('combobox', { name: 'Input for Plate 1 in preset Solo' });
   await input.click();
   await page.locator('[data-picker-input="unavailable-preset-input"]').click();
   await cue('duo').click();
@@ -3469,7 +3469,7 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
 
   // At equal geometry the old source stays visible until the incoming snapshot arrives.
   await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
-  await inspector.getByRole('combobox', { name: 'Input for common in look Solo' }).click();
+  await inspector.getByRole('combobox', { name: 'Input for Plate 1 in preset Solo' }).click();
   await page.locator('[data-picker-input="extra"]').click();
   await expect(picture('solo')).toHaveAttribute('data-source-id', 'extra');
   await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(1);
@@ -3525,7 +3525,7 @@ async function verifyLocalInputSlides(
   picture: Locator,
 ): Promise<void> {
   const effect = inspector.getByRole('group', { name: 'Input effect' });
-  const input = inspector.getByRole('combobox', { name: 'Input for common in look Solo' });
+  const input = inspector.getByRole('combobox', { name: 'Input for Plate 1 in preset Solo' });
   const rect = (locator: Locator) =>
     locator.evaluate((element) => {
       const { x, y, width, height } = element.getBoundingClientRect();

@@ -632,12 +632,6 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 Style::Body,
                 palette::TEXT_SECONDARY,
             );
-            b.text(
-                Rect::new(X0, 116.0, 380.0, 20.0),
-                format!("Version {}", m.config.version),
-                Style::Body,
-                palette::TEXT_SECONDARY,
-            );
             b.items.push(Item::Tile {
                 rect: Rect::new(X1 - 88.0, 54.0, 88.0, 88.0),
             });
@@ -845,27 +839,25 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 palette::SPLASH_READOUT,
             );
             let detail = match m.progress.copy {
-                Some(copy) => Some(format!(
+                Some(copy) => format!(
                     "{} / {}",
                     format_copy_bytes(copy.written),
                     format_copy_bytes(copy.total)
-                )),
+                ),
                 None if !m.progress.waiting => {
-                    Some(format!("{}%", (m.shown * 100.0).floor() as u32))
+                    format!("{}%", (m.shown * 100.0).floor() as u32)
                 }
-                None => None,
+                None => "In progress".into(),
             };
-            if let Some(text) = detail {
-                b.items.push(Item::Text {
-                    rect: Rect::new(X0 + CONTENT_W / 2.0, 212.0, CONTENT_W / 2.0, 14.0),
-                    text,
-                    style: Style::Readout,
-                    color: palette::SPLASH_READOUT,
-                    role: Role::Text,
-                    right: true,
-                    wrap: false,
-                });
-            }
+            b.items.push(Item::Text {
+                rect: Rect::new(X0 + CONTENT_W / 2.0, 212.0, CONTENT_W / 2.0, 14.0),
+                text: detail,
+                style: Style::Readout,
+                color: palette::SPLASH_READOUT,
+                role: Role::Text,
+                right: true,
+                wrap: false,
+            });
             let can_cancel = !m.progress.engine_started && !m.cancelling;
             footer(
                 &mut b,
@@ -879,13 +871,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 ok: true,
             });
             b.heading(Rect::new(X0, 124.0, CONTENT_W, 34.0), m.title());
-            b.text(
-                Rect::new(X0, 166.0, CONTENT_W, 20.0),
-                format!("Version {}", m.config.version),
-                Style::Body,
-                palette::TEXT_SECONDARY,
-            );
-            let mut y = 186.0;
+            let mut y = 168.0;
             if p.id == ProductId::Bridge {
                 if let Some(running) = m.outcome.service_running {
                     let state = if running { "running" } else { "stopped" };
@@ -948,6 +934,14 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             escape = Some(WidgetId::Close);
         }
     }
+
+    // Keep the packaged version in the same place throughout the wizard.
+    b.text(
+        Rect::new(X0, 10.0, 380.0, 20.0),
+        format!("Version {}", m.config.version),
+        Style::Body,
+        palette::TEXT_SECONDARY,
+    );
 
     // Help, at the rail's foot: the guide when it is bundled; CG Bridge's status once installed.
     if help_target(m).is_some() {
@@ -1100,6 +1094,41 @@ mod tests {
     }
 
     #[test]
+    fn the_packaged_version_stays_visible_on_every_page() {
+        for product in [&CONTROL, &DESIGNER, &BRIDGE] {
+            let mut m = model(
+                product,
+                Facts {
+                    installed_version: Some("0.9.1".into()),
+                    ..Facts::default()
+                },
+            );
+            for page in [
+                Page::Welcome,
+                Page::Location,
+                Page::Server,
+                Page::Installing,
+                Page::Done,
+                Page::Failed,
+            ] {
+                m.page = page;
+                let scene = build(&m, &Fake);
+                assert_eq!(
+                    scene
+                        .texts()
+                        .into_iter()
+                        .filter(|t| *t == "Version 0.10.0")
+                        .count(),
+                    1,
+                    "{:?} on {:?}",
+                    product.id,
+                    page
+                );
+            }
+        }
+    }
+
+    #[test]
     fn cg_bridges_lines_are_its_service_and_ports() {
         let m = model(&BRIDGE, Facts::default());
         let t = build(&m, &Fake)
@@ -1150,6 +1179,7 @@ mod tests {
         let s = build(&m, &Fake);
         assert!(s.texts().contains(&"Stopping the service"));
         assert!(s.texts().contains(&"STEP 2 OF 11"));
+        assert!(s.texts().contains(&"In progress"));
         assert!(!s.texts().contains(&"42%"));
         assert!(s
             .items

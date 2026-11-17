@@ -107,18 +107,14 @@ describe('B-240 — one job, one control, one name', () => {
     expect(footerButtons(dialog), 'a read-only tab offers the dialog’s own way out').toEqual([
       'Close',
     ]);
-    for (const id of ['sources', 'delimiters'] as const) {
+    for (const id of ['servers', 'sources', 'delimiters'] as const) {
       await selectSetupTab(dialog, id);
-      expect(footerButtons(dialog), `${id} is save-as-you-go: Close alone`).toEqual(['Close']);
+      expect(footerButtons(dialog), `${id} has no footer commit`).toEqual(['Close']);
     }
     // 🔴 …and NEVER beside a commit. This is the half `B-240` was protecting.
-    for (const id of ['servers', 'candidate-layers'] as const) {
-      await selectSetupTab(dialog, id);
-      expect(footerButtons(dialog), `${id} offers both a Close and an Apply`).not.toContain(
-        'Close',
-      );
-      expect(footerButtons(dialog).join(' '), `${id} lost its commit`).toContain('Apply');
-    }
+    await selectSetupTab(dialog, 'candidate-layers');
+    expect(footerButtons(dialog)).not.toContain('Close');
+    expect(footerButtons(dialog)).toContain('Apply layers');
     // The contract sentence is still there — that is what the footer is FOR.
     expect(
       dialog.querySelector('[data-section-footer]')?.textContent?.trim().length ?? 0,
@@ -159,12 +155,12 @@ describe('B-240 — one job, one control, one name', () => {
     const dialog = await renderStationSetup({ section: 'servers' });
 
     // CLEAN: Servers has a draft mechanism but no draft yet, so no discard is offered.
-    expect(footerButtons(dialog)).toEqual(['Apply servers']);
+    expect(footerButtons(dialog)).toEqual(['Close']);
 
     // DIRTY: typing puts the same fact on the rail's dot and on the Revert button — one
     // condition, read twice, so they cannot disagree.
     await setSetupInput(dialog, 'Primary host', '192.168.21.114');
-    expect(footerButtons(dialog)).toEqual(['Revert', 'Apply servers']);
+    expect(footerButtons(dialog)).toEqual(['Revert']);
     expect(
       dialog.querySelector('[role="tab"]#station-servers [data-tab-badge="edited"]'),
       'the rail says the same thing the button does',

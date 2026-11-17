@@ -217,7 +217,7 @@ function pill(el: HTMLElement, contains: string): HTMLElement | undefined {
 
 /** The primary server's pill — `backup` carries its own HEALTHY, so assert on this one. */
 function primaryPill(el: HTMLElement): string {
-  return pill(el, 'PRIMARY')?.textContent ?? '';
+  return pill(el, 'Server A')?.textContent ?? '';
 }
 
 /**
@@ -264,7 +264,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
 
     expect(el.textContent).not.toContain('Loading…');
     expect(el.textContent).not.toContain('UNKNOWN');
-    expect(primaryPill(el)).toContain('PRIMARY A');
+    expect(primaryPill(el)).toContain('Server A');
     expect(primaryPill(el)).toContain('HEALTHY');
     // The same <footer> node throughout: React reconciled the tree, it was never re-created.
     expect(el.querySelector('footer')).toBe(footerBefore);
@@ -278,7 +278,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     // StrictMode deliberately double-invokes the mount effect, so the absolute number is a
     // property of the harness, not of the hook.)
     expect(primaryPill(el)).toContain('HEALTHY');
-    expect(confidentIn(pill(el, 'PRIMARY'))).not.toEqual([]);
+    expect(confidentIn(pill(el, 'Server A'))).not.toEqual([]);
     const pullsWhileConnected = bridge.healthPulls();
     expect(pullsWhileConnected).toBeGreaterThan(0);
     const footerBefore = el.querySelector('footer');
@@ -291,10 +291,10 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     expect(primaryPill(el)).toContain('UNKNOWN');
     expect(primaryPill(el)).not.toContain('HEALTHY');
     // Not just the word — nothing in the pill is still claiming green, ● dot included.
-    expect(confidentIn(pill(el, 'PRIMARY'))).toEqual([]);
-    expect(confidentIn(pill(el, 'BACKUP'))).toEqual([]);
+    expect(confidentIn(pill(el, 'Server A'))).toEqual([]);
+    expect(confidentIn(pill(el, 'Server B'))).toEqual([]);
     // The last-known reading survives ONLY as an explicitly-stale tooltip.
-    expect(pill(el, 'PRIMARY')?.title).toContain('Last known before the link dropped: HEALTHY');
+    expect(pill(el, 'Server A')?.title).toContain('Last known before the link dropped: HEALTHY');
     // And no read is fired at a link that refuses reads by design (R-006).
     expect(bridge.healthPulls()).toBe(pullsWhileConnected);
 
@@ -304,7 +304,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     expect(bridge.healthPulls()).toBe(pullsWhileConnected + 1);
     expect(primaryPill(el)).toContain('HEALTHY');
     expect(primaryPill(el)).not.toContain('UNKNOWN');
-    expect(confidentIn(pill(el, 'PRIMARY'))).not.toEqual([]);
+    expect(confidentIn(pill(el, 'Server A'))).not.toEqual([]);
     expect(el.querySelector('footer')).toBe(footerBefore);
   });
 
@@ -376,7 +376,7 @@ describe('the health LED agrees with its own label', () => {
     await flush(() => bridge.publishHealth(HEALTHY));
 
     expect(primaryPill(el)).toContain('HEALTHY');
-    expect(greenDots(pill(el, 'PRIMARY'))).toBe(1);
+    expect(greenDots(pill(el, 'Server A'))).toBe(1);
   });
 
   it('THE BUG: an OFFLINE primary must NOT keep a green dot', async () => {
@@ -386,7 +386,7 @@ describe('the health LED agrees with its own label', () => {
     await flush(() => bridge.publishHealth(PRIMARY_OFFLINE));
 
     expect(primaryPill(el)).toContain('OFFLINE');
-    expect(greenDots(pill(el, 'PRIMARY')), 'a green LED beside OFFLINE').toBe(0);
+    expect(greenDots(pill(el, 'Server A')), 'a green LED beside OFFLINE').toBe(0);
   });
 
   it('a DEGRADED primary does not keep one either', async () => {
@@ -396,7 +396,7 @@ describe('the health LED agrees with its own label', () => {
     await flush(() => bridge.publishHealth(PRIMARY_DEGRADED));
 
     expect(primaryPill(el)).toContain('DEGRADED');
-    expect(greenDots(pill(el, 'PRIMARY'))).toBe(0);
+    expect(greenDots(pill(el, 'Server A'))).toBe(0);
   });
 });
 
@@ -442,7 +442,7 @@ describe('the BACKUP LED agrees with its own label too', () => {
     await flush(() => bridge.setLink('live'));
     await flush(() => bridge.publishHealth(BACKUP_OFFLINE));
 
-    const scope = pill(el, 'BACKUP');
+    const scope = pill(el, 'Server B');
     expect(scope?.textContent ?? '').toContain('OFFLINE');
     expect(greenDots(scope), 'a green LED beside an OFFLINE backup').toBe(0);
     expect(hollowDot(scope)?.style.color, 'the backup LED must read as the fault').toBe(FAULT_MARK);
@@ -464,7 +464,7 @@ describe('the BACKUP LED agrees with its own label too', () => {
     await flush(() => bridge.setLink('live'));
     await flush(() => bridge.publishHealth(HEALTHY));
 
-    const scope = pill(el, 'BACKUP');
+    const scope = pill(el, 'Server B');
     expect(scope?.textContent ?? '').toContain('HEALTHY');
     expect(hollowDot(scope)).toBeDefined();
     expect(hollowDot(scope)?.style.color).toBe(LED_GREEN);

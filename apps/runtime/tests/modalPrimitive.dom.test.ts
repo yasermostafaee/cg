@@ -257,6 +257,9 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await act(async () => {
+      dialog.querySelector<HTMLInputElement>('[aria-label="Show layer 95"]')?.click();
+    });
     await clickSetupButton(dialog, 'Apply layers');
     return dialog;
   }

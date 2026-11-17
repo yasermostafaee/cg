@@ -1,8 +1,8 @@
+import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState, useSyncExternalStore } from 'react';
 import {
   controlLiveLayoutDefaults,
-  plateLabel,
   resolvePlateSourcesForLook,
   type TemplateInfo,
 } from '@cg/shared-ipc';
@@ -145,22 +145,17 @@ export function LiveSourceSwapDialog({
     >
       <LiveInputCheckCard surface={surface} />
       <InputEffectControls itemId={item.itemId} layout={template.controlLiveLayout} />
-      {plates.map((plate, i) => {
+      {plates.map((plate) => {
         const assigned = revertedSources.get(plate.sourceId) ?? null;
         const hasPresetAssignment =
           bindingLookId !== undefined &&
           item.lookSourceOverride?.[bindingLookId]?.[plate.sourceId] !== undefined;
         const swapped = override[plate.sourceId];
-        // The one numbering (`plateLabel`); the id stays on the label's `title`.
-        const label = plateLabel(plates, plate.sourceId) ?? `Plate ${String(i + 1)}`;
+        const label = plateDisplayName(plate.sourceId, template.liveSources?.sources, layout);
         return (
           <div key={plate.sourceId} style={styles.row} data-swap-plate={plate.sourceId}>
-            <label
-              htmlFor={`swap-${item.itemId}-${plate.sourceId}`}
-              style={styles.plate}
-              title={plate.sourceId}
-            >
-              {label}
+            <label htmlFor={`swap-${item.itemId}-${plate.sourceId}`} style={styles.plate}>
+              <bdi>{label}</bdi>
               <span style={styles.assigned} data-swap-assigned="">
                 <ChoiceLabel
                   meterChannel={channel}

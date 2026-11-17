@@ -102,7 +102,11 @@ describe('Station setup — Servers (R-010)', () => {
   it('idle/loaded items do not block APPLY SERVERS', async () => {
     stub({ items: [item('idle'), item('loaded')] });
     const el = await renderStationSetup({ section: 'servers' });
+    expect(applyButton(el).disabled).toBe(true);
+    await setSetupInput(el, 'Primary host', '192.0.2.11');
     expect(applyButton(el).disabled).toBe(false);
+    await setSetupInput(el, 'Primary host', '127.0.0.1');
+    expect(applyButton(el).disabled).toBe(true);
   });
 
   it('warns about LAN exposure for a non-loopback host, and confirms post-apply', async () => {
@@ -142,6 +146,7 @@ describe('Station setup — Servers (R-010)', () => {
       },
     });
     const el = await renderStationSetup({ section: 'servers' });
+    await setSetupInput(el, 'Primary host', '192.168.21.50');
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -166,6 +171,7 @@ describe('Station setup — Servers (R-010)', () => {
       },
     });
     const el = await renderStationSetup({ section: 'servers' });
+    await setSetupInput(el, 'Graphics port', '7911');
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -349,8 +355,12 @@ describe('Station setup — Servers (R-010)', () => {
       cleared field has to reach the store as `''` — so it is always sent. The PORT has no such
       problem and `0` already means something specific, so an empty port field is omitted.
     */
-    const { setConfig } = stub();
+    const { setConfig } = stub({
+      config: { ...SETUP_CONFIG, templateServeHost: '192.0.2.50', templateServePort: 7911 },
+    });
     const el = await renderStationSetup({ section: 'servers' });
+    await setSetupInput(el, 'Graphics host', '');
+    await setSetupInput(el, 'Graphics port', '');
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -439,7 +449,7 @@ describe('Station setup — Servers (R-010)', () => {
     */
     await setSetupInput(el, 'Graphics port', '');
     expect(el.querySelector('[data-setup-field="serve-port"] [data-field-error]')).toBeNull();
-    expect(applyButton(el).disabled).toBe(false);
+    expect(applyButton(el).disabled).toBe(true);
 
     // …and out of range is refused beside the field, with the commit dead.
     await setSetupInput(el, 'Graphics port', '99999');

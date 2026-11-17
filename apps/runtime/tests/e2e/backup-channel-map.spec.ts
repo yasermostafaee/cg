@@ -18,7 +18,7 @@ import { stopChild } from './fixtures/child-process.js';
 
 /**
  * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — **WHERE EACH CHANNEL'S LINES GO ON THE BACKUP ENGINE, IN A REAL
- * BROWSER**: the status bar's `BACKUP B · n of m channels mapped`, the channel view's backup line, and Station
+ * BROWSER**: the status bar's `Server B · n/m CG channels mapped`, the channel view's backup line, and Station
  * setup's `Backup engine` lines.
  *
  * Two fake engines publishing a real pair's D4 — the backup's mirror of the primary's channel 1 is the
@@ -163,7 +163,7 @@ test('🔴 the channel’s lines on the backup engine: the status bar’s count,
   // 1 — the status bar's count: the backup's mirror of CH 1 is ITS channel 2.
   const bar = page.getByLabel('Status bar');
   const count = bar.locator('[data-backup-mapped]');
-  await expect(count).toHaveText('BACKUP B · 1 of 1 channels mapped', { timeout: 20_000 });
+  await expect(count).toHaveText('Server B · 1/1 CG channels mapped', { timeout: 20_000 });
   await expect(count).toHaveAttribute('data-backup-mapped', 'ok');
 
   // 2 — the channel's own view: PROGRAM names the backup's own channel and host.
@@ -178,7 +178,11 @@ test('🔴 the channel’s lines on the backup engine: the status bar’s count,
   if ((await servers.getAttribute('aria-selected')) !== 'true') await servers.click();
   const card = setup.getByRole('region', { name: 'Backup engine' });
   const row = card.locator('[data-backup-entry-row="1"]');
-  await expect(row).toContainText('CH 1 (primary) → CH');
+  await expect(row).toContainText('CH 1 (primary) →');
+  const picker = card.getByRole('combobox', { name: 'Backup channel for CH 1' });
+  const save = card.getByRole('button', { name: 'Save backup channels' });
+  await expect(picker.locator('option:checked')).toHaveText('Automatic · CH 2');
+  await expect(picker).toBeDisabled();
   await expect(row.locator('[data-backup-entry-state]')).toHaveText(
     'CH 2 in force · from the backup engine',
   );
@@ -195,17 +199,22 @@ test('🔴 the channel’s lines on the backup engine: the status bar’s count,
     'Not mapped · The backup engine publishes no mirrors (Playout before 2.9.5).',
     { timeout: 20_000 },
   );
-  await expect(count).toHaveText('BACKUP B · 0 of 1 channels mapped');
+  await expect(count).toHaveText('Server B · 0/1 CG channels mapped');
   await expect(count).toHaveAttribute('data-backup-mapped', 'alarm');
 
-  // A station admin enters CH 1 → CH 2: checked against the backup's list, and in force.
-  await card.getByLabel('Backup channel for CH 1').fill('2');
-  await card.getByRole('button', { name: 'Save backup channels' }).click();
+  // A station admin selects a channel from the backup's list.
+  await expect(save).toBeDisabled();
+  await expect(picker.locator('option[value="2"]')).toHaveText('CH 2 · آپاسای (آینه)');
+  await expect(picker.locator('option[value="4"]')).toHaveCount(0);
+  await picker.selectOption('2');
+  await expect(picker).toHaveValue('2');
+  await save.click();
   await expect(row.locator('[data-backup-entry-state]')).toHaveText(
     'CH 2 in force · from this entry',
     { timeout: 20_000 },
   );
-  await expect(count).toHaveText('BACKUP B · 1 of 1 channels mapped');
+  await expect(count).toHaveText('Server B · 1/1 CG channels mapped');
+  await expect(save).toBeDisabled();
 
   // Close the dialog: the channel's own line reads the entry's channel.
   await page.keyboard.press('Escape');

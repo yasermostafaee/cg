@@ -98,26 +98,28 @@ const TWO_OF_TWO: BackupChannelsState = {
 const ONE_OF_TWO: BackupChannelsState = {
   backup: {
     backupHost: '192.0.2.21',
+    channelListState: 'ready',
     channels: [
-      { channel: 1, state: 'mapped', backupChannel: 2, source: 'playout' },
+      { channel: 1, state: 'mapped', backupChannel: 2, source: 'playout', automaticChannel: 2 },
       {
         channel: 2,
         state: 'not-mapped',
         entry: 3,
         entryRefusal: 'Video mode differs: CH 2 is 1080i5000, backup CH 3 is 720p5000.',
         reason: 'Video mode differs: CH 2 is 1080i5000, backup CH 3 is 720p5000.',
+        manualChoices: [{ channel: 4, name: 'Backup studio' }],
       },
     ],
   },
 };
 
-describe('R-089 — the status bar: `BACKUP B · n of m channels mapped`', () => {
+describe('R-089 — the status bar: `Server B · n/m CG channels mapped`', () => {
   const count = (el: HTMLElement) => el.querySelector<HTMLElement>('[data-backup-mapped]');
 
   it('🔴 all mapped reads plainly; one of two in the warning tone; none in the alarm tone', async () => {
     stub();
     let el = await mount(createElement(StatusBar, { backupChannels: TWO_OF_TWO }));
-    expect(count(el)?.textContent).toBe('BACKUP B · 2 of 2 channels mapped');
+    expect(count(el)?.textContent).toBe('Server B · 2/2 CG channels mapped');
     expect(count(el)?.getAttribute('data-backup-mapped')).toBe('ok');
     await act(async () => {
       root?.unmount();
@@ -125,7 +127,7 @@ describe('R-089 — the status bar: `BACKUP B · n of m channels mapped`', () =>
     root = null;
     host?.remove();
     el = await mount(createElement(StatusBar, { backupChannels: ONE_OF_TWO }));
-    expect(count(el)?.textContent).toBe('BACKUP B · 1 of 2 channels mapped');
+    expect(count(el)?.textContent).toBe('Server B · 1/2 CG channels mapped');
     expect(count(el)?.getAttribute('data-backup-mapped')).toBe('warn');
   });
 
@@ -229,7 +231,7 @@ describe('R-089 — Station setup → Servers → Backup engine: one line per ch
     ...el.querySelectorAll<HTMLElement>('[data-backup-entry-row]'),
   ];
 
-  it('🔴 each line: `CH N (primary) → CH [M] (backup)` and its state — a refused entry says why beside it', async () => {
+  it('describes an automatic mapping and preserves a refused saved entry for correction', async () => {
     stub();
     const el = await mount(
       createElement(BackupChannelsCard, { state: ONE_OF_TWO, mayChange: true }),
@@ -238,38 +240,88 @@ describe('R-089 — Station setup → Servers → Backup engine: one line per ch
       'CH 2 in force · from the backup engine',
       'Not mapped · Video mode differs: CH 2 is 1080i5000, backup CH 3 is 720p5000.',
     ]);
-    expect(rows(el)[0]?.textContent).toContain('CH 1 (primary) → CH');
-    expect(rows(el)[0]?.textContent).toContain('(backup)');
-    // The admin's own entry is in its field.
-    expect(el.querySelector<HTMLInputElement>('#backup-channel-2')?.value).toBe('3');
+    expect(rows(el)[0]?.textContent).toContain('CH 1 (primary) →');
+    const automatic = el.querySelector<HTMLSelectElement>('#backup-channel-1');
+    expect(automatic?.selectedOptions[0]?.textContent).toBe('Automatic · CH 2');
+    expect(automatic?.disabled).toBe(true);
+    const manual = el.querySelector<HTMLSelectElement>('#backup-channel-2');
+    expect(manual?.value).toBe('3');
+    expect(manual?.selectedOptions[0]?.disabled).toBe(true);
   });
 
-  it('🔴 a station admin types M and saves: the bridge is sent the complete entries', async () => {
+  it('lets an admin select only named compatible channels and save a changed mapping', async () => {
     stub();
     setEntries.mockClear();
     const el = await mount(
       createElement(BackupChannelsCard, { state: ONE_OF_TWO, mayChange: true }),
     );
-    const field = el.querySelector<HTMLInputElement>('#backup-channel-1');
+    const field = el.querySelector<HTMLSelectElement>('#backup-channel-2');
     if (field === null) throw new Error('no field');
-    await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-      set?.call(field, '2');
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    expect([...field.options].map((option) => [option.value, option.disabled])).toEqual([
+      ['', false],
+      ['3', true],
+      ['4', false],
+    ]);
     const save = [...el.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('Save backup channels'),
     );
+    expect(save?.disabled).toBe(true);
+    await act(async () => {
+      field.value = '4';
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(field.selectedOptions[0]?.textContent).toBe('CH 4 · Backup studio');
+    expect(save?.disabled).toBe(false);
     await act(async () => {
       save?.click();
       await Promise.resolve();
     });
     expect(setEntries).toHaveBeenCalledWith({
-      entries: [
-        { channel: 1, backupChannel: 2 },
-        { channel: 2, backupChannel: 3 },
-      ],
+      entries: [{ channel: 2, backupChannel: 4 }],
     });
+  });
+
+  it('shows missing inventory states and blocks a draft removed by an updated catalogue', async () => {
+    stub();
+    const state = ONE_OF_TWO.backup;
+    if (state === null) throw new Error('no backup fixture');
+    const card = (backup: BackupChannelsState['backup']) =>
+      createElement(BackupChannelsCard, { state: { backup }, mayChange: true });
+    const el = await mount(card(state));
+    const field = el.querySelector<HTMLSelectElement>('#backup-channel-2');
+    if (field === null) throw new Error('no field');
+    const save = el.querySelector('button');
+    await act(async () => {
+      field.value = '4';
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(save?.disabled).toBe(false);
+    const channels = [{ channel: 1, state: 'not-mapped' as const }];
+    await act(async () => {
+      root?.render(
+        card({
+          ...state,
+          channelListState: 'stale',
+          channels: [...channels, { channel: 2, state: 'not-mapped', entry: 3 }],
+        }),
+      );
+    });
+    expect(field.value).toBe('4');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(save?.disabled).toBe(true);
+    for (const [channelListState, words] of [
+      ['unread', 'Waiting for channel list'],
+      ['stale', 'Channel list out of date'],
+      ['empty', 'No channels on server B'],
+      ['ready', 'No compatible channels'],
+    ] as const) {
+      await act(async () => {
+        root?.render(card({ ...state, channelListState, channels }));
+      });
+      const unavailable = el.querySelector<HTMLSelectElement>('#backup-channel-1');
+      expect(unavailable?.disabled).toBe(true);
+      expect(unavailable?.selectedOptions[0]?.textContent).toBe(words);
+    }
   });
 
   it('CONTROL — anyone else reads the lines: no field, no save', async () => {
@@ -277,7 +329,7 @@ describe('R-089 — Station setup → Servers → Backup engine: one line per ch
     const el = await mount(
       createElement(BackupChannelsCard, { state: TWO_OF_TWO, mayChange: false }),
     );
-    expect(el.querySelector('input')).toBe(null);
+    expect(el.querySelector('select')).toBe(null);
     expect(el.textContent).not.toContain('Save backup channels');
     expect(rows(el)).toHaveLength(2);
   });

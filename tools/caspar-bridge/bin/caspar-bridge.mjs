@@ -727,10 +727,10 @@ const connection =
   typed `--backup-*` flag still wins. A bridge that is not the service is unchanged.
 */
 const bootConnection =
-  serviceConfig !== null && connection !== undefined && !hasBackupFlags
+  serviceConfig !== null && connection !== undefined
     ? withSavedBackup(connection, loadPersistedConnection(persistPath))
     : connection;
-if (bootConnection !== connection) {
+if (bootConnection?.servers.B !== undefined && connection?.servers.B === undefined) {
   console.error(
     `[caspar-bridge] server B from Station setup: ${bootConnection.servers.B.host}:${String(bootConnection.servers.B.amcpPort)}`,
   );

@@ -45,7 +45,7 @@ describe('MODAL-TRUTH-01 — an impossible address is refused, and cannot be app
   it('🔴 the owner’s value: the field says why, and Apply is not available', async () => {
     stationSetupStub();
     const el = await renderStationSetup({ section: 'servers' });
-    expect(applyButton(el).disabled).toBe(false);
+    expect(applyButton(el).disabled).toBe(true);
 
     await setSetupInput(el, 'Primary host', '127.0.6110.121151515');
 
@@ -106,6 +106,8 @@ describe('MODAL-TRUTH-01 — an impossible address is refused, and cannot be app
     // Blank is a real state on this one field and means "derive it" (`C-024`).
     await setSetupInput(el, 'Graphics host', '');
     expect(fieldError(el, 'serve-host')).toBe('');
+    expect(applyButton(el).disabled).toBe(true);
+    await setSetupInput(el, 'Primary host', '192.168.21.114');
     expect(applyButton(el).disabled).toBe(false);
   });
 });

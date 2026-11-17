@@ -1,16 +1,17 @@
+import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { useSyncExternalStore } from 'react';
 import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
 import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
-import { SourceLabel } from '../sources/SourceLabel.js';
+import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { MediaPlaybackControl, MediaTransport } from '../sources/MediaPlayback.js';
 import { useMediaState } from '../../hooks/useMediaState.js';
-import { currentSourceCatalog, sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
+import { sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
 import {
   draftsVersion,
   effectiveLookBinding,
@@ -250,33 +251,6 @@ export function badgeFor(
   return { text: null, tone: 'not-on-air', color: styles.selected.color };
 }
 
-/**
- * The name this station shows for a catalog id, or the id when it names nothing.
- *
- * 🔴 **IT TAKES A NON-EMPTY `string`, AND THE EMPTY CASE IS GONE RATHER THAN REWORDED.**
- *
- * It used to accept `string | undefined` and answer `'the template default'` for the empty
- * case — old vocabulary from before the blank option named its own default, and by the time
- * the option was renamed to `Default (…)` that fallback had become actively wrong: interpolated
- * at the one call site below it produced **`Default (the template default)`**, self-referential
- * nonsense an operator would read as a data fault rather than a copy fault.
- *
- * ⚠ **The dead branch is DELETED, not re-worded, because it fed TWO call sites.** Rewording it
- * would have left one string doing duty in two roles — the blank option's label and the
- * "not in force — patched to X" note — with only one of them ever exercised, which is precisely
- * the shape that let the old wording rot unnoticed. Narrowing the parameter makes the state
- * unrepresentable instead: each caller now proves its id is real where it can actually see the
- * evidence.
- *
- * (It was never reachable — `SourceDefinitionIdSchema` is `.min(1)` plus a leading-alphanumeric
- * regex, enforced at every boundary an assignment crosses, and `applyDraft` turns an empty
- * staged value into a DELETION rather than a blank entry. Unreachability is why nothing was
- * red; it is not why this changed.)
- */
-function sourceName(id: string): string {
-  return currentSourceCatalog().sources.find((s) => s.id === id)?.name ?? id;
-}
-
 export function LooksBindingsSection({
   item,
   info,
@@ -346,8 +320,7 @@ export function LooksBindingsSection({
     const frozen = frozenPlateSource(item, plateId, appliedSource);
     // Through the file's OWN join, so this note and the `Default (…)` option beside it
     // cannot name the same source two different ways.
-    const nameOf = (id: string | null | undefined): string =>
-      id === null || id === undefined ? 'nothing' : sourceName(id);
+    const nameOf = (id: string | null | undefined): string => labelledSource(id)?.name ?? 'nothing';
     /*
       §12.5 — WHAT IS ACTUALLY ON AIR, when it is not what this control shows. An `R-048`
       patch outranks every level below it, so it speaks first and alone: naming a frozen value
@@ -537,7 +510,8 @@ export function LooksBindingsSection({
               `lookBindings.dom.test.ts` pins that exactly one exists.
             */}
             {plates.length === 0 && <p style={styles.empty}>No frames in this look.</p>}
-            {plates.map((plate, plateIndex) => {
+            {plates.map((plate) => {
+              const label = plateDisplayName(plate.sourceId, carrier.sources, layout);
               const applied = bound[look.id]?.[plate.sourceId];
               /*
                 §3d — THE DEFAULT, NAMED IN THE CONTROL THAT INHERITS IT. `appliedPlateSources`
@@ -562,21 +536,8 @@ export function LooksBindingsSection({
               const masked = patch !== undefined && patch !== '';
               return (
                 <div key={`${look.id}:${plate.sourceId}`} style={styles.row}>
-                  {/*
-                    🔴 **gh2 — THE LABEL LEADS ITS BOX** (owner, 2026-09-14:
-                    «اینپوتهای داخل اینسپکتور رو هم تمام صفحه کن مثل gh2»). It was a label
-                    BESIDE an auto-width select, which in a 396 px panel gave the box whatever
-                    was left after the longest plate id — so two rows of one look could carry
-                    two different box widths.
-
-                    ⚠ **`Frame N` IS THE LABEL AND THE PLATE ID IS ON THE `title`** — golden
-                    rule 11, and the drawing agrees. `plate.sourceId` is the template AUTHOR's
-                    identifier for a hole in a layout (`guest-1`); the operator reads a
-                    position. The id is RELOCATED, not deleted: the `aria-label` still carries
-                    it, so every existing finder and every screen reader still names the plate.
-                  */}
-                  <span style={styles.plate} title={plate.sourceId}>
-                    Plate {plateIndex + 1}
+                  <span style={styles.plate}>
+                    <bdi>{label}</bdi>
                   </span>
                   {/*
                     🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER, on this row's CHANNEL, so an
@@ -596,7 +557,7 @@ export function LooksBindingsSection({
                       className={[dirty ? 'is-dirty' : '', masked ? 'is-struck' : '']
                         .filter(Boolean)
                         .join(' ')}
-                      aria-label={`Input for ${plate.sourceId} in look ${look.name}`}
+                      aria-label={`Input for ${label} in preset ${look.name}`}
                       data={{
                         'data-look-binding': `${look.id}:${plate.sourceId}`,
                         ...(masked ? { 'data-look-binding-masked': '' } : {}),
@@ -649,7 +610,7 @@ export function LooksBindingsSection({
                       <Button
                         variant="ghost"
                         data-clear-patch={plate.sourceId}
-                        title={`Stop patching "${plate.sourceId}" and put this row's per-look inputs back in force`}
+                        title={`Stop patching "${label}" and put this row's per-look inputs back in force`}
                         onClick={() => {
                           void window.cg.stack
                             .swapLiveSource({

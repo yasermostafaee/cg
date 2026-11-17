@@ -102,8 +102,9 @@ export interface PlatePlacement {
    * template's layout and nothing outside it (design.md §2z).
    */
   plateId: string;
-  /** Operator-facing frame name for layouts authored in CG Control. */
-  frameLabel?: string;
+  plateLabel?: string;
+  /** The live layout draws its own caption, leaving the overlay free for status. */
+  captionInTemplate?: true;
   /** The active fit mode crops the input at the edges of this box. */
   cropEdges?: true;
   focus?: LiveCropFocus;

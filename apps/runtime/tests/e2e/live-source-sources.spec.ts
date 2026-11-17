@@ -68,6 +68,26 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   // The Playout's inputs, in ITS order, by the names its operators gave them.
   const list = dialog.getByRole('region', { name: 'Inputs from the Playout' });
   const rows = list.locator('[data-source-input]');
+  const grid = dialog.getByRole('button', { name: 'Grid view' });
+  const listView = dialog.getByRole('button', { name: 'List view' });
+  const firstPicture = rows.first().locator('.cg-input-thumbnail');
+  const firstTitle = rows.first().locator('.cg-resource__name');
+  await expect(grid).toHaveAttribute('aria-pressed', 'true');
+  await expect(list).toHaveAttribute('data-input-view', 'grid');
+  const gridPicture = await firstPicture.boundingBox();
+  const gridTitle = await firstTitle.boundingBox();
+  if (gridPicture === null || gridTitle === null) throw new Error('missing source tile');
+  expect(gridPicture.width).toBeGreaterThan(150);
+  expect(gridTitle.y).toBeGreaterThan(gridPicture.y + gridPicture.height);
+  await listView.click();
+  await expect(list).toHaveAttribute('data-input-view', 'list');
+  const listPicture = await firstPicture.boundingBox();
+  const listTitle = await firstTitle.boundingBox();
+  if (listPicture === null || listTitle === null) throw new Error('missing source row');
+  expect(listPicture.width).toBeGreaterThan(150);
+  expect(listPicture.x).toBeGreaterThan(listTitle.x + listTitle.width);
+  await grid.click();
+  await expect(list).toHaveAttribute('data-input-view', 'grid');
   await expect(rows.locator('.cg-resource__name')).toHaveText([
     'Studio 1',
     'Studio 2',
@@ -119,6 +139,7 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   // The BAND is the one catalogue fact the station still owns. It must be disjoint from the
   // operator's candidate bank: the mock's seeded bank starts at 80, so 60–85 reaches into it and
   // the refusal names BOTH ranges rather than merely saying no.
+  await expect(dialog.getByRole('button', { name: 'Apply band' })).toBeDisabled();
   await dialog.getByLabel('Live source band start layer').fill('60');
   await dialog.getByLabel('Live source band end layer').fill('85');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
@@ -132,6 +153,7 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   await dialog.getByLabel('Live source band end layer').fill('79');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
   await expect(dialog.getByText(/Currently 60–79/)).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Apply band' })).toBeDisabled();
 
   // Durable: the band survives closing and reopening the surface, because the value lives on the
   // bridge (here, the mock's store) and not in the modal — and the list is still the Playout's.

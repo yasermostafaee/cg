@@ -192,7 +192,7 @@ async function openDefaults(el: HTMLElement): Promise<HTMLElement> {
  * replaced the native select; its field carries the plate's value as `data-picker-value`.
  */
 function defaultsSelect(dialog: HTMLElement, plateId: string): HTMLElement {
-  const field = dialog.querySelector<HTMLElement>(`[aria-label="Default source for ${plateId}"]`);
+  const field = dialog.querySelector<HTMLElement>(`[data-defaults-select="${plateId}"]`);
   if (field === null) throw new Error(`no picker for ${plateId}`);
   return field;
 }

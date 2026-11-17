@@ -172,21 +172,10 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     const onClose = vi.fn();
     const dialog = await renderStationSetup({ section: 'servers', onClose });
 
-    // No draft, so the ✕ dismisses without a question — and it is the ONLY dismissal on
-    // screen: the footer carries no `Close` and no `Cancel` on any tab.
-    expect(footerActions(dialog).map((b) => b.textContent)).not.toContain('Cancel');
-    expect(footerActions(dialog).map((b) => b.textContent)).not.toContain('Close');
-    /*
-      ⚠ Asserted directly rather than through `expectDismissOnly`: that helper checks a
-      FOOTER ACTION's role and treatment (`data-modal-role="cancel"`, `cg-btn--neutral`), and
-      the point of B-240 is that this dismissal is not a footer action at all. It is the
-      primitive's ✕ — a `ghost`, with neither attribute — so passing it through the helper
-      would be asserting the shape this change removed.
-    */
-    const x = dialog.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
-    if (x === null) throw new Error('the dialog has no dismiss affordance');
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Close']);
+    const close = lastFooterAction(dialog);
     await act(async () => {
-      x.click();
+      close.click();
       await Promise.resolve();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -198,25 +187,16 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     expect(stub.delimitersSet).not.toHaveBeenCalled();
   });
 
-  it('a dialog that DOES commit keeps its primary — the rule does not neutralise real actions', async () => {
-    /*
-      🔴 THE NEGATIVE CONTROL, and without it this file would be enforcing "no dialog has a
-      primary action", which is a different and much worse rule.
-
-      `Apply servers` sends `connections.setConfig`. It keeps the `primary` role — and it is
-      named for the ONE section it commits, because four other tabs sit beside it.
-
-      ⭐ `STATION-CHROME-02` §3 — SENTENCE CASE. It read `APPLY SERVERS` until this change,
-      which was a leftover from the dialog it grew out of: the modal contract already says a
-      dialog's title is sentence case and never shouting, and `Apply layers` one tab along was
-      already right. Two spellings of one rule inside one dialog.
-    */
+  it('Advanced owns the primary engine settings action and the clean footer offers Close', async () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'servers' });
-    const apply = lastFooterAction(dialog);
-    expect(apply.textContent).toBe('Apply servers');
-    expect(apply.getAttribute('data-modal-role')).toBe('primary');
-    expect(apply.getAttribute('aria-label')).toBe('Apply server settings');
+    const apply = dialog.querySelector<HTMLButtonElement>(
+      '[data-setup-advanced] button[aria-label="Apply server settings"]',
+    );
+    expect(apply?.textContent).toBe('Apply servers');
+    expect(apply?.classList.contains('cg-btn--primary')).toBe(true);
+    expect(apply?.disabled).toBe(true);
+    expect(lastFooterAction(dialog).textContent).toBe('Close');
   });
 
   it('🔴 STATION-CHROME-01 §2 — each TAB carries its own footer, and no other tab’s action', async () => {
@@ -224,7 +204,7 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       The rule this file guards is unchanged; what changed is that the footer is now PER TAB,
       so it can be checked exactly rather than by counting a shared row.
 
-      · SERVERS is the only tab with an APPLY, and it is named for its scope.
+      · Connection groups its server Apply within Advanced.
       · The BANK's Apply/Revert are in ITS footer (portalled there from the section) — the
         `STATION-SETUP-02` note said they lived in the body only because "the dialog's footer
         belongs to Servers", and with tabs that is no longer true.
@@ -236,11 +216,10 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     /*
       ⭐ `B-240` — REWRITTEN. Servers used to read `Cancel · Apply servers` and every other
       tab a lone `Close`: three answers for dismissing, and two names for discarding. Now a
-      footer carries only THAT SECTION's actions — so a clean Servers tab carries its commit
-      alone, and a save-as-you-go tab carries nothing at all.
+      a clean Connection tab only carries Close.
     */
     const dialog = await renderStationSetup({ section: 'servers' });
-    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Apply servers']);
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Close']);
     /*
       …then the OTHER tabs, from the SAME dialog, by pressing the rail. Reusing one dialog is
       not convenience: a second `renderStationSetup` leaves the first mounted and

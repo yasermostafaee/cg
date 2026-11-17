@@ -198,10 +198,8 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
               }
               onClick={() => {
                 /*
-                  🔴 CONFIRM-GATED, because this PUTS GRAPHICS ON AIR. The owner chose
-                  detect-and-say over restoring automatically precisely so that a person
-                  decides; a one-click path from a banner to live output would give back most
-                  of what that decision was protecting.
+                  This is the manual path after a long outage or an unsuccessful recovery.
+                  Confirmation is required before sending another take.
                 */
                 void (async () => {
                   const ok = await confirm({

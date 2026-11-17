@@ -46,4 +46,14 @@ describe('B-312 — withSavedBackup', () => {
     };
     expect(withSavedBackup(typed, saved)).toBe(typed);
   });
+
+  it('preserves a saved recovery window on a single-server service', () => {
+    expect(
+      withSavedBackup(fromFlags, {
+        ...saved,
+        servers: { A: saved.servers.A },
+        quickRestoreSeconds: 0,
+      }),
+    ).toEqual({ ...fromFlags, quickRestoreSeconds: 0 });
+  });
 });

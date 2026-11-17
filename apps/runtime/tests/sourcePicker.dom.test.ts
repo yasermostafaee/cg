@@ -285,13 +285,11 @@ describe('B-303 — a choice names its source APART from its words, in the name�
     expect(field.querySelector('.cg-source-tag--unavailable')).toBeNull();
   });
 
-  it('a default the catalogue does not know reads `Not listed`, its id on the title — never the id in the text', async () => {
+  it('shows `Not listed` for an unknown default without exposing its id', async () => {
     const field = await render({ choices: DEFAULT('in-gone-forever') });
     expect(field.textContent).toBe('Default (Not listed)Unavailable');
     expect(field.textContent).not.toContain('in-gone-forever');
-    expect(field.querySelector('[data-choice-names]')?.getAttribute('title')).toBe(
-      'in-gone-forever',
-    );
+    expect(field.querySelector('[data-choice-names]')?.getAttribute('title')).toBeNull();
   });
 
   it('no default reads `(none set)`; a choice with no source is its words alone', async () => {

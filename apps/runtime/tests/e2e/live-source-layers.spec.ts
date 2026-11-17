@@ -37,9 +37,10 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
   await expect(onScreen).toBeVisible();
   await expect(held).toBeVisible();
 
-  // The row says WHAT is on the layer — the symbolic plate and the producer actually
-  // sent — not what a since-edited mapping now claims it should be.
-  await expect(onScreen).toContainText('guest-1');
+  // The row uses an operator label while the seated plate retains its identity.
+  await expect(onScreen.getByRole('cell', { name: /^Plate(?: \d+)?\b/ })).toBeVisible();
+  await expect(onScreen).toHaveAttribute('data-live-layer-plate', 'guest-1');
+  await expect(onScreen).not.toContainText('guest-1');
   await expect(onScreen).toContainText('route://1-1');
 
   // ── §12.4 — a HELD plate reads as held, never as on screen. A list showing a held
@@ -137,7 +138,7 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
 
   // ── ON is ONE press, and it is FULL volume.
   await stripOf(onScreen, 'guest-1')
-    .getByRole('button', { name: /^Full volume for guest-1/ })
+    .getByRole('button', { name: /^Full volume for Plate(?: \d+)? \(/ })
     .click();
   await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
   await expect(stripOf(onScreen, 'guest-1')).toContainText('Audible');
@@ -150,7 +151,9 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   // ── 🔴 A HELD PLATE READS ARMED-NOT-AUDIBLE, AND ITS CONTROLS STAY LIVE.
   //    Grey reads as disabled; arming a held plate's audio BEFORE switching to the look that
   //    shows it is the affordance the whole mute rule exists to preserve.
-  const heldOn = stripOf(held, 'guest-2').getByRole('button', { name: /^Full volume for guest-2/ });
+  const heldOn = stripOf(held, 'guest-2').getByRole('button', {
+    name: /^Full volume for Plate(?: \d+)? \(/,
+  });
   await expect(heldOn).toBeEnabled();
   await heldOn.click();
   /*
@@ -166,7 +169,7 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
 
   // ── SOLO raises one and silences its siblings, in one press and with no restore offered.
   await stripOf(onScreen, 'guest-1')
-    .getByRole('button', { name: /^Solo guest-1/ })
+    .getByRole('button', { name: /^Solo Plate(?: \d+)? —/ })
     .click();
   await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
   await expect(stripOf(held, 'guest-2')).toContainText('0%');
@@ -248,7 +251,7 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   await expect(newsRow).toContainText('ON AIR', { timeout: 3000 });
   await app.liveSourcesTab.click();
   await stripOf(onScreen, 'guest-1')
-    .getByRole('button', { name: /^Full volume for guest-1/ })
+    .getByRole('button', { name: /^Full volume for Plate(?: \d+)? \(/ })
     .click();
   await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
   await app.layers.getByRole('button', { name: /^Silence all boxes/ }).click();

@@ -114,7 +114,8 @@ describe('§2.C — the Playout’s inputs, read-only', () => {
       'SDI',
       'SDI',
     ]);
-    expect(rows[0]?.textContent).toContain('1080i5000');
+    expect(rows[0]?.textContent).toContain('1080i · 25 fps · 50 fields/s');
+    expect(rows[0]?.textContent).not.toContain('1080i5000');
     // Media are not listed here, and neither is an input the Playout no longer lists.
     expect(section.textContent).not.toContain('Studio 1 clip');
     expect(section.textContent).not.toContain('Studio 5');
@@ -134,7 +135,9 @@ describe('§2.C — the Playout’s inputs, read-only', () => {
     const route = section.querySelector('[data-source-unusable]');
     expect(route?.textContent).toContain('Unusable');
     expect(route?.textContent).toContain('No layer');
-    expect(route?.querySelector('[title]')?.getAttribute('title')).toBe(ROUTE_NO_LAYER_REASON);
+    expect(route?.querySelector('.cg-source-tag')?.getAttribute('title')).toBe(
+      ROUTE_NO_LAYER_REASON,
+    );
     // `ROUTE-PLATES-01` — and a Playout route WITH a layer is not unusable any more.
     expect(section.querySelectorAll('[data-source-unusable]')).toHaveLength(1);
     // Control: a usable input carries no such mark.

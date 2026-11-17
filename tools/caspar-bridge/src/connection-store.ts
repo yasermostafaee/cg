@@ -51,9 +51,13 @@ export function withSavedBackup(
   fromFlags: ConnectionConfig,
   saved: ConnectionConfig | null,
 ): ConnectionConfig {
-  if (fromFlags.servers.B !== undefined || saved?.servers.B === undefined) return fromFlags;
+  const recovery =
+    fromFlags.quickRestoreSeconds !== undefined || saved?.quickRestoreSeconds === undefined
+      ? fromFlags
+      : { ...fromFlags, quickRestoreSeconds: saved.quickRestoreSeconds };
+  if (fromFlags.servers.B !== undefined || saved?.servers.B === undefined) return recovery;
   return {
-    ...fromFlags,
+    ...recovery,
     servers: { A: fromFlags.servers.A, B: saved.servers.B },
     strategy: saved.strategy,
     autoFailoverEnabled: saved.autoFailoverEnabled,

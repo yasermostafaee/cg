@@ -30,9 +30,10 @@ interface Station {
   readonly playout: FakePlayout;
 }
 
-async function station(): Promise<Station> {
+async function station(quickRestoreSeconds?: number): Promise<Station> {
   const playout = track(await startFakePlayout(), (p) => p.stop());
   const rig = await twoChannelRig({
+    ...(quickRestoreSeconds === undefined ? {} : { quickRestoreSeconds }),
     bridge: {
       playout: {
         auth: 'playout',
@@ -149,7 +150,7 @@ describe('CENTRAL-BRIDGE-01 (D4) — each console is told only the channels its 
   }, 60_000);
 
   it('🔴 the restart notice: each console is told its own rows, and one console’s dismissal leaves the other’s', async () => {
-    const s = await station();
+    const s = await station(0);
     const one = await signedIn(s, 'operator');
     const two = await signedIn(s, 'channelTwo');
     const both = await signedIn(s, 'bothChannels');

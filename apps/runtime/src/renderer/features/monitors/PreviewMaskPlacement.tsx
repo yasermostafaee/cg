@@ -58,7 +58,7 @@ export function PreviewMaskPlacement({
   const drag = useRef<MaskDrag>();
   const { placement } = mask;
   const { rect, kind, index } = placement;
-  const name = `${kind} ${index + 1} for ${plate.sourceName ?? plate.plateId}`;
+  const name = `${kind} ${index + 1} for ${plate.sourceName ?? plate.plateLabel ?? 'Plate'}`;
   const edit = (
     original: LiveRevealRect,
     dx: number,

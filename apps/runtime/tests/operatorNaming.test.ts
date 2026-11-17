@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
-import { operatorRowName } from '../src/renderer/ui/operatorNaming.js';
+import {
+  operatorRowName,
+  plateDisplayName,
+  sourceDisplayName,
+} from '../src/renderer/ui/operatorNaming.js';
 
 /**
  * `B-232` — THE COMPOSITION, pinned on the plant's own values.
@@ -33,6 +37,39 @@ const TEMPLATE: TemplateInfo = {
 };
 
 const TEMPLATES = new Map([[TEMPLATE.templateId, TEMPLATE]]);
+
+describe('live source names', () => {
+  const id = 'e506e319-6e68-4603-a5f4-290b21616250';
+
+  it('uses the declared plate number instead of the internal plate id', () => {
+    const plateId = `frame-${id}`;
+    expect(plateDisplayName(plateId, [{ sourceId: 'studio' }, { sourceId: plateId }])).toBe(
+      'Plate 2',
+    );
+  });
+
+  it('prefers the authored focus alias, then title, then the layout plate number', () => {
+    const plateId = 'frame-' + id;
+    expect(
+      plateDisplayName(plateId, undefined, {
+        frames: [{ id: plateId, title: 'Main studio', focusAlias: 'Studio' }],
+      }),
+    ).toBe('Studio');
+    expect(
+      plateDisplayName(plateId, undefined, { frames: [{ id: plateId, title: 'Main studio' }] }),
+    ).toBe('Main studio');
+    expect(plateDisplayName(plateId, undefined, { frames: [{ id: plateId, title: '' }] })).toBe(
+      'Plate 1',
+    );
+  });
+
+  it('keeps authored source names and replaces opaque input and media UUIDs', () => {
+    expect(sourceDisplayName('استودیو')).toBe('استودیو');
+    expect(sourceDisplayName(id, 'input')).toBe('Input');
+    expect(sourceDisplayName(`md-${id}`, 'media')).toBe('Media');
+    expect(sourceDisplayName(undefined, 'media')).toBe('Media');
+  });
+});
 
 describe('operatorRowName', () => {
   it('names the ROW first and what it was SHOWING second', () => {

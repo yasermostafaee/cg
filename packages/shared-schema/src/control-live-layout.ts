@@ -124,7 +124,6 @@ const ControlLiveLayoutFrameSchema = z.object({
     .object({
       color: HexColorSchema,
       width: z.number().min(0).max(CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX),
-      radius: z.number().min(0).max(CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX),
     })
     .optional(),
 });
@@ -137,7 +136,6 @@ export function controlLiveLayoutPlateBorder(frame: ControlLiveLayoutFrame, rast
   return {
     color: border.color,
     width: Math.min(border.width, max),
-    radius: Math.min(border.radius, max),
   };
 }
 

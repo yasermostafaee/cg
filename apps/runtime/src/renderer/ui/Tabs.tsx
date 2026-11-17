@@ -402,15 +402,11 @@ export function RailStationCard({
       </div>
       {version !== undefined && (
         <Tag className="cg-rail-foot__version" title={version.build} data-testid="app-version">
-          Version {version.release}
+          <span>Version</span> <strong>{version.release}</strong>
         </Tag>
       )}
       {version?.onOpenHistory !== undefined && (
-        <Button
-          variant="secondary"
-          className="cg-rail-foot__history"
-          onClick={version.onOpenHistory}
-        >
+        <Button variant="neutral" className="cg-rail-foot__history" onClick={version.onOpenHistory}>
           Version history
         </Button>
       )}

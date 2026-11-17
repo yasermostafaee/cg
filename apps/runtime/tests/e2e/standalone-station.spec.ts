@@ -115,8 +115,11 @@ test('R-098 / B-434 a saved standalone station repairs server A and takes withou
     await expect(standalone.getByLabel('CG Bridge port')).toHaveValue(String(bridge.port));
     await expect(settings.getByLabel('Primary host')).toHaveValue(HOST);
     await expect(settings.getByLabel('Primary OSC port')).toBeEditable();
+    const applyServers = settings.getByRole('button', { name: 'Apply server settings' });
+    await expect(applyServers).toBeDisabled();
     await settings.getByLabel('Primary AMCP port').fill(String(caspar.amcpPort));
-    await settings.getByRole('button', { name: 'Apply server settings' }).click();
+    await expect(applyServers).toBeEnabled();
+    await applyServers.click();
     await expect(settings.getByText('Applied. All listeners remain loopback-only.')).toBeVisible();
     await standalone.getByRole('button', { name: 'Check', exact: true }).click();
     await expect(standalone.getByRole('button', { name: 'Checking…', exact: true })).toHaveCount(0);

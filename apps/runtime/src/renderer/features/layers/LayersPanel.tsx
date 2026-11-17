@@ -47,7 +47,12 @@ import {
   type LayerFilter,
 } from './layerFilter.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
-import { operatorRowName, placeName, type OperatorRowName } from '../../ui/operatorNaming.js';
+import {
+  operatorRowName,
+  placeName,
+  plateDisplayName,
+  type OperatorRowName,
+} from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
@@ -94,7 +99,6 @@ import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio } from './plateAudio.js';
-import { plateLabelOf } from './takeRefusalLine.js';
 import {
   declaredFrameRows,
   hasStrandedLiveLayer,
@@ -1971,14 +1975,16 @@ export function LayersPanel({
             }}
             onApplyVolumes={applyPlateVolumes}
             plateLabelOf={(itemId, plateId) => {
-              // `B-309` — `Plate N` from the row's own template, for the refused-audio toast.
               const owner = itemById.get(itemId);
-              return owner === undefined
-                ? undefined
-                : plateLabelOf(
-                    templates.get(owner.templateId, boundChannelOf(owner, slots)),
-                    plateId,
-                  );
+              const template =
+                owner === undefined
+                  ? undefined
+                  : templates.get(owner.templateId, boundChannelOf(owner, slots));
+              return plateDisplayName(
+                plateId,
+                template?.liveSources?.sources,
+                template?.controlLiveLayout,
+              );
             }}
             onOpenAudio={(itemId, plateId) => {
               if (itemById.get(itemId) === undefined) {

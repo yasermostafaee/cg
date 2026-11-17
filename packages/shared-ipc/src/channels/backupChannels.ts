@@ -34,12 +34,20 @@ export const BackupChannelLineSchema = z.object({
   entry: z.number().int().positive().optional(),
   entryRefusal: z.string().min(1).max(300).optional(),
   reason: z.string().min(1).max(300).optional(),
+  /** The mirror declared by Playout, even when a prior entry prevents its use. */
+  automaticChannel: z.number().int().positive().optional(),
+  /** Compatible choices on B when there is no published automatic mapping. */
+  manualChoices: z
+    .array(z.object({ channel: z.number().int().positive(), name: z.string().min(1) }))
+    .optional(),
 });
 export type BackupChannelLine = z.infer<typeof BackupChannelLineSchema>;
 
 export const BackupChannelsSchema = z.object({
   /** Server B's host — the machine every `mapped` line goes to. */
   backupHost: z.string().min(1),
+  /** Optional for consoles connected to an earlier Bridge. */
+  channelListState: z.enum(['unread', 'stale', 'empty', 'ready']).optional(),
   channels: z.array(BackupChannelLineSchema),
 });
 export type BackupChannels = z.infer<typeof BackupChannelsSchema>;
@@ -105,7 +113,7 @@ export function backupChannelLineText(line: BackupChannelLine, backupHost: strin
 export type BackupMappedTone = 'ok' | 'warn' | 'alarm';
 
 /**
- * 🔴 **THE STATUS BAR'S COUNT — `BACKUP B · n of m channels mapped`.** `null` with no server B, or before a
+ * 🔴 **THE STATUS BAR'S COUNT — `Server B · n/m CG channels mapped`.** `null` with no server B, or before a
  * channel is declared. The alarm tone when none is mapped, the warning tone when some are not.
  */
 export function backupMappedSummary(
@@ -116,7 +124,7 @@ export function backupMappedSummary(
   const m = backup.channels.length;
   const n = backup.channels.filter((c) => c.state === 'mapped').length;
   return {
-    text: `BACKUP B · ${String(n)} of ${String(m)} channels mapped`,
+    text: `Server B · ${String(n)}/${String(m)} CG channels mapped`,
     tone: n === m ? 'ok' : n === 0 ? 'alarm' : 'warn',
   };
 }

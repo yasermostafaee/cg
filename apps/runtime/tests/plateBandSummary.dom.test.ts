@@ -7,6 +7,7 @@ import { clearPortals } from './support/dialog.js';
 import {
   renderStationSetup,
   sectionOf,
+  setSetupInput,
   stationSetupStub,
   unmountStationSetup,
   type StationSetupStub,
@@ -90,7 +91,7 @@ describe('the band in force, as the tab reads it', () => {
 });
 
 describe('a station-admin and the default', () => {
-  it('the fields show the band in force — and only a press of Apply band DECLARES it', async () => {
+  it('disables Apply for the effective numerical range and saves a changed band', async () => {
     const { pane, stub } = await open(
       { sources: INPUTS, plateBand: { range: { start: 60, end: 79 }, origin: 'default' } },
       ADMIN,
@@ -107,15 +108,22 @@ describe('a station-admin and the default', () => {
     expect(stub.sourcesSetConfig).not.toHaveBeenCalled();
 
     const apply = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Apply band');
-    expect(apply, 'the admin has Apply band').toBeDefined();
+    expect(apply?.disabled).toBe(true);
+    await setSetupInput(pane, 'Live source band end layer', '078');
+    expect(apply?.disabled).toBe(false);
+    await setSetupInput(pane, 'Live source band end layer', '079');
+    expect(apply?.disabled).toBe(true);
+    expect(stub.sourcesSetConfig).not.toHaveBeenCalled();
+
+    await setSetupInput(pane, 'Live source band end layer', '78');
     await act(async () => {
       apply?.click();
       // The commit awaits the bridge's answer, then adopts it: let both settle.
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(stub.sourcesSetConfig).toHaveBeenCalledWith({ layerRange: { start: 60, end: 79 } });
-    // Accepted, it is DECLARED now — the tab stops calling it the default.
-    expect(summary(pane)?.textContent).toBe('Currently 60–79 · 20 layers.');
+    expect(stub.sourcesSetConfig).toHaveBeenCalledWith({ layerRange: { start: 60, end: 78 } });
+    expect(summary(pane)?.textContent).toBe('Currently 60–78 · 19 layers.');
     expect(summary(pane)?.getAttribute('data-plate-band')).toBe('declared');
+    expect(apply?.disabled).toBe(true);
   });
 });

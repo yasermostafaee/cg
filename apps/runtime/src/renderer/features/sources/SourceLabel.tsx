@@ -1,3 +1,4 @@
+import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useSyncExternalStore } from 'react';
 import { Cable, Film } from 'lucide-react';
 import type { SourceDefinition } from '@cg/shared-ipc';
@@ -59,7 +60,7 @@ export function labelledSource(sourceId: string | null | undefined): LabelledSou
   );
   if (entry !== undefined) {
     return {
-      name: entry.name,
+      name: sourceDisplayName(entry.name, entry.origin),
       origin: entry.origin,
       durationMs: entry.media?.durationMs,
       unavailable: entry.status === 'unavailable',
@@ -69,7 +70,7 @@ export function labelledSource(sourceId: string | null | undefined): LabelledSou
   const seen = seenMediaItem(sourceId);
   if (seen !== undefined) {
     return {
-      name: seen.name,
+      name: sourceDisplayName(seen.name, 'media'),
       origin: 'media',
       durationMs: seen.durationMs,
       unavailable: false,

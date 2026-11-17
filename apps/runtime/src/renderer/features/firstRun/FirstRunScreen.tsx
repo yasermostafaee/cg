@@ -523,10 +523,10 @@ export function ChannelStep({
   const warned = warning !== null && warning.key === choiceKey;
   // Station setup opens on the station's set; pressing Use on the SAME set would change nothing.
   const unchanged =
-    initial.length > 0 &&
-    !manual &&
-    picked.length === initial.length &&
-    initial.every((d) => isPicked(d));
+    initial.length === channels.length &&
+    initial.every(
+      ({ casparHost, casparChannel }) => casparHost === host && channels.includes(casparChannel),
+    );
   const nameOf = (channel: number): string => {
     const row = rows.find((r) => r.casparHost === host && r.casparChannel === channel);
     return row === undefined || row.unnamed === true ? `CH ${String(channel)}` : row.name;

@@ -143,8 +143,8 @@ test('the LIVE PLATES table and the audio dialog carry the reference’s rendere
 
   // The verbs — ON/OFF at 40 × 32, SOLO at 46 × 32.
   const strip = shown.locator('[data-plate-audio="guest-1"]');
-  const on = strip.getByRole('button', { name: /^Full volume for guest-1/ });
-  const solo = strip.getByRole('button', { name: /^Solo guest-1/ });
+  const on = strip.getByRole('button', { name: /^Full volume for Plate(?: \d+)? \(/ });
+  const solo = strip.getByRole('button', { name: /^Solo Plate(?: \d+)? —/ });
   expect((await box(on)).w).toBeCloseTo(await token(page, '--r-plate-verb-w'), 0);
   expect((await box(on)).h).toBeCloseTo(await token(page, '--r-plate-verb-h'), 0);
   expect((await box(solo)).w).toBeCloseTo(await token(page, '--r-plate-solo-w'), 0);

@@ -120,6 +120,7 @@ describe('R-089 — the Playout team’s rule, from the backup engine’s own D4
       state: 'mapped',
       backupChannel: 2,
       source: 'playout',
+      automaticChannel: 2,
     });
   });
 
@@ -244,6 +245,27 @@ describe('R-089 — an engine before `2.9.5`: the station admin’s entry, check
     expect(lineOf(r, 1)?.entryRefusal).toBe('Backup CH 3 is the mirror of another channel.');
   });
 
+  it('offers only named, compatible choices on the physical B server', () => {
+    const r = rig({
+      b: [
+        bRow(7, { playout: A_HOST, id: 'cg-test2' }),
+        bRow(6, null, { casparHost: A_HOST }),
+        bRow(5, null, { cgLicensed: false }),
+        bRow(4, null, { videoMode: '720p5000' }),
+        bRow(3, null),
+        bRow(2, null),
+      ],
+    });
+    expect(lineOf(r, 1)?.manualChoices).toEqual([
+      { channel: 2, name: 'B 2' },
+      { channel: 3, name: 'B 3' },
+    ]);
+    expect(r.map.state().backup?.channelListState).toBe('ready');
+    r.setB([]);
+    expect(r.map.state().backup?.channelListState).toBe('empty');
+    expect(lineOf(r, 1)?.manualChoices).toEqual([]);
+  });
+
   it('entries made for another server B are not used, and are said', () => {
     expect(
       entriesFor(
@@ -299,6 +321,7 @@ describe('R-089 — kept current', () => {
     expect(r.map.channelOnB(1)).toBe(2);
     r.advance(2);
     expect(r.map.channelOnB(1)).toBe(null);
+    expect(r.map.state().backup?.channelListState).toBe('stale');
     expect(lineOf(r, 1)?.reason).toBe(
       "The backup engine's channel list has not answered for 30 s.",
     );
@@ -313,6 +336,7 @@ describe('R-089 — kept current', () => {
   it('nothing read from B yet: nothing mapped, in words', () => {
     const r = rig({ b: null });
     expect(r.map.channelOnB(1)).toBe(null);
+    expect(r.map.state().backup?.channelListState).toBe('unread');
     expect(lineOf(r, 1)?.reason).toBe("The backup engine's channel list has not been read.");
   });
 });

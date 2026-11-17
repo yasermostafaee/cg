@@ -101,6 +101,27 @@ pub fn preview(args: &[String]) -> u32 {
         };
         inst.shown = inst.progress.fraction;
         shots.push(("installing".into(), inst, None));
+        let mut working = mk(&fresh);
+        working.page = Page::Installing;
+        working.progress = if id == ProductId::Bridge {
+            observe::bridge(
+                "[stopping the service (if it runs)] exit 0\r\n",
+                1.0,
+                100 << 20,
+                100 << 20,
+                true,
+            )
+        } else {
+            observe::app(observe::AppSignals {
+                prepared: 1.0,
+                engine_started: true,
+                main_copied: 36 << 20,
+                main_expected: 36 << 20,
+                ..Default::default()
+            })
+        };
+        working.shown = working.progress.fraction;
+        shots.push(("installing-working".into(), working, None));
         let mut done = mk(&fresh);
         done.page = Page::Done;
         done.outcome = Outcome {

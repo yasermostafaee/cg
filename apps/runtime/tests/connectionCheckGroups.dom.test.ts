@@ -9,6 +9,7 @@ import {
   consoleCheckLines,
   type ShownCheckLine,
 } from '../src/renderer/features/firstRun/firstRunStation.js';
+import { colors } from '../src/renderer/theme.js';
 
 /**
  * 🔴 `R-081` (`CONSOLE-POLISH-01` §6) — **THE CHECK READS IN THE ORDER THINGS HAPPEN.** The owner's
@@ -123,6 +124,52 @@ describe('R-081 — four groups, in the order things happen', () => {
     expect(c.querySelector('[data-check-group]')).toBeNull();
     expect(c.querySelectorAll('[data-check]')).toHaveLength(1);
   });
+
+  it('shows the engine release without the core commit and build identifiers', async () => {
+    const c = await render(
+      [
+        {
+          id: 'amcp',
+          status: 'pass',
+          text: 'CasparCG on 192.0.2.1 answered VERSION: 2.19.0 4f57b1d ApasaiCIaB-CgRecovery1.',
+        },
+      ],
+      false,
+    );
+    expect(c.textContent).toBe('APASAI Playout Engine on 192.0.2.1 answered VERSION: 2.19.0.');
+  });
+
+  it.each([
+    ['1.2.11', 'warn'],
+    ['1.3.1', 'fail'],
+  ])(
+    'shows a version mismatch with %s in amber even while passing checks are folded',
+    async (bridgeVersion, status) => {
+      const lines = consoleCheckLines({
+        bridgeAddress: '192.0.2.20:5280',
+        bridgeVersion,
+        consoleVersion: '1.2.10',
+        auth: { kind: 'off' },
+      });
+      const c = await render([...lines, line('playout-version')], true);
+      const bridge = c.querySelector<HTMLElement>('[data-check="bridge-version"]');
+      const expectedInk = document.createElement('span');
+      expectedInk.style.color = colors.pending;
+      expect(bridge?.dataset.status).toBe(status);
+      expect(bridge?.hidden).toBe(false);
+      expect(bridge?.querySelector('[data-check-icon]')).toHaveProperty(
+        'style.color',
+        expectedInk.style.color,
+      );
+      expect(bridge?.querySelector('span:nth-child(2)')).toHaveProperty(
+        'style.color',
+        expectedInk.style.color,
+      );
+      expect(c.querySelector<HTMLElement>('[data-check="playout-version"]')?.dataset.status).toBe(
+        'pass',
+      );
+    },
+  );
 });
 
 describe('R-081 — the lines only the console can write', () => {
@@ -137,7 +184,11 @@ describe('R-081 — the lines only the console can write', () => {
     });
     expect(lines).toEqual([
       { id: 'bridge', status: 'pass', text: 'CG Bridge found at 192.0.2.20:5280.' },
-      { id: 'bridge-version', status: 'pass', text: 'CG Bridge 0.10.2 · this console 0.10.0.' },
+      {
+        id: 'bridge-version',
+        status: 'warn',
+        text: 'CG Bridge 0.10.2 · this console 0.10.0. Version mismatch.',
+      },
       { id: 'signin', status: 'wait', text: "This console's sign-in: not signed in yet." },
     ]);
   });

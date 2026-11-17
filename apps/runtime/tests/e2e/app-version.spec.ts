@@ -24,9 +24,16 @@ test('P-077 — version history opens inside Station setup and returns to the st
   await settings.getByRole('button', { name: 'Version history', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Version history' });
   const history = dialog.frameLocator('iframe[title="Version history"]');
-  await expect(
-    history.getByRole('heading', { name: 'نسخه‌ها و تغییرات', exact: true }),
-  ).toBeVisible();
+  const heading = history.getByRole('heading', { name: 'نسخه‌ها و تغییرات', exact: true });
+  await expect(heading).toBeVisible();
+  const viewport = page.viewportSize();
+  const frame = await dialog.boundingBox();
+  if (viewport === null || frame === null) throw new Error('Version history frame is missing');
+  expect(frame.width).toBeGreaterThanOrEqual(viewport.width - 40);
+  expect(frame.height).toBeGreaterThanOrEqual(viewport.height - 40);
+  expect(
+    await heading.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+  ).toBeLessThan(32);
   await history.getByRole('button', { name: 'English' }).click();
   await expect(history.locator('html')).toHaveAttribute('lang', 'en');
   await expect(history.getByRole('heading', { name: 'Bug fixes' })).toBeVisible();

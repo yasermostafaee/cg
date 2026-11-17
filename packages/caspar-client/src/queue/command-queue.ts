@@ -24,6 +24,8 @@ export interface EnqueueOptions {
   retries?: number;
   /** Optional cancellation. Aborting after send rejects but keeps the in-flight slot. */
   signal?: AbortSignal;
+  /** Recheck a conditional write immediately before sending, without interrupting its reply. */
+  canDispatch?: () => boolean;
 }
 
 /** What `enqueue()` resolves to on success. */
@@ -59,6 +61,7 @@ interface Entry {
   startedAt: number | null;
   timeoutMs: number;
   retriesLeft: number;
+  canDispatch?: () => boolean;
   signal?: AbortSignal;
   signalListener?: () => void;
   resolve: (result: QueueResult) => void;
@@ -177,6 +180,7 @@ export class CommandQueue extends EventEmitter<CommandQueueEvents> {
         startedAt: null,
         timeoutMs,
         retriesLeft: retries,
+        ...(options.canDispatch !== undefined && { canDispatch: options.canDispatch }),
         resolve,
         reject,
         settled: false,
@@ -256,6 +260,10 @@ export class CommandQueue extends EventEmitter<CommandQueueEvents> {
     while (this.inFlight.length < effectiveDepth && this.waiting.length > 0) {
       const entry = this.waiting.shift();
       if (!entry || entry.settled) continue;
+      if (entry.canDispatch?.() === false) {
+        this.settle(entry, new AmcpAbortedError(entry.seq, entry.line));
+        continue;
+      }
       this.inFlight.push(entry);
       entry.startedAt = this.now();
       entry.timer = setTimeout(() => {
@@ -314,6 +322,7 @@ export class CommandQueue extends EventEmitter<CommandQueueEvents> {
         priority: entry.priority,
         timeoutMs: entry.timeoutMs,
         retries: entry.retriesLeft,
+        ...(entry.canDispatch !== undefined && { canDispatch: entry.canDispatch }),
       }).then(entry.resolve, entry.reject);
       // Note: signal isn't re-bound for the retry — once aborted, the
       // wrapping promise is settled, no further retries will fire.

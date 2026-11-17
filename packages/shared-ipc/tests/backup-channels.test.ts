@@ -43,12 +43,12 @@ describe('R-089 — the backup channel words', () => {
         : { channel, state: 'not-mapped' as const };
     expect(
       backupMappedSummary(state({ backupHost: 'h', channels: [line(1, true), line(2, true)] })),
-    ).toEqual({ text: 'BACKUP B · 2 of 2 channels mapped', tone: 'ok' });
+    ).toEqual({ text: 'Server B · 2/2 CG channels mapped', tone: 'ok' });
     expect(
       backupMappedSummary(state({ backupHost: 'h', channels: [line(1, true), line(2, false)] })),
-    ).toEqual({ text: 'BACKUP B · 1 of 2 channels mapped', tone: 'warn' });
+    ).toEqual({ text: 'Server B · 1/2 CG channels mapped', tone: 'warn' });
     expect(backupMappedSummary(state({ backupHost: 'h', channels: [line(1, false)] }))).toEqual({
-      text: 'BACKUP B · 0 of 1 channels mapped',
+      text: 'Server B · 0/1 CG channels mapped',
       tone: 'alarm',
     });
     // A held channel sends nothing: it is not counted as mapped.

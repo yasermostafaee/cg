@@ -1,3 +1,4 @@
+import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -502,12 +503,6 @@ export function RehearsalStage({
       renderable.flatMap(({ subject }) => {
         const live = subject.liveSources;
         if (live === undefined || live.sources.length === 0) return [];
-        const frameLabels = new Map(
-          subject.controlLiveLayout?.frames.map(({ id, focusAlias, title }, i) => [
-            id,
-            focusAlias?.trim() || title.trim() || `Frame ${i + 1}`,
-          ]),
-        );
         return platePlacements(
           live,
           raster,
@@ -518,16 +513,14 @@ export function RehearsalStage({
           subject.appliedFramePlacements,
           subject.maskPlacements,
           subject.appliedMaskPlacements,
-        ).map((p) => {
-          const frameLabel = frameLabels.get(p.plateId);
-          return {
-            ...p,
-            ...(frameLabel !== undefined && { frameLabel }),
-            itemId: subject.itemId,
-            channel: subject.channel,
-            elementId: `${subject.itemId}:${p.elementId}`,
-          };
-        });
+        ).map((p) => ({
+          ...p,
+          plateLabel: plateDisplayName(p.plateId, live.sources, subject.controlLiveLayout),
+          ...(subject.controlLiveLayout !== undefined && { captionInTemplate: true }),
+          itemId: subject.itemId,
+          channel: subject.channel,
+          elementId: `${subject.itemId}:${p.elementId}`,
+        }));
       }),
     [renderable, raster],
   );

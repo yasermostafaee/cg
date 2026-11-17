@@ -70,7 +70,7 @@ export function PreviewFramePlacement({
   onSelect: () => void;
 }): JSX.Element {
   const drag = useRef<Drag>();
-  const name = plate.sourceName ?? plate.plateId;
+  const name = plate.sourceName ?? plate.plateLabel ?? 'Plate';
   const canMove = frame.move !== false;
   const canResize = frame.resize !== 'move-only';
   const keepRatio = frame.resize === 'proportional' || preserveAspect;

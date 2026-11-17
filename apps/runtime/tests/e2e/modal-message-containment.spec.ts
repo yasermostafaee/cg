@@ -152,6 +152,7 @@ test('a Servers message is drawn inside the section pane, clear of the footer', 
     'with nothing on air the standing block is gone — the POSITIVE CONTROL for the split',
   ).toHaveCount(0);
 
+  await dialog.getByLabel('Graphics port').fill('7911');
   await dialog.getByRole('button', { name: 'Apply server settings' }).click();
 
   const message = dialog.locator('[data-modal-message]');

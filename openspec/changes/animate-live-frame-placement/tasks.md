@@ -96,4 +96,3 @@
 - [x] Animate fill and clip of retained inputs when the destination fit changes.
 - [x] Support directional entrance and departure with independent directions and fade.
 - [ ] Capture a real PGM switch with the intended station engine to measure border and input alignment.
-- [ ] Verify native input corner clipping once the Playout engine exposes a supported per-plate radius.

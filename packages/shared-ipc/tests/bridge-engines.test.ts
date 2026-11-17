@@ -47,7 +47,7 @@ describe('RELEASE-0112-01 — each engine’s state, in words', () => {
     expect(engineNeedsAttention('waiting')).toBe(false);
     expect(engineNeedsAttention('off')).toBe(false);
     expect(engineNeedsAttention('not-licensed')).toBe(true);
-    expect(engineChipText('B', 'not-licensed')).toBe('B: CG NOT LICENSED');
+    expect(engineChipText('B', 'not-licensed')).toBe('Server B · CG license needed');
   });
 
   it('🔴 RELEASE-0113-01 Part D — the dialog’s line is the Playout team’s own sentence (their §5), led by the account', () => {

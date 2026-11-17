@@ -13,6 +13,7 @@ import { clearPortals, openDialog } from './support/dialog.js';
 import {
   clickSetupButton,
   renderStationSetup,
+  setSetupInput,
   stationSetupStub,
   unmountStationSetup,
   selectSetupTab,
@@ -155,6 +156,9 @@ describe('the census — every section of Station setup that can speak, speaks t
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await act(async () => {
+      dialog.querySelector<HTMLInputElement>('[aria-label="Show layer 95"]')?.click();
+    });
     await clickSetupButton(dialog, 'Apply layers');
 
     expectMessageThroughTheRegion(dialog, 'refusal');
@@ -190,10 +194,11 @@ describe('the census — every section of Station setup that can speak, speaks t
     `PLAYOUT-SOURCES-01` §1.F — the Add dialog went with the catalogue editor; what Live sources can
     still say is a refused BAND, and it says it through Station setup's own region.
   */
-  it('Live sources routes its refusal through the region — a band with no numbers', async () => {
+  it('Live sources routes its refusal through the region — an incomplete band', async () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'sources' });
-    // Apply with no band typed and none in force: the section's own refusal, no bridge round-trip.
+    // Edit one end of the band to exercise the section's own refusal.
+    await setSetupInput(dialog, 'Live source band start layer', '60');
     await clickSetupButton(dialog, 'Apply band');
 
     expectMessageThroughTheRegion(dialog, 'refusal');

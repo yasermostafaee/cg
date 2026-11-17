@@ -1,3 +1,4 @@
+import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { VideoOff } from 'lucide-react';
 import {
@@ -125,7 +126,7 @@ export function InputThumbnail({
         variant="ghost"
         className={className}
         data-input-thumbnail="checkable"
-        aria-label={`Check input · ${source.name}`}
+        aria-label={`Check input · ${sourceDisplayName(source.name, 'input')}`}
         title={`${description} Select to check this input.`}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
@@ -138,7 +139,11 @@ export function InputThumbnail({
   return (
     <span className="cg-input-picture-meter">
       {thumbnail}
-      <InputAudioMeter sourceId={sourceId} channel={meterChannel} name={source.name} />
+      <InputAudioMeter
+        sourceId={sourceId}
+        channel={meterChannel}
+        name={sourceDisplayName(source.name, 'input')}
+      />
     </span>
   );
 }

@@ -1,12 +1,14 @@
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
+import { Pencil } from 'lucide-react';
 import { APP_VERSION } from '../../appVersion.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { useEngineSessions } from '../../hooks/useEngineSessions.js';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
 import { LocalBridgeHelp } from './LocalBridgeHelp.js';
@@ -466,7 +468,7 @@ export function PlayoutConnection({
     answered, the check's own CG Bridge line says where, and nothing is saved.
   */
   const connect = async (): Promise<void> => {
-    if (typed === null || bridgeTyped === null) return;
+    if (!changed || typed === null || bridgeTyped === null) return;
     const answeredHere = (at: RanAt | null): boolean =>
       at?.kind === 'answered' && at.address === resolved;
     const at = answeredHere(ranAt) ? ranAt : await check('press');
@@ -519,7 +521,7 @@ export function PlayoutConnection({
           )}
           {canWrite && !editing && (
             <Button
-              variant="ghost"
+              variant="secondary"
               disabled={busy !== null}
               data-change="playout"
               onClick={() => {
@@ -527,7 +529,7 @@ export function PlayoutConnection({
                 setLines(null);
               }}
             >
-              Change
+              <Icon icon={Pencil} size={14} /> Change
             </Button>
           )}
         </div>
@@ -560,7 +562,7 @@ export function PlayoutConnection({
           )}
           {canWrite && (
             <Button
-              variant="ghost"
+              variant="secondary"
               disabled={busy !== null}
               data-change="bridge"
               onClick={() => {
@@ -568,7 +570,7 @@ export function PlayoutConnection({
                 setLines(null);
               }}
             >
-              Change
+              <Icon icon={Pencil} size={14} /> Change
             </Button>
           )}
         </div>
@@ -604,10 +606,10 @@ export function PlayoutConnection({
           >
             {busy === 'checking' ? 'Checking…' : 'Check'}
           </Button>
-          {changed && canWrite && (
+          {canWrite && (
             <Button
               variant="primary"
-              disabled={busy !== null || typed === null || bridgeTyped === null}
+              disabled={!changed || busy !== null || typed === null || bridgeTyped === null}
               onClick={() => void connect()}
             >
               {busy === 'connecting' ? 'Connecting…' : 'Connect'}

@@ -56,6 +56,7 @@ import type { LiveLayerRowView } from './liveLayerRows.js';
 
 export interface PlateAudioStripProps {
   row: LiveLayerRowView;
+  plateName: string;
   /**
    * Every plate this ROW's item owns — SOLO's scope. Passed in rather than derived here for
    * the reason `releaseScopeOf` is: the set a control acts on and the set the operator can see
@@ -74,6 +75,7 @@ export interface PlateAudioStripProps {
 
 export function PlateAudioStrip({
   row,
+  plateName,
   siblings,
   refusal,
   onApply,
@@ -161,7 +163,7 @@ export function PlateAudioStrip({
           value={Math.round(shown * 100)}
           disabled={why !== undefined}
           {...(why !== undefined ? { title: why } : {})}
-          aria-label={`Volume for ${row.plate} ${
+          aria-label={`Volume for ${plateName} ${
             row.coordinate !== null ? `on ${row.coordinate}` : '(not seated)'
           }`}
           aria-valuetext={pct(shown)}
@@ -198,7 +200,7 @@ export function PlateAudioStrip({
           onError={reportCommandError}
           disabled={why !== undefined}
           {...(why !== undefined ? { title: why } : { title: ON_TITLE })}
-          aria-label={`Full volume for ${row.plate} (100%, not the previous level)`}
+          aria-label={`Full volume for ${plateName} (100%, not the previous level)`}
         >
           ON
         </AsyncButton>
@@ -208,7 +210,7 @@ export function PlateAudioStrip({
           onError={reportCommandError}
           disabled={why !== undefined}
           {...(why !== undefined ? { title: why } : { title: OFF_TITLE })}
-          aria-label={`Silence ${row.plate}`}
+          aria-label={`Silence ${plateName}`}
         >
           OFF
         </AsyncButton>
@@ -218,7 +220,7 @@ export function PlateAudioStrip({
           onError={reportCommandError}
           disabled={why !== undefined || siblings.length < 2}
           title={why ?? (siblings.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)}
-          aria-label={`Solo ${row.plate} — silences the other ${String(siblings.length - 1)} plate(s) on this row, with no restore`}
+          aria-label={`Solo ${plateName} — silences the other ${String(siblings.length - 1)} plate(s) on this row, with no restore`}
         >
           SOLO
         </AsyncButton>

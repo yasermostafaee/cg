@@ -1,3 +1,4 @@
+import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import {
   useCallback,
   useEffect,
@@ -9,7 +10,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { Cable, Check, Film, LayoutGrid, List, Play } from 'lucide-react';
+import { Cable, Check, Film, Play } from 'lucide-react';
 import {
   canCheckLiveInput,
   INPUT_GONE_REASON,
@@ -33,6 +34,7 @@ import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/V
 import { inputAudioSource } from './InputAudioMeter.js';
 import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import { InputViewSwitch, type InputView } from './InputViewSwitch.js';
 import {
   createMediaThumbnailLoader,
   MediaThumbnail,
@@ -129,11 +131,7 @@ export function ChoiceLabel({
   const offered = source !== null && !source.unavailable;
   const input = meterChannel === undefined ? undefined : inputAudioSource(choice.names);
   return (
-    <span
-      className="cg-choice-label"
-      data-choice-names={choice.names}
-      {...(source === null ? { title: choice.names } : {})}
-    >
+    <span className="cg-choice-label" data-choice-names={choice.names}>
       <span className="cg-choice-label__words">
         {`${choice.label} (`}
         <bdi dir={directionOf(name)} data-choice-name="">
@@ -192,8 +190,6 @@ const RECENT_MAX = 8;
 const FILTER_OVER = 10;
 
 type Tab = 'inputs' | 'media';
-type InputView = 'grid' | 'list';
-
 const isMediaId = (id: string): boolean => id.startsWith('md-');
 
 export function SourcePicker({
@@ -500,7 +496,9 @@ function InputsTab({
   const tiled = view === 'grid';
   const needle = filter.trim().toLowerCase();
   const shown =
-    needle === '' ? inputs : inputs.filter((s) => s.name.toLowerCase().includes(needle));
+    needle === ''
+      ? inputs
+      : inputs.filter((s) => sourceDisplayName(s.name, 'input').toLowerCase().includes(needle));
   const rows: VirtualRow[] = shown.map((source) => {
     // `ROUTE-PLATES-01` — v1.3 rule 1, asked of the one predicate the bridge's refusal asks.
     const offChannel = channel !== undefined && !sourceShowableOn(source, channel);
@@ -514,12 +512,13 @@ function InputsTab({
     const playlistDown = isPlaylistOutput(source) && source.status === 'unavailable';
     const bindable = sourceBindable(source);
     const selected = source.id === value;
+    const name = sourceDisplayName(source.name, 'input');
     const checkable = canCheckLiveInput(source, inputCheck?.channel ?? channel ?? 0);
     const disabled = !bindable || offChannel || loops || playlistDown;
     return {
       kind: 'option',
       key: source.id,
-      ariaLabel: source.status === 'unavailable' ? `${source.name} Unavailable` : source.name,
+      ariaLabel: source.status === 'unavailable' ? `${name} Unavailable` : name,
       disabled,
       selected,
       ...(loops
@@ -543,8 +542,8 @@ function InputsTab({
         <span className="cg-picker-row">
           <Icon icon={Cable} size={14} />
           {/* `B-303` — the name in its own direction (`directionOf`), as `SourceLabel` draws it. */}
-          <bdi className="cg-picker-row__name" dir={directionOf(source.name)}>
-            {source.name}
+          <bdi className="cg-picker-row__name" dir={directionOf(name)}>
+            {name}
           </bdi>
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
@@ -563,24 +562,7 @@ function InputsTab({
     <div className="cg-picker-tab" data-picker-tab="inputs" data-input-view={view}>
       <div className="cg-picker-input-bar">
         <InputCatalogueServer server={server} />
-        <div className="cg-picker-input-view" role="group" aria-label="Input view">
-          <Button
-            aria-label="Grid view"
-            aria-pressed={tiled}
-            active={tiled}
-            onClick={() => onViewChange('grid')}
-          >
-            <Icon icon={LayoutGrid} size={15} /> Grid
-          </Button>
-          <Button
-            aria-label="List view"
-            aria-pressed={!tiled}
-            active={!tiled}
-            onClick={() => onViewChange('list')}
-          >
-            <Icon icon={List} size={15} /> List
-          </Button>
-        </div>
+        <InputViewSwitch view={view} onChange={onViewChange} />
       </div>
       {inputs.length > FILTER_OVER && (
         <div className="cg-picker-controls">
@@ -729,6 +711,7 @@ function mediaRow(
   setPreview: (item: MediaChoice) => void,
 ): VirtualRow {
   const selected = item.id === value;
+  const name = sourceDisplayName(item.name, 'media');
   const facts = [
     item.durationMs !== undefined ? formatMediaDuration(item.durationMs) : null,
     item.width !== undefined && item.height !== undefined
@@ -744,7 +727,7 @@ function mediaRow(
       <Button
         variant="neutral"
         className="cg-picker-preview-button"
-        aria-label={`Preview · ${item.name}`}
+        aria-label={`Preview · ${name}`}
         aria-pressed={preview?.id === item.id}
         data-picker-preview={item.id}
         onClick={() => setPreview(item)}
@@ -759,8 +742,8 @@ function mediaRow(
         <span className="cg-picker-media__text">
           <span className="cg-picker-row">
             <Icon icon={Film} size={14} />
-            <bdi className="cg-picker-row__name" dir={directionOf(item.name)}>
-              {item.name}
+            <bdi className="cg-picker-row__name" dir={directionOf(name)}>
+              {name}
             </bdi>
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
@@ -978,7 +961,7 @@ function MediaTab({
           <SourceMediaPreview
             key={preview.id}
             id={preview.id}
-            name={preview.name}
+            name={sourceDisplayName(preview.name, 'media')}
             durationMs={preview.durationMs}
             channel={previewChannel}
           />

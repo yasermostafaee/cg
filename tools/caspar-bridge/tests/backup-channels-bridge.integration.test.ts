@@ -170,7 +170,10 @@ describe('🔴 R-089 — the fake pair maps itself from the backup engine’s ow
     );
     expect((await stateOf(p.admin)).backup).toEqual({
       backupHost: p.st.backup?.host,
-      channels: [{ channel: 1, state: 'mapped', backupChannel: 2, source: 'playout' }],
+      channelListState: 'ready',
+      channels: [
+        { channel: 1, state: 'mapped', backupChannel: 2, source: 'playout', automaticChannel: 2 },
+      ],
     });
     const backupReturn = await p.admin.ask(id(), 'pgmReturn.ticket', {
       channel: 1,
@@ -271,6 +274,10 @@ describe('🔴 R-089 — the fake pair maps itself from the backup engine’s ow
       backupChannel: 2,
       source: 'entry',
       entry: 2,
+      manualChoices: [
+        { channel: 1, name: 'برنامهٔ موتورِ پشتیبان' },
+        { channel: 2, name: 'آپاسای (آینه)' },
+      ],
     });
     // An entry for a channel this station does not declare is refused.
     expect(

@@ -99,8 +99,8 @@ function failoverButton(el: HTMLElement): HTMLButtonElement {
 describe('StatusBar — B-046 single-server state', () => {
   it('renders NO CG BACKUP and disables manual failover when health has no backup', async () => {
     const el = await renderStatusBar(singleServerHealth());
-    expect(el.textContent).toContain('NO CG BACKUP');
-    expect(el.textContent).not.toContain('BACKUP B');
+    expect(el.textContent).toContain('No CG backup');
+    expect(el.textContent).not.toContain('Server B');
     const btn = failoverButton(el);
     expect(btn.disabled).toBe(true);
     expect(btn.title).toBe('No CG backup configured');
@@ -108,10 +108,10 @@ describe('StatusBar — B-046 single-server state', () => {
 
   it('renders the backup card and enables manual failover when a backup is declared', async () => {
     const el = await renderStatusBar(twoServerHealth());
-    expect(el.textContent).toContain('BACKUP B');
-    expect(el.textContent).not.toContain('NO CG BACKUP');
+    expect(el.textContent).toContain('Server B');
+    expect(el.textContent).not.toContain('No CG backup');
     const btn = failoverButton(el);
     expect(btn.disabled).toBe(false);
-    expect(btn.title).toBe('Switch CG primary to B');
+    expect(btn.title).toBe('Switch graphics control to Server B.');
   });
 });

@@ -106,6 +106,7 @@ import {
   judgeConsumers,
   parseDeclaredConsumersFromConfig,
   parseRunningConsumersFromInfo,
+  DEFAULT_QUICK_RESTORE_SECONDS,
   type ChannelOutputCheck,
   type DeclaredChannelConsumers,
   type RunningConsumer,
@@ -229,6 +230,7 @@ import {
   type StationStray,
 } from '@cg/shared-ipc';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as waitForTimer } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
 import type { LayerProfile, StackLoadProfileResult } from '@cg/shared-ipc';
@@ -705,6 +707,22 @@ interface MixerBatch {
 interface PrimaryMixerTarget {
   readonly primaryOnly: ServerSession;
   readonly primaryQueue?: ServerSession['queue'];
+}
+
+interface QuickRestoreTarget extends PrimaryMixerTarget {
+  readonly primaryQueue: ServerSession['queue'];
+  readonly ready: Promise<void>;
+  readonly deadline: number;
+  readonly current: () => boolean;
+  readonly publish?: AbortSignal;
+  readonly publicationIsCurrent?: () => boolean;
+}
+
+interface QuickRestoreOutage {
+  readonly session: ServerSession;
+  readonly since: number;
+  readonly failover: ConnectionHealth['lastFailover'];
+  readonly cancelled: Set<string>;
 }
 
 function cropKey(lookId: string | undefined, plateId: string): string {
@@ -2184,6 +2202,9 @@ export class CasparRuntime {
    * would be the same class of defect as the ledger that outlived its producers (`B-227`).
    */
   #emptiedAir: EmptiedAirNotice | null = null;
+  #quickRestoreOutage: QuickRestoreOutage | undefined;
+  readonly #quickRestoreScope = new AsyncLocalStorage<QuickRestoreTarget>();
+  readonly #quickRestoreRows = new Map<string, AbortController>();
   /**
    * `CENTRAL-BRIDGE-01` (`B-294`) — what this process's restore did not bring back as it was, or
    * `null`. Process state like `#emptiedAir`, for its reason: it describes the start THIS process
@@ -3345,8 +3366,33 @@ export class CasparRuntime {
       //                     via resumed OSC; a silent layer (producer gone) resets
       //                     to IDLE. The two calls coalesce into one publish, so an
       //                     emptied item never flashes red.
-      session.on('state-change', ({ from, to }) => {
+      session.on('state-change', ({ from, to, reason }) => {
         if (this.#sessions[label] !== session) return; // torn-down era
+        const seconds = this.#config.quickRestoreSeconds ?? DEFAULT_QUICK_RESTORE_SECONDS;
+        if (
+          this.#playoutLinked &&
+          seconds > 0 &&
+          to === 'disconnected' &&
+          (reason === 'amcp peer closed' ||
+            reason.startsWith('amcp probe failed:') ||
+            reason === 'cycle teardown') &&
+          (from === 'healthy' || from === 'degraded') &&
+          this.#adapter.currentPrimary === label
+        ) {
+          this.#quickRestoreOutage = {
+            session,
+            since: performance.now(),
+            failover: this.#lastFailover,
+            cancelled: new Set(),
+          };
+        }
+        const outage = this.#quickRestoreOutage;
+        const endedOutage =
+          to === 'healthy' && outage?.session === session && outage.failover === this.#lastFailover
+            ? outage
+            : undefined;
+        if (outage?.session === session && (to === 'healthy' || reason === 'stop()'))
+          this.#quickRestoreOutage = undefined;
         /*
           C-029 — a NEW CONNECTION invalidates the per-connection facts: the declaration
           and the mode latch. A CasparCG restarted after a
@@ -3378,7 +3424,7 @@ export class CasparRuntime {
           // 🔴 `LOOK-SWITCH-01` — and on a NEW connection (never `degraded → healthy`, which is
           // the same socket with OSC back), our full mixer state follows it: see
           // {@link #resendLiveMixerState}.
-          void this.#mixerStateOnHealthy(from !== 'degraded');
+          const mixerReady = this.#mixerStateOnHealthy(from !== 'degraded');
           /*
             🔴 `CENTRAL-BRIDGE-01` (`C-047`) — THE START CHECK. The FIRST connection after this
             bridge starts is judged from the core's own answer, one `INFO <ch>` per declared channel
@@ -3398,10 +3444,34 @@ export class CasparRuntime {
           // R-021 stage 4 — sampled ONCE, with the producer KIND, and the key set
           // derived from it. `reconcileOnReconnect` only asks "occupied?"; the
           // restore decision additionally asks "ours?" on a declared row.
+          const deadline = endedOutage === undefined ? 0 : endedOutage.since + seconds * 1000;
+          const queue = session.queue;
+          const generation = this.#amcpGeneration;
+          const quickRestore =
+            from === 'resyncing' &&
+            endedOutage !== undefined &&
+            seconds > 0 &&
+            deadline >= performance.now()
+              ? {
+                  primaryOnly: session,
+                  primaryQueue: queue,
+                  ready: mixerReady,
+                  deadline,
+                  current: () =>
+                    this.#started &&
+                    this.#adapter.primarySession === session &&
+                    session.state === 'healthy' &&
+                    session.queue === queue &&
+                    this.#amcpGeneration === generation &&
+                    this.#lastFailover === endedOutage.failover,
+                }
+              : undefined;
           this.#reconcileAtHealthy(
             from,
             this.#observedProducers(session),
             session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+            quickRestore,
+            endedOutage?.cancelled,
           );
         } else if (from === 'healthy') {
           this.#reconciler.setLinkDown(true);
@@ -3492,6 +3562,8 @@ export class CasparRuntime {
     from: ServerSessionState,
     observedProducers: ReadonlyMap<string, string>,
     heard: boolean,
+    quickRestore?: QuickRestoreTarget,
+    cancelled?: ReadonlySet<string>,
   ): void {
     const occupiedKeys = new Set(observedProducers.keys());
     // B-092 — decide the pending RESTORES here, against this same drained
@@ -3518,7 +3590,9 @@ export class CasparRuntime {
       // `B-227` — BOTH halves of one event, from the one sample. The ledger first: it
       // is the structural fact (what the bridge OWNS), and the status reset below is
       // the derived one (what the operator SEES). Neither sends anything.
-      const dropped = this.#reconcileLedgerOnReconnect(occupiedKeys);
+      const dropped = this.#reconcileLedgerOnReconnect(occupiedKeys).filter(
+        ({ itemId }) => cancelled?.has(itemId) !== true,
+      );
       /*
               🔴 `B-225` — THE BEFORE-STATE, SAMPLED HERE BECAUSE IT DOES NOT SURVIVE THE
               NEXT LINE. Which rows were ON AIR when the server stopped carrying them is the
@@ -3527,9 +3601,9 @@ export class CasparRuntime {
               NOT "on air": `out` leaves it TRUE (only `stop` retracts it), so an operator's
               own CLEAR is inside the reset set and must be excluded HERE.
             */
+      const before = this.#reconciler.snapshot();
       const wasOnAir = new Set(
-        this.#reconciler
-          .snapshot()
+        before
           .filter((item) => isOnAirStatus(item) && item.status !== 'exiting')
           .map((item) => item.itemId),
       );
@@ -3551,11 +3625,20 @@ export class CasparRuntime {
             */
       // `CENTRAL-BRIDGE-01` — ONE notice for this transition: the restored rows the
       // decision above found empty, then the live rows this reconcile reset.
-      this.#raiseEmptiedAir(
-        [...emptiedByRestore, ...reset.filter((item) => wasOnAir.has(item.itemId))],
-        dropped,
-        from !== 'degraded',
+      const emptied = [
+        ...emptiedByRestore,
+        ...reset.filter((item) => wasOnAir.has(item.itemId)),
+      ].filter(({ itemId }) => cancelled?.has(itemId) !== true);
+      const confirmed = new Set(
+        before
+          .filter(({ status }) => status === 'on-air' || status === 'playing')
+          .map(({ itemId }) => itemId),
       );
+      if (quickRestore !== undefined && emptied.some(({ itemId }) => confirmed.has(itemId))) {
+        void this.#restoreAfterQuickOutage(emptied, confirmed, dropped, quickRestore);
+      } else {
+        this.#raiseEmptiedAir(emptied, dropped, from !== 'degraded');
+      }
     } else {
       // …and while blind, NO on-air claim is verifiable — not just the
       // restored ones. Skipping the reconcile alone would leave a played
@@ -3571,6 +3654,179 @@ export class CasparRuntime {
           this.#reconciler.setUnverifiable(item.itemId, true);
           this.#markDirty(item.itemId);
         }
+      }
+    }
+  }
+
+  /** Applied row settings that must still match before a queued recovery can publish. */
+  #quickRestoreSettings(itemId: string) {
+    return {
+      fields: this.#reconciler.get(itemId)?.fields,
+      position: this.#positions.get(itemId),
+      activeLookId: this.activeLookId(itemId),
+      sourceOverride: this.#sourceOverrides.get(itemId),
+      lookSourceOverride: this.#lookSourceBindings.get(itemId),
+      plateVolumes: this.#plateVolumes.get(itemId),
+      previewPlateCrops: this.#previewPlateCrops.get(itemId),
+      framePlacements: this.#framePlacements.get(itemId),
+      framePlacementsPendingReset: this.#framePlacementsPendingReset.has(itemId),
+      maskPlacements: this.#maskPlacements.get(itemId),
+      timingOverride: this.#passTimings.get(itemId),
+      pages: this.#pageIndexes.get(itemId),
+      pageAdvance: this.#pageAdvance.get(itemId),
+      soundMuted: this.#soundMutes.get(itemId),
+    };
+  }
+
+  /** Recover only known programme rows on the engine and transport that just returned. */
+  async #restoreAfterQuickOutage(
+    emptied: readonly StackItemState[],
+    confirmed: ReadonlySet<string>,
+    dropped: readonly DroppedLiveLayer[],
+    target: QuickRestoreTarget,
+  ): Promise<void> {
+    const previousNotice = this.#emptiedAir;
+    const rows = emptied.flatMap((item) =>
+      confirmed.has(item.itemId) && item.slot !== undefined
+        ? [
+            {
+              item,
+              slot: item.slot,
+              publish: new AbortController(),
+              settings: structuredClone(this.#quickRestoreSettings(item.itemId)),
+            },
+          ]
+        : [],
+    );
+    for (const { item, publish } of rows) {
+      this.#cancelQuickRestore(item.itemId);
+      this.#quickRestoreRows.set(item.itemId, publish);
+    }
+    const restored = new Set<string>();
+    const refused = new Map<string, EmptiedAirRefusal>();
+    try {
+      await target.ready;
+      for (const {
+        item: { itemId, templateId, lastIntentSeq },
+        slot,
+        publish,
+        settings,
+      } of rows) {
+        if (publish.signal.aborted) continue;
+        if (!target.current() || performance.now() > target.deadline) break;
+        const item = this.#reconciler.get(itemId);
+        if (item === null || isOnAirStatus(item)) {
+          restored.add(itemId);
+          continue;
+        }
+        const heldVersion = this.#templates.heldVersion(itemId);
+        const carrier =
+          heldVersion === undefined ? undefined : this.#templates.infoOf(heldVersion)?.liveSources;
+        const backupChannel = this.#backupChannels.channelOnB(slot.channel);
+        const activeIsB = this.#adapter.currentPrimary === 'B';
+        const publicationIsCurrent = () =>
+          this.#templates.versionOn(slot.channel, templateId) === heldVersion &&
+          isDeepStrictEqual(settings, this.#quickRestoreSettings(itemId));
+        if (
+          item.status !== 'idle' ||
+          item.templateId !== templateId ||
+          item.lastIntentSeq !== lastIntentSeq ||
+          item.slot?.channel !== slot.channel ||
+          item.slot.layer !== slot.layer ||
+          heldVersion === undefined ||
+          ((carrier?.sources.length ?? 0) > 0 && !this.#frozenAssignments.has(itemId)) ||
+          !publicationIsCurrent() ||
+          (activeIsB && backupChannel === null) ||
+          this.#observedProducer(target.primaryOnly, slot) !== undefined
+        ) {
+          continue;
+        }
+        const onCore = activeIsB ? backupChannel : slot.channel;
+        if (onCore === null) continue;
+        const stage = await target.primaryQueue
+          .enqueue(this.#builder.info(onCore), { priority: 'urgent', signal: publish.signal })
+          .then(({ response }) => {
+            const xml =
+              response.kind === 'ok-line'
+                ? response.data
+                : response.kind === 'ok-multi'
+                  ? response.lines.join('\n')
+                  : null;
+            return xml === null ? null : stageProducersOfInfo(xml);
+          })
+          .catch(() => null);
+        if (
+          stage === null ||
+          stage.has(slot.layer) ||
+          publish.signal.aborted ||
+          !target.current() ||
+          performance.now() > target.deadline ||
+          !publicationIsCurrent() ||
+          !isDeepStrictEqual(item, this.#reconciler.get(itemId))
+        ) {
+          continue;
+        }
+        const verdict = await this.#quickRestoreScope.run(
+          {
+            ...target,
+            publish: publish.signal,
+            publicationIsCurrent,
+            current: () =>
+              target.current() &&
+              (!activeIsB || this.#backupChannels.channelOnB(slot.channel) === backupChannel),
+          },
+          () => this.take(itemId),
+        );
+        if (verdict.accepted) restored.add(itemId);
+        else refused.set(itemId, emptiedAirRefusalFor(verdict.errorCode));
+      }
+    } catch (error) {
+      process.stderr.write(`[caspar-bridge] quick programme recovery ended: ${String(error)}\n`);
+    } finally {
+      for (const {
+        item: { itemId },
+        publish,
+      } of rows) {
+        if (publish.signal.aborted) restored.add(itemId);
+        if (this.#quickRestoreRows.get(itemId) === publish) this.#quickRestoreRows.delete(itemId);
+      }
+    }
+    if (this.#emptiedAir !== previousNotice) return;
+    if (restored.size > 0) {
+      process.stderr.write(
+        `[caspar-bridge] quick programme recovery: ${String(restored.size)} row(s) recovered or resolved.\n`,
+      );
+    }
+    const remaining = emptied.filter(({ itemId }) => !restored.has(itemId));
+    const remainingIds = new Set(remaining.map(({ itemId }) => itemId));
+    this.#raiseEmptiedAir(
+      remaining,
+      dropped.filter(({ itemId }) => remainingIds.has(itemId)),
+      true,
+      refused,
+    );
+  }
+
+  #cancelQuickRestore(itemId: string): void {
+    const outage = this.#quickRestoreOutage;
+    if (outage?.session === this.#adapter.primarySession && outage.failover === this.#lastFailover)
+      outage.cancelled.add(itemId);
+    this.#quickRestoreRows.get(itemId)?.abort();
+    this.#quickRestoreRows.delete(itemId);
+  }
+
+  #cancelQuickRestores(channel?: number): void {
+    const itemIds = new Set(this.#quickRestoreRows.keys());
+    const outage = this.#quickRestoreOutage;
+    if (
+      outage?.session === this.#adapter.primarySession &&
+      outage.failover === this.#lastFailover
+    ) {
+      for (const { itemId } of this.#reconciler.snapshot()) itemIds.add(itemId);
+    }
+    for (const itemId of itemIds) {
+      if (channel === undefined || this.#withinChannel(itemId, channel)) {
+        this.#cancelQuickRestore(itemId);
       }
     }
   }
@@ -7046,6 +7302,14 @@ export class CasparRuntime {
   }
 
   async #takeImpl(itemId: string): Promise<TakeVerdict> {
+    const recovery = this.#quickRestoreScope.getStore();
+    const mayRecover = () =>
+      recovery === undefined ||
+      (recovery.publish?.aborted !== true &&
+        recovery.current() &&
+        recovery.publicationIsCurrent?.() !== false &&
+        performance.now() <= recovery.deadline);
+    if (!mayRecover()) return { accepted: false, errorCode: 'disconnected' };
     /**
      * R-022 — THE LEGACY INTERLOCK. An interlocked rehearsal cannot be taken to air, and the
      * refusal lives HERE rather than only in a disabled button.
@@ -7111,8 +7375,10 @@ export class CasparRuntime {
       is judged by the mapping its take would put in force (`channelOnBAtTake`).
     */
     if (this.#adapter.currentPrimary === 'B') {
-      const unmapped = this.channelsForItem(itemId).find(
-        (channel) => this.#backupChannels.channelOnBAtTake(channel) === null,
+      const unmapped = this.channelsForItem(itemId).find((channel) =>
+        recovery === undefined
+          ? this.#backupChannels.channelOnBAtTake(channel) === null
+          : this.#backupChannels.channelOnB(channel) === null,
       );
       if (unmapped !== undefined) {
         const message = backupUnmappedRefusal(unmapped);
@@ -7159,7 +7425,9 @@ export class CasparRuntime {
       while it was live, and nothing has been sent to server B for it since. From here this take's lines —
       and every later one — reach B's newly resolved channel, or nothing.
     */
-    for (const channel of this.channelsForItem(itemId)) this.#backupChannels.release(channel);
+    if (recovery === undefined) {
+      for (const channel of this.channelsForItem(itemId)) this.#backupChannels.release(channel);
+    }
 
     /*
       C-015 phase 6 (6.0) — DECIDE THE LIVE PLATES HERE, WHERE A REFUSAL COSTS
@@ -7241,7 +7509,7 @@ export class CasparRuntime {
         'entering-look',
         // SESSION BP — THE TAKE IS THE ONE ACTION THAT RESOLVES LEVEL 2 AFRESH, and pins what
         // it resolved. See `LevelTwoSource`.
-        'fresh',
+        recovery === undefined ? 'fresh' : 'pinned',
         undefined,
         takeFramePlacements,
       );
@@ -7311,6 +7579,7 @@ export class CasparRuntime {
       const masksBefore = this.#maskPlacements.get(itemId);
       const confirmed = await this.#ensureRouteEpoch();
       // The read is an await: re-ask what the take's first lines asked before it.
+      if (!mayRecover()) return { accepted: false, errorCode: 'disconnected' };
       if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
       if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
       if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
@@ -8605,6 +8874,7 @@ export class CasparRuntime {
   // NB `stop()` on this class is the PROCESS shutdown, so the item verb is
   // `stopItem` — the AMCP verb it sends is still `CG … STOP`.
   async stopItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    this.#cancelQuickRestore(itemId);
     // The audit ACTION is `stop` — the schema's word for the verb, not this
     // method's disambiguating name (`stop()` on this class is the process
     // shutdown). The log speaks the operator's vocabulary, not the class's.
@@ -9233,6 +9503,7 @@ export class CasparRuntime {
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    this.#cancelQuickRestore(itemId);
     return this.#audited('out', this.#itemDetail(itemId), () => this.#outImpl(itemId));
   }
 
@@ -15832,7 +16103,11 @@ export class CasparRuntime {
     presetEffect?: LiveMixerTransitionGuard,
   ): Promise<LivePlateApplyResult> {
     const releaseClaims = this.#claimSeatLayers(plan);
-    const batch: MixerBatch = { ...presetEffect?.terminalTarget };
+    const recovery = this.#quickRestoreScope.getStore();
+    const batch: MixerBatch =
+      recovery === undefined
+        ? { ...presetEffect?.terminalTarget }
+        : { primaryOnly: recovery.primaryOnly, primaryQueue: recovery.primaryQueue };
     try {
       return await this.#applyLivePlatesUnguarded(
         itemId,
@@ -19535,17 +19810,22 @@ export class CasparRuntime {
     reset: readonly StackItemState[],
     dropped: readonly DroppedLiveLayer[],
     newConnection: boolean,
+    refused?: ReadonlyMap<string, EmptiedAirRefusal>,
   ): void {
     if (reset.length === 0) return;
     const notice: EmptiedAirNotice = {
       at: new Date().toISOString(),
-      rows: reset.map((item) => ({
-        itemId: item.itemId,
-        templateId: item.templateId,
-        ...(item.slot !== undefined
-          ? { slot: { channel: item.slot.channel, layer: item.slot.layer } }
-          : {}),
-      })),
+      rows: reset.map((item) => {
+        const refusal = refused?.get(item.itemId);
+        return {
+          itemId: item.itemId,
+          templateId: item.templateId,
+          ...(item.slot !== undefined
+            ? { slot: { channel: item.slot.channel, layer: item.slot.layer } }
+            : {}),
+          ...(refusal !== undefined && { refusal }),
+        };
+      }),
       seatsDropped: dropped.length,
       // `CENTRAL-BRIDGE-01` (D4) — each seat's channel, so a console told only its own channels
       // is told only its own seats.
@@ -19563,7 +19843,7 @@ export class CasparRuntime {
       `[caspar-bridge] air emptied under us: ${String(notice.rows.length)} row(s) were on air ` +
         `and their layers are silent on ${newConnection ? 'a NEW AMCP connection' : 'the same AMCP connection'}; ` +
         `${String(notice.seatsDropped)} live-source seat(s) dropped from the ledger. ` +
-        `Nothing was re-seated — the operator decides.\n`,
+        `The remaining rows require operator recovery.\n`,
     );
   }
 
@@ -19822,11 +20102,8 @@ export class CasparRuntime {
   /**
    * 🔴 **THE ONE PRESS — put the named rows back, and only rows the notice can prove.**
    *
-   * The owner's decision (2026-09-05) was *detect and say*, not restore automatically,
-   * because **an unattended machine must not put a graphic on air.** So nothing in this class
-   * calls this method: it is reachable only from `air.restore-emptied`, which is reachable
-   * only from a control the operator pressed. There is no timer, no reconnect hook and no
-   * page-load path into it, and there must never be one.
+   * This is the operator confirmation path after a long outage or an unsuccessful recovery.
+   * Short-outage recovery uses fresh evidence and pins the exact engine transport.
    *
    * ⭐ **Each row is re-taken through the ORDINARY {@link take}**, never a private re-seat.
    * That is what makes the restore inherit every refusal a take already owns — reachability,
@@ -20689,6 +20966,7 @@ export class CasparRuntime {
     attempted: number;
     refused: { itemId: string; reason: LayerClearReason }[];
   }> {
+    this.#cancelQuickRestores(channel);
     const bound = this.#reconciler
       .snapshot()
       .filter((item) => channel === undefined || this.#withinChannel(item.itemId, channel))
@@ -20748,6 +21026,7 @@ export class CasparRuntime {
    * ({@link #withinChannel}). Bare, exactly as before.
    */
   async stopAll(channel?: number): Promise<{ ok: boolean; stopped: number }> {
+    this.#cancelQuickRestores(channel);
     const stoppable = this.#reconciler
       .snapshot()
       .filter(
@@ -20786,6 +21065,7 @@ export class CasparRuntime {
   async remove(
     itemId: string,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    this.#cancelQuickRestore(itemId);
     const verdict = await this.#audited('remove', this.#itemDetail(itemId), (detail) =>
       this.#removeImpl(itemId, detail),
     );
@@ -23640,18 +23920,47 @@ export class CasparRuntime {
       // `ROUTE-PLATES-01` C4 — a Playout route reaches the primary only, and is never journaled.
       // `PLAYOUT-FEATURES-01` A — a clip's `PLAY` carries server B's own line; a transport verb to a
       // clip server B was sent nothing for reaches the primary only (B's layer holds nothing of ours).
+      const recovery = this.#quickRestoreScope.getStore();
+      // Stop/Clear can revoke a queued producer write while the take's cleanup still
+      // has access to the same engine.
+      const publishes = producerSlot !== null || /^CG \d+-\d+ PLAY(?:\s|$)/.test(line);
+      const publishSignal = publishes ? recovery?.publish : undefined;
+      const signal =
+        publishSignal !== undefined && options.signal !== undefined
+          ? AbortSignal.any([publishSignal, options.signal])
+          : (publishSignal ?? options.signal);
+      const primaryOnly = options.primaryOnly ?? recovery?.primaryOnly;
+      const primaryQueue = options.primaryQueue ?? recovery?.primaryQueue;
+      const matchesPrimary = () =>
+        (recovery === undefined || recovery.current()) &&
+        (primaryOnly === undefined || this.#adapter.primarySession === primaryOnly) &&
+        (primaryQueue === undefined || this.#adapter.primarySession.queue === primaryQueue);
+      // The window limits dispatch, not the lifetime of an already transmitted command.
+      // In particular, keep an ADD acknowledgement so a rejected late PLAY can clean it up.
+      const canDispatch =
+        recovery !== undefined && publishes
+          ? () =>
+              matchesPrimary() &&
+              performance.now() <= recovery.deadline &&
+              publishSignal?.aborted !== true &&
+              recovery.publicationIsCurrent?.() !== false
+          : undefined;
+      const matched = matchesPrimary();
+      if (!matched || canDispatch?.() === false) {
+        if (recovery !== undefined) {
+          this.#clearExpiry(seq);
+          const errorCode = matched ? 'amcp-send-failed' : 'disconnected';
+          this.#reconciler.applyAck(seq, false, errorCode);
+          return { ok: false, onPrimary: false, errorCode };
+        }
+        return { ok: false, onPrimary: false, errorCode: 'frame-transition-interrupted' };
+      }
       const sendOptions = {
         priority,
-        ...(options.signal !== undefined && { signal: options.signal }),
+        ...(signal !== undefined && { signal }),
+        ...(canDispatch !== undefined && { canDispatch }),
         ...(options.mediaPreload !== undefined && { mediaPreload: options.mediaPreload }),
       };
-      const matchesPrimary = () =>
-        (options.primaryOnly === undefined ||
-          this.#adapter.primarySession === options.primaryOnly) &&
-        (options.primaryQueue === undefined ||
-          this.#adapter.primarySession.queue === options.primaryQueue);
-      if (!matchesPrimary())
-        return { ok: false, onPrimary: false, errorCode: 'frame-transition-interrupted' };
       const replicaPage = options.pageReplica;
       const peer = replicaPage === undefined ? undefined : this.#residentMirror(replicaPage);
       if (replicaPage !== undefined && peer === undefined)
@@ -23669,13 +23978,13 @@ export class CasparRuntime {
               },
               ...(options.serverB !== undefined && { serverB: options.serverB }),
             }
-          : options.primaryOnly !== undefined
+          : primaryOnly !== undefined
             ? {
                 ...sendOptions,
                 mirror: false,
                 primaryOwner: {
-                  session: options.primaryOnly,
-                  queue: options.primaryQueue ?? options.primaryOnly.queue,
+                  session: primaryOnly,
+                  queue: primaryQueue ?? primaryOnly.queue,
                 },
                 ...(options.serverB !== undefined && { serverB: options.serverB }),
               }
@@ -23685,6 +23994,11 @@ export class CasparRuntime {
                 ? { ...sendOptions, serverB: options.serverB }
                 : sendOptions,
       );
+      if (recovery !== undefined && !matchesPrimary()) {
+        this.#clearExpiry(seq);
+        this.#reconciler.applyAck(seq, false, 'disconnected');
+        return { ok: false, onPrimary: false, errorCode: 'disconnected' };
+      }
       // A response ARRIVED, so the B-044 bounded timeout no longer applies —
       // and the ack below settles the intent either way (B-070: a failed ack
       // settles too), so no expiry is needed to rescue it.

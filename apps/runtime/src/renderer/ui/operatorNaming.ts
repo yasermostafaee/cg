@@ -2,10 +2,12 @@ import {
   bankInSet,
   isFixedBankLayer,
   placeName,
+  plateLabel,
   type BankSet,
   type NameableSlot,
   type TemplateInfo,
 } from '@cg/shared-ipc';
+import type { ControlLiveLayout } from '@cg/shared-schema';
 import { templateDisplayName } from '../features/library/templateName.js';
 
 /**
@@ -174,4 +176,35 @@ export function operatorRowName(
     layer,
     title: ids.join(' · '),
   };
+}
+
+/** Names a live plate consistently across source assignment and preview. */
+export function plateDisplayName(
+  plateId: string,
+  plates: readonly { readonly sourceId: string }[] | undefined,
+  layout?: Pick<ControlLiveLayout, 'frames'> | undefined,
+): string {
+  const index = layout?.frames.findIndex(({ id }) => id === plateId) ?? -1;
+  const frame = layout?.frames[index];
+  return (
+    displayName(frame?.focusAlias) ??
+    displayName(frame?.title) ??
+    plateLabel(plates, plateId) ??
+    (index < 0 ? 'Plate' : `Plate ${String(index + 1)}`)
+  );
+}
+
+const UUID_LABEL = /^(?:[a-z][a-z\d]*[-:])*[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+function displayName(name: string | null | undefined): string | undefined {
+  const text = name?.trim();
+  return text && !UUID_LABEL.test(text) ? text : undefined;
+}
+
+/** Some catalogue entries have only an opaque ID in place of a name. */
+export function sourceDisplayName(
+  name: string | null | undefined,
+  origin?: 'input' | 'media',
+): string {
+  return displayName(name) ?? (origin === 'media' ? 'Media' : 'Input');
 }

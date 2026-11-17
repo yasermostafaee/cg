@@ -18,3 +18,16 @@ the progress display. Reduced-motion settings SHALL stop the activity animation.
 
 - **WHEN** the engine is still operating and there is no reliable byte measure for the current step
 - **THEN** CG Setup displays its activity and the current step without a numeric progress value
+- **AND** the completed fill remains visible while the activity is marked on the remaining track
+- **AND** with reduced motion, the remaining track has a stationary tint and the stage reads In progress
+
+#### Scenario: The wizard changes page
+
+- **WHEN** the operator moves between setup pages or the engine reports a new installation phase
+- **THEN** CG Setup shows the packaged version in the same place in the title bar
+
+#### Scenario: Recognise Designer and Control
+
+- **WHEN** the operator opens Designer or Control Setup or sees the installed app's icon
+- **THEN** Designer uses a violet tile with colored keyframes and Control uses a green tally accent
+- **AND** the APASAI mark and brand blue are visible in both tiles

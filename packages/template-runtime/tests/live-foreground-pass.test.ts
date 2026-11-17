@@ -197,9 +197,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       name: scene.name,
       resolution: scene.resolution,
       frameRate: scene.frameRate,
-      frames: [
-        { id: 'guest', title: 'Guest', border: { color: '#ffffff', width: 12, radius: 36 } },
-      ],
+      frames: [{ id: 'guest', title: 'Guest', border: { color: '#ffffff', width: 12 } }],
       presets: [
         {
           id: 'default',
@@ -224,7 +222,8 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     if (wrap == null || border == null || picture == null) throw new Error('Missing plate DOM');
     expect(border.hasAttribute('data-cg-layout-plate-edges')).toBe(true);
     expect(border.style.borderTopWidth).toBe('12px');
-    expect(picture.hasAttribute('data-cg-layout-plate-edges')).toBe(true);
+    expect(Number.parseFloat(border.style.borderRadius)).toBe(0);
+    expect(picture.style.borderRadius).toBe('');
     expect(picture.style.overflow).toBe('hidden');
 
     await runtime.update(

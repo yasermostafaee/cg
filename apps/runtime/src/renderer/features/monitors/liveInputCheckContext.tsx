@@ -1,3 +1,4 @@
+import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import {
   createContext,
   useCallback,
@@ -97,7 +98,7 @@ export function LiveInputCheckProvider({
       const handle = { channel: target, previewId: uuid() };
       const connecting: LivePreviewStatus = {
         ...handle,
-        sourceName: source.name,
+        sourceName: sourceDisplayName(source.name, 'input'),
         state: 'connecting',
         dbFs: null,
       };

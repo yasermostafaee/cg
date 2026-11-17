@@ -1,7 +1,6 @@
 import type { LiveLayerState, LivePlateReleaseState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { shortId } from '../../ui/operatorNaming.js';
 import {
   CLEARED_PILL,
   LOCKED_PILL,
@@ -847,12 +846,8 @@ export function plateVolumeFor(
  * (`ui/operatorNaming.ts`): the bank's configured ALIAS for the layer this item sits on, else
  * the bank's default (`Layer N` / `Bed N`), and `null` when there is no slot to name at all.
  *
- * ⚠ **AND WHEN THERE IS NO ROW NAME, THE ANSWER IS AN ID — NOT A WORD THAT READS LIKE A
- * NAME.** The order is: the row's name, else the composition's name, else {@link shortId} of
- * the item. `Unknown row` was considered and rejected twice over: it is indistinguishable
- * across two different unnamed rows, and it is indistinguishable from the STRANDED verdict
- * this function's `null` exists to carry. An id is ugly and it is a handle; a friendly
- * placeholder is neither.
+ * If neither name is known, the panel identifies the owner as a live layer and keeps the
+ * coordinate visible in its own column. A stranded layer has no owner.
  *
  * The composition goes to {@link LiveLayerRowView.ownerDetail}, which the surface puts on a
  * `title` — relocated, not deleted.
@@ -867,7 +862,7 @@ export function ownerLabelFor(
     const item = byId.get(itemId);
     if (item === undefined) return null;
     const composition = templateName(item.templateId) ?? null;
-    const row = rowName(itemId) ?? composition ?? shortId(itemId);
+    const row = rowName(itemId) ?? composition ?? 'Live layer';
     // The composition is a SECOND statement when it is already the visible name — say it once.
     return { row, detail: composition === null || composition === row ? null : composition };
   };

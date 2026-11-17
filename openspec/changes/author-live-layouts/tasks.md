@@ -43,6 +43,6 @@
 - [x] Carry the input catalogue server through successful D10 reads, refresh failures and Bridge restarts.
 - [x] Verify vertical stereo input meters, frame-height rails when enabled, a default-off editor preview, and no meters on media in Chromium.
 - [x] Align New live layout labels with Designer's Plate terminology.
-- [x] Save and render a per-plate border with editable color, width and radius.
+- [x] Save and render a rectangular per-plate border with editable color and width.
 - [x] Verify preset and per-plate aspect and fit in saved packages and Windows Chromium, including a 3:4 center crop and the same input in a 16:9 solo preset.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

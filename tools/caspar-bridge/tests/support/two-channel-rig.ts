@@ -96,6 +96,7 @@ export async function twoChannelRig(
     fromFile?: string;
     channels?: number;
     bridge?: Partial<BridgeOptions>;
+    quickRestoreSeconds?: number;
     awaitBlanket?: boolean;
     /**
      * Where the fake CasparCG listens and the bridge's control socket binds — `127.0.0.1` unless a
@@ -130,6 +131,9 @@ export async function twoChannelRig(
     servers: { A: { host, amcpPort: mock.amcpPort, oscPort } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
+    ...(opts.quickRestoreSeconds === undefined
+      ? {}
+      : { quickRestoreSeconds: opts.quickRestoreSeconds }),
   };
   const handle = track(
     await createBridge({

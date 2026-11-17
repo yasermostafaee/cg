@@ -526,7 +526,12 @@ test.describe('source audio meters', () => {
                 }
               : {
                   sourceId,
-                  state: sourceId === 'in-studio-2' ? 'no-audio' : 'unknown',
+                  state:
+                    sourceId === 'in-studio-2'
+                      ? 'no-audio'
+                      : sourceId === 'in-studio-3'
+                        ? 'has-audio'
+                        : 'unknown',
                 },
           ),
         });
@@ -688,7 +693,13 @@ test.describe('source audio meters', () => {
     await expect(setupMeter).toBeVisible();
     await expect(setupMeter.locator('[data-input-meter-channel]')).toHaveCount(32);
     await expectAttached(setupMeter);
-    await expect(sources.getByRole('img', { name: 'Studio 2 · No audio stream' })).toBeVisible();
+    const silent = sources.getByRole('img', { name: 'Studio 2 · No audio stream' });
+    const withoutLevel = sources.getByRole('img', {
+      name: 'Studio 3 · Audio stream present, level unavailable',
+    });
+    await expect(silent).toBeVisible();
+    const neutralBorder = await silent.evaluate((el) => getComputedStyle(el).borderTopColor);
+    await expect(withoutLevel).toHaveCSS('border-top-color', neutralBorder);
     expect((await readState()).checked).toEqual([]);
   });
 });

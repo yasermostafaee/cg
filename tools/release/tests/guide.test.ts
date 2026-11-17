@@ -21,7 +21,7 @@ const source = fs.readFileSync(GUIDE, 'utf8');
 /** The pictures the guide embeds, by source — every figure line. */
 const PICTURES = [...source.matchAll(/^!\[[^\]]*\]\(([^)\s]+)/gm)].map((m) => m[1] ?? '');
 
-const LABELS: readonly { shown: string; text?: string; file: string }[] = [
+const LABELS: readonly { shown: string; text?: string | RegExp; file: string }[] = [
   {
     shown: 'CG Bridge and APASAI Playout Engine run on separate servers',
     file: 'tools/setup-ui/src/server.rs',
@@ -105,7 +105,7 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   {
     shown: 'Apply servers',
-    text: '\n                Apply servers\n',
+    text: /^[ \t]+Apply servers\r?$/m,
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
@@ -196,7 +196,7 @@ describe('the Persian release guide', () => {
   it('quotes the actual setup and operator controls', () => {
     for (const { shown, text, file } of LABELS) {
       expect(source, `the guide quotes ${shown}`).toContain(`\`${shown}\``);
-      expect(fs.readFileSync(path.join(REPO, file), 'utf8'), `${file} renders ${shown}`).toContain(
+      expect(fs.readFileSync(path.join(REPO, file), 'utf8'), `${file} renders ${shown}`).toMatch(
         text ?? shown,
       );
     }

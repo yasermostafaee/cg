@@ -108,8 +108,8 @@ pub struct Frame<'a> {
     pub step_t: [f32; MAX_STEPS],
     /// The Done/Failed mark, drawing in, 0 → 1.
     pub mark_t: f32,
-    /// Position of the activity segment, fixed in reduced motion.
-    pub activity_t: f32,
+    /// Position of indeterminate activity, or no animation with reduced motion.
+    pub activity_t: Option<f32>,
     /// Windows 11 draws the window's border (DWM); Windows 10 gets ours.
     pub dwm_border: bool,
     /// Device pixels per DIP.
@@ -608,7 +608,10 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
     if layered {
         p.layer(e);
     }
-    for item in &f.scene.items {
+    // Title-bar text stays fixed while the wizard changes pages.
+    let on_title_bar =
+        |item: &&Item| matches!(item, Item::Text { rect, .. } if rect.bottom() <= TITLE_H);
+    for item in f.scene.items.iter().filter(|item| !on_title_bar(item)) {
         page_item(&mut p, f, item);
     }
     // The page's own controls (the folder's Change, the Playout page's fields) enter with the page;
@@ -623,6 +626,9 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
         p.pop();
     }
     unsafe { rt.SetTransform(&Matrix3x2::identity()) };
+    for item in f.scene.items.iter().filter(on_title_bar) {
+        page_item(&mut p, f, item);
+    }
     for w in f.scene.widgets.iter().filter(|w| !on_page(w)) {
         widget(&mut p, f, w);
     }
@@ -671,13 +677,12 @@ fn rail(p: &mut Painter, f: &Frame) {
 }
 
 /// The setup family stays dark and branded, while each product gets a recognisable room:
-/// neutral Control, teal Bridge and blue Designer. These are blends of existing audited tokens,
-/// not a second hand-picked palette.
+/// neutral Control, teal Bridge and violet Designer.
 fn product_surface(id: ProductId) -> Rgb {
     match id {
         ProductId::Control => palette::SURFACE,
         ProductId::Bridge => mix(palette::SURFACE, palette::OK_BG, 0.62),
-        ProductId::Designer => mix(palette::SURFACE, palette::ACCENT_FILL, 0.58),
+        ProductId::Designer => mix(palette::SURFACE, palette::DESIGNER_VIOLET, 0.12),
     }
 }
 
@@ -685,8 +690,55 @@ fn product_rail(id: ProductId) -> Rgb {
     match id {
         ProductId::Control => palette::SPLASH_BG,
         ProductId::Bridge => mix(palette::SPLASH_BG, palette::OK_BG, 0.58),
-        ProductId::Designer => mix(palette::SPLASH_BG, palette::BRAND_DEEP, 0.22),
+        ProductId::Designer => mix(palette::SPLASH_BG, palette::DESIGNER_VIOLET, 0.23),
     }
+}
+
+fn progress_colors(id: ProductId) -> (Rgb, Rgb) {
+    match id {
+        ProductId::Bridge => (palette::BRAND_DEEP, palette::BRAND),
+        ProductId::Control => (palette::BRAND_DEEP, palette::SUCCESS),
+        ProductId::Designer => (palette::BRAND_DEEP, palette::DESIGNER_LILAC),
+    }
+}
+
+fn fill_progress(p: &mut Painter, rect: Rect, start: Rgb, end: Rgb) {
+    if rect.w <= 0.5 {
+        return;
+    }
+    for (d, alpha) in [(6.0, 0.03), (4.0, 0.06), (2.0, 0.12)] {
+        p.fill_round(
+            inflate(rect, d),
+            2.0 + d,
+            end,
+            alpha * palette::GLOW_ALPHA * 2.0,
+        );
+    }
+    unsafe {
+        let stops = [
+            D2D1_GRADIENT_STOP {
+                position: 0.0,
+                color: color(start, 1.0),
+            },
+            D2D1_GRADIENT_STOP {
+                position: 1.0,
+                color: color(end, 1.0),
+            },
+        ];
+        if let Ok(collection) =
+            p.rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)
+        {
+            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
+                startPoint: v(rect.x, 0.0),
+                endPoint: v(rect.right(), 0.0),
+            };
+            if let Ok(brush) = p.rt.CreateLinearGradientBrush(&props, None, &collection) {
+                p.rt.FillRoundedRectangle(&rr(rect, 2.0), &brush);
+                return;
+            }
+        }
+    }
+    p.fill_round(rect, 2.0, end, 1.0);
 }
 
 fn wordmark(p: &mut Painter, role: &str) {
@@ -918,52 +970,18 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
             waiting,
         } => {
             p.fill_round(*rect, 2.0, palette::SPLASH_RAIL, 1.0);
-            let w = rect.w
-                * if *waiting {
-                    0.18
-                } else {
-                    fraction.clamp(0.0, 1.0)
-                };
-            if w > 0.5 {
-                let offset = if *waiting {
-                    (rect.w - w) * f.activity_t
-                } else {
-                    0.0
-                };
-                let filled = Rect::new(rect.x + offset, rect.y, w, rect.h);
-                // The splash's glow under its fill (`--r-splash-glow`, 14 px), in soft steps.
-                for (d, a) in [(6.0, 0.03), (4.0, 0.06), (2.0, 0.12)] {
-                    p.fill_round(
-                        inflate(filled, d),
-                        2.0 + d,
-                        palette::BRAND,
-                        a * palette::GLOW_ALPHA * 2.0,
-                    );
-                }
-                unsafe {
-                    let stops = [
-                        D2D1_GRADIENT_STOP {
-                            position: 0.0,
-                            color: color(palette::BRAND_DEEP, 1.0),
-                        },
-                        D2D1_GRADIENT_STOP {
-                            position: 1.0,
-                            color: color(palette::BRAND, 1.0),
-                        },
-                    ];
-                    if let Ok(coll) = p.rt.CreateGradientStopCollection(
-                        &stops,
-                        D2D1_GAMMA_2_2,
-                        D2D1_EXTEND_MODE_CLAMP,
-                    ) {
-                        let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
-                            startPoint: v(filled.x, 0.0),
-                            endPoint: v(filled.right(), 0.0),
-                        };
-                        if let Ok(brush) = p.rt.CreateLinearGradientBrush(&props, None, &coll) {
-                            p.rt.FillRoundedRectangle(&rr(filled, 2.0), &brush);
-                        }
-                    }
+            let w = rect.w * fraction.clamp(0.0, 1.0);
+            let (start, end) = progress_colors(f.product);
+            let filled = Rect::new(rect.x, rect.y, w, rect.h);
+            fill_progress(p, filled, start, end);
+            let remaining = rect.w - w;
+            if *waiting && remaining > 0.5 {
+                let track = Rect::new(filled.right(), rect.y, remaining, rect.h);
+                p.fill_round(track, 2.0, end, 0.28);
+                if let Some(t) = f.activity_t {
+                    let scan = (track.w * 0.3).clamp(1.5, 72.0).min(track.w);
+                    let x = track.x + (track.w - scan) * t;
+                    p.fill_round(Rect::new(x, track.y, scan, track.h), 2.0, end, 0.8);
                 }
             }
         }

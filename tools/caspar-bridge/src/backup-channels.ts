@@ -1,4 +1,9 @@
-import type { BackupChannelEntry, BackupChannelLine, BackupChannelsState } from '@cg/shared-ipc';
+import type {
+  BackupChannelEntry,
+  BackupChannelLine,
+  BackupChannels as BackupChannelsView,
+  BackupChannelsState,
+} from '@cg/shared-ipc';
 import { hostJoinsStation, type CatalogueRow } from './playout-catalogue.js';
 import type { BackupChannelMap } from './server-b-line.js';
 
@@ -75,6 +80,8 @@ interface Resolution {
   readonly reason?: string;
   readonly entry?: number;
   readonly entryRefusal?: string;
+  readonly automaticChannel?: number;
+  readonly manualChoices?: BackupChannelLine['manualChoices'];
 }
 
 /**
@@ -120,11 +127,26 @@ function rowRefusal(
   return null;
 }
 
+function manualRowRefusal(
+  row: CatalogueRow,
+  aRow: CatalogueRow,
+  serverBHost: string,
+  channel: number,
+): string | null {
+  // A row for this id whose primary host is spelled differently can still be chosen explicitly.
+  if (row.mirrorOf != null && row.mirrorOf.id !== aRow.id) {
+    return `Backup CH ${String(row.casparChannel)} is the mirror of another channel.`;
+  }
+  return rowRefusal(row, aRow, serverBHost, channel);
+}
+
 export class BackupChannels implements BackupChannelMap {
   readonly #opts: BackupChannelsOptions;
   readonly #now: () => number;
   #lastA: readonly CatalogueRow[] | null = null;
   #lastB: readonly CatalogueRow[] | null = null;
+  #backupHost: string | undefined;
+  #channelListState: NonNullable<BackupChannelsView['channelListState']> = 'unread';
   #resolved = new Map<number, Resolution>();
   #inForce = new Map<number, number>();
   readonly #held = new Set<number>();
@@ -197,15 +219,33 @@ export class BackupChannels implements BackupChannelMap {
   recompute(): void {
     const primary = this.#opts.primaryRows();
     if (primary !== null) this.#lastA = primary;
+    const serverB = this.#opts.serverB();
+    if (serverB?.host !== this.#backupHost) {
+      this.#backupHost = serverB?.host;
+      this.#lastB = null;
+    }
     const backup = this.#opts.backupRows();
     if (backup !== null) this.#lastB = backup;
-    const serverB = this.#opts.serverB();
+    const readAt = this.#opts.backupReadAtMs();
+    const fresh = readAt !== null && this.#now() - readAt <= BACKUP_D4_FRESH_MS;
+    const backupRows = fresh ? this.#lastB : null;
+    const hasBChannel =
+      serverB !== undefined &&
+      backupRows?.some((row) => hostJoinsStation(row.casparHost, [serverB.host])) === true;
+    this.#channelListState =
+      this.#lastB === null
+        ? 'unread'
+        : backupRows === null
+          ? 'stale'
+          : hasBChannel
+            ? 'ready'
+            : 'empty';
     const declared = [...new Set(this.#opts.declared())].sort((a, b) => a - b);
     const resolved = new Map<number, Resolution>();
     if (serverB !== undefined) {
       const entries = this.#opts.entries();
       for (const channel of declared) {
-        resolved.set(channel, this.#resolve(channel, serverB.host, entries));
+        resolved.set(channel, this.#resolve(channel, serverB.host, backupRows, entries));
       }
     }
     this.#resolved = resolved;
@@ -251,6 +291,7 @@ export class BackupChannels implements BackupChannelMap {
   #resolve(
     channel: number,
     serverBHost: string,
+    bRows: readonly CatalogueRow[] | null,
     entries: ReturnType<BackupChannelsOptions['entries']>,
   ): Resolution {
     const n = String(channel);
@@ -258,9 +299,6 @@ export class BackupChannels implements BackupChannelMap {
     const aRow = this.#lastA?.find(
       (r) => r.casparChannel === channel && hostJoinsStation(r.casparHost, [aHost]),
     );
-    const readAt = this.#opts.backupReadAtMs();
-    const fresh = readAt !== null && this.#now() - readAt <= BACKUP_D4_FRESH_MS;
-    const bRows = fresh ? this.#lastB : null;
     const entry = entries.entries.find((e) => e.channel === channel);
     const entryM = entry?.backupChannel;
     const entryFields = entryM !== undefined ? { entry: entryM } : {};
@@ -324,24 +362,30 @@ export class BackupChannels implements BackupChannelMap {
     }
 
     // ── 2. the station admin's entry, checked against B's D4 ──
+    const ownRows = new Map<number, CatalogueRow>();
+    for (const row of bRows) {
+      if (hostJoinsStation(row.casparHost, [serverBHost]) && !ownRows.has(row.casparChannel)) {
+        ownRows.set(row.casparChannel, row);
+      }
+    }
+    const manualChoices =
+      autoM === null
+        ? [...ownRows.values()]
+            .filter((row) => manualRowRefusal(row, aRow, serverBHost, channel) === null)
+            .map((row) => ({ channel: row.casparChannel, name: row.name }))
+            .sort((a, b) => a.channel - b.channel)
+        : [];
+    const choices = autoM === null ? { manualChoices } : { automaticChannel: autoM };
     let entryRefusal: string | null = null;
     if (entryM !== undefined) {
       const m = String(entryM);
       const twice = entries.entries.filter((e) => e.backupChannel === entryM).length > 1;
-      const row = bRows.find(
-        (r) => r.casparChannel === entryM && hostJoinsStation(r.casparHost, [serverBHost]),
-      );
-      // Another channel's declared mirror. A row naming THIS id under a spelling CG cannot match (a name
-      // where CG knows an IP) is exactly what an entry is for, so the id alone decides.
-      const mirrorsOther =
-        row?.mirrorOf !== undefined && row.mirrorOf !== null && row.mirrorOf.id !== aRow.id;
+      const row = ownRows.get(entryM);
       entryRefusal = twice
         ? `CH ${m} is entered for two channels.`
         : row === undefined
           ? `The backup engine lists no CH ${m} on server B.`
-          : mirrorsOther
-            ? `Backup CH ${m} is the mirror of another channel.`
-            : rowRefusal(row, aRow, serverBHost, channel);
+          : manualRowRefusal(row, aRow, serverBHost, channel);
     }
 
     // ── 3. together ──
@@ -351,28 +395,30 @@ export class BackupChannels implements BackupChannelMap {
         reason: `The entry (CH ${String(entryM)}) and the backup engine (CH ${String(autoM)}) disagree.`,
         entry: entryM,
         entryRefusal: `The backup engine names CH ${String(autoM)}.`,
+        ...choices,
       };
     }
     if (autoM !== null) {
       return autoValid
-        ? { onB: autoM, source: 'playout', ...entryFields }
+        ? { onB: autoM, source: 'playout', ...entryFields, ...choices }
         : {
             onB: null,
             reason: autoReason,
             ...entryFields,
+            ...choices,
             ...(entryM !== undefined ? { entryRefusal: autoReason } : {}),
           };
     }
     if (entryM !== undefined) {
       return entryRefusal === null
-        ? { onB: entryM, source: 'entry', entry: entryM }
-        : { onB: null, reason: entryRefusal, entry: entryM, entryRefusal };
+        ? { onB: entryM, source: 'entry', entry: entryM, ...choices }
+        : { onB: null, reason: entryRefusal, entry: entryM, entryRefusal, ...choices };
     }
     const another =
       entries.madeForAnother !== null
         ? ` Entries were made for another server B (${entries.madeForAnother}).`
         : '';
-    return { onB: null, reason: `${autoReason}${another}`.slice(0, 300) };
+    return { onB: null, reason: `${autoReason}${another}`.slice(0, 300), ...choices };
   }
 
   #publish(): void {
@@ -383,6 +429,7 @@ export class BackupChannels implements BackupChannelMap {
         : {
             backup: {
               backupHost: serverB.host,
+              channelListState: this.#channelListState,
               channels: [...this.#resolved].map(([channel, r]): BackupChannelLine => {
                 const held = this.#held.has(channel);
                 const onB = held ? r.onB : (this.#inForce.get(channel) ?? null);
@@ -397,6 +444,10 @@ export class BackupChannels implements BackupChannelMap {
                   ...(onB !== null ? { backupChannel: onB } : {}),
                   ...(state === 'mapped' && r.source !== undefined ? { source: r.source } : {}),
                   ...(r.entry !== undefined ? { entry: r.entry } : {}),
+                  ...(r.automaticChannel !== undefined
+                    ? { automaticChannel: r.automaticChannel }
+                    : {}),
+                  ...(r.manualChoices !== undefined ? { manualChoices: r.manualChoices } : {}),
                   ...(r.entryRefusal !== undefined
                     ? { entryRefusal: r.entryRefusal.slice(0, 300) }
                     : {}),

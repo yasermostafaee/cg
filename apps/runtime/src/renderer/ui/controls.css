@@ -5508,16 +5508,27 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text);
 }
 
-/* `CLIENT-TEST-RELEASE-01` B1 — the version line under the station wears the host line's
-   treatment: a quiet fact at the rail's foot. */
-.cg-rail-station__host,
-.cg-rail-foot__version {
+.cg-rail-station__host {
   display: block;
   margin-top: var(--r-setup-station-host-gap);
   font-family: var(--r-font-mono);
   font-size: var(--r-setup-station-host-text);
   color: var(--r-text-muted);
   overflow-wrap: anywhere;
+}
+
+.cg-rail-foot__version {
+  display: flex;
+  align-items: baseline;
+  gap: var(--r-space-2);
+  margin-top: var(--r-space-2);
+  color: var(--r-text-secondary);
+  font-size: var(--r-text-sm);
+}
+
+.cg-rail-foot__version strong {
+  color: var(--r-text);
+  font: var(--r-weight-semibold) var(--r-text-md) var(--r-font-mono);
 }
 
 /* The rail's two washes, in this frame's own family (the mint — see the token home's A4 note). */
@@ -6991,12 +7002,17 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
 }
 
-/* ── `RELEASE-0113-01` — THE BACKUP ENGINE'S CHANNELS: `CH N (primary) → CH [M] (backup)` · its state ── */
+/* ── The backup engine's channel mapping and state ─────────────────────────────────────── */
 .cg-setup-backup-row {
   display: grid;
-  grid-template-columns: max-content 7ch max-content minmax(0, 1fr);
+  grid-template-columns: max-content minmax(9rem, 20rem) minmax(0, 1fr);
   align-items: center;
   gap: var(--r-setup-band-fields-gap);
+}
+
+.cg-setup-backup-row > .cg-field {
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 
 .cg-setup-backup-row + .cg-setup-backup-row {

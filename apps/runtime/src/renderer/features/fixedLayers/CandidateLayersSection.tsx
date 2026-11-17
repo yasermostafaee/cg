@@ -397,7 +397,7 @@ function BankEditor({
     ]);
     const changed = new Set<string>();
     for (const key of keys) {
-      if ((beforeAliases[key] ?? '') !== (aliases[key] ?? '')) changed.add(key);
+      if ((beforeAliases[key] ?? '') !== (aliases[key] ?? '').trim()) changed.add(key);
       if ((beforeVisible[key] ?? true) !== (visible[key] ?? true)) changed.add(key);
     }
     return changed;
@@ -543,6 +543,7 @@ function BankEditor({
         variant="neutral"
         aria-label="Revert candidate layer edits"
         title="Back to what the bridge holds; nothing is sent"
+        disabled={!dirty || busy}
         onClick={revert}
       >
         Revert
@@ -551,7 +552,7 @@ function BankEditor({
         variant="primary"
         aria-label="Apply layers"
         title="Applies visibility and names"
-        disabled={busy}
+        disabled={!dirty || busy}
         onClick={apply}
       >
         Apply layers

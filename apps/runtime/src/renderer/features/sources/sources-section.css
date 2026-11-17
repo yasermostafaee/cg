@@ -1,0 +1,65 @@
+.cg-setup-source-catalogue {
+  container-type: inline-size;
+}
+
+.cg-setup-source-catalogue .cg-resource {
+  grid-template-columns: var(--r-setup-resource-icon-box) minmax(0, 1fr) clamp(6rem, 34cqi, 14rem);
+  grid-template-areas: 'icon caption picture';
+}
+
+.cg-setup-source-catalogue .cg-resource__icon {
+  grid-area: icon;
+}
+
+.cg-setup-source-caption {
+  min-inline-size: 0;
+  grid-area: caption;
+  overflow-wrap: anywhere;
+}
+
+.cg-setup-source-catalogue .cg-input-picture-meter {
+  display: flex;
+  grid-area: picture;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.cg-setup-source-catalogue .cg-input-thumbnail {
+  flex: 1 1 0;
+  inline-size: auto;
+  min-inline-size: 0;
+}
+
+.cg-setup-source-catalogue[data-input-view='grid'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--r-space-3);
+}
+
+.cg-setup-source-catalogue[data-input-view='grid'] > .cg-card {
+  grid-column: 1 / -1;
+}
+
+.cg-setup-source-catalogue[data-input-view='grid'] .cg-resource {
+  grid-template-columns: var(--r-setup-resource-icon-box) minmax(0, 1fr);
+  grid-template-areas:
+    'picture picture'
+    'icon caption';
+  align-content: start;
+  gap: var(--r-space-2);
+  padding: var(--r-space-2);
+  border: 1px solid var(--r-setup-card-line);
+  border-radius: var(--r-setup-card-radius);
+  background: var(--r-setup-card-bg);
+}
+
+@container (max-width: 28rem) {
+  .cg-setup-source-catalogue[data-input-view='list'] .cg-resource {
+    grid-template-columns: minmax(0, 1fr) clamp(6rem, 38cqi, 10rem);
+    grid-template-areas: 'caption picture';
+  }
+
+  .cg-setup-source-catalogue[data-input-view='list'] .cg-resource__icon {
+    display: none;
+  }
+}

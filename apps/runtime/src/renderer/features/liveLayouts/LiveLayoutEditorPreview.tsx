@@ -200,7 +200,6 @@ function ShotBorder({
         className="cg-live-layout-shot-border"
         style={{
           border: `${scaled(border.width)} solid ${border.color}`,
-          borderRadius: scaled(border.radius),
         }}
       />
     </div>
@@ -543,12 +542,7 @@ export function LiveLayoutEditorPreview({
                 } as CSSProperties
               }
             >
-              <div
-                className="cg-live-layout-shot-source"
-                style={{
-                  borderRadius: `${((input.border?.radius ?? 0) / raster.height) * 100}cqh`,
-                }}
-              >
+              <div className="cg-live-layout-shot-source">
                 <ShotInput
                   source={preview}
                   input={previewInput}

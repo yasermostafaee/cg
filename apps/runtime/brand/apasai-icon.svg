@@ -1,10 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 132" role="img" aria-label="APASAI">
-<!-- FIELD-FIXES-01 G: the application icon and favicon, made from apasai-logo.svg beside it.
-     The 114x96 logo is centred, unchanged, on a white rounded square, so the icon is square
-     and its near-black bars stay legible on a dark title bar or taskbar. The path data and
-     the brand blue #00AEEF are the logo file's own; regenerate this file from it, never edit. -->
-  <rect width="132" height="132" rx="24" fill="#FFFFFF"/>
-  <svg x="9" y="18" width="114" height="96" viewBox="0 0 114 96" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 132" role="img" aria-label="APASAI CG Control">
+  <!-- The shared mark is sourced from apasai-logo.svg. The tile adds product color and a small role symbol. -->
+  <style>.apasai-bars { fill: #EDF5FC; } .apasai-swoosh { fill: #677E90; }</style>
+  <rect x="1" y="1" width="130" height="130" rx="23" fill="#142230" stroke="#394F61" stroke-width="2"/>
+  <svg x="18" y="15" width="96" height="81" viewBox="0 0 114 96" fill="none">
 <!-- APASAI mark.
      Brand blue #00AEEF is EXACT and must not be altered.
      Light ground : .apasai-bars #0E0E0E  .apasai-swoosh #8E8E8E
@@ -156,4 +154,7 @@ l-52 -6 0 -147 0 -146 58 7 c31 4 100 23 152 42 53 19 135 40 185 46 119 16
   </g>
 </g>
 </svg>
+  <path d="M48 111h36" stroke="#3F5968" stroke-width="2"/>
+  <circle cx="66" cy="111" r="8.5" fill="#193628" stroke="#517C67"/>
+  <circle cx="66" cy="111" r="5.5" fill="#85E4B6"/>
 </svg>

@@ -9,6 +9,7 @@ import { Icon } from '../../ui/Icon.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { isContextMenuKey } from '../../ui/useContextMenu.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
@@ -307,6 +308,10 @@ export function LiveSourcesPanel({
    * can know it must make.
    */
   const audioRefusal = linkDown ? BRIDGE_DOWN_REASON : undefined;
+  const plateName = (row: LiveLayerRowView): string =>
+    plateLabelOf?.(row.itemId, row.plate) ?? 'Plate';
+  const plateSourceName = (row: LiveLayerRowView): string =>
+    sourceDisplayName(row.sourceName ?? producerForDisplay(row.producer).replace(/^"(.*)"$/, '$1'));
 
   /**
    * Apply a map for one row, and turn the bridge's PER-PLATE verdicts into one sentence.
@@ -408,8 +413,8 @@ export function LiveSourcesPanel({
         (many
           ? `These ${String(scope.length)} layers — ${names} — were all seated for the same item, ` +
             `and clearing is item-scoped: releasing one releases them all. They carry ` +
-            `${scope.map((r) => `"${r.plate}" (${r.producer})`).join(', ')}. `
-          : `This layer carries "${row.plate}" (${row.producer}). `) +
+            `${scope.map((r) => `"${plateName(r)}" (${plateSourceName(r)})`).join(', ')}. `
+          : `This layer carries "${plateName(row)}" (${plateSourceName(row)}). `) +
         `No row on the stack owns ${many ? 'them' : 'it'}, so nothing else in the console can ` +
         `reach ${many ? 'them' : 'it'}. Releasing clears the ` +
         `layer${many ? 's' : ''} — whatever ${many ? 'they are' : 'it is'} showing leaves air ` +
@@ -632,6 +637,8 @@ export function LiveSourcesPanel({
         {rows.map((row) => {
           // Every disposition but the ordinary one keeps its sentence visible (see below).
           const attention = !row.plain;
+          const name = plateName(row);
+          const source = plateSourceName(row);
           return (
             <div
               /*
@@ -650,7 +657,7 @@ export function LiveSourcesPanel({
               // The row is the keyboard's target for the audio dialog (`Shift+F10` /
               // `ContextMenu`), exactly as the reference's `<tr tabindex="0">` is.
               tabIndex={0}
-              aria-label={`${row.plate} ${
+              aria-label={`${name} ${
                 row.coordinate !== null ? `on ${row.coordinate}` : 'not seated'
               } · ${row.headline}${row.audio !== null ? ' · right-click for audio' : ''}`}
               title={row.detail}
@@ -685,40 +692,17 @@ export function LiveSourcesPanel({
                 )}
               </span>
               <span role="cell" className="cg-plate-source">
-                <span className="cg-plate-slot" title="Template plate handle">
-                  {row.plate}
-                </span>
-                {/*
-                  🔴 **THE SOURCE THE OPERATOR NAMED, NOT THE PRODUCER ARGUMENT** — owner,
-                  2026-09-14. This printed the ledger's `producer` (`DECKLINK DEVICE 1`, `"m1"`);
-                  the operator called that input `sdi` in Station setup, and that is the word he
-                  will say. Golden rule 11's split, with the AMCP string on the `title`.
-
-                  ⚠ The FALLBACK is the producer, not an invented name. `sourceName` is `null`
-                  when the plate is unassigned, its catalogue entry has gone, or the stack has
-                  not arrived — and in each of those the producer is the only true thing the
-                  console has. Printing `— none —` there would hide a real producer that is on
-                  a layer right now.
-
-                  ⚠ Its own `<bdi>`: a catalogue name can be Persian and the row around it is
-                  LTR chrome.
-                */}
-                {/*
-                  🔴 `PLAYOUT-SOURCES-01` §1.E — and a stream's ADDRESS is never the fallback, nor on
-                  the hover: `producerForDisplay` prints it as `stream`. The ledger publishes what was
-                  sent with its credentials already `***`, which is redaction, not hiding.
-                */}
+                <IsolatedName className="cg-plate-slot">{name}</IsolatedName>
+                {/* The catalogue's name is isolated from the table's writing direction. */}
                 {(row.sourceName ?? row.producer) !== '' && (
                   <bdi
                     className="cg-plate-producer"
                     data-plate-unnamed={row.sourceName === null ? 'true' : undefined}
                     title={
-                      row.sourceName === null
-                        ? `${producerForDisplay(row.producer)} — this plate has no source assigned in Station setup, so the console can only name what the bridge sent`
-                        : `${row.sourceName} · sent as ${producerForDisplay(row.producer)}`
+                      row.sourceName === null ? `${source} · no source name available` : source
                     }
                   >
-                    {row.sourceName ?? producerForDisplay(row.producer)}
+                    {source}
                   </bdi>
                 )}
               </span>
@@ -790,7 +774,7 @@ export function LiveSourcesPanel({
                       aria-label={
                         row.coordinate !== null
                           ? `Open the row that owns live layer ${row.coordinate}`
-                          : `Open the row that declares ${row.plate}`
+                          : `Open the row that declares ${name}`
                       }
                     >
                       {/* ADDENDUM B — the box is the button's own LTR chrome; only the
@@ -825,6 +809,7 @@ export function LiveSourcesPanel({
               */}
               <PlateAudioStrip
                 row={row}
+                plateName={name}
                 siblings={rowPlatesOf(rows, row.itemId)}
                 refusal={audioRefusal}
                 onApply={(volumes) => applyAndReport(row.itemId, volumes)}

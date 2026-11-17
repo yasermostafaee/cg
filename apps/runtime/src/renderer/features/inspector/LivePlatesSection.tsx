@@ -3,11 +3,11 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
-import { SourceLabel } from '../sources/SourceLabel.js';
+import { plateDisplayName } from '../../ui/operatorNaming.js';
+import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
 import {
   assignmentsWereCarriedOver,
-  currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
@@ -120,7 +120,6 @@ export function LivePlatesSection({
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
-  const catalog = currentSourceCatalog();
   const plates = info?.liveSources?.sources ?? [];
 
   // A template with no live plates gets NO section. An empty heading is a
@@ -281,20 +280,20 @@ export function LivePlatesSection({
         const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);
         // The `title`'s words — never the id (golden rule 11): an entry the catalogue no longer
         // names reads as `nothing`, as the label beside it does.
-        const onAirName =
-          catalog.sources.find((src) => src.id === onAir.sourceId)?.name ?? 'nothing';
+        const onAirName = labelledSource(onAir.sourceId)?.name ?? 'nothing';
         // SESSION BP — what LEVEL 2 resolves to on this row, which for a row on air is the
         // snapshot its take froze rather than the value the dialog now edits.
         const frozen = frozenPlateSource(item, plate.sourceId, appliedSource);
-        const frozenName =
-          catalog.sources.find((src) => src.id === frozen.sourceId)?.name ?? 'nothing';
+        const frozenName = labelledSource(frozen.sourceId)?.name ?? 'nothing';
         const patched = onAir.overridden && rowIsOnAir;
         const isFrozen = !onAir.patched && frozen.diverged && rowIsOnAir;
         if (!patched && !isFrozen) return null;
         return (
           <div key={plate.elementId} style={styles.row}>
             <span style={styles.plate}>
-              <IsolatedName>{plate.sourceId}</IsolatedName>
+              <IsolatedName>
+                {plateDisplayName(plate.sourceId, plates, info?.controlLiveLayout)}
+              </IsolatedName>
             </span>
             {/*
               🔴 §12.5 / `tasks.md` 7.8 — WHAT IS ACTUALLY ON AIR, when it is not the default.

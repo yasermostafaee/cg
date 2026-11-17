@@ -76,10 +76,6 @@
   --cg-input-meter-max-width: 5rem;
 }
 
-.cg-input-meter[data-source-audio-meter='has-audio'] {
-  border-color: var(--r-meter-safe);
-}
-
 .cg-input-meter[data-source-audio-meter='no-audio'] {
   border-style: dashed;
 }

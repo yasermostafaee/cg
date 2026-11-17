@@ -30,7 +30,7 @@ const RESIZE_CHOICES = [
   ['free', 'Free'],
 ] as const;
 
-const DEFAULT_BORDER = { color: liveLayoutArtwork.plateBorder, width: 0, radius: 0 };
+const DEFAULT_BORDER = { color: liveLayoutArtwork.plateBorder, width: 0 };
 
 const MASK_FIELDS = [
   { key: 'x', limit: 'width', label: 'Mask X (%)', min: 0 },
@@ -172,13 +172,6 @@ export function LiveLayoutEditorFrameOptions({
               max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
               value={border.width}
               onChange={(width) => onChange({ border: { ...border, width } })}
-            />
-            <LiveLayoutEditorNumber
-              label="Border radius (px)"
-              min={0}
-              max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
-              value={border.radius}
-              onChange={(radius) => onChange({ border: { ...border, radius } })}
             />
           </div>
         </section>

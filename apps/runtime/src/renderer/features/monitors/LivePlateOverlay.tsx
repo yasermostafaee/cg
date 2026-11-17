@@ -223,10 +223,10 @@ export function LivePlateOverlay({
         const audio = p.audio === undefined ? undefined : AUDIO_GLYPH[p.audio];
         const region = largestLivePlateMaskRegion(p.mask);
         const roomForLabel = regionFitsCaveat(p.width * (region?.width ?? 0) * fit);
-        const authoredFrame = p.frameLabel !== undefined;
-        const plateLabel = p.frameLabel ?? p.plateId;
+        const authoredFrame = p.captionInTemplate === true;
+        const plateLabel = p.plateLabel ?? 'Plate';
         // A live layout already paints its own frame caption. Keep status chrome clear of it.
-        const showPlateId = !authoredFrame && (p.mask !== undefined || roomForLabel);
+        const showPlateLabel = !authoredFrame && (p.mask !== undefined || roomForLabel);
         const labelAnchor: CSSProperties =
           region === null || p.mask === undefined
             ? {}
@@ -268,7 +268,7 @@ export function LivePlateOverlay({
               <InputAudioMeter
                 sourceId={p.sourceId}
                 channel={source?.unavailable === true ? undefined : channel}
-                name={source?.name ?? p.plateId}
+                name={source?.name ?? plateLabel}
                 edge
                 style={
                   {
@@ -280,7 +280,7 @@ export function LivePlateOverlay({
               />
             )}
             {region === null ? null : hasPicture ? (
-              (showPlateId || audio !== undefined) && (
+              (showPlateLabel || audio !== undefined) && (
                 <div
                   data-live-plate-label=""
                   style={{
@@ -305,7 +305,7 @@ export function LivePlateOverlay({
                           : 'right bottom',
                   }}
                 >
-                  {showPlateId && (
+                  {showPlateLabel && (
                     <span
                       style={{ ...styles.source, overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >

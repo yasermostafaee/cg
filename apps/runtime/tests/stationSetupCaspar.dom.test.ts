@@ -5,6 +5,7 @@ import type { ConnectionConfig, ConnectionHealth } from '@cg/shared-ipc';
 import { signedInStub } from './support/authStub.js';
 import { clearPortals } from './support/dialog.js';
 import {
+  SETUP_CONFIG,
   SETUP_SERVE_INFO,
   renderStationSetup,
   setSetupInput,
@@ -86,6 +87,8 @@ describe('T2 — the cards say CasparCG', () => {
     expect(values).toEqual(['127.0.0.1', '5250', '6251']);
     // B stays the station admin's to add.
     expect(dialog.querySelector('button[aria-label="Add backup"]')).not.toBeNull();
+    expect(dialog.querySelector('[aria-label="Redundancy strategy"]')).toBeNull();
+    expect(dialog.querySelector('[aria-label="Auto-failover enabled"]')).toBeNull();
   });
 
   it('CONTROL — with no Playout, CasparCG A is typed, with no placement tag', async () => {
@@ -93,6 +96,41 @@ describe('T2 — the cards say CasparCG', () => {
     const dialog = await renderStationSetup({ section: 'servers' });
     expect(input(dialog, 'Primary host')).not.toBeNull();
     expect(dialog.querySelector('[data-caspar-placement]')).toBeNull();
+    expect(dialog.querySelector('[aria-label="Redundancy strategy"]')).not.toBeNull();
+    expect(dialog.querySelector('[aria-label="Auto-failover enabled"]')).not.toBeNull();
+  });
+
+  it('keeps the Bridge redundancy policy when applying other Playout connection settings', async () => {
+    const { setConfig } = stationSetupStub({
+      auth: ADMIN,
+      config: { ...SETUP_CONFIG, strategy: 'journal-replay', autoFailoverEnabled: false },
+    });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    await setSetupInput(dialog, 'Graphics port', '7911');
+    await press(dialog.querySelector('button[aria-label="Apply server settings"]'));
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ strategy: 'journal-replay', autoFailoverEnabled: false }),
+    );
+    expect(setConfig.mock.calls.at(-1)?.[0]).not.toHaveProperty('quickRestoreSeconds');
+  });
+
+  it('validates the Playout graphics restore window and saves an explicit off', async () => {
+    const { setConfig } = stationSetupStub({ auth: ADMIN });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    const restore = input(dialog, 'Restore window (seconds)');
+    const apply = dialog.querySelector<HTMLButtonElement>(
+      'button[aria-label="Apply server settings"]',
+    );
+    expect(restore?.value).toBe('5');
+    expect(apply?.disabled).toBe(true);
+    await setSetupInput(dialog, 'Restore window (seconds)', '31');
+    expect(restore?.getAttribute('aria-invalid')).toBe('true');
+    expect(apply?.disabled).toBe(true);
+    await setSetupInput(dialog, 'Restore window (seconds)', '0');
+    expect(restore?.getAttribute('aria-invalid')).toBeNull();
+    expect(apply?.disabled).toBe(false);
+    await press(apply);
+    expect(setConfig).toHaveBeenCalledWith(expect.objectContaining({ quickRestoreSeconds: 0 }));
   });
 });
 

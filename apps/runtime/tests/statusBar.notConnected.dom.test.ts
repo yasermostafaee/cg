@@ -101,7 +101,7 @@ describe('§7 — the status bar with the bridge UP and CasparCG DOWN', () => {
     expect(linkPill(el)?.textContent).toContain('BRIDGE ONLY');
     expect(linkPill(el)?.textContent).toContain('NO CASPARCG');
     // The server pill still carries the fault in its own words, unchanged.
-    expect(el.textContent).toContain('PRIMARY A');
+    expect(el.textContent).toContain('Server A');
     expect(el.textContent).toContain('OFFLINE');
   });
 

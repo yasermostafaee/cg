@@ -214,7 +214,12 @@ describe('B-325 — a Servers draft never crosses to another CG Bridge', () => {
     });
     await settleSetup();
 
-    // The owner's harm first: what `Apply servers` sends to Y.
+    // An untouched Y sends nothing. A Y-only edit must never revive X's values.
+    const apply = dialog.querySelector<HTMLButtonElement>(
+      'button[aria-label="Apply server settings"]',
+    );
+    expect(apply?.disabled).toBe(true);
+    await setSetupInput(dialog, 'Graphics port', '7911');
     await press(dialog, 'Apply servers');
     const sent = h.stub.setConfig.mock.calls.at(-1)?.[0] as ConnectionConfig | undefined;
     expect(sent?.servers.A.host, 'nothing of X reaches Y').toBe('127.0.0.1');

@@ -116,6 +116,9 @@ describe('Station setup — Candidate layers', () => {
     const onClose = vi.fn();
     const dialog = await renderStationSetup({ section: 'candidate-layers', onClose });
 
+    await act(async () => {
+      dialog.querySelector<HTMLInputElement>('[aria-label="Show layer 71"]')?.click();
+    });
     await clickSetupButton(dialog, 'Apply layers');
 
     // CONTROL — the rule holds: the bridge was asked and refused, and the refusal is on screen.
@@ -142,6 +145,9 @@ describe('Station setup — Candidate layers', () => {
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await act(async () => {
+      dialog.querySelector<HTMLInputElement>('[aria-label="Show layer 71"]')?.click();
+    });
     await clickSetupButton(dialog, 'Apply layers');
     const refusal = dialog.querySelector('[data-modal-message] [role="alert"]');
     expect(linesOf(refusal)).toEqual(['Refused — layer 71 is not empty, so it stays shown.']);
@@ -153,6 +159,9 @@ describe('Station setup — Candidate layers', () => {
       fixedSetConfigResult: { ok: false, message: 'The station is being set up elsewhere.' },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await act(async () => {
+      dialog.querySelector<HTMLInputElement>('[aria-label="Show layer 71"]')?.click();
+    });
     await clickSetupButton(dialog, 'Apply layers');
     const refusal = dialog.querySelector('[data-modal-message] [role="alert"]');
     expect(linesOf(refusal)).toEqual(['The station is being set up elsewhere.']);

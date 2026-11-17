@@ -61,7 +61,7 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
-import { templateName } from '../../ui/operatorNaming.js';
+import { sourceDisplayName, templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
 import { LiveInputCheckCard } from './LiveInputCheckCard.js';
@@ -396,7 +396,10 @@ export function PreviewPanel({
               }),
               lookBindings: buildLookBindingsPayload(item.itemId, item.lookSourceOverride),
               ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
-              nameOf: (catalogId) => catalog.sources.find((s) => s.id === catalogId)?.name ?? null,
+              nameOf: (catalogId) => {
+                const source = catalog.sources.find((s) => s.id === catalogId);
+                return source === undefined ? null : sourceDisplayName(source.name, source.origin);
+              },
               /*
               `add-multibox-audio` — what each box's audio is doing, joined HERE for `nameOf`'s
               reason: it needs the stack (the recorded intent) AND the bridge's ledger (the

@@ -113,7 +113,7 @@ test('🔴 T1 + B-324 — facts, Host and Port, Connect once something changed, 
   await expect(port).toHaveAttribute('placeholder', '5280');
   await expect(card.locator('[data-playout-address]')).toHaveText(`${GOOD_HOST} : ${playoutPort}`);
   // Nothing changed yet: nothing to connect, and the rail is quiet.
-  await expect(card.getByRole('button', { name: 'Connect' })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Connect' })).toBeDisabled();
   await expect(tab.locator('[data-tab-badge]')).toHaveCount(0);
 
   // Measured in a real engine (golden rule 12c): the port on its host's row, after it, inside the card.

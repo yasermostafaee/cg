@@ -134,7 +134,7 @@ describe('CG Control authored live layouts', () => {
     plate.border = border;
     const bytes = await compileControlLiveLayout(layout);
     const reopened = await readControlLiveLayout(bytes);
-    expect(reopened.layout.frames[1]?.border).toEqual(border);
+    expect(reopened.layout.frames[1]?.border).toEqual({ color: border.color, width: border.width });
     const { scene } = await unpack(bytes);
     const artwork = scene.compositions?.find(({ id }) => id === 'layout-frame-' + plate.id);
     expect(
@@ -142,9 +142,11 @@ describe('CG Control authored live layouts', () => {
     ).toMatchObject({
       type: 'shape',
       stroke: { color: border.color, width: border.width },
-      cornerRadius: border.radius,
       liveForeground: true,
     });
+    expect(
+      artwork?.layers[0]?.children.find(({ id }) => id === plate.id + '-border'),
+    ).not.toHaveProperty('cornerRadius');
     const looks = buildTemplateLiveSources(scene).looks ?? [];
     const art = looks.find(({ id }) => id === layout.defaultPresetId)?.transitionFrames?.[plate.id]
       ?.artworkId;

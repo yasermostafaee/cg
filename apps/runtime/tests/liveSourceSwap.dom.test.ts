@@ -175,14 +175,13 @@ describe('6.9 — the dialog names each plate’s assignment, and commits in ONE
     expect(text).toContain('Template assignment (Studio A)');
   });
 
-  it('🔴 a plate is `Plate N`, its id on the label’s title and nowhere in the text (golden rule 11)', async () => {
+  it('🔴 a plate is `Plate N`, with its id kept on the data attribute (golden rule 11)', async () => {
     await renderDialog(() => Promise.resolve({ ok: true }));
     const dialog = openDialog();
     expect(dialog?.textContent).not.toContain('guest-1');
     const label = dialog?.querySelector<HTMLLabelElement>('[data-swap-plate="guest-1"] label');
     expect(label?.firstChild?.textContent).toBe('Plate 1');
-    // RELOCATED, not deleted: an author correlates against it.
-    expect(label?.getAttribute('title')).toBe('guest-1');
+    expect(label?.getAttribute('title')).toBeNull();
   });
 
   it('🔴 `B-309` — the plate’s source picker is NAMED `Plate N` too: its accessible name carries no id', async () => {
@@ -214,9 +213,8 @@ describe('6.9 — the dialog names each plate’s assignment, and commits in ONE
     const assigned = openDialog()?.querySelector('[data-swap-assigned]');
     expect(assigned?.textContent).toContain('Template assignment (Not listed)');
     expect(assigned?.textContent).toContain('Unavailable');
-    // The unknown id is on the title, never in the text.
     expect(assigned?.textContent).not.toContain('src-gone');
-    expect(assigned?.querySelector('[title="src-gone"]')).not.toBeNull();
+    expect(assigned?.querySelector('[title="src-gone"]')).toBeNull();
   });
 
   const authoredLayout = createControlLiveLayout();

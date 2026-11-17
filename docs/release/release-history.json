@@ -20,12 +20,20 @@
           "en": "In New live layout, set aspect ratio and input fit for the preset or for each plate. Crop edges fills the plate with a center crop, and Fit whole picture shows the entire input."
         },
         {
-          "fa": "رنگ، ضخامت و شعاع گوشهٔ حاشیهٔ Plate قابل تنظیم است. حاشیه همراه قاب در افکت Focus حرکت می‌کند.",
-          "en": "Set a plate border's color, width, and corner radius. The border follows the plate during Focus transitions."
+          "fa": "رنگ و ضخامت حاشیهٔ مستطیلی پلیت قابل تنظیم است. حاشیه همراه قاب در افکت Focus حرکت می‌کند.",
+          "en": "Set a rectangular plate border's color and width. The border follows the plate during Focus transitions."
         },
         {
           "fa": "انتخاب ورودی در پنجره‌ای با تصاویر و پوسترهای بزرگ‌تر انجام می‌شود. پیش‌نمایش مدیا دکمه‌های Play، Pause و Stop و نوار زمان قابل‌کشیدن دارد و فریم‌های نمونه‌برداری‌شدهٔ بی‌صدا را نشان می‌دهد.",
           "en": "The source picker opens a larger dialog with input pictures and media posters. Media preview offers Play, Pause, Stop, and a draggable timeline with silent sampled frames."
+        },
+        {
+          "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید همراه Fade را جداگانه انتخاب کنید. چیدمان زندهٔ ذخیره‌شده را هم می‌توان از Templates به‌صورت VCG صادر و دوباره وارد کرد.",
+          "en": "Choose independent arrival and departure effects for preset changes. Export a saved live layout as a VCG from Templates and import it again."
+        },
+        {
+          "fa": "Bridge پس از قطعی کوتاه Playout، گرافیک‌های واجد شرایط را خودکار برمی‌گرداند. زمان پیش‌فرض ۵ ثانیه است و در Connection → Advanced قابل تنظیم است.",
+          "en": "Bridge restores eligible programme graphics after a short Playout outage. The five-second window can be changed in Connection → Advanced."
         }
       ],
       "fixes": [
@@ -36,6 +44,26 @@
         {
           "fa": "CG Bridge مدیای واجد شرایط را پیش از پخش روی هر دو موتور آماده می‌کند و افکت‌های پریست و Focus را برای رزرو تأییدشده هم اجرا می‌کند.",
           "en": "CG Bridge prepares eligible media on both engines before playback and applies preset and Focus transitions on a confirmed reserve."
+        },
+        {
+          "fa": "حاشیه چهار ضلع قاب هم‌ضخامت است و برش تصویر هنگام سوییچ پریست همراه قاب تغییر می‌کند. ظاهر قاب و مجوزهای اپراتور در دو بخش دیده می‌شوند.",
+          "en": "Plate borders have even edges and the input reframes with the plate during preset changes. Plate appearance and operator permissions have separate controls."
+        },
+        {
+          "fa": "در Station setup، ورودی‌ها پیش‌نمایش بزرگ‌تر و دو نمای Grid و List دارند. Apply servers به انتهای Advanced منتقل شده، اختلاف نسخهٔ Bridge و Control زرد دیده می‌شود و پنجرهٔ تاریخچه بزرگ‌تر است.",
+          "en": "Station setup offers larger source previews in Grid and List views. Apply servers sits in Advanced, Bridge and Control version differences appear in amber, and Version history opens in a larger window."
+        },
+        {
+          "fa": "نوار وضعیت سرورها را با Server A و Server B نشان می‌دهد و مشخص می‌کند کدام سرور فرمان‌های گرافیک را دریافت می‌کند.",
+          "en": "The status bar identifies Server A and Server B and shows which server controls CG graphics."
+        },
+        {
+          "fa": "کانال رزرو از فهرست کانال‌های سازگار سرور B انتخاب می‌شود. نام قاب و ورودی در پیش‌نمایش و Live plates خواناتر است و Station layers فقط وضعیت لایه‌ها را خلاصه می‌کند.",
+          "en": "Backup channels are selected from compatible channels on Server B. Preview and Live plates use readable plate and source names, and Station layers summarises layer status."
+        },
+        {
+          "fa": "نصاب شمارهٔ نسخه و پیشرفت عملیات را در تمام مراحل نشان می‌دهد. آیکون‌های Designer و Control با رنگ‌های متمایز به‌روز شده‌اند.",
+          "en": "Setup shows the version and progress throughout the installation. Designer and Control have refreshed, distinct icon accents."
         }
       ],
       "planned": [],
@@ -976,30 +1004,8 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [
-        {
-          "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید از یکی از چهار سمت همراه Fade را جداگانه انتخاب کنید.",
-          "en": "Set arriving and departing plates independently to Fade or to slide from or toward any edge while fading."
-        },
-        {
-          "fa": "چیدمان زندهٔ ذخیره‌شده را از Templates به‌صورت فایل VCG ذخیره کنید و بعداً با Import a .vcg دوباره وارد و ویرایش کنید.",
-          "en": "Export a saved live layout as a VCG file from Templates, then import and edit it again."
-        }
-      ],
-      "fixes": [
-        {
-          "fa": "در تنظیمات پیشرفتهٔ پلیت، ظاهر قاب و مجوزهای اپراتور در دو بخش جدا دیده می‌شوند.",
-          "en": "Advanced plate controls distinguish authored appearance from operator permissions."
-        },
-        {
-          "fa": "حاشیهٔ قاب در ابعاد عمودی و افقی هم‌ضخامت است و نشان انتخاب در ادیتور بیرون حاشیه دیده می‌شود. تصویر در ادیتور و PVW از گوشه‌های گرد بیرون نمی‌زند.",
-          "en": "Portrait and landscape plates show an even border, with editor selection outside the stroke. The editor and PVW clip pictures to rounded corners."
-        },
-        {
-          "fa": "هنگام سوییچ پریست، برش ورودی‌های مشترک همراه جابه‌جایی تغییر می‌کند و حاشیه و تصویر از زمان‌بندی مشترک استفاده می‌کنند.",
-          "en": "During a preset switch, retained inputs reframe as they move, and artwork and mixer motion share a start schedule."
-        }
-      ],
+      "features": [],
+      "fixes": [],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",

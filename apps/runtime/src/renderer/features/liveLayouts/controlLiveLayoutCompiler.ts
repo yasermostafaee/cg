@@ -508,7 +508,6 @@ function frameComposition(
       type: 'shape',
       shape: 'rect',
       stroke: { color: border.color, width: border.width },
-      cornerRadius: border.radius,
       liveForeground: true,
     });
   }

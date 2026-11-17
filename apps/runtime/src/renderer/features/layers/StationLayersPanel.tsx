@@ -30,7 +30,7 @@ const styles = {
   intro: {
     padding: '0.6rem 1rem',
     fontSize: '0.8rem',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     borderBottom: `1px solid ${colors.border}`,
     display: 'flex',
     justifyContent: 'space-between',
@@ -55,8 +55,7 @@ const styles = {
   },
   body: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem', minWidth: 0 },
   occupant: { fontSize: '0.9rem', fontWeight: 700 },
-  reason: { fontSize: '0.78rem', color: colors.textMuted },
-  empty: { padding: '1rem', fontSize: '0.85rem', color: colors.textMuted },
+  reason: { fontSize: '0.82rem', color: colors.textSecondary },
   /** `B-235` / `STATION-CHROME-01` §3 — the two groups this panel now carries below the rows. */
   group: {
     padding: '0.6rem 1rem',
@@ -66,19 +65,16 @@ const styles = {
     gap: '0.35rem',
   },
   groupTitle: {
-    fontSize: '0.72rem',
+    fontSize: '0.82rem',
     fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
+    color: colors.text,
   },
   groupValue: {
     fontSize: '0.85rem',
     color: colors.text,
     fontVariantNumeric: 'tabular-nums' as const,
   },
-  groupNote: { fontSize: '0.72rem', color: colors.textMuted, margin: 0, lineHeight: 1.5 },
-  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
+  groupNote: { fontSize: '0.82rem', color: colors.textSecondary, margin: 0, lineHeight: 1.5 },
 } as const;
 
 /** `60–69, 105` for a sorted layer list — the spelling the CLI flag itself takes. */
@@ -288,10 +284,6 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
   if (layers.length === 0) {
     return (
       <>
-        <div style={styles.empty}>
-          No playout layers are declared. Reserve them in the bridge&rsquo;s configuration (
-          <code>--reserved-layers</code>) to see what the playout system has on air.
-        </div>
         <UndeclaredLayers orphans={orphans} />
         <StationLayerDeclarations />
       </>
@@ -301,10 +293,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
   return (
     <>
       <div style={styles.intro}>
-        <span>
-          These layers belong to the PLAYOUT system, not to this console. Clearing one takes its
-          graphic off air.
-        </span>
+        <span>Playout layers on this channel</span>
         {clearable.length > 0 && (
           <AsyncButton
             variant="caution-strong"
@@ -379,7 +368,7 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
   if (orphans.length === 0) return null;
   return (
     <div style={styles.group} data-undeclared-layers="">
-      <span style={styles.groupTitle}>In use, never declared</span>
+      <span style={styles.groupTitle}>Occupied outside reserved ranges</span>
       {[...orphans]
         .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
         .map((o) => (
@@ -392,13 +381,6 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
             Channel {String(o.channel)}, layer {String(o.layer)} — {o.producer}
           </span>
         ))}
-      <p style={styles.groupNote}>
-        Something is on these layers that this console did not put there, and they are{' '}
-        <b>never declared</b> reserved — so they are not in the list above and never will be.
-        Declare them with <span style={styles.code}>--reserved-layers</span> to see them as rows
-        here. To take one in CG&rsquo;s layers (50 and up) off air now, use the warning strip above
-        the layer list: it owns that Clear, with its confirm gate.
-      </p>
     </div>
   );
 }
@@ -406,16 +388,7 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
 /**
  * `STATION-CHROME-01` §3 — **what MOVED here when Station layers left settings.**
  *
- * The reserved DECLARATION (ranges + where they come from) and the LIVE-LAYER LEDGER were in
- * the Station setup section that this change deletes. The declaration is a duplicate of what
- * the rows above already show, so it came across as one line; the LEDGER was reachable ONLY
- * from the settings copy and would otherwise have disappeared with it — which is the check
- * §3 asked for, and it found something.
- *
- * Both are read at bridge start and neither can change from a browser, so this is read-only
- * by construction: it shows what is declared and says where to change it. The console cannot
- * see the bridge's command line, so it cannot say whether the ledger is being PERSISTED or
- * was started with `--no-live-layers`. It says that, rather than guessing.
+ * The reserved ranges and live layers are a read-only summary of Bridge state.
  */
 function StationLayerDeclarations(): JSX.Element {
   const station = useStationLayers();
@@ -430,9 +403,9 @@ function StationLayerDeclarations(): JSX.Element {
   return (
     <>
       <div style={styles.group} data-reserved-layers="">
-        <span style={styles.groupTitle}>Reserved for the station’s playout system</span>
+        <span style={styles.groupTitle}>Reserved for Playout</span>
         {reserved.length === 0 ? (
-          <span style={styles.groupValue}>None declared.</span>
+          <span style={styles.groupValue}>No reserved Playout layers.</span>
         ) : (
           reserved.map(([channel, ls]) => (
             <span key={channel} style={styles.groupValue} dir="ltr">
@@ -440,32 +413,21 @@ function StationLayerDeclarations(): JSX.Element {
             </span>
           ))
         )}
-        <p style={styles.groupNote}>
-          Declared at bridge start by <span style={styles.code}>--reserved-layers</span> or{' '}
-          <span style={styles.code}>bridge-reserved-layers.json</span> in{' '}
-          <span style={styles.code}>~/.cg-runtime</span>. Not editable here — change the flag or the
-          file and restart the bridge.
-        </p>
       </div>
       <div style={styles.group} data-live-layer-ledger="">
-        <span style={styles.groupTitle}>Live-layer ledger</span>
+        <span style={styles.groupTitle}>Live plate layers</span>
         <span style={styles.groupValue} dir="ltr">
           {!live.ready
-            ? 'Not read from the bridge yet.'
+            ? 'Waiting for Bridge.'
             : live.value.length === 0
-              ? 'Nothing seated.'
-              : `${String(live.value.length)} layer${live.value.length === 1 ? '' : 's'} seated: ${live.value
+              ? 'No occupied live plate layers.'
+              : `${String(live.value.length)} occupied · ${live.value
                   .map((l) => `${String(l.channel)}-${String(l.layer)}`)
                   .join(', ')}`}
         </span>
-        <p style={styles.groupNote}>
-          The layers this bridge seated behind a template’s live plates. Persisted at{' '}
-          <span style={styles.code}>bridge-live-layers.json</span> in{' '}
-          <span style={styles.code}>~/.cg-runtime</span> (or where{' '}
-          <span style={styles.code}>--live-layers-path</span> points) unless the bridge was started
-          with <span style={styles.code}>--no-live-layers</span> — the console cannot see which.
-          Which row owns each layer is on the LIVE PLATES tab.
-        </p>
+        {live.ready && live.value.length > 0 && (
+          <p style={styles.groupNote}>Open Live plates to see which rows use these layers.</p>
+        )}
       </div>
     </>
   );

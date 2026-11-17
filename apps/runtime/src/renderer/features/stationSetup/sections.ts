@@ -150,8 +150,8 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
     commit: 'apply-servers',
     group: 'Playout',
     /* §3 — the legend NAMES the button, so it moved to sentence case with it. */
-    legend: 'Applied together by Apply servers below. Refused while anything is on air.',
-    footerRest: 'Applied together. Refused while anything is on air.',
+    legend: 'Use Connect for address changes and Apply servers under Advanced for engine settings.',
+    footerRest: 'Engine settings apply under Advanced.',
     /*
       §9c — FOUR WORDS while the block is in force, because the BANNER above is already
       explaining at length and naming the remedy. That division is the design: the banner says

@@ -27,7 +27,12 @@ import {
   FolderOpen,
   type LucideIcon,
 } from 'lucide-react';
-import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
+import {
+  DEFAULT_OSC_PORT,
+  DEFAULT_QUICK_RESTORE_SECONDS,
+  type ConnectionConfig,
+  type TemplateServeInfo,
+} from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { engineNameForMode, playoutEngineWording } from '../../ui/engineWording.js';
@@ -40,7 +45,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
-import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
+import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
@@ -113,11 +118,8 @@ import { serverStateWord } from '../status/StatusBar.js';
  *
  * Read-only sections carry no commit action at all and say there is nothing to apply.
  * Sections that commit as they go say so and offer a quiet Close, which dismisses and
- * commits nothing. Only the two draft sections carry an APPLY, and each one's APPLY names
- * its own scope. `CandidateLayersSection` renders its Apply/Revert straight INTO this
- * footer through `footerSlot` — that is what the tabs bought it: its own note recorded that
- * the buttons sat in the body only because "the dialog's footer belongs to Servers", and
- * that is no longer true.
+ * commits nothing. Connection applies engine drafts under Advanced. The Layers section
+ * renders its Apply and Revert in the footer through `footerSlot`.
  *
  * ── THE ON-AIR GUARD DID NOT WIDEN ──────────────────────────────────────────
  *
@@ -292,6 +294,7 @@ function sameServerConfig(a: ConnectionConfig, b: ConnectionConfig): boolean {
       String(c.autoFailoverEnabled),
       c.templateServeHost ?? '',
       c.templateServePort === undefined ? '' : String(c.templateServePort),
+      c.quickRestoreSeconds === undefined ? '' : String(c.quickRestoreSeconds),
     ].join('\u0001');
   return key(a) === key(b);
 }
@@ -547,6 +550,7 @@ export function StationSetupDialog({
   const [serveInfo, setServeInfo] = useState<TemplateServeInfo | null>(null);
   const [strategy, setStrategy] = useState<ConnectionConfig['strategy']>(UNREAD_SERVERS.strategy);
   const [autoFailover, setAutoFailover] = useState(UNREAD_SERVERS.autoFailover);
+  const [quickRestore, setQuickRestore] = useState(String(DEFAULT_QUICK_RESTORE_SECONDS));
   const [status, setStatus] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   /**
@@ -610,6 +614,7 @@ export function StationSetupDialog({
     is not the operator's to type: it is a fact.
   */
   const playoutStation = capabilities?.mode === 'playout';
+  const directConnection = capabilities?.mode === 'off';
   const engineName = engineNameForMode(capabilities?.mode);
   const graphicsAddressLabel = `Where ${engineName} fetches graphics`;
   /** `T3` — `Advanced` (the graphics address and the redundancy): `null` — as the station has it. */
@@ -730,6 +735,7 @@ export function StationSetupDialog({
       setBackup(UNREAD_SERVERS.backup);
       setStrategy(UNREAD_SERVERS.strategy);
       setAutoFailover(UNREAD_SERVERS.autoFailover);
+      setQuickRestore(String(DEFAULT_QUICK_RESTORE_SECONDS));
       setServeHost(UNREAD_SERVERS.serveHost);
       setServePort(UNREAD_SERVERS.servePort);
       return;
@@ -743,6 +749,7 @@ export function StationSetupDialog({
     );
     setStrategy(config.strategy);
     setAutoFailover(config.autoFailoverEnabled);
+    setQuickRestore(String(config.quickRestoreSeconds ?? DEFAULT_QUICK_RESTORE_SECONDS));
     setServeHost(config.templateServeHost ?? '');
     setServePort(config.templateServePort === undefined ? '' : String(config.templateServePort));
   }, []);
@@ -888,6 +895,20 @@ export function StationSetupDialog({
   }, [open, section, requestId]);
 
   const onAirCount = anyOnAirOrUnsettled(items);
+  const requestedRestoreSeconds =
+    quickRestore.trim() === '' ? DEFAULT_QUICK_RESTORE_SECONDS : Number(quickRestore);
+  const quickRestoreError =
+    Number.isInteger(requestedRestoreSeconds) &&
+    requestedRestoreSeconds >= 0 &&
+    requestedRestoreSeconds <= 30
+      ? null
+      : 'Enter a whole number from 0 to 30 seconds.';
+  const savedRestoreSeconds = loaded?.quickRestoreSeconds;
+  const quickRestoreSeconds =
+    playoutStation &&
+    (savedRestoreSeconds !== undefined || requestedRestoreSeconds !== DEFAULT_QUICK_RESTORE_SECONDS)
+      ? requestedRestoreSeconds
+      : savedRestoreSeconds;
 
   const validated = useMemo((): ConnectionConfig | string => {
     const a = parseEndpoint(primary, PRIMARY_DEFAULTS);
@@ -914,14 +935,31 @@ export function StationSetupDialog({
     const port = servePort.trim();
     const portProblem = portError(port, { min: 0, label: 'Port', blankAllowed: true });
     if (portProblem !== null) return portProblem;
+    if (playoutStation && quickRestoreError !== null) return quickRestoreError;
     return {
       servers: { A: a, ...(b !== undefined ? { B: b } : {}) },
-      strategy,
-      autoFailoverEnabled: autoFailover,
+      strategy: directConnection ? strategy : (loaded?.strategy ?? strategy),
+      autoFailoverEnabled: directConnection
+        ? autoFailover
+        : (loaded?.autoFailoverEnabled ?? autoFailover),
       templateServeHost: serveHost,
       ...(port.length > 0 ? { templateServePort: Number(port) } : {}),
+      ...(quickRestoreSeconds !== undefined && { quickRestoreSeconds }),
     };
-  }, [primary, backupEnabled, backup, strategy, autoFailover, serveHost, servePort]);
+  }, [
+    primary,
+    backupEnabled,
+    backup,
+    strategy,
+    autoFailover,
+    serveHost,
+    servePort,
+    directConnection,
+    loaded,
+    playoutStation,
+    quickRestoreError,
+    quickRestoreSeconds,
+  ]);
 
   const validationError = typeof validated === 'string' ? validated : null;
   const remoteHosts = [
@@ -1025,12 +1063,15 @@ export function StationSetupDialog({
           ? health.backup.state
           : null;
 
-  if (!open) return null;
-
   /** Servers holds an unapplied draft when the typed config differs from what is stored. */
   const serversDirty =
     loaded !== null && typeof validated !== 'string' && !sameServerConfig(validated, loaded);
 
+  useEffect(() => {
+    if (open && active === 'servers' && serversDirty) setAdvancedOpen(true);
+  }, [open, active, serversDirty]);
+
+  if (!open) return null;
   /**
    * 🔴 `SETTINGS-POLISH-04` §4 — **THE STANDING BLOCK, WHICH IS NOT A MESSAGE.**
    *
@@ -1489,73 +1530,6 @@ export function StationSetupDialog({
                   Revert
                 </ModalAction>
               )}
-              {/*
-                Apply servers — `primary`, and named for its SCOPE. It commits the Servers
-                section and nothing else; the bank, the catalogue and the delimiters each
-                commit from their own tab.
-
-                ⭐ `STATION-CHROME-02` §3 — SENTENCE CASE. It shipped as `APPLY SERVERS`, and
-                the shout was a leftover from the dialog this grew out of: the modal contract
-                already says a dialog's TITLE is sentence case and never shouting, and its
-                buttons had simply never been brought to the same rule. `Apply layers`, one
-                tab along, was already right — two spellings of one rule in one dialog.
-              */}
-              <AsyncButton
-                variant={modalActionVariant('primary')}
-                data-modal-role="primary"
-                aria-label="Apply server settings"
-                title="Applies this tab's server settings. Refused while anything is on air."
-                disabled={onAirCount > 0 || validationError !== null}
-                run={async () => {
-                  if (typeof validated === 'string') return { accepted: false };
-                  setRefusal(null);
-                  setStatus(null);
-                  const result = await window.cg.connections.setConfig(validated);
-                  if (!result.ok) {
-                    setRefusal(result.message ?? 'The bridge refused the new configuration.');
-                    return { accepted: false, errorCode: result.reason ?? 'refused' };
-                  }
-                  /*
-                    🔴 B-162 — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS GRAPHICS.
-                    The bridge's own verdict (`unreachable`) is read FIRST: a loopback template
-                    server with a remote CasparCG configured means that server fetches ITSELF,
-                    gets nothing, and shows live sources with no graphic over them while
-                    `CG ADD` reports success. The bridge's verdict, never re-derived here.
-                  */
-                  // `C-024` — RE-READ WHAT IS IN FORCE: the panel never computes it, it asks.
-                  void window.cg.connections.templateServe().then(setServeInfo);
-                  const unreachable = result.templateServe?.unreachable ?? [];
-                  if (unreachable.length > 0) {
-                    /*
-                      `B-326` — the bridge says WHY (`elsewhere`), and the sentence follows it: a host
-                      that is another machine is not fixed by any address of CG Bridge's — it is
-                      cleared, and detected again. Never "this machine": the owner read it as his PC.
-                    */
-                    setRefusal(
-                      result.templateServe?.elsewhere === true
-                        ? `Applied, but ${engineName} would fetch graphics from ${result.templateServe.serveHost}, ` +
-                            `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
-                            `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
-                            `still report success. Press Detect automatically, then Apply again — CG ` +
-                            `Bridge does not need restarting.`
-                        : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
-                            `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
-                            `background, no text — and their CG ADD will still report success. Set the ` +
-                            `graphics Host under Advanced to CG Bridge's address as those servers see it, ` +
-                            `then Apply again — CG Bridge does not need restarting.`,
-                    );
-                    return { accepted: true };
-                  }
-                  setStatus(
-                    result.templateServe?.exposed === true
-                      ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
-                      : 'Applied. All listeners remain loopback-only.',
-                  );
-                  return { accepted: true };
-                }}
-              >
-                Apply servers
-              </AsyncButton>
             </>
           ) : null}
           {/*
@@ -1579,7 +1553,7 @@ export function StationSetupDialog({
 
             `sections.ts`'s `commits` is where that rule is written down, with the dating.
           */}
-          {!activeSpec.commits && (
+          {(!activeSpec.commits || (active === 'servers' && !isDirty('servers'))) && (
             /*
               ⚠ Its accessible NAME is the longer one, and that is a decision rather than a
               flourish: the primitive's ✕ is already named `Close`, so two controls in one
@@ -1847,7 +1821,12 @@ export function StationSetupDialog({
                   admin's entry checked against it. Its own save — it does not wait for anything to leave air.
               */}
               {loaded?.servers.B !== undefined && (
-                <BackupChannelsCard state={backupChannels} mayChange={holdsStationAdmin} />
+                <BackupChannelsCard
+                  key={backupChannels?.backup?.backupHost}
+                  state={backupChannels}
+                  mayChange={holdsStationAdmin}
+                  {...(playoutStation && { bridgeAutoFailover: loaded.autoFailoverEnabled })}
+                />
               )}
 
               {/*
@@ -1981,68 +1960,81 @@ export function StationSetupDialog({
                     </div>
                   )}
 
-                  {/*
-                      ⭐ `SETTINGS-DIALOG-01` §3 — REDUNDANCY FOLDED IN, because the reference
-                      draws one `Station connection` card holding the template address, the
-                      strategy and the failover switch, and the app had a second card
-                      (`Redundancy`) for the last two. They are facts about the SAME pair of
-                      servers, and the split cost a card head and a rule to say nothing.
+                  {playoutStation && holdsStationAdmin && (
+                    <section className="cg-station-fields__group" aria-label="Graphics recovery">
+                      <span className="cg-station-fields__name" aria-hidden="true">
+                        Graphics recovery
+                      </span>
+                      <div className="cg-setup-fields">
+                        <SetupField
+                          id="quick-restore"
+                          label="Restore window (seconds)"
+                          error={quickRestoreError}
+                          hint="Restore on-air graphics after a short engine outage. Enter 0 to turn it off."
+                        >
+                          <NumericInput
+                            className="cg-field cg-field--mono"
+                            dir="ltr"
+                            allow="digits"
+                            aria-label="Restore window (seconds)"
+                            placeholder={String(DEFAULT_QUICK_RESTORE_SECONDS)}
+                            value={quickRestore}
+                            onValueChange={setQuickRestore}
+                          />
+                        </SetupField>
+                      </div>
+                    </section>
+                  )}
 
-                      ⚠ The reference's `Station connection` is not adopted. Since
-                      `SERVERS-SIMPLIFY-01` (T3) the card is `Advanced`, and the graphics block in it
-                      is named for what it is — `Where CasparCG fetches graphics` — which
-                      `server-settings.spec.ts` queries by.
+                  {directConnection && holdsStationAdmin && (
+                    <>
+                      <div className="cg-setup-fields">
+                        <div className="cg-setup-field cg-setup-field--full">
+                          <span className="cg-setup-field__label">Strategy</span>
+                          <select
+                            className="cg-field"
+                            aria-label="Redundancy strategy"
+                            value={strategy}
+                            onChange={(e) =>
+                              setStrategy(e.target.value as ConnectionConfig['strategy'])
+                            }
+                          >
+                            <option value="mirror-sync">mirror-sync</option>
+                            <option value="mirror-async">mirror-async</option>
+                            <option value="journal-replay">journal-replay</option>
+                          </select>
+                          <p className="cg-setup-field__hint">
+                            How the backup is kept in step while both servers are configured.
+                          </p>
+                        </div>
+                      </div>
 
-                      ⚠ And the strategy keeps all THREE of the app's options. The reference
-                      draws two (`Mirror sync` / `Primary only`); `ConnectionConfig['strategy']`
-                      has three, and a select that cannot express a stored value is a defect,
-                      not a simplification.
-                    */}
-                  <div className="cg-setup-fields">
-                    <div className="cg-setup-field cg-setup-field--full">
-                      <span className="cg-setup-field__label">Strategy</span>
-                      <select
-                        className="cg-field"
-                        aria-label="Redundancy strategy"
-                        value={strategy}
-                        onChange={(e) =>
-                          setStrategy(e.target.value as ConnectionConfig['strategy'])
-                        }
-                      >
-                        <option value="mirror-sync">mirror-sync</option>
-                        <option value="mirror-async">mirror-async</option>
-                        <option value="journal-replay">journal-replay</option>
-                      </select>
-                      <p className="cg-setup-field__hint">
-                        How the backup is kept in step while both servers are configured.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="cg-setup-switch-row">
-                    <div className="cg-setup-switch-row__text">
-                      <span className="cg-setup-field__label">Automatic failover</span>
-                      <p className="cg-setup-field__hint">
-                        Switch to the backup if the primary becomes unavailable.
-                      </p>
-                    </div>
-                    {/*
+                      <div className="cg-setup-switch-row">
+                        <div className="cg-setup-switch-row__text">
+                          <span className="cg-setup-field__label">Automatic failover</span>
+                          <p className="cg-setup-field__hint">
+                            Switch to the backup if the primary becomes unavailable.
+                          </p>
+                        </div>
+                        {/*
                         `SETTINGS-MATCH-02` — a SWITCH, not a bare tick. The control is still
                         the native checkbox (it keeps the accessible name every spec queries by,
                         and the keyboard); the track is drawn over it. A setting that is either
                         on or off reads as a switch; a tick reads as an item in a list.
                       */}
-                    <span className="cg-switch">
-                      <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label="Auto-failover enabled"
-                        checked={autoFailover}
-                        onChange={(e) => setAutoFailover(e.target.checked)}
-                      />
-                      <span className="cg-switch__track" aria-hidden="true" />
-                    </span>
-                  </div>
+                        <span className="cg-switch">
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            aria-label="Auto-failover enabled"
+                            checked={autoFailover}
+                            onChange={(e) => setAutoFailover(e.target.checked)}
+                          />
+                          <span className="cg-switch__track" aria-hidden="true" />
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/*
@@ -2073,6 +2065,68 @@ export function StationSetupDialog({
                       control connection stays on 127.0.0.1.
                     </span>
                   </p>
+                )}
+                {holdsStationAdmin && (
+                  <div
+                    className="cg-card__body"
+                    style={{ display: 'flex', justifyContent: 'flex-end' }}
+                  >
+                    <AsyncButton
+                      variant="primary"
+                      aria-label="Apply server settings"
+                      title="Applies this tab's server settings. Refused while anything is on air."
+                      disabled={!serversDirty || onAirCount > 0 || validationError !== null}
+                      run={async () => {
+                        if (typeof validated === 'string') return { accepted: false };
+                        setRefusal(null);
+                        setStatus(null);
+                        const result = await window.cg.connections.setConfig(validated);
+                        if (!result.ok) {
+                          setRefusal(result.message ?? 'The bridge refused the new configuration.');
+                          return { accepted: false, errorCode: result.reason ?? 'refused' };
+                        }
+                        /*
+                          🔴 B-162 — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS GRAPHICS.
+                          The bridge's own verdict (`unreachable`) is read FIRST: a loopback template
+                          server with a remote CasparCG configured means that server fetches ITSELF,
+                          gets nothing, and shows live sources with no graphic over them while
+                          `CG ADD` reports success. The bridge's verdict, never re-derived here.
+                        */
+                        // `C-024` — RE-READ WHAT IS IN FORCE: the panel never computes it, it asks.
+                        void window.cg.connections.templateServe().then(setServeInfo);
+                        const unreachable = result.templateServe?.unreachable ?? [];
+                        if (unreachable.length > 0) {
+                          /*
+                            `B-326` — the bridge says WHY (`elsewhere`), and the sentence follows it: a host
+                            that is another machine is not fixed by any address of CG Bridge's — it is
+                            cleared, and detected again. Never "this machine": the owner read it as his PC.
+                          */
+                          setRefusal(
+                            result.templateServe?.elsewhere === true
+                              ? `Applied, but ${engineName} would fetch graphics from ${result.templateServe.serveHost}, ` +
+                                  `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
+                                  `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
+                                  `still report success. Press Detect automatically, then Apply again — CG ` +
+                                  `Bridge does not need restarting.`
+                              : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
+                                  `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
+                                  `background, no text — and their CG ADD will still report success. Set the ` +
+                                  `graphics Host under Advanced to CG Bridge's address as those servers see it, ` +
+                                  `then Apply again — CG Bridge does not need restarting.`,
+                          );
+                          return { accepted: true };
+                        }
+                        setStatus(
+                          result.templateServe?.exposed === true
+                            ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
+                            : 'Applied. All listeners remain loopback-only.',
+                        );
+                        return { accepted: true };
+                      }}
+                    >
+                      Apply servers
+                    </AsyncButton>
+                  </div>
                 )}
               </details>
             </SetupSection>
@@ -2142,7 +2196,7 @@ export function StationSetupDialog({
       {historyOpen && (
         <Modal
           title="Version history"
-          size="library"
+          size="history"
           layer="sub"
           onClose={() => setHistoryOpen(false)}
           footer={
@@ -2156,7 +2210,7 @@ export function StationSetupDialog({
             title="Version history"
             sandbox="allow-scripts allow-downloads"
             tabIndex={0}
-            style={{ display: 'block', width: '100%', height: 'min(70vh, 740px)', border: 0 }}
+            style={{ display: 'block', width: '100%', flex: 1, minHeight: 0, border: 0 }}
           />
         </Modal>
       )}

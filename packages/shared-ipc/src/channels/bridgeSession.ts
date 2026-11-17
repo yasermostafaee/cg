@@ -260,20 +260,20 @@ export function engineNeedsAttention(state: EngineState): boolean {
 export function engineChipText(server: 'A' | 'B', state: EngineState): string {
   switch (state) {
     case 'needs-admin':
-      return `${server}: SIGN IN CG BRIDGE`;
+      return `Server ${server} · Bridge sign-in needed`;
     case 'not-licensed':
-      return `${server}: CG NOT LICENSED`;
+      return `Server ${server} · CG license needed`;
     case 'refused':
-      return `${server}: CG BRIDGE REFUSED`;
+      return `Server ${server} · Bridge sign-in refused`;
     case 'amcp-pending':
-      return `${server}: AMCP NOT APPROVED`;
+      return `Server ${server} · AMCP approval needed`;
     case 'unreachable':
-      return `${server}: ENGINE UNREACHABLE`;
+      return `Server ${server} · Engine API unreachable`;
     case 'core-held':
-      return `${server}: HELD — ANOTHER CG BRIDGE`;
+      return `Server ${server} · Controlled by another CG Bridge`;
     case 'core-shared':
-      return `${server}: ANOTHER CG BRIDGE`;
+      return `Server ${server} · Shared with another CG Bridge`;
     default:
-      return server;
+      return `Server ${server}`;
   }
 }

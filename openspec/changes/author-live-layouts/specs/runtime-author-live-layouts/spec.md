@@ -42,11 +42,11 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 
 #### Scenario: Style the plate border
 
-- **WHEN** the operator opens Advanced plate controls and enters border color, width and radius
+- **WHEN** the operator opens Advanced plate controls and enters border color and width
 - **THEN** the outline is drawn inside the plate and follows it across preview, presets and Focus
 - **AND** the authored stroke remains equally thick on every side of a landscape or portrait plate
 - **AND** the editor draws its selection outline outside the authored stroke
-- **AND** the editor and PVW clip the input picture to the configured corner radius
+- **AND** plates and their pictures have square corners, including when reopening a package with a previously saved radius
 - **AND** a zero-width border is hidden
 - **AND** the border is saved in the VCG without changing the input crop or mask
 

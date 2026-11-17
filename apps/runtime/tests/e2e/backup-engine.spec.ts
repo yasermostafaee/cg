@@ -151,10 +151,15 @@ test('🔴 «Sign in CG Bridge…» names both engines; each is signed in with i
 
   const bar = page.getByLabel('Status bar');
   // Neither engine signed in: a chip beside each server, in words.
-  await expect(bar.locator('[data-engine-chip="primary"]')).toHaveText(/A: SIGN IN CG BRIDGE/, {
-    timeout: 20_000,
-  });
-  await expect(bar.locator('[data-engine-chip="backup"]')).toHaveText(/B: SIGN IN CG BRIDGE/);
+  await expect(bar.locator('[data-engine-chip="primary"]')).toHaveText(
+    /Server A · Bridge sign-in needed/,
+    {
+      timeout: 20_000,
+    },
+  );
+  await expect(bar.locator('[data-engine-chip="backup"]')).toHaveText(
+    /Server B · Bridge sign-in needed/,
+  );
 
   // The dialog lists both engines, each with its address and its state.
   await page.getByRole('button', { name: 'Sign in CG Bridge…' }).click();
@@ -176,7 +181,9 @@ test('🔴 «Sign in CG Bridge…» names both engines; each is signed in with i
   await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
   await expect(bar.locator('[data-engine-chip="primary"]')).toHaveCount(0, { timeout: 15_000 });
-  await expect(bar.locator('[data-engine-chip="backup"]')).toHaveText(/B: SIGN IN CG BRIDGE/);
+  await expect(bar.locator('[data-engine-chip="backup"]')).toHaveText(
+    /Server B · Bridge sign-in needed/,
+  );
   await expect(page.locator('[data-bridge-session-banner]')).toContainText(
     'CG Bridge needs a station admin to sign in on the backup engine',
   );
@@ -196,12 +203,15 @@ test('🔴 «Sign in CG Bridge…» names both engines; each is signed in with i
   await expect(again).toHaveCount(0, { timeout: 15_000 });
 
   // Signed in, the backup's own license reads not licensed — said beside BACKUP B, in words.
-  await expect(bar.locator('[data-engine-chip="backup"]')).toHaveText(/B: CG NOT LICENSED/, {
-    timeout: 20_000,
-  });
+  await expect(bar.locator('[data-engine-chip="backup"]')).toHaveText(
+    /Server B · CG license needed/,
+    {
+      timeout: 20_000,
+    },
+  );
   await expect(bar.locator('[data-engine-chip="backup"]')).toHaveAttribute(
     'title',
-    'Backup engine: CG not licensed on this engine.',
+    'Server B: CG not licensed on this engine.',
   );
   await expect(bar.locator('[data-engine-chip="primary"]')).toHaveCount(0);
 
