@@ -36,8 +36,8 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
   The Playout programme channel, programme layers and PGM relay are never mutated by this feature.
 - Surface `connecting`, `live`, `stalled`, `unavailable`, `conflict`, `replaced` and `expired` honestly; never leave a
   frozen frame looking live.
-- Reserve a thumbnail slot on each input row and give Station setup a larger 16:9 slot. Show `No signal` in the slot until the independent feed is
-  available, and open the existing one-input check when the operator activates an eligible slot.
+- Reserve a thumbnail slot on each input row and give Station setup a larger 16:9 slot. Show `Preview unavailable` for an unknown input state and
+  `No signal` for confirmed absence, and open the existing one-input check when the operator activates an eligible slot.
 - Use Playout's existing static library poster for Media items in the source pickers.
 - Offer a separate seekable media preview inside the full-size picker, with transport controls.
 - With a compatible read-only Playout capability, show each visible eligible input's live thumbnail in that slot

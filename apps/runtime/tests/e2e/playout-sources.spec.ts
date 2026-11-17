@@ -1,4 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { FRAME_A, FRAME_B } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
@@ -1082,4 +1084,170 @@ test('🔴 the owner’s take: a plate on an input and a plate on a media item �
   await expect(second.locator('.lucide-film')).toHaveCount(1);
   await expect(second.locator('.cg-source-label__meta')).toHaveText('17:39');
   await expect(looks).not.toContainText('md-m-khabar');
+});
+
+test('Media file preview decodes a Range stream and keeps playback controls local to the picker', async ({
+  app,
+}) => {
+  const clip = await readFile(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url));
+  const ranges: string[] = [];
+  let posterReads = 0;
+  const server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? '/', 'http://preview.test').pathname;
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    if (pathname === '/poster') {
+      posterReads++;
+      response.setHeader('Content-Type', 'image/jpeg');
+      response.end(FRAME_A);
+      return;
+    }
+    response.setHeader('Content-Type', 'video/webm');
+    response.setHeader('Accept-Ranges', 'bytes');
+    const range = request.headers.range;
+    if (range !== undefined) {
+      ranges.push(range);
+      const match = /^bytes=(\d+)-(\d*)$/.exec(range);
+      const start = Number(match?.[1]);
+      const end = match?.[2] ? Math.min(Number(match[2]), clip.length - 1) : clip.length - 1;
+      if (match === null || start > end || start >= clip.length) {
+        response.writeHead(416, { 'Content-Range': `bytes */${String(clip.length)}` });
+        response.end();
+        return;
+      }
+      response.writeHead(206, {
+        'Content-Range': `bytes ${String(start)}-${String(end)}/${String(clip.length)}`,
+        'Content-Length': end - start + 1,
+      });
+      response.end(clip.subarray(start, end + 1));
+      return;
+    }
+    response.setHeader('Content-Length', clip.length);
+    response.end(clip);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('preview server has no port');
+  const origin = `http://127.0.0.1:${String(address.port)}`;
+  const page = app.page;
+  try {
+    const defaults = await openDefaults(app);
+    const field = defaults.locator('[data-defaults-select="l-1"]');
+    await page.evaluate((origin) => {
+      const state = {
+        sessions: [] as string[],
+        closes: [] as string[],
+        commands: 0,
+        violations: [] as string[],
+      };
+      Object.assign(window, { filePreviewTest: state });
+      document.addEventListener('securitypolicyviolation', (event) => {
+        state.violations.push(event.violatedDirective);
+      });
+      window.cg.sourcePreviews.mediaOpen = async ({ previewId }) => {
+        const id = previewId ?? crypto.randomUUID();
+        if (previewId === undefined) state.sessions.push(id);
+        return {
+          state: 'ready',
+          previewId: id,
+          videoUrl: `${origin}/video?ticket=${id}`,
+          posterUrl: `${origin}/poster?ticket=${id}`,
+          durationMs: 10_000,
+          engine: 'B',
+          host: '192.0.2.43',
+        };
+      };
+      window.cg.sourcePreviews.mediaClose = async ({ previewId }) => {
+        state.closes.push(previewId);
+        return { closed: true };
+      };
+      const take = window.cg.stack.take;
+      window.cg.stack.take = (request) => {
+        state.commands++;
+        return take(request);
+      };
+      const update = window.cg.stack.update;
+      window.cg.stack.update = (request) => {
+        state.commands++;
+        return update(request);
+      };
+    }, origin);
+    const state = () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              filePreviewTest: {
+                sessions: string[];
+                closes: string[];
+                commands: number;
+                violations: string[];
+              };
+            }
+          ).filePreviewTest,
+      );
+    await field.click();
+    const panel = picker(page);
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
+    await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
+    const preview = panel.locator('[data-media-file-preview]');
+    const video = preview.locator('video');
+    const poster = preview.locator('img');
+    await expect(video).toBeVisible();
+    await expect
+      .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+      .toBeGreaterThan(0);
+    expect(await video.evaluate((element) => (element as HTMLVideoElement).videoWidth)).toBe(64);
+    expect(await video.evaluate((element) => (element as HTMLVideoElement).muted)).toBe(true);
+    await expect
+      .poll(() => poster.evaluate((element) => (element as HTMLImageElement).naturalWidth))
+      .toBe(64);
+    expect(ranges.length).toBeGreaterThan(0);
+    expect(
+      (await state()).violations.filter((directive) => /media-src|default-src/.test(directive)),
+    ).toEqual([]);
+    await preview.getByRole('button', { name: 'Pause preview' }).click();
+    expect(await video.evaluate((element) => (element as HTMLVideoElement).paused)).toBe(true);
+    const pausedAt = await video.evaluate((element) => (element as HTMLVideoElement).currentTime);
+    await page.waitForTimeout(150);
+    expect(
+      await video.evaluate((element) => (element as HTMLVideoElement).currentTime),
+    ).toBeCloseTo(pausedAt, 1);
+    await preview.getByRole('button', { name: 'Listen to preview' }).click();
+    expect(await video.evaluate((element) => (element as HTMLVideoElement).muted)).toBe(false);
+    const seek = preview.getByRole('slider', { name: 'Preview position' });
+    const bounds = await seek.boundingBox();
+    if (bounds === null) throw new Error('the file preview must expose a seek bar');
+    const y = bounds.y + bounds.height / 2;
+    await page.mouse.move(bounds.x + bounds.width / 4, y);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.75, y, { steps: 6 });
+    await page.mouse.up();
+    const duration = await video.evaluate((element) => (element as HTMLVideoElement).duration);
+    await expect
+      .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+      .toBeGreaterThan(duration / 2);
+    const readsBeforeStop = posterReads;
+    await preview.getByRole('button', { name: 'Stop preview' }).click();
+    await expect(seek).toHaveValue('0');
+    await expect(poster).toBeVisible();
+    expect(posterReads).toBe(readsBeforeStop);
+    expect((await state()).closes).toHaveLength(1);
+    await preview.getByRole('button', { name: 'Play preview' }).click();
+    await expect.poll(() => state().then((value) => value.sessions.length)).toBe(2);
+    await expect(video).toBeVisible();
+    await expect(field).toHaveAttribute('data-picker-value', '');
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    const final = await state();
+    expect(final.closes).toEqual(final.sessions);
+    expect(final.commands).toBe(0);
+    await expect(field).toHaveAttribute('data-picker-value', '');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 });

@@ -67,6 +67,8 @@ import type {
   SourceAudioLevelsChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
+  SourceMediaOpenChannel,
+  SourceMediaCloseChannel,
   PlaylistGainGetChannel,
   PlaylistGainSetChannel,
   LivePreviewStatus,
@@ -862,6 +864,12 @@ export interface RuntimeBridge {
   };
 
   sourcePreviews: {
+    mediaOpen?(
+      req: ChannelRequest<typeof SourceMediaOpenChannel>,
+    ): Promise<ChannelResponse<typeof SourceMediaOpenChannel>>;
+    mediaClose?(
+      req: ChannelRequest<typeof SourceMediaCloseChannel>,
+    ): Promise<ChannelResponse<typeof SourceMediaCloseChannel>>;
     audioLevels?(
       req: ChannelRequest<typeof SourceAudioLevelsChannel>,
     ): Promise<ChannelResponse<typeof SourceAudioLevelsChannel>>;

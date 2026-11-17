@@ -1,0 +1,721 @@
+import http from 'node:http';
+import * as dgram from 'node:dgram';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import type { AddressInfo } from 'node:net';
+import { afterEach, expect, it } from 'vitest';
+import { createMock } from '@cg/amcp-mock';
+import { mediaSourceId, type BackupChannelsState, type MediaPlaybackPreview } from '@cg/shared-ipc';
+import { AuthSession } from '../src/auth-session.js';
+import { HttpTickets } from '../src/http-tickets.js';
+import {
+  MediaPreviewService,
+  mediaPreviewEngine,
+  type MediaPreviewTarget,
+} from '../src/media-preview-service.js';
+import { openClient } from './support/auth-harness.js';
+import {
+  FAKE_MEDIA_IDS,
+  FAKE_CATALOGUE,
+  FAKE_PLAYOUT_PASSWORD,
+  fakeFingerprint,
+  startFakePlayout,
+} from './support/fake-playout.js';
+import { track } from './support/harness.js';
+import { twoChannelRig, waitUntil } from './support/two-channel-rig.js';
+
+const FINGERPRINT = 'a'.repeat(64);
+const BYTES = Buffer.from(Array.from({ length: 65_536 }, (_, index) => index % 251));
+const cleanups: (() => Promise<void>)[] = [];
+
+afterEach(async () => {
+  for (const close of cleanups.splice(0).reverse()) await close();
+});
+
+async function listen(server: http.Server): Promise<string> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  );
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+async function fixture() {
+  let mode: 'direct' | 'proxy' = 'direct';
+  let proxyState = 'notPrepared';
+  let supported = true;
+  let malicious = false;
+  let slow = false;
+  let streams = 0;
+  let preparations = 0;
+  let preparationStatus = 202;
+  let preparationGate: Promise<void> | null = null;
+  let targetGate: Promise<void> | null = null;
+  let targetOnce = false;
+  let targetWaits = 0;
+  let manifestFails = false;
+  let allowed = true;
+  let now = Date.now();
+  const authorizations: (string | undefined)[] = [];
+  const root = '/api/v1/channels/local-b/media-previews/replica-b';
+  const engine = http.createServer((req, res) => {
+    authorizations.push(req.headers.authorization);
+    if (req.headers.authorization !== 'Bearer independent-b') {
+      res.writeHead(401).end();
+      return;
+    }
+    const url = new URL(req.url ?? '/', 'http://engine');
+    if (!supported) {
+      res.writeHead(404).end();
+      return;
+    }
+    if (url.pathname === root) {
+      if (manifestFails) {
+        res.destroy();
+        return;
+      }
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          mediaId: 'replica-b',
+          fingerprint: FINGERPRINT,
+          durationMs: 10_000,
+          browserMode: mode,
+          proxy: { state: proxyState },
+          fileUrl: malicious
+            ? 'http://elsewhere.invalid/private'
+            : `${root}/file?revision=${FINGERPRINT}`,
+          proxyUrl: `${root}/proxy?revision=${FINGERPRINT}`,
+          prepareUrl: `${root}/proxy`,
+          posterUrl: `${root}/poster`,
+        }),
+      );
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === `${root}/proxy`) {
+      preparations++;
+      const respond = () => {
+        if (preparationStatus === 202) proxyState = 'ready';
+        res.writeHead(preparationStatus, { 'content-type': 'application/json' }).end('{}');
+      };
+      if (preparationGate === null) respond();
+      else void preparationGate.then(respond);
+      return;
+    }
+    if (url.pathname === `${root}/poster`) {
+      res.writeHead(200, { 'content-type': 'image/jpeg' }).end(Buffer.from([255, 216, 255, 217]));
+      return;
+    }
+    if (url.searchParams.get('revision') !== FINGERPRINT) {
+      res.writeHead(409).end();
+      return;
+    }
+    res.setHeader('content-type', 'video/mp4');
+    res.setHeader('accept-ranges', 'bytes');
+    res.setHeader('etag', '"verified-bytes"');
+    if (slow) {
+      streams++;
+      res.writeHead(200);
+      const timer = setInterval(() => res.write(BYTES.subarray(0, 1024)), 10);
+      res.once('close', () => {
+        clearInterval(timer);
+        streams--;
+      });
+      return;
+    }
+    let start = 0;
+    let end = BYTES.length - 1;
+    const range = req.headers.range;
+    if (range !== undefined && req.headers['if-range'] !== '"changed"') {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (match === null) {
+        res.writeHead(416, { 'content-range': `bytes */${BYTES.length}` }).end();
+        return;
+      }
+      start = match[1] === '' ? BYTES.length - Number(match[2]) : Number(match[1]);
+      end = match[1] === '' || match[2] === '' ? end : Number(match[2]);
+      if (start < 0 || start >= BYTES.length || end < start) {
+        res.writeHead(416, { 'content-range': `bytes */${BYTES.length}` }).end();
+        return;
+      }
+      end = Math.min(end, BYTES.length - 1);
+      res.statusCode = 206;
+      res.setHeader('content-range', `bytes ${start}-${end}/${BYTES.length}`);
+    }
+    res.setHeader('content-length', end - start + 1);
+    res.end(req.method === 'HEAD' ? undefined : BYTES.subarray(start, end + 1));
+  });
+  const origin = await listen(engine);
+  const tickets = new HttpTickets(() => now);
+  const target: MediaPreviewTarget = {
+    origin,
+    code: 'local-b',
+    mediaId: 'replica-b',
+    fingerprint: FINGERPRINT,
+    bearer: 'independent-b',
+    engine: 'B',
+    host: '192.0.2.43',
+  };
+  const owner = new AuthSession();
+  const service = new MediaPreviewService({
+    tickets,
+    now: () => now,
+    targetFor: async (_owner, channel, sourceId) => {
+      if (targetGate !== null) {
+        targetWaits++;
+        const pending = targetGate;
+        if (targetOnce) targetGate = null;
+        await pending;
+      }
+      return allowed && channel === 1 && ['md-primary-a', 'md-next'].includes(sourceId)
+        ? { ...target }
+        : null;
+    },
+  });
+  cleanups.push(async () => service.dispose());
+  const relay = http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://relay');
+    const match = /^\/media-preview\/([\w-]+)\/(file|proxy|poster)$/.exec(url.pathname);
+    const grant = tickets.redeem(
+      url.searchParams.get('ticket'),
+      (held) =>
+        held.kind === 'media-preview' &&
+        held.previewId === match?.[1] &&
+        held.resource === match[2],
+    );
+    if (grant?.kind !== 'media-preview') {
+      res.writeHead(403).end();
+      return;
+    }
+    void service.serve(req, res, grant).catch(() => res.destroy());
+  });
+  const relayOrigin = await listen(relay);
+  return {
+    service,
+    owner,
+    tickets,
+    target,
+    authorizations,
+    url: (relative: string | undefined) => new URL(relative ?? '/', relayOrigin),
+    setMode: () => {
+      mode = 'proxy';
+    },
+    resetProxy: () => {
+      proxyState = 'notPrepared';
+    },
+    failProxy: () => {
+      proxyState = 'error';
+    },
+    setPreparationStatus: (status: number) => {
+      preparationStatus = status;
+    },
+    delayPrepare: () => {
+      let release: () => void = () => undefined;
+      preparationGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
+    delayTarget: (once = false) => {
+      let release: () => void = () => undefined;
+      targetOnce = once;
+      targetGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
+    targetWaits: () => targetWaits,
+    failManifest: () => {
+      manifestFails = true;
+    },
+    setUnsupported: () => {
+      supported = false;
+    },
+    setMalicious: () => {
+      malicious = true;
+    },
+    setSlow: () => {
+      slow = true;
+    },
+    revokeAccess: () => {
+      allowed = false;
+    },
+    restoreAccess: () => {
+      allowed = true;
+    },
+    advance: (ms: number) => {
+      now += ms;
+    },
+    streams: () => streams,
+    preparations: () => preparations,
+    open: (previewId?: string, prepare = true) =>
+      service.open(owner, {
+        channel: 1,
+        sourceId: 'md-primary-a',
+        prepare,
+        ...(previewId === undefined ? {} : { previewId }),
+      }),
+  };
+}
+
+it('relays engine-local verified bytes with Range, suffix Range, HEAD and If-Range', async () => {
+  const f = await fixture();
+  const opened = await f.open();
+  expect(opened).toMatchObject({
+    state: 'ready',
+    engine: 'B',
+    host: '192.0.2.43',
+    durationMs: 10_000,
+  });
+  expect(opened.videoUrl).not.toContain('independent-b');
+  const partial = await fetch(f.url(opened.videoUrl), { headers: { range: 'bytes=10-19' } });
+  expect(partial.status).toBe(206);
+  expect(partial.headers.get('content-range')).toBe(`bytes 10-19/${BYTES.length}`);
+  expect(partial.headers.get('content-type')).toBe('video/mp4');
+  expect(Buffer.from(await partial.arrayBuffer())).toEqual(BYTES.subarray(10, 20));
+  const suffix = await fetch(f.url(opened.videoUrl), { headers: { range: 'bytes=-5' } });
+  expect(suffix.status).toBe(206);
+  expect(Buffer.from(await suffix.arrayBuffer())).toEqual(BYTES.subarray(-5));
+  const head = await fetch(f.url(opened.videoUrl), { method: 'HEAD' });
+  expect(head.headers.get('content-length')).toBe(String(BYTES.length));
+  expect(await head.text()).toBe('');
+  const invalid = await fetch(f.url(opened.videoUrl), { headers: { range: 'bytes=999999-' } });
+  expect(invalid.status).toBe(416);
+  expect(invalid.headers.get('content-range')).toBe(`bytes */${BYTES.length}`);
+  const changed = await fetch(f.url(opened.videoUrl), {
+    headers: { range: 'bytes=10-19', 'if-range': '"changed"' },
+  });
+  expect(changed.status).toBe(200);
+  expect(changed.headers.get('etag')).toBe('"verified-bytes"');
+  expect(Buffer.from(await changed.arrayBuffer())).toEqual(BYTES);
+  expect(f.authorizations.every((value) => value === 'Bearer independent-b')).toBe(true);
+});
+
+it('prefers verified active topology over stale legacy selection for read previews', () => {
+  expect(mediaPreviewEngine('A', 'B')).toBe('A');
+  expect(mediaPreviewEngine('B', 'A')).toBe('B');
+  expect(mediaPreviewEngine(undefined, 'B')).toBe('B');
+  expect(mediaPreviewEngine(null, 'A', false)).toBe('B');
+  expect(mediaPreviewEngine('A', 'B', false)).toBe('A');
+  expect(mediaPreviewEngine('C', 'A')).toBeNull();
+});
+
+it('keeps a verified poster and owned lease when proxy capacity is exhausted and permits retry', async () => {
+  const f = await fixture();
+  f.setMode();
+  f.setPreparationStatus(429);
+  const busy = await f.open();
+  expect(busy.state).toBe('error');
+  expect(busy.previewId).toBeDefined();
+  expect((await fetch(f.url(busy.posterUrl))).status).toBe(200);
+  f.setPreparationStatus(202);
+  expect((await f.open(busy.previewId)).state).toBe('preparing');
+  const ready = await f.open(busy.previewId);
+  expect(ready.state).toBe('ready');
+  expect(ready.posterUrl).toBe(busy.posterUrl);
+  expect(f.service.close(f.owner, ready.previewId!)).toEqual({ closed: true });
+  expect(f.tickets.size).toBe(0);
+});
+
+it('keeps a permanent proxy error terminal while renewing its independent poster', async () => {
+  const f = await fixture();
+  f.setMode();
+  f.failProxy();
+  const failed = await f.open();
+  f.advance(15_000);
+  const renewed = await f.open(failed.previewId);
+  expect(renewed.state).toBe('error');
+  expect(renewed.posterUrl).toBe(failed.posterUrl);
+  expect((await fetch(f.url(renewed.posterUrl))).status).toBe(200);
+  expect(f.preparations()).toBe(0);
+});
+
+it('aborts pending proxy preparation on close and never returns its revoked URLs', async () => {
+  const f = await fixture();
+  const initial = await f.open();
+  f.setMode();
+  const release = f.delayPrepare();
+  const pending = f.open(initial.previewId);
+  await waitUntil(() => f.preparations() === 1, 'the pending proxy preparation');
+  expect(f.service.close(f.owner, initial.previewId!)).toEqual({ closed: true });
+  const result = await pending;
+  release();
+  expect(result.state).toBe('unavailable');
+  expect(result.previewId).toBeUndefined();
+  expect(f.tickets.size).toBe(0);
+});
+
+it('does not open a stream if its preview was closed while read authorization was pending', async () => {
+  const f = await fixture();
+  f.setSlow();
+  const initial = await f.open();
+  const release = f.delayTarget();
+  const pending = fetch(f.url(initial.videoUrl));
+  await waitUntil(() => f.targetWaits() > 0, 'the pending target authorization');
+  f.service.close(f.owner, initial.previewId!);
+  release();
+  expect((await pending).status).toBe(403);
+  expect(f.streams()).toBe(0);
+  expect(f.tickets.size).toBe(0);
+});
+
+it('does not let a late initial lookup revoke the preview opened for the newer selection', async () => {
+  const f = await fixture();
+  const release = f.delayTarget(true);
+  const old = f.open();
+  await waitUntil(() => f.targetWaits() === 1, 'the older pending selection');
+  const current = await f.service.open(f.owner, { channel: 1, sourceId: 'md-next', prepare: true });
+  expect(current.state).toBe('ready');
+  release();
+  expect((await old).state).toBe('unavailable');
+  expect((await fetch(f.url(current.videoUrl))).status).toBe(200);
+  expect(f.tickets.size).toBe(3);
+});
+
+it('sign-out invalidates an initial media lookup before it has created any HTTP grant', async () => {
+  const f = await fixture();
+  const release = f.delayTarget(true);
+  const pending = f.open();
+  await waitUntil(() => f.targetWaits() === 1, 'the pending signed-out selection');
+  f.service.drop(f.owner);
+  release();
+  expect((await pending).state).toBe('unavailable');
+  expect(f.tickets.size).toBe(0);
+});
+
+it('does not recreate a closed renewal lease when its pending lookup resolves on another engine', async () => {
+  const f = await fixture();
+  const initial = await f.open();
+  const release = f.delayTarget(true);
+  const renewal = f.open(initial.previewId);
+  await waitUntil(() => f.targetWaits() === 1, 'the pending renewal');
+  f.service.close(f.owner, initial.previewId!);
+  f.target.engine = 'A';
+  release();
+  expect((await renewal).state).toBe('unavailable');
+  expect(f.tickets.size).toBe(0);
+});
+
+it('revokes old resources and active streams when manifest renewal loses its source connection', async () => {
+  const f = await fixture();
+  f.setSlow();
+  const initial = await f.open();
+  const response = await fetch(f.url(initial.videoUrl));
+  const body = response.arrayBuffer();
+  const settled = expect(body).rejects.toThrow();
+  f.failManifest();
+  expect((await f.open(initial.previewId)).state).toBe('unavailable');
+  await settled;
+  await waitUntil(() => f.streams() === 0, 'the cancelled upstream stream');
+  expect(f.tickets.size).toBe(0);
+});
+
+it('keeps the poster available while preparing a proxy and preserves URLs on renewal', async () => {
+  const f = await fixture();
+  f.setMode();
+  const preparing = await f.open();
+  expect(preparing.state).toBe('preparing');
+  expect(preparing.videoUrl).toBeUndefined();
+  expect((await fetch(f.url(preparing.posterUrl))).status).toBe(200);
+  f.advance(15_000);
+  const ready = await f.open(preparing.previewId);
+  expect(ready.state).toBe('ready');
+  expect(ready.posterUrl).toBe(preparing.posterUrl);
+  const renewed = await f.open(ready.previewId);
+  expect(renewed.videoUrl).toBe(ready.videoUrl);
+  expect(f.preparations()).toBe(1);
+  expect((await fetch(f.url(ready.videoUrl))).status).toBe(200);
+  f.resetProxy();
+  const recovering = await f.open(ready.previewId);
+  expect(recovering.state).toBe('preparing');
+  expect(recovering.posterUrl).toBe(ready.posterUrl);
+  expect(f.preparations()).toBe(2);
+  expect((await f.open(recovering.previewId)).videoUrl).toBe(ready.videoUrl);
+});
+
+it('binds a preview to its owner, source and lifetime and rechecks read access', async () => {
+  const f = await fixture();
+  const opened = await f.open();
+  const other = new AuthSession();
+  expect(
+    await f.service.open(other, {
+      channel: 1,
+      sourceId: 'md-primary-a',
+      previewId: opened.previewId,
+    }),
+  ).toEqual({ state: 'unavailable' });
+  expect(f.service.close(other, opened.previewId!)).toEqual({ closed: false });
+  expect((await fetch(f.url(opened.videoUrl))).status).toBe(200);
+  f.revokeAccess();
+  expect((await fetch(f.url(opened.videoUrl))).status).toBe(403);
+  f.advance(31_000);
+  expect((await fetch(f.url(opened.videoUrl))).status).toBe(403);
+  f.restoreAccess();
+  const renewed = await f.open();
+  expect(renewed.state).toBe('ready');
+  expect(
+    await f.service.open(f.owner, {
+      channel: 1,
+      sourceId: 'another-media',
+      previewId: renewed.previewId,
+    }),
+  ).toMatchObject({ state: 'unavailable' });
+  expect(f.tickets.size).toBe(0);
+  expect((await fetch(f.url(renewed.videoUrl))).status).toBe(403);
+});
+
+it('rejects upstream URL substitution and releases grants for unsupported servers', async () => {
+  const f = await fixture();
+  f.setMalicious();
+  expect((await f.open()).state).toBe('error');
+  expect(f.tickets.size).toBe(0);
+  f.setUnsupported();
+  expect(await f.open()).toEqual({ state: 'unsupported' });
+  expect(f.tickets.size).toBe(0);
+});
+
+it('closing a preview aborts its live HTTP stream and revokes every resource', async () => {
+  const f = await fixture();
+  f.setSlow();
+  const opened = await f.open();
+  const response = await fetch(f.url(opened.videoUrl));
+  const body = response.arrayBuffer();
+  expect(f.streams()).toBe(1);
+  expect(f.service.close(f.owner, opened.previewId!)).toEqual({ closed: true });
+  await expect(body).rejects.toThrow();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(f.streams()).toBe(0);
+  expect(f.tickets.size).toBe(0);
+  expect((await fetch(f.url(opened.posterUrl))).status).toBe(403);
+});
+
+it('opens a searched media item through the authenticated Bridge socket and HTTP route without taking it on air', async () => {
+  const mediaId = FAKE_MEDIA_IDS.studio1;
+  const fingerprint = fakeFingerprint(mediaId);
+  const root = `/api/v1/channels/fake-programme/media-previews/${mediaId}`;
+  const playout = track(
+    await startFakePlayout({
+      verifyBearers: true,
+      mediaPreviews: async (req, res) => {
+        const url = new URL(req.url ?? '/', 'http://engine');
+        if (url.pathname === root) {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(
+            JSON.stringify({
+              mediaId,
+              fingerprint,
+              durationMs: 12_000,
+              browserMode: 'direct',
+              proxy: { state: 'notPrepared' },
+              fileUrl: `${root}/file?revision=${fingerprint}`,
+              proxyUrl: `${root}/proxy?revision=${fingerprint}`,
+              prepareUrl: `${root}/proxy`,
+              posterUrl: `${root}/poster`,
+            }),
+          );
+        } else if (url.pathname === `${root}/file`) {
+          expect(req.headers.range).toBe('bytes=2-5');
+          res
+            .writeHead(206, {
+              'content-type': 'video/mp4',
+              'content-range': `bytes 2-5/${BYTES.length}`,
+              'content-length': 4,
+              etag: '"actual-http-preview"',
+            })
+            .end(BYTES.subarray(2, 6));
+        } else res.writeHead(404).end();
+      },
+    }),
+    (p) => p.stop(),
+  );
+  const rig = await twoChannelRig({
+    bridge: { playout: { auth: 'playout', address: playout.baseUrl, issuer: playout.issuer } },
+  });
+  const client = await openClient(rig.handle);
+  const sourceId = mediaSourceId(mediaId);
+  expect(
+    (await client.ask('unsigned', 'sourcePreviews.mediaOpen', { channel: 1, sourceId })).error,
+  ).toBeDefined();
+  expect(
+    (await client.authenticate('signin', (await playout.issueToken({ user: 'operator' })).token))
+      .error,
+  ).toBeUndefined();
+  await waitUntil(() => playout.channelsBearers.length > 0, 'the authorized channel catalogue');
+  const before = (await rig.lines()).length;
+  expect(
+    (await client.ask('unsearched', 'sourcePreviews.mediaOpen', { channel: 1, sourceId })).payload,
+  ).toEqual({
+    state: 'unavailable',
+    message: 'This media preview is unavailable on the source server.',
+  });
+  expect(
+    (await client.ask('search', 'sources.media-search', { q: 'Studio 1' })).error,
+  ).toBeUndefined();
+  const answer = await client.ask('open', 'sourcePreviews.mediaOpen', {
+    channel: 1,
+    sourceId,
+    prepare: true,
+  });
+  expect(answer.error).toBeUndefined();
+  const opened = answer.payload as MediaPlaybackPreview;
+  expect(opened).toMatchObject({ state: 'ready', engine: 'A', durationMs: 12_000 });
+  const response = await fetch(`http://127.0.0.1:${rig.handle.port}${opened.videoUrl!}`, {
+    headers: { range: 'bytes=2-5' },
+  });
+  expect(response.status).toBe(206);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(BYTES.subarray(2, 6));
+  expect(
+    (await client.ask('foreign', 'sourcePreviews.mediaOpen', { channel: 2, sourceId })).error,
+  ).toBeDefined();
+  await client.ask('close', 'sourcePreviews.mediaClose', { previewId: opened.previewId });
+  expect((await fetch(`http://127.0.0.1:${rig.handle.port}${opened.videoUrl!}`)).status).toBe(403);
+  expect(
+    (await rig.lines())
+      .slice(before)
+      .filter((line) => /^(?:CG|PLAY|STOP|CLEAR|MIXER|LOAD|LOADBG)\b/i.test(line)),
+  ).toEqual([]);
+});
+
+it('reads cached media from independently authenticated mapped B after A and its catalogue disappear', async () => {
+  const mediaId = FAKE_MEDIA_IDS.studio1;
+  const fingerprint = fakeFingerprint(mediaId);
+  const replicaId = `replica-${fakeFingerprint('reserve-preview')}`;
+  const root = `/api/v1/channels/reserve-local/media-previews/${replicaId}`;
+  const a = track(await startFakePlayout({ verifyBearers: true }), (p) => p.stop());
+  a.setChannels(FAKE_CATALOGUE.map((row) => ({ ...row, videoMode: '1080i5000' })));
+  let bReads = 0;
+  const b = track(
+    await startFakePlayout({
+      verifyBearers: true,
+      mediaPreviews: async (req, res) => {
+        bReads++;
+        const url = new URL(req.url ?? '/', 'http://engine');
+        if (url.pathname === root)
+          res.writeHead(200, { 'content-type': 'application/json' }).end(
+            JSON.stringify({
+              mediaId: replicaId,
+              fingerprint,
+              durationMs: 12_000,
+              browserMode: 'direct',
+              proxy: { state: 'notPrepared' },
+              fileUrl: `${root}/file?revision=${fingerprint}`,
+              proxyUrl: `${root}/proxy?revision=${fingerprint}`,
+              prepareUrl: `${root}/proxy`,
+              posterUrl: `${root}/poster`,
+            }),
+          );
+        else if (url.pathname === `${root}/file`)
+          res
+            .writeHead(206, {
+              'content-type': 'video/mp4',
+              'content-range': `bytes 0-3/${BYTES.length}`,
+              'content-length': 4,
+            })
+            .end(BYTES.subarray(0, 4));
+        else res.writeHead(404).end();
+      },
+    }),
+    (p) => p.stop(),
+  );
+  b.setChannels([
+    {
+      id: 'reserve-local',
+      name: 'Reserve mirror',
+      casparHost: '127.0.0.1',
+      casparChannel: 2,
+      videoMode: '1080i5000',
+      mirrorOf: { playout: a.baseUrl, id: 'fake-programme' },
+    },
+  ]);
+  b.setMedia([
+    {
+      id: replicaId,
+      name: 'Studio reserve',
+      clip: 'D:/Reserve/Studio.mp4',
+      type: 'video',
+      fingerprint,
+      durationMs: 12_000,
+      folder: 'Reserve',
+      updatedAt: '2026-11-18T00:00:00Z',
+    },
+  ]);
+  const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-relay-reserve-')), (p) =>
+    fs.rmSync(p, { recursive: true, force: true }),
+  );
+  const udp = dgram.createSocket('udp4');
+  await new Promise<void>((resolve) => udp.bind(0, '127.0.0.1', resolve));
+  const oscPort = udp.address().port;
+  await new Promise<void>((resolve) => udp.close(resolve));
+  const core = track(
+    await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, channels: 2 }),
+    (m) => m.stop(),
+  );
+  let clock = Date.now();
+  const rig = await twoChannelRig({
+    bridge: {
+      playout: { auth: 'playout', address: a.baseUrl, issuer: a.issuer },
+      backupPlayoutAddress: b.baseUrl,
+      bridgeSessionPath: path.join(dir, 'session.json'),
+      playoutCatalogueOptions: { now: () => clock },
+    },
+  });
+  await rig.handle.runtime.setConfig({
+    ...rig.connection,
+    servers: {
+      ...rig.connection.servers,
+      B: { host: '127.0.0.1', amcpPort: core.amcpPort, oscPort },
+    },
+  });
+  const client = await openClient(rig.handle);
+  expect(
+    (await client.authenticate('admin', (await a.issueToken({ user: 'admin' })).token)).error,
+  ).toBeUndefined();
+  expect(
+    (
+      await client.ask('b-signin', 'bridgeSession.backup.sign-in', {
+        username: 'cg-admin',
+        password: FAKE_PLAYOUT_PASSWORD,
+      })
+    ).payload,
+  ).toEqual({ ok: true });
+  let mapping: BackupChannelsState | undefined;
+  await waitUntil(async () => {
+    const state = (await client.ask('mapping', 'backupChannels.state'))
+      .payload as BackupChannelsState;
+    mapping = state;
+    return (
+      state.backup?.channels.some((entry) => entry.channel === 1 && entry.backupChannel === 2) ===
+      true
+    );
+  }, 'the verified backup mapping').catch(() => {
+    expect(mapping).toMatchObject({
+      backup: { channels: [{ channel: 1, state: 'mapped', backupChannel: 2 }] },
+    });
+  });
+  const sourceId = mediaSourceId(mediaId);
+  expect(
+    (await client.ask('media', 'sources.media-search', { q: 'Studio 1' })).error,
+  ).toBeUndefined();
+  await a.goOffline();
+  clock += 60_000;
+  await rig.handle.playoutCatalogue?.refresh();
+  expect(rig.handle.playoutCatalogue?.rows()).toBeNull();
+  const reply = await client.ask('reserve-open', 'sourcePreviews.mediaOpen', {
+    channel: 1,
+    sourceId,
+    prepare: true,
+  });
+  expect(reply.error).toBeUndefined();
+  const preview = reply.payload as MediaPlaybackPreview;
+  expect(preview).toMatchObject({ state: 'ready', engine: 'B' });
+  const response = await fetch(`http://127.0.0.1:${rig.handle.port}${preview.videoUrl!}`, {
+    headers: { range: 'bytes=0-3' },
+  });
+  expect(response.status).toBe(206);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(BYTES.subarray(0, 4));
+  expect(bReads).toBe(2);
+}, 20_000);

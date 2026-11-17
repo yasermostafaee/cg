@@ -299,6 +299,14 @@ channel links. `PlayoutPgmMonitors` owns the demand-driven picture and sound rel
 verified member. Opaque resource keys keep stream tickets and status events attached to the
 same physical mapping. The Monitor Strip consumes that data through the Runtime Bridge.
 
+## Library media-preview transport
+
+`MediaPreviewService` resolves a library item on its serving Playout Engine and validates
+the manifest's identity and resource paths. Socket-owned tickets expose file, proxy and
+poster streams through the Bridge HTTP server. The service uses the streaming Playout
+transport with range headers, backpressure and cancellation. `SourceMediaPreview` consumes
+the typed open/close lifecycle and selects native video or the compatible sampled player.
+
 ## Where the engines live
 
 | Engine / package                                          | Responsibility                                                                                                                                                                                                                                                                                   |

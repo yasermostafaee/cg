@@ -36,10 +36,14 @@
       frame enforces its OWN policy as well (`img-src data: 'self'` since R-100 — `'self'` in a
       srcdoc frame is this console's own origin), and the intersection wins.
       Pinned by `tests/e2e/pgm-return.spec.ts` and `dev-station.spec.ts`, in a real browser.
+
+      Media preview plays scoped file/proxy streams from the configured Bridge HTTP(S) origin.
+      Its relay keeps the Engine credential on the server. Exported srcdoc templates enforce
+      their own media-src data: policy alongside this page's policy.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
       P-001 — NO FONT COMES OFF THE NETWORK. The UI's Vazirmatn faces are the ones this app

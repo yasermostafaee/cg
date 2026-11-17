@@ -1646,6 +1646,17 @@ class FakePlayoutServer implements FakePlayout {
           return;
         }
         if (
+          options.mediaPreviews !== undefined &&
+          /^\/api\/v1\/channels\/[^/]+\/media-previews(?:[/?]|$)/.test(req.url ?? '')
+        ) {
+          if (!(await this.#ownBearer(req))) {
+            sendError(res, 'invalid_token');
+            return;
+          }
+          await options.mediaPreviews(req, res);
+          return;
+        }
+        if (
           options.sourcePreviews !== undefined &&
           /^\/api\/v1\/channels\/[^/]+\/source-previews(?:[/?]|$)/.test(req.url ?? '')
         ) {
@@ -2724,6 +2735,8 @@ export interface FakePlayoutOptions {
   readonly livePreview?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   /** C-023 independent silent source observations, after this fake verifies the CG bearer. */
   readonly sourcePreviews?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
+  /** Independent .16 file/proxy preview, after this fake verifies its own bearer. */
+  readonly mediaPreviews?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   readonly sourceAudio?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   readonly programmeGain?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   /** D11's existing poster fixture, reached after this fake verifies the CG bearer. */

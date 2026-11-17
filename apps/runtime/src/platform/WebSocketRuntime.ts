@@ -166,6 +166,7 @@ import type {
   StandaloneSetup,
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
+import { isLoopbackHost } from '../shared/loopback.js';
 import * as ipcChannels from '@cg/shared-ipc';
 import { bridgeErrorFrom, BridgeSkewError } from '../shared/bridgeSkew.js';
 import { downloadBridgeArchive } from './bridgeDownload.js';
@@ -2431,6 +2432,27 @@ export class WebSocketRuntime implements RuntimeBridge {
   };
 
   readonly sourcePreviews: RuntimeBridge['sourcePreviews'] = {
+    mediaOpen: async (req) => {
+      if (await this.#optionalChannelMissing(ipcChannels.SourceMediaOpenChannel.name))
+        return { state: 'unsupported' };
+      const answer = await this.#invoke(ipcChannels.SourceMediaOpenChannel, req);
+      return {
+        ...answer,
+        ...(answer.host !== undefined && isLoopbackHost(answer.host)
+          ? { host: new URL(this.#bridgeHttpUrl('/')).hostname }
+          : {}),
+        ...(answer.videoUrl === undefined
+          ? {}
+          : { videoUrl: this.#bridgeHttpUrl(answer.videoUrl) }),
+        ...(answer.posterUrl === undefined
+          ? {}
+          : { posterUrl: this.#bridgeHttpUrl(answer.posterUrl) }),
+      };
+    },
+    mediaClose: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.SourceMediaCloseChannel.name))
+        ? { closed: false }
+        : this.#invoke(ipcChannels.SourceMediaCloseChannel, req),
     audioLevels: async (req) =>
       (await this.#optionalChannelMissing(ipcChannels.SourceAudioLevelsChannel.name))
         ? { readings: [] }

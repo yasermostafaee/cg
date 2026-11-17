@@ -98,6 +98,9 @@ import {
   PlayoutSourcePresenceChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
+  SourceMediaOpenChannel,
+  SourceMediaCloseChannel,
+  parsePlayoutMediaPage,
   PlaylistGainGetChannel,
   PlaylistGainSetChannel,
   playoutInputIdOf,
@@ -328,7 +331,7 @@ import {
   type CheckProbes,
   type PortHolder,
 } from './connection-check.js';
-import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
+import { pinnedIPv4, playoutFetch, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PgmAudioRelay } from './pgm-audio.js';
@@ -338,6 +341,12 @@ import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
 import type { SourcePreviewSelector } from './playout-source-previews.js';
 import { SourceAudioService } from './source-audio.js';
 import { SourcePreviewService } from './source-preview-service.js';
+import {
+  MediaPreviewService,
+  mediaPreviewEngine,
+  MEDIA_PREVIEW_HTTP_PREFIX,
+  type MediaPreviewTarget,
+} from './media-preview-service.js';
 import { PlaylistGainService, playlistFrameUsage } from './playlist-gain-service.js';
 import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
@@ -3234,18 +3243,22 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   */
   const tickets = new HttpTickets();
   const previewOrigin = auth.playout === null ? null : new URL(auth.playout.channelsUrl).origin;
-  const previewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
+  const previewPermitted = (owner: AuthSession, channel: number): boolean => {
     const token = owner.token;
     const lock = runtime.lockState();
-    if (
-      previewOrigin === null ||
-      token === null ||
-      token.jti === null ||
-      authGateState(owner, playoutAuth) !== 'signed-in' ||
-      !holdsPermissionClass(token.principal.roles, 'operator') ||
-      (lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
-    )
-      return null;
+    return (
+      token !== null &&
+      token.jti !== null &&
+      authGateState(owner, playoutAuth) === 'signed-in' &&
+      holdsPermissionClass(token.principal.roles, 'operator') &&
+      runtime.isDeclaredChannel(channel) &&
+      socketScope(owner, playoutAuth, runtime)?.(channel) !== false &&
+      !(lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
+    );
+  };
+  const previewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
+    const token = owner.token;
+    if (previewOrigin === null || token === null || !previewPermitted(owner, channel)) return null;
     const named = stationChannelsFor(
       owner,
       'signed-in',
@@ -3308,6 +3321,94 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     (sourceId, atMs) => playoutSources?.mediaPreviewId(sourceId, atMs) ?? null,
   );
   const sourceAudio = new SourceAudioService(previewTarget, previewSelector);
+  const backupPreviewMedia = new Map<string, { until: number; id: string | null }>();
+  const mediaPreviews = new MediaPreviewService({
+    tickets,
+    targetFor: async (owner, channel, sourceId): Promise<MediaPreviewTarget | null> => {
+      if (!previewPermitted(owner, channel)) return null;
+      const fingerprint = playoutSources?.mediaForPresence(sourceId)?.fingerprint;
+      const topology = await readProgrammeTopology(channel);
+      const primary = previewTarget(owner, channel);
+      const engine = mediaPreviewEngine(
+        topology?.active,
+        runtime.health().currentPrimary,
+        primary !== null,
+      );
+      if (engine === null) return null;
+      if (engine === 'A') {
+        const mediaId = playoutSources?.mediaPreviewId(sourceId);
+        if (primary === null || mediaId == null) return null;
+        return {
+          ...primary,
+          mediaId,
+          ...(fingerprint === undefined ? {} : { fingerprint }),
+          engine: 'A',
+          host: new URL(primary.origin).hostname,
+        };
+      }
+      const address = backupEngine?.address();
+      const bearer = backupEngine?.accessToken();
+      const mediaUrl = backupEngine?.mediaUrl();
+      const physical = backupChannels.channelOnB(channel);
+      const endpoint = runtime.config().servers.B;
+      if (
+        address == null ||
+        bearer == null ||
+        mediaUrl == null ||
+        physical === null ||
+        endpoint === undefined ||
+        fingerprint === undefined
+      )
+        return null;
+      const matches = backupEngine
+        ?.rows()
+        ?.filter(
+          (row) =>
+            row.casparChannel === physical && hostJoinsStation(row.casparHost, [endpoint.host]),
+        );
+      const row = matches?.length === 1 ? matches[0] : undefined;
+      if (row === undefined || row.cgLicensed === false) return null;
+      const key = `${address}\n${bearer}\n${fingerprint}`;
+      let found = backupPreviewMedia.get(key);
+      if (found === undefined || Date.now() >= found.until) {
+        const url = new URL(mediaUrl);
+        url.searchParams.set('fingerprint', fingerprint);
+        const response = await playoutFetch(url, {
+          headers: { authorization: `Bearer ${bearer}` },
+          signal: AbortSignal.timeout(5000),
+          maxResponseBytes: 1024 * 1024,
+        }).catch(() => null);
+        const page =
+          response?.ok === true
+            ? parsePlayoutMediaPage(await response.json().catch(() => null))
+            : null;
+        const item = page?.items.find((entry) => entry.fingerprint === fingerprint);
+        found = { until: Date.now() + 15_000, id: item?.id ?? null };
+        backupPreviewMedia.set(key, found);
+        while (backupPreviewMedia.size > 64) {
+          const oldest = backupPreviewMedia.keys().next().value;
+          if (oldest === undefined) break;
+          backupPreviewMedia.delete(oldest);
+        }
+      }
+      if (
+        found.id === null ||
+        !previewPermitted(owner, channel) ||
+        backupEngine?.accessToken() !== bearer ||
+        backupEngine.address() !== address
+      )
+        return null;
+      return {
+        origin: new URL(address).origin,
+        code: row.id,
+        bearer,
+        mediaId: found.id,
+        fingerprint,
+        engine: 'B',
+        host: new URL(address).hostname,
+      };
+    },
+  });
   const sourcePresence = async (
     owner: AuthSession | null,
     { channel, sourceIds }: ChannelRequest<typeof PlayoutSourcePresenceChannel>,
@@ -3502,6 +3603,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     issueTicket: (grant) => tickets.issue(grant),
     livePreview,
     sourcePreviews,
+    mediaPreviews,
     sourceAudio,
     sourcePresence,
     playlistGain,
@@ -3601,6 +3703,28 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     }
     const url = new URL(req.url ?? '/', 'http://cg-bridge');
     const pathname = url.pathname;
+    if (
+      (req.method === 'GET' || req.method === 'HEAD') &&
+      pathname.startsWith(MEDIA_PREVIEW_HTTP_PREFIX)
+    ) {
+      const match = /^\/media-preview\/([\w-]+)\/(file|proxy|poster)$/.exec(pathname);
+      const grant = tickets.redeem(
+        url.searchParams.get('ticket'),
+        (held) =>
+          held.kind === 'media-preview' &&
+          held.previewId === match?.[1] &&
+          held.resource === match[2],
+      );
+      if (grant?.kind !== 'media-preview') {
+        res.writeHead(403).end();
+        return;
+      }
+      void mediaPreviews.serve(req, res, grant).catch(() => {
+        if (res.headersSent) res.destroy();
+        else res.writeHead(502).end();
+      });
+      return;
+    }
     if (req.method === 'GET' && pathname.startsWith(LIVE_PREVIEW_HTTP_PREFIX)) {
       const match = /^\/input-preview\/([\w-]+)\/(picture|audio)$/.exec(pathname);
       const grant = tickets.redeem(
@@ -4004,6 +4128,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const dropSocket = (): void => {
       livePreview.disconnect(session);
       void sourcePreviews.drop(session);
+      mediaPreviews.drop(session);
       sourceAudio.drop(session);
       playlistGain.drop(session);
       for (const off of unsubscribers) off();
@@ -4251,6 +4376,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       sourceAudio.dispose();
       await livePreview.dispose();
       await sourcePreviews.dispose();
+      mediaPreviews.dispose();
       // `CENTRAL-BRIDGE-01` — the stack's last change is on disk before anything stops.
       stack?.flush();
       // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
@@ -5068,6 +5194,7 @@ export function buildRoutes(
     issueTicket?: (grant: TicketGrant) => string;
     livePreview?: LivePreviewService;
     sourcePreviews?: SourcePreviewService;
+    mediaPreviews?: MediaPreviewService;
     sourceAudio?: SourceAudioService;
     sourcePresence?: (
       owner: AuthSession | null,
@@ -5342,6 +5469,7 @@ export function buildRoutes(
       if (session !== null) {
         paths.livePreview?.drop(session);
         void paths.sourcePreviews?.drop(session);
+        paths.mediaPreviews?.drop(session);
         paths.sourceAudio?.drop(session);
         paths.playlistGain?.drop(session);
       }
@@ -5870,6 +5998,20 @@ export function buildRoutes(
       'operator',
       (req: ChannelRequest<typeof SourcePreviewPvwChannel>) =>
         paths.sourcePreviews?.pvw(currentAuthSession(), req) ?? { frames: [] },
+    ),
+    route(
+      SourceMediaOpenChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof SourceMediaOpenChannel>) =>
+        paths.mediaPreviews?.open(currentAuthSession(), req) ?? { state: 'unsupported' as const },
+    ),
+    route(
+      SourceMediaCloseChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof SourceMediaCloseChannel>) =>
+        paths.mediaPreviews?.close(currentAuthSession(), req.previewId) ?? { closed: false },
     ),
     route(
       SourcePreviewThumbnailsChannel,

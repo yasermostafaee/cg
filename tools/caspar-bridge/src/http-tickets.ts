@@ -25,6 +25,12 @@ export type TicketGrant =
     }
   | { readonly kind: 'logs' }
   | {
+      readonly kind: 'media-preview';
+      readonly channel: number;
+      readonly previewId: string;
+      readonly resource: 'file' | 'proxy' | 'poster';
+    }
+  | {
       readonly kind: 'input-preview';
       readonly channel: number;
       readonly previewId: string;
@@ -74,6 +80,18 @@ export class HttpTickets {
   /** How many are held — for a test. */
   get size(): number {
     return this.#held.size;
+  }
+
+  /** Extend a live ticket while its owning preview remains authorized. */
+  renew(ticket: string): boolean {
+    const held = this.#held.get(ticket);
+    if (held === undefined || this.#now() >= held.expiresAtMs) return false;
+    this.#held.set(ticket, { grant: held.grant, expiresAtMs: this.#now() + this.#ttlMs });
+    return true;
+  }
+
+  revoke(ticket: string): void {
+    this.#held.delete(ticket);
   }
 
   #sweep(): void {

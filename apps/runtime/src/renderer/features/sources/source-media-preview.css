@@ -28,10 +28,26 @@
   background: #0a0e13;
 }
 
-.cg-source-media-preview__picture img {
+.cg-source-media-preview__picture img,
+.cg-source-media-preview__picture video {
   inline-size: 100%;
   block-size: 100%;
   object-fit: contain;
+}
+
+.cg-source-media-preview__picture video[hidden],
+.cg-source-media-preview__picture img[hidden] {
+  display: none;
+}
+
+.cg-source-media-preview__origin {
+  position: absolute;
+  inset: var(--r-space-1) auto auto var(--r-space-1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--r-monitor-bg);
+  color: var(--r-text);
+  font-size: 11px;
 }
 
 .cg-source-media-preview__transport {
