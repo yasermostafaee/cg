@@ -87,8 +87,9 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
 
   // 3. Reopened: unblocked; remote host → warning; Apply → applied.
   await openServers(page);
-  await expect(panel.getByRole('button', { name: 'Apply server settings' })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Apply server settings' })).toBeDisabled();
   await panel.getByLabel('Primary host').fill('192.168.1.50');
+  await expect(panel.getByRole('button', { name: 'Apply server settings' })).toBeEnabled();
   await expect(panel.getByText(/Remote server \(192\.168\.1\.50\)/)).toBeVisible();
   await expect(panel.getByText(/control connection stays on 127\.0\.0\.1/)).toBeVisible();
   await panel.getByRole('button', { name: 'Apply server settings' }).click();

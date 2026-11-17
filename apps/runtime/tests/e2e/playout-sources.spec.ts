@@ -368,7 +368,7 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
   const tile = (id: string) =>
     panel
-      .locator('.cg-vlist-action-row', { has: panel.locator(`[data-picker-media="${id}"]`) })
+      .locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-media="${id}"]`) })
       .locator('[data-media-thumbnail]');
   const red = tile('md-m-clip-001').locator('img');
   const blue = tile('md-m-clip-002').locator('img');
