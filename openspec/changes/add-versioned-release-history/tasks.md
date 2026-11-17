@@ -40,6 +40,9 @@
 - [x] 3.7 Read the `1.2.0` candidate results on `c560f8cd`: [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197), [Windows installers](https://github.com/yasermostafaee/cg/actions/runs/42873144144/job/130029350792), [installer smoke](https://github.com/yasermostafaee/cg/actions/runs/42873144144/job/130039694110) and [fresh Playout installation](https://github.com/yasermostafaee/cg/actions/runs/42873144144/job/130039694274) passed. The independent [No Playout acceptance](https://github.com/yasermostafaee/cg/actions/runs/42873144144/job/130039694031) connected and saved the station; its assertion of the address spelling prevented the installed Take check. The candidate is for station testing.
 - [x] 3.8 Windows Edge measured Designer history against the full viewport and verified the Close
       footer action, published 1.1.0 status and hidden Next/download sections in both apps.
-      Both `app-version` suites passed with 3 tests each. Linux E2E for the carrying commit remains owed.
+      Both `app-version` suites passed with 3 tests each. The exact carrying `317580f7` also passed
+      the full Linux gate and actual [Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/44139741353/job/134239075832).
 - [x] 3.9 Windows Edge verified pagination with 32 releases, including 15/15/2 entries and navigation
       boundaries. The current one-page history has disabled navigation in both languages and apps.
+- [x] 3.10 The local `1.2.11/317580f7` Bridge, Control and Designer installers passed checksum,
+      version, embedded-engine, guide, product-tile and executable-icon verification.
