@@ -976,8 +976,22 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [],
-      "fixes": [],
+      "features": [
+        {
+          "fa": "در Departing plates تعیین کنید قاب حذف‌شونده محو شود یا هم‌زمان به یکی از چهار سمت حرکت کند.",
+          "en": "Under Departing plates, choose Fade or slide toward any edge while fading."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "حاشیهٔ قاب در ابعاد عمودی و افقی هم‌ضخامت است و نشان انتخاب در ادیتور بیرون حاشیه دیده می‌شود. تصویر در ادیتور و PVW از گوشه‌های گرد بیرون نمی‌زند.",
+          "en": "Portrait and landscape plates show an even border, with editor selection outside the stroke. The editor and PVW clip pictures to rounded corners."
+        },
+        {
+          "fa": "هنگام سوییچ پریست، برش ورودی‌های مشترک همراه جابه‌جایی تغییر می‌کند و حاشیه و تصویر از زمان‌بندی مشترک استفاده می‌کنند.",
+          "en": "During a preset switch, retained inputs reframe as they move, and artwork and mixer motion share a start schedule."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",

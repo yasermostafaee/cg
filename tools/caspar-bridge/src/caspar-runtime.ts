@@ -36,6 +36,7 @@ import {
   defaultNestedValues,
   framePlacementFits,
   frameTransitionPhases,
+  presetDepartureRect,
   presetTransitionDurations,
   isFieldNamespace,
   inputSlideVector,
@@ -589,12 +590,21 @@ interface PresetArtworkEffect {
   readonly fadeFrames?: number;
   readonly immediatelyHidden?: ReadonlySet<string>;
   readonly fits?: ReadonlyMap<LiveLayerRecord, LivePlatePlacement['fit']>;
+  readonly slideFrames?: FrameTransitionPhase['frames'];
 }
 
 interface FrameEffectReply {
   readonly ok: boolean;
   readonly errorCode?: string;
   readonly command?: string;
+}
+
+interface FramePhaseReply extends FrameEffectReply {
+  readonly startsAt?: number;
+}
+
+function remainingFramePhaseDelay(startsAt: number | undefined, fallback = 0): number {
+  return startsAt === undefined ? fallback : Math.ceil(Math.max(0, startsAt - performance.now()));
 }
 
 interface MixerFramePhase {
@@ -612,7 +622,7 @@ interface LiveFrameEffectTransport {
     fit: LivePlatePlacement['fit'],
     phase: MixerFramePhase,
   ) => Promise<FrameEffectReply>;
-  readonly tell: (phase: FrameTransitionPhase) => Promise<FrameEffectReply>;
+  readonly tell: (phase: FrameTransitionPhase) => Promise<FramePhaseReply>;
 }
 
 function presetArtworkOpacity(
@@ -6459,11 +6469,12 @@ export class CasparRuntime {
       }
       for (const record of departureRecords) {
         const frames = immediate?.has(record.sourceId) === true ? 0 : (fadeFrames ?? 0);
-        const staged = await stage(record, record, {
+        const slideFit = departure.fits?.get(record);
+        const staged = await stage(record, slideFit ?? record, {
           frames,
           easing: 'linear',
           opacity: 0,
-          ...(fadeFrames !== undefined && { opacityOnly: true }),
+          ...(fadeFrames !== undefined && slideFit === undefined && { opacityOnly: true }),
         });
         if (!staged.ok) return staged;
       }
@@ -6475,7 +6486,10 @@ export class CasparRuntime {
           destinationLookId: effect.destinationLookId,
         }),
         easing: 'linear',
-        frames: effect.frames.map((frame) => ({ ...frame, to: frame.from })),
+        frames: [
+          ...effect.frames.map((frame) => ({ ...frame, to: frame.from })),
+          ...(departure.slideFrames ?? []),
+        ],
         ...(fadeFrames === undefined
           ? hide
           : {
@@ -6489,7 +6503,7 @@ export class CasparRuntime {
             }),
       });
       if (!told.ok) return told;
-      if (!(await wait(hold))) return interrupted;
+      if (!(await wait(remainingFramePhaseDelay(told.startsAt, hold)))) return interrupted;
       const committed = await this.#commitStagedMixer(batch, { retainOnFailure: true });
       if (!committed.landed) return { ...committed, ok: false };
       // The outgoing group must be hidden before any shared plate enters its area.
@@ -6541,7 +6555,7 @@ export class CasparRuntime {
         ...hide,
       });
       if (!told.ok) return told;
-      if (!(await wait(hold))) return interrupted;
+      if (!(await wait(remainingFramePhaseDelay(told.startsAt, hold)))) return interrupted;
       const commit = await this.#commitStagedMixer(batch, { retainOnFailure: true });
       if (!commit.landed) return { ...commit, ok: false };
       // The ack schedules the tween. Leave an output tick to paint the endpoint.
@@ -6636,7 +6650,7 @@ export class CasparRuntime {
           slidePhase(elapsed / frames, (elapsed + step.frames) / frames, step.frames * period),
         );
         if (!painted.ok) return painted;
-        if (!(await wait(hold))) return interrupted;
+        if (!(await wait(remainingFramePhaseDelay(painted.startsAt, hold)))) return interrupted;
       }
       const commit = await this.#commitStagedMixer(batch, { retainOnFailure: true });
       if (!commit.landed) return { ...commit, ok: false };
@@ -13069,8 +13083,7 @@ export class CasparRuntime {
         toFrame.elementId !== fromFrame.elementId ||
         toFrame.artworkId !== fromFrame.artworkId ||
         from === undefined ||
-        to === undefined ||
-        (sameMixerRect(from, to, 1e-8) && !transition.fade)
+        to === undefined
       )
         continue;
       const group = visible.filter((record) => record.sourceId === plateId);
@@ -13100,6 +13113,16 @@ export class CasparRuntime {
       }
       // Own masks may use several physical pieces. Animate them as one frame or cut the group.
       if (fits.size !== group.length) continue;
+      if (
+        !transition.fade &&
+        sameMixerRect(from, to, 1e-8) &&
+        [...fits].every(
+          ([record, fit]) =>
+            sameMixerRect(record.fill, fit.fill, 1e-8) &&
+            sameMixerRect(record.clip, fit.clip, 1e-8),
+        )
+      )
+        continue;
       frames.push({
         frameKey: fromFrame.frameKey,
         lookId: fromLook.id,
@@ -13133,6 +13156,16 @@ export class CasparRuntime {
           transition.durationMs / this.#channelFrameMsFor(page.slot.channel),
           { exit: composed.departure !== undefined, move, enter: composed.arrival !== undefined },
         );
+        const departure = composed.departure;
+        const slides =
+          departure !== undefined && transition.exitDirection !== undefined
+            ? this.#planPresetDepartureSlide(departure, fromLook, fromRects, visible, {
+                channel: page.slot.channel,
+                resolution: carrier.resolution,
+                direction: transition.exitDirection,
+                frameLimit: 128 - frames.length,
+              })
+            : undefined;
         return this.#runPresetFrameTransaction(
           item,
           page,
@@ -13147,8 +13180,8 @@ export class CasparRuntime {
             authoredPreset: true,
             destinationLookId: toLook.id,
             moveFrames: periods.move,
-            ...(composed.departure !== undefined && {
-              departure: { ...composed.departure, fadeFrames: periods.exit },
+            ...(departure !== undefined && {
+              departure: { ...departure, ...slides, fadeFrames: periods.exit },
             }),
             ...(composed.arrival !== undefined && {
               arrival: { ...composed.arrival, fadeFrames: periods.enter },
@@ -13466,6 +13499,76 @@ export class CasparRuntime {
     )
       return undefined;
     return { ...groups, records };
+  }
+
+  #planPresetDepartureSlide(
+    departure: PresetArtworkEffect,
+    look: TemplateLook,
+    rects: Readonly<Record<string, NormalizedRect>>,
+    visible: readonly LiveLayerRecord[],
+    options: {
+      channel: number;
+      resolution: TemplateLiveSources['resolution'];
+      direction: NonNullable<FrameTransition['exitDirection']>;
+      frameLimit: number;
+    },
+  ): Pick<PresetArtworkEffect, 'fits' | 'slideFrames'> | undefined {
+    const { channel, resolution, direction, frameLimit } = options;
+    const raster = this.#channelSettings.rasterFor(channel);
+    const scale = outputScale(raster);
+    const offset = presetDepartureRect({ x: 0, y: 0, width: 1, height: 1 }, direction, resolution);
+    const dx = (offset.x * scale) / raster.width;
+    const dy = (offset.y * scale) / raster.height;
+    const shift = (rect: NormalizedRect): NormalizedRect => ({
+      ...rect,
+      x: rect.x + dx,
+      y: rect.y + dy,
+    });
+    const retained = visible.filter(({ sourceId }) => !departure.plateIds.includes(sourceId));
+    const fits = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
+    const slideFrames: FrameTransitionPhase['frames'] = [];
+    for (const key of departure.artworkKeys) {
+      if (departure.immediatelyHidden?.has(key)) continue;
+      const routes = look.transitionDepartureGroups?.[key] ?? [];
+      const frames = routes.flatMap((plateId) => {
+        const from = rects[plateId];
+        const artwork = look.transitionFrames?.[plateId];
+        return from === undefined || artwork === undefined
+          ? []
+          : [
+              {
+                frameKey: artwork.frameKey,
+                lookId: look.id,
+                from,
+                to: presetDepartureRect(from, direction, resolution),
+                fromOpacity: 1,
+                toOpacity: 1,
+              },
+            ];
+      });
+      if (frames.length !== routes.length) continue;
+      const records = departure.records.filter(({ sourceId }) => routes.includes(sourceId));
+      const crossesRetained = records.some(({ slot, clip }) => {
+        const swept = {
+          x: clip.x + Math.min(0, dx),
+          y: clip.y + Math.min(0, dy),
+          width: clip.width + Math.abs(dx),
+          height: clip.height + Math.abs(dy),
+        };
+        return retained.some(
+          (record) =>
+            slot.layer > record.slot.layer && intersectNormalizedRects(swept, record.clip) !== null,
+        );
+      });
+      // A higher native seat cannot cross a retained picture without covering it.
+      if (crossesRetained) continue;
+      for (const record of records)
+        fits.set(record, { fill: shift(record.fill), clip: shift(record.clip) });
+      slideFrames.push(...frames);
+    }
+    return slideFrames.length === 0 || slideFrames.length > frameLimit
+      ? undefined
+      : { fits, slideFrames };
   }
 
   #preparePresetArtworkEffects(
@@ -13849,7 +13952,7 @@ export class CasparRuntime {
           signal,
         })
       ).ok;
-    const queuePeer = (line: string, target?: LiveLayerRecord | CommandSlot) => {
+    const queuePeer = (line: string | (() => string), target?: LiveLayerRecord | CommandSlot) => {
       if (!animatePeer || !mirrorForward || peerFailed) return;
       if (target !== undefined && 'sourceId' in target && !peerProducers.has(target)) return;
       const signal = AbortSignal.any([cancel.signal, AbortSignal.timeout(peerDeadline)]);
@@ -13879,7 +13982,7 @@ export class CasparRuntime {
             this.#rememberInputReplicaMixer(effectPeer.session, channel, pendingPeer);
             peerArmed = true;
           }
-          peerFailed = !(await sendPeer(line, signal));
+          peerFailed = !(await sendPeer(typeof line === 'string' ? line : line(), signal));
           if (!peerFailed && target === undefined) peerStaged = false;
         })
         .catch(() => {
@@ -13986,6 +14089,7 @@ export class CasparRuntime {
     const sendPages = async (
       build: (slot: CommandSlot) => string,
       rollback = false,
+      refreshPeerLine = false,
     ): Promise<FrameEffectReply> => {
       let failed: FrameEffectReply | undefined;
       for (const slot of pageSlots) {
@@ -14000,9 +14104,36 @@ export class CasparRuntime {
           failed ??= { ...sent, ok: false };
           if (!rollback) break;
         }
-        if (sent.ok && sent.onPrimary && !rollback) queuePeer(line, slot);
+        if (sent.ok && sent.onPrimary && !rollback)
+          queuePeer(refreshPeerLine ? () => build(slot) : line, slot);
       }
       return failed ?? { ok: true };
+    };
+    const sendPhase = async (phase: FrameTransitionPhase): Promise<FramePhaseReply> => {
+      // Spend the paint allowance once across both HTML pages and mixer COMMIT.
+      // Each page receives the remaining allowance when its update is sent.
+      const startsAt = performance.now() + (phase.delayMs ?? 0);
+      const sent = await sendPages(
+        (slot) =>
+          this.#builder.update(
+            slot,
+            withCgControl(
+              {},
+              {
+                frameTransition: {
+                  ...phase,
+                  ...(phase.delayMs !== undefined && {
+                    delayMs: remainingFramePhaseDelay(startsAt),
+                  }),
+                },
+                ...(presetEffectId !== undefined && { presetEffectId }),
+              },
+            ),
+          ),
+        false,
+        phase.delayMs !== undefined,
+      );
+      return { ...sent, startsAt };
     };
     this.#frameTransitionInterrupts.set(itemId, cancel);
     this.#reconciler.on('item-changed', invalidate);
@@ -14019,19 +14150,7 @@ export class CasparRuntime {
           batch,
           wait,
           stage,
-          tell: (phase) =>
-            sendPages((slot) =>
-              this.#builder.update(
-                slot,
-                withCgControl(
-                  {},
-                  {
-                    frameTransition: { ...phase, ...priorTitleHold },
-                    ...(presetEffectId !== undefined && { presetEffectId }),
-                  },
-                ),
-              ),
-            ),
+          tell: (phase) => sendPhase({ ...phase, ...priorTitleHold }),
         }),
       tellLook: async (fits, fallback) => {
         const arrival = effect.arrival;
@@ -14113,20 +14232,9 @@ export class CasparRuntime {
             if (!fading.ok) return fading;
           }
         }
-        const rendered = await sendPages((slot) =>
-          this.#builder.update(
-            slot,
-            withCgControl(
-              {},
-              {
-                frameTransition: artworkPhase(enter, 1),
-                ...(presetEffectId !== undefined && { presetEffectId }),
-              },
-            ),
-          ),
-        );
+        const rendered = await sendPhase(artworkPhase(enter, 1));
         if (!rendered.ok) return rendered;
-        if (!(await wait(hold))) return interrupted;
+        if (!(await wait(remainingFramePhaseDelay(rendered.startsAt)))) return interrupted;
         const revealed = await this.#commitStagedMixer(batch, { retainOnFailure: true });
         if (!revealed.landed) return { ...revealed, ok: false };
         return (await wait(enter * period + period)) ? { ok: true } : interrupted;

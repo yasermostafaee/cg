@@ -1,5 +1,6 @@
 import {
   frameTransitionPhases,
+  presetDepartureRect,
   presetTransitionDurations,
   type FrameTransition,
   type FrameTransitionPhase,
@@ -106,6 +107,7 @@ export function rehearsalPresetPlan(
   effect: FrameTransition,
   periodMs: number,
   holdTitles: boolean,
+  raster: Pick<LiveSourceRect, 'width' | 'height'>,
 ): PresetPlan | undefined {
   const oldInputs = new Map(before.plates.map(({ plateId, sourceId }) => [plateId, sourceId]));
   const newInputs = new Map(after.plates.map(({ plateId, sourceId }) => [plateId, sourceId]));
@@ -149,19 +151,46 @@ export function rehearsalPresetPlan(
     holdTitles && titlePlateIds.length > 0 ? { hidePresetTitlePlateIds: titlePlateIds } : {};
   const exit: FrameTransitionPhase[] = [];
   if (ticks.exit > 0) {
+    const direction = effect.exitDirection;
+    const departingFrames =
+      direction === undefined
+        ? []
+        : outgoing.flatMap(({ key }) => {
+            const routes = before.look.transitionDepartureGroups?.[key] ?? [];
+            const frames = routes.flatMap((plateId) => {
+              const from = before.rects[plateId];
+              const artwork = before.look.transitionFrames?.[plateId];
+              return from === undefined || artwork === undefined
+                ? []
+                : [
+                    {
+                      frameKey: artwork.frameKey,
+                      lookId: before.look.id,
+                      from,
+                      to: presetDepartureRect(from, direction, raster),
+                      fromOpacity: 1,
+                      toOpacity: 1,
+                    },
+                  ];
+            });
+            return frames.length === routes.length ? frames : [];
+          });
     exit.push({
       authoredPreset: true,
       destinationLookId: after.look.id,
       ...titleHold,
       durationMs: ticks.exit * periodMs,
       easing: 'linear',
-      frames: shared.map(({ from, ...frame }) => ({
-        ...frame,
-        from,
-        to: from,
-        fromOpacity: 1,
-        toOpacity: 1,
-      })),
+      frames: [
+        ...shared.map(({ from, ...frame }) => ({
+          ...frame,
+          from,
+          to: from,
+          fromOpacity: 1,
+          toOpacity: 1,
+        })),
+        ...(shared.length + departingFrames.length <= 128 ? departingFrames : []),
+      ],
       opacityArtwork: outgoing,
     });
   }

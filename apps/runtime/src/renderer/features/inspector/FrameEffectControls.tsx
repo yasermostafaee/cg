@@ -3,7 +3,9 @@ import {
   FRAME_TRANSITION_MAX_MS,
   FRAME_TRANSITION_MIN_MS,
   FrameTransitionSchema,
+  InputTransitionDirectionSchema,
   type FrameTransition,
+  type InputTransitionDirection,
 } from '@cg/shared-schema';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { NumericInput } from '../../ui/NumericInput.js';
@@ -23,6 +25,44 @@ const MOTION_LABELS: Record<FrameTransition['motion'], string> = {
   bounce: 'Bounce',
   elastic: 'Elastic',
 };
+
+const DEPARTURE_LABELS: Record<InputTransitionDirection, string> = {
+  left: 'Slide left + fade',
+  right: 'Slide right + fade',
+  up: 'Slide up + fade',
+  down: 'Slide down + fade',
+};
+
+export function PresetDepartureControl({
+  direction,
+  onChange,
+}: {
+  direction: InputTransitionDirection | undefined;
+  onChange: (direction: InputTransitionDirection | undefined) => void;
+}): JSX.Element {
+  return (
+    <label className="cg-preset-departure-control">
+      Departing plates
+      <select
+        className="cg-field"
+        aria-label="Departing plates"
+        value={direction ?? ''}
+        onChange={(event) => {
+          const value = event.currentTarget.value;
+          const parsed = InputTransitionDirectionSchema.safeParse(value);
+          if (value === '' || parsed.success) onChange(parsed.success ? parsed.data : undefined);
+        }}
+      >
+        <option value="">Fade</option>
+        {InputTransitionDirectionSchema.options.map((option) => (
+          <option key={option} value={option}>
+            {DEPARTURE_LABELS[option]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export function FrameEffectControls({
   disabled,
@@ -59,6 +99,7 @@ export function FrameEffectControls({
         Motion
         <select
           className="cg-field"
+          aria-label="Motion"
           value={preset !== undefined && override === undefined ? 'default' : motion}
           onChange={(event) => {
             if (event.currentTarget.value === 'default' && preset !== undefined) {
@@ -102,6 +143,12 @@ export function FrameEffectControls({
             onBlur={() => setTypedDuration(null)}
           />
         </label>
+      )}
+      {preset !== undefined && hasEffect && (
+        <PresetDepartureControl
+          direction={effect.exitDirection}
+          onChange={(exitDirection) => changeEffect({ exitDirection })}
+        />
       )}
     </fieldset>
   );

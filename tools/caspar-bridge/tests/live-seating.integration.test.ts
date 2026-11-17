@@ -42,6 +42,7 @@ import {
   type LiveRevealMask,
 } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import { parkedFit } from '../src/live-plate-release.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
 
@@ -255,6 +256,11 @@ async function bootPresetDeparture(
             },
             platePaintOrder: ['guest-1', 'guest-2', 'guest-3'],
             transitionPaintOrder: ['guest-1', 'guest-2', 'guest-3'],
+            transitionFrames: {
+              ...duo!.transitionFrames,
+              'guest-2': { frameKey: 'duo-right', elementId: 'guest-2', artworkId: 'right' },
+              'guest-3': { frameKey: 'duo-mask', elementId: 'mask-guest', artworkId: 'mask' },
+            },
             transitionDepartureGroups: {
               [DEPARTURE_ARTWORK]: [
                 'guest-2',
@@ -347,6 +353,7 @@ async function boot(options: {
   redundant?: boolean;
   mirrorChannel?: number;
   missingBackupMedia?: boolean;
+  lookMixerHoldMs?: number;
 }): Promise<CasparRuntime> {
   tracePath = path.join(
     os.tmpdir(),
@@ -373,6 +380,7 @@ async function boot(options: {
       sweepMs: 150,
       sourceCatalog: options.catalog ?? catalog(),
       sourceAssignments: options.assignments ?? assign([['guest-1', 'src-a']]),
+      ...(options.lookMixerHoldMs !== undefined && { lookMixerHoldMs: options.lookMixerHoldMs }),
       ...(options.mirrorChannel !== undefined && {
         backupChannels: {
           channelOnB: (channel: number) => (channel === 1 ? options.mirrorChannel! : null),
@@ -2311,6 +2319,94 @@ it('animates the retained authored seat in both directions and cuts the new plat
   }
 });
 
+it('tweens a fit-only preset change and shares the artwork start allowance across both pages and engines', async () => {
+  const base = presetEffectTemplate();
+  const live = base.liveSources!;
+  const [solo, duo] = live.looks!;
+  const portrait = { x: 600, y: 60, width: 720, height: 960 };
+  const r = await boot({
+    template: {
+      ...base,
+      liveSources: {
+        ...live,
+        looks: [
+          { ...solo!, rects: { 'guest-1': portrait }, fits: { 'guest-1': 'contain' } },
+          { ...duo!, rects: { 'guest-1': portrait }, fits: { 'guest-1': 'cover' } },
+        ],
+      },
+    },
+    html: PRESET_RECOVERY_HTML,
+    catalog: catalog({
+      sources: [
+        {
+          id: 'src-a',
+          name: 'Studio A',
+          format: '1080i5000',
+          producer: { kind: 'ndi', source: 'A' },
+        },
+      ],
+    }),
+    lookMixerHoldMs: 200,
+    mirrorChannel: 2,
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
+  const a = mock!;
+  const b = backup!;
+  const native = r.liveLayers().get('item-1')![0]!.slot.layer;
+  const activeBefore = a.receivedCommands().length;
+  const reserveBefore = b.receivedCommands().length;
+  const initialFill = a.layerState({ channel: 1, layer: native })?.fill;
+  const normalCg = defaultHandlers().get('CG')!;
+  let delayed = false;
+  a.setHandler('CG', async (request, context, connection) => {
+    const reply = normalCg(request, context, connection);
+    if (!delayed && request.raw.startsWith('CG 1-10 UPDATE ') && request.raw.includes('delayMs')) {
+      delayed = true;
+      await new Promise<void>((resolve) => setTimeout(resolve, 90));
+    }
+    return reply;
+  });
+  expect(
+    await r.setActiveLook('item-1', 'duo', { motion: 'linear', fade: false, durationMs: 120 }),
+  ).toEqual({ ok: true });
+  expect(delayed).toBe(true);
+  const firstPhase = (engine: MockHandle, start: number, channel: number) => {
+    const logs = engine.receivedCommands().slice(start);
+    const writes = logs.filter(
+      ({ line }) => line.includes('authoredPreset') && line.includes('delayMs'),
+    );
+    expect(writes).toHaveLength(2);
+    const delays = writes.map(({ line }) => {
+      const decoded = decodeCgData(parseAmcpLine(line)!.args[3]!);
+      if (decoded.data === null) throw new Error('Cannot decode preset artwork phase');
+      return readCgControl(JSON.parse(decoded.data))?.frameTransition?.delayMs ?? 0;
+    });
+    const commit = logs.find(
+      ({ line, at }) => line === `MIXER ${channel} COMMIT` && at >= writes[1]!.at,
+    );
+    expect(commit).toBeDefined();
+    expect(logs.map(({ line }) => line)).not.toContainEqual(
+      expect.stringMatching(new RegExp(`^(?:PLAY|CLEAR) ${channel}-${native}(?: |$)`)),
+    );
+    for (const transform of ['FILL', 'CLIP'])
+      expect(logs.map(({ line }) => line)).toContainEqual(
+        expect.stringMatching(
+          new RegExp(`^MIXER ${channel}-${native} ${transform} .* 3 linear DEFER$`),
+        ),
+      );
+    return { delays, writes, commit: commit! };
+  };
+  const active = firstPhase(a, activeBefore, 1);
+  const reserve = firstPhase(b, reserveBefore, 2);
+  expect(active.delays[0]! - active.delays[1]!).toBeGreaterThan(70);
+  expect(active.commit.at - active.writes[1]!.at).toBeLessThan(active.delays[0]! - 35);
+  expect(reserve.delays[0]!).toBeLessThan(active.delays[0]! - 70);
+  const coverFill = a.layerState({ channel: 1, layer: native })?.fill;
+  expect(coverFill).not.toEqual(initialFill);
+  expect(b.layerState({ channel: 2, layer: native })?.fill).toEqual(coverFill);
+});
+
 it('hides a complete departing mask group before the shared resize, then restores opacity on reverse', async () => {
   const r = await bootPresetDeparture(PRESET_DEPARTURE_HTML);
   const itemId = 'item-1';
@@ -2379,26 +2475,31 @@ it.each([
   },
 );
 
-it('restores prior mask geometry and opacity if the first motion after departure is refused', async () => {
-  const r = await bootPresetDeparture(PRESET_DEPARTURE_HTML);
-  const itemId = 'item-1';
-  const original = r
-    .liveLayers()
-    .get(itemId)
-    ?.map(({ slot }) => [slot, mock!.layerState(slot)] as const);
-  const normal = defaultHandlers().get('MIXER')!;
-  mock!.setHandler('MIXER', (request, context, connection) => {
-    if (request.raw.includes('FILL') && request.raw.includes('easeinoutquad'))
-      return { kind: 'err', code: 502, verb: 'MIXER' };
-    return normal(request, context, connection);
-  });
-  expect(await r.setActiveLook(itemId, 'solo', { ...PRESET_EFFECT, fade: false })).toMatchObject({
-    ok: false,
-    reason: 'amcp-502',
-  });
-  expect(r.stackSnapshot()[0]?.activeLookId).toBe('duo');
-  for (const [slot, state] of original ?? []) expect(mock!.layerState(slot)).toEqual(state);
-});
+it.each([
+  { name: 'immediate', html: PRESET_DEPARTURE_HTML, exitDirection: undefined },
+  { name: 'slide and fade', html: PRESET_ARTWORK_FADE_HTML, exitDirection: 'up' as const },
+])(
+  'restores prior mask geometry and opacity if movement fails after $name departure',
+  async ({ html, exitDirection }) => {
+    const r = await bootPresetDeparture(html);
+    const itemId = 'item-1';
+    const original = r
+      .liveLayers()
+      .get(itemId)
+      ?.map(({ slot }) => [slot, mock!.layerState(slot)] as const);
+    const normal = defaultHandlers().get('MIXER')!;
+    mock!.setHandler('MIXER', (request, context, connection) => {
+      if (request.raw.includes('FILL') && request.raw.includes('easeinoutquad'))
+        return { kind: 'err', code: 502, verb: 'MIXER' };
+      return normal(request, context, connection);
+    });
+    expect(
+      await r.setActiveLook(itemId, 'solo', { ...PRESET_EFFECT, fade: false, exitDirection }),
+    ).toMatchObject({ ok: false, reason: 'amcp-502' });
+    expect(r.stackSnapshot()[0]?.activeLookId).toBe('duo');
+    for (const [slot, state] of original ?? []) expect(mock!.layerState(slot)).toEqual(state);
+  },
+);
 
 it('fades exiting and returning mask seats while keeping retained pictures opaque with Fade off', async () => {
   const r = await bootPresetDeparture(PRESET_ARTWORK_FADE_HTML);
@@ -2445,6 +2546,80 @@ it('fades exiting and returning mask seats while keeping retained pictures opaqu
         Object.entries(clip).map(([key, value]) => [key, Number(value.toFixed(6))]),
       ),
     });
+  }
+});
+
+it('slides the disappearing picture, its mask and artwork up in the same fade phase', async () => {
+  const r = await bootPresetDeparture(PRESET_ARTWORK_FADE_HTML);
+  const itemId = 'item-1';
+  const visible = () => (r.liveLayers().get(itemId) ?? []).filter(({ held }) => held !== true);
+  const extras = visible().filter(({ sourceId }) => sourceId !== 'guest-1');
+  const retained = visible().find(({ sourceId }) => sourceId === 'guest-1')!;
+  expect(extras).toHaveLength(2);
+  const start = (await recvLines()).length;
+  const effect = { ...PRESET_EFFECT, fade: false, exitDirection: 'up' } as const;
+  expect(await r.setActiveLook(itemId, 'solo', effect)).toEqual({ ok: true });
+  const writes = (await recvLines()).slice(start);
+  const departureIndex = writes.findIndex((line) => line.includes('opacityArtwork'));
+  const commitAt = writes.indexOf('MIXER 1 COMMIT', departureIndex);
+  expect(departureIndex).toBeGreaterThan(0);
+  expect(commitAt).toBeGreaterThan(departureIndex);
+  const decoded = decodeCgData(parseAmcpLine(writes[departureIndex]!)!.args[3]!);
+  if (decoded.data === null) throw new Error('Cannot decode the departure artwork');
+  const phase = readCgControl(JSON.parse(decoded.data))?.frameTransition;
+  expect(phase?.opacityArtwork).toContainEqual({
+    key: DEPARTURE_ARTWORK,
+    lookId: 'duo',
+    fromOpacity: 1,
+    toOpacity: 0,
+  });
+  expect(phase?.frames.filter(({ from, to }) => to.y !== from.y)).toEqual(
+    ['duo-right', 'duo-mask'].map((frameKey) => ({
+      frameKey,
+      lookId: 'duo',
+      from: { x: 960, y: 270, width: 960, height: 540 },
+      to: { x: 960, y: -810, width: 960, height: 540 },
+      fromOpacity: 1,
+      toOpacity: 1,
+    })),
+  );
+  for (const { slot, fill, clip } of extras) {
+    const group = writes.slice(0, commitAt);
+    const target = 'MIXER 1-' + String(slot.layer);
+    const line = group.find((value) => value.startsWith(target + ' OPACITY 0 '));
+    const frames = line?.split(' ')[4];
+    expect(Number(frames)).toBeGreaterThan(0);
+    const args = ({ x, y, width, height }: typeof clip) =>
+      [x, y - 1, width, height].map((value) => Number(value.toFixed(6))).join(' ');
+    expect(group).toContain(target + ' FILL ' + args(fill) + ' ' + frames + ' linear DEFER');
+    expect(group).toContain(target + ' CLIP ' + args(clip) + ' ' + frames + ' linear DEFER');
+  }
+  expect(
+    writes.findIndex(
+      (line) =>
+        line.startsWith('MIXER 1-' + String(retained.slot.layer) + ' FILL ') &&
+        line.endsWith('easeinoutquad DEFER'),
+    ),
+  ).toBeGreaterThan(commitAt);
+  for (const { slot, sourceId, fill } of extras) {
+    const parked = parkedFit(fill);
+    expect(
+      r
+        .liveLayers()
+        .get(itemId)
+        ?.find((record) => record.sourceId === sourceId),
+    ).toMatchObject({ ...parked, held: true });
+    expect(mock!.layerState(slot)).toMatchObject({
+      ...parked,
+      fill: Object.fromEntries(
+        Object.entries(parked.fill).map(([key, value]) => [key, Number(value.toFixed(6))]),
+      ),
+      opacity: 1,
+    });
+  }
+  expect(await r.setActiveLook(itemId, 'duo', effect)).toEqual({ ok: true });
+  for (const { sourceId, clip, fill } of extras) {
+    expect(visible().find((record) => record.sourceId === sourceId)).toMatchObject({ clip, fill });
   }
 });
 

@@ -99,6 +99,20 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **THEN** the picture fades down and returns as its new placement settles
 - **AND** separate PVW and PGM switches use the same channel-frame budget for each visible phase
 
+#### Scenario: Choose how a plate leaves a preset
+
+- **WHEN** the preset effect uses a direction under Departing plates
+- **THEN** an eligible departing plate, mask and attached artwork slide toward that edge and fade together
+- **AND** when a native layer would cover a retained plate during its exit, the native group fades in place or is hidden under the existing overlap guard
+- **AND** Cut keeps its immediate switch behavior
+
+#### Scenario: Keep a retained input running across a different fit
+
+- **GIVEN** an animated preset switch keeps the same source in the same authored plate
+- **WHEN** the destination changes the plate's aspect ratio or input fit
+- **THEN** the native mixer animates to the destination fill and clip while the existing source keeps playing
+- **AND** the Bridge spends the scheduled start allowance once across the template artwork and the native mixer
+
 #### Scenario: The engine connection drops during a preset change
 
 - **WHEN** the same engine reconnects after an interrupted preset effect

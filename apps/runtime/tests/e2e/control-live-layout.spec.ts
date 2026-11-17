@@ -446,6 +446,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await editor.getByText('Layout effects', { exact: true }).click();
     await editor.getByRole('combobox', { name: 'Motion', exact: true }).selectOption('linear');
     await editor.getByLabel('Focus duration (ms)', { exact: true }).fill('1000');
+    const departingPlates = editor.getByRole('combobox', { name: 'Departing plates' });
+    await departingPlates.selectOption('up');
     await interview.click();
     const sharedShot = stage.locator('[data-layout-preview-shot][data-frame-number="1"]');
     await expect
@@ -459,6 +461,20 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
         ),
       )
       .toBe(true);
+    const departingShot = stage.locator('[data-layout-preview-shot][data-frame-number="3"]');
+    const departure = await departingShot.evaluate((node) => {
+      const effect = node.getAnimations()[0]?.effect;
+      if (!(effect instanceof KeyframeEffect)) throw new Error('Missing plate exit transition');
+      const keys = effect.getKeyframes();
+      return {
+        upward:
+          Number.parseFloat(String(keys.at(-1)?.['top'])) <
+          Number.parseFloat(String(keys[0]?.['top'])),
+        opacity: Number(keys.at(-1)?.['opacity']),
+      };
+    });
+    expect(departure).toEqual({ upward: true, opacity: 0 });
+    await departingPlates.selectOption('');
     await expect(sharedShot.locator('img')).toBeVisible();
     await threeUp.click();
     const soloEffect = editor
@@ -509,6 +525,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const authoredBorder = thirdShot.locator('.cg-live-layout-shot-border');
     await expect(authoredBorder).toHaveCSS('border-top-color', 'rgb(254, 195, 82)');
     await expect(authoredBorder).toHaveCSS('border-top-left-radius', /[1-9][0-9.]*px/);
+    await expect(thirdShot).toHaveCSS('outline-offset', '2px');
+    await expect(thirdShot).toHaveCSS('outline-style', 'solid');
+    const pictureClip = thirdShot.locator('.cg-live-layout-shot-source');
+    await expect(pictureClip).toHaveCSS('overflow', 'hidden');
+    await expect(pictureClip).toHaveCSS(
+      'border-top-left-radius',
+      await authoredBorder.evaluate((node) => getComputedStyle(node).borderTopLeftRadius),
+    );
     const pictureWindows = thirdShot.locator('.cg-live-layout-shot-picture');
     const windowRatios = (window: Locator) =>
       window.evaluate((node) => {
@@ -940,7 +964,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
 
     const presetEffect = inspector
       .getByRole('group', { name: 'Preset effect', exact: true })
-      .getByRole('combobox');
+      .getByRole('combobox', { name: 'Motion', exact: true });
     await expect(presetEffect.locator('option:checked')).toHaveText('Layout default (Linear)');
     await presetEffect.selectOption('cut');
     const presetStart = engine.receivedCommands().length;
@@ -1038,6 +1062,32 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect.poll(() => aspect(copiedPlate(1))).toBeCloseTo(16 / 9, 2);
     await expect.poll(() => imageOverflow(portraitImage)).toEqual([0, 0]);
     await copy.getByRole('button', { name: 'Three-up', exact: true }).click();
+    await expect.poll(() => aspect(copiedPlate(1))).toBeCloseTo(0.75, 2);
+    await copy.getByRole('button', { name: 'Studio solo', exact: true }).click();
+    const cropMotion = await copiedPlate(1).evaluate((shot) => {
+      const animation = shot.getAnimations()[0];
+      const image = shot.querySelector('img');
+      if (animation?.effect == null || image === null) throw new Error('Missing crop transition');
+      const duration = Number(animation.effect.getComputedTiming().duration);
+      animation.pause();
+      const sample = (time: number) => {
+        animation.currentTime = time;
+        const { width, height } = image.getBoundingClientRect();
+        return {
+          fit: Number(getComputedStyle(shot).getPropertyValue('--cg-shot-contain')),
+          aspect: width / height,
+        };
+      };
+      const samples = [sample(0), sample(duration / 2), sample(duration * 0.9)];
+      animation.cancel();
+      return samples;
+    });
+    expect(cropMotion[0]?.fit).toBe(0);
+    expect(cropMotion[1]?.fit).toBeGreaterThan(0);
+    expect(cropMotion[1]?.fit).toBeLessThan(1);
+    expect(cropMotion[2]?.fit).toBeGreaterThan(cropMotion[1]!.fit);
+    for (const { aspect: imageAspect } of cropMotion) expect(imageAspect).toBeCloseTo(16 / 9, 2);
+    await copy.getByRole('button', { name: 'Three-up', exact: true }).click();
     await noBackground(copy).click();
     await expect(noBackground(copy)).toHaveAttribute('aria-pressed', 'true');
     await expect(copy.getByText('panel.png', { exact: true })).toHaveCount(0);
@@ -1110,6 +1160,39 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       .first();
     await expect(transparentPicture).toBeVisible();
     await expect.poll(() => aspect(transparentPicture)).toBeCloseTo(0.75, 2);
+    const portraitFrameId = nextLayout.frames[2]!.id;
+    const portraitBorder = transparentFrame
+      .locator(`[data-cg-element-id="${portraitFrameId}-border"]`)
+      .filter({ visible: true });
+    await expect(portraitBorder).toBeVisible();
+    const borderEdges = await portraitBorder.evaluate((node) => {
+      if (!(node instanceof HTMLElement)) throw new Error('Expected an HTML plate border');
+      const { width, height } = node.getBoundingClientRect();
+      const x = width / node.offsetWidth;
+      const y = height / node.offsetHeight;
+      const style = getComputedStyle(node);
+      const [rx, ry = rx] = style.borderTopLeftRadius.split(' ').map(Number.parseFloat);
+      return {
+        left: Number.parseFloat(style.borderLeftWidth) * x,
+        right: Number.parseFloat(style.borderRightWidth) * x,
+        top: Number.parseFloat(style.borderTopWidth) * y,
+        radiusX: (rx ?? 0) * x,
+        radiusY: (ry ?? 0) * y,
+      };
+    });
+    expect(borderEdges.top).toBeGreaterThan(0);
+    expect(Math.abs(borderEdges.left - borderEdges.top)).toBeLessThan(0.5);
+    expect(Math.abs(borderEdges.right - borderEdges.top)).toBeLessThan(0.5);
+    expect(borderEdges.radiusY).toBeGreaterThan(0);
+    expect(Math.abs(borderEdges.radiusX - borderEdges.radiusY)).toBeLessThan(0.5);
+    const portraitClip = transparentFrame
+      .locator(`[data-cg-element-id="${portraitFrameId}-plate"]`)
+      .filter({ visible: true });
+    await expect(portraitClip).toHaveCSS('overflow', 'hidden');
+    await expect(portraitClip).toHaveCSS(
+      'border-top-left-radius',
+      await portraitBorder.evaluate((node) => getComputedStyle(node).borderTopLeftRadius),
+    );
     await expect(transparentFrame.locator('body')).toHaveCSS(
       'background-color',
       'rgba(0, 0, 0, 0)',

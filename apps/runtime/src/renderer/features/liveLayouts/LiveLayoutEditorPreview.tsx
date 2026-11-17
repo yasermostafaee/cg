@@ -14,6 +14,7 @@ import {
   largestLivePlateMaskRegion,
   livePlateMaskRegions,
   liveRevealSceneRect,
+  presetDepartureRect,
   type ControlLiveLayout,
   type ControlLiveLayoutFrame,
   type ControlLiveLayoutPreset,
@@ -49,6 +50,7 @@ interface View {
   focused: string | undefined;
   soloFrameId: string | undefined;
   rects: Rects;
+  fits: ReadonlyMap<string, number>;
 }
 
 const easings = {
@@ -74,6 +76,10 @@ function blendRect(from: LiveSourceRect, to: LiveSourceRect, amount: number): Li
     width: from.width + (to.width - from.width) * amount,
     height: from.height + (to.height - from.height) * amount,
   };
+}
+
+function fitWeight(input: ControlLiveLayoutFrame): number {
+  return (input.fitMode ?? DEFAULT_LIVE_FIT_MODE) === 'contain' ? 1 : 0;
 }
 
 function ShotInput({
@@ -125,6 +131,33 @@ function ShotInput({
     (source.width !== undefined && source.height !== undefined
       ? source.width / source.height
       : null);
+  const url = `data:image/jpeg;base64,${source.jpegBase64}`;
+  if (
+    mask === undefined &&
+    pictureBox === undefined &&
+    sourceAspect !== null &&
+    Number.isFinite(sourceAspect) &&
+    sourceAspect > 0
+  ) {
+    const active = source.geometry?.activeRect ?? { x: 0, y: 0, width: 1, height: 1 };
+    return (
+      <div
+        className="cg-live-layout-shot-picture"
+        data-fit-to-shot=""
+        style={
+          {
+            '--cg-shot-source-aspect': sourceAspect,
+            '--cg-shot-jpeg-width-factor': 1 / active.width,
+            '--cg-shot-jpeg-height-factor': 1 / active.height,
+            '--cg-shot-jpeg-x-factor': active.x / active.width,
+            '--cg-shot-jpeg-y-factor': active.y / active.height,
+          } as CSSProperties
+        }
+      >
+        <img src={url} alt="" />
+      </div>
+    );
+  }
   const { picture, visible } = fitPictureToBox(
     seat,
     sourceAspect,
@@ -132,7 +165,6 @@ function ShotInput({
   );
   const jpeg =
     source.geometry === undefined ? picture : fullJpegRect(picture, source.geometry.activeRect);
-  const url = `data:image/jpeg;base64,${source.jpegBase64}`;
   return (
     <>
       {windows.map((window, index) => {
@@ -239,6 +271,7 @@ function motionKeys(
   shownBefore: boolean,
   shownAfter: boolean,
   zIndex: string,
+  fit: { from: number; to: number },
 ): { keys: Keyframe[]; duration: number } {
   const steps = frameTransitionPhases(effect, Math.round((effect.durationMs * frameRate) / 1_000));
   const count = steps.reduce((total, step) => total + step.frames, 0);
@@ -248,6 +281,7 @@ function motionKeys(
       ...cssRect(from, raster),
       opacity: shownBefore ? 1 : 0,
       zIndex,
+      '--cg-shot-contain': String(fit.from),
       offset: 0,
     },
   ];
@@ -262,6 +296,7 @@ function motionKeys(
     if (!shownAfter) opacity *= 1 - time;
     keys.push({
       ...cssRect(blendRect(from, to, step.progress), raster),
+      '--cg-shot-contain': String(fit.from + (fit.to - fit.from) * step.progress),
       opacity,
       zIndex,
       offset: time,
@@ -321,20 +356,22 @@ export function LiveLayoutEditorPreview({
   // The editor has no programme target. Its retained DOM shots can reuse the
   // frame clock and focus effects without calling a play or preset command.
   useLayoutEffect(() => {
+    if (stage.current === null) return;
+    const shots = [...stage.current.querySelectorAll<HTMLElement>('[data-layout-preview-shot]')];
+    const fits = new Map<string, number>();
+    for (const shot of shots) {
+      const id = shot.dataset.layoutPreviewShot;
+      if (id !== undefined) fits.set(id, Number(shot.style.getPropertyValue('--cg-shot-contain')));
+    }
     const before = previous.current;
-    previous.current = { presetId: preset.id, focused, soloFrameId, rects: visible };
-    if (
-      stage.current === null ||
-      before === undefined ||
-      (before.focused === focused && before.presetId === preset.id)
-    )
+    previous.current = { presetId: preset.id, focused, soloFrameId, rects: visible, fits };
+    if (before === undefined || (before.focused === focused && before.presetId === preset.id))
       return;
 
     active.current.forEach((animation) => animation.cancel());
     active.current = [];
     // This is a rehearsal of the chosen broadcast effect, including on systems
     // where the operator has reduced the console's own interface animations.
-    const shots = [...stage.current.querySelectorAll<HTMLElement>('[data-layout-preview-shot]')];
     const { focus, switch: change } = layout.effects;
     const previousSingle = before.focused ?? before.soloFrameId;
     const switching =
@@ -353,7 +390,11 @@ export function LiveLayoutEditorPreview({
         const id = shot.dataset.layoutPreviewShot;
         if (id !== focused && id !== previousSingle) continue;
         const incoming = id === focused;
-        const box = { ...opacity, zIndex: incoming ? '3' : '2' };
+        const box = {
+          ...opacity,
+          zIndex: incoming ? '3' : '2',
+          '--cg-shot-contain': String((incoming ? fits.get(id) : before.fits.get(id)) ?? 1),
+        };
         const keys =
           change.mode === 'fade'
             ? [{ ...box, opacity: incoming ? 0 : 1 }, box]
@@ -392,11 +433,16 @@ export function LiveLayoutEditorPreview({
       const shownBefore = before.rects[id] !== undefined;
       const shownAfter = visible[id] !== undefined;
       const from = before.rects[id] ?? geometry[id] ?? collapsed;
-      const to = visible[id] ?? geometry[id] ?? collapsed;
+      const to =
+        !shownAfter && effect.exitDirection !== undefined
+          ? presetDepartureRect(from, effect.exitDirection, raster)
+          : (visible[id] ?? geometry[id] ?? collapsed);
       const shared = shownBefore && shownAfter;
       const activeFocus =
         focused === id || (before.focused === id && before.presetId === preset.id);
       const zIndex = activeFocus || shared ? '3' : shownAfter ? '2' : '1';
+      const previousFit = before.fits.get(id) ?? 1;
+      const nextFit = fits.get(id) ?? 1;
       const { keys, duration } = motionKeys(
         from,
         to,
@@ -406,6 +452,7 @@ export function LiveLayoutEditorPreview({
         shownBefore,
         shownAfter,
         zIndex,
+        { from: shownBefore ? previousFit : nextFit, to: shownAfter ? nextFit : previousFit },
       );
       if (keys.length > 0 && typeof shot.animate === 'function') {
         active.current.push(shot.animate(keys, { duration }));
@@ -483,20 +530,30 @@ export function LiveLayoutEditorPreview({
               data-preset-position={position || undefined}
               data-editing={activeShot && selectedFrameId === id ? '' : undefined}
               aria-hidden={!activeShot}
-              style={{
-                ...cssRect(rect, raster),
-                opacity: activeShot ? 1 : 0,
-                pointerEvents: activeShot ? 'auto' : 'none',
-                zIndex: focused === id ? '3' : '1',
-              }}
+              style={
+                {
+                  ...cssRect(rect, raster),
+                  opacity: activeShot ? 1 : 0,
+                  pointerEvents: activeShot ? 'auto' : 'none',
+                  zIndex: focused === id ? '3' : '1',
+                  '--cg-shot-contain': fitWeight(previewInput),
+                } as CSSProperties
+              }
             >
-              <ShotInput
-                source={preview}
-                input={previewInput}
-                frame={rect}
-                pictureBox={pictureBox}
-                fallback={`Plate ${number}`}
-              />
+              <div
+                className="cg-live-layout-shot-source"
+                style={{
+                  borderRadius: `${((input.border?.radius ?? 0) / raster.height) * 100}cqh`,
+                }}
+              >
+                <ShotInput
+                  source={preview}
+                  input={previewInput}
+                  frame={rect}
+                  pictureBox={pictureBox}
+                  fallback={`Plate ${number}`}
+                />
+              </div>
               {showMeters && activeShot && sourceId !== undefined && (
                 <InputAudioMeter
                   sourceId={sourceId}

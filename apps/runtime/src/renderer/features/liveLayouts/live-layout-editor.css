@@ -289,16 +289,25 @@
   overflow: hidden;
   outline: 1px solid var(--r-border-strong);
   outline-offset: -1px;
+  container-type: size;
 }
 
-.cg-live-layout-shot[data-editing]::after {
+@property --cg-shot-contain {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+.cg-live-layout-shot-source {
   position: absolute;
   inset: 0;
-  z-index: 1;
-  border: 2px solid var(--r-accent);
-  box-shadow: inset 0 0 0 1px var(--r-surface-sunken);
+  overflow: hidden;
   pointer-events: none;
-  content: '';
+}
+
+.cg-live-layout-shot[data-editing] {
+  outline: 2px solid var(--r-accent);
+  outline-offset: 2px;
 }
 
 .cg-live-layout-shot-picture,
@@ -313,6 +322,31 @@
   position: absolute;
   max-width: none;
   max-height: none;
+}
+
+/* Fit against the animated plate dimensions. Blend the two fits without changing source aspect. */
+.cg-live-layout-shot-picture[data-fit-to-shot] {
+  --cg-cover-width: max(100cqw, calc(100cqh * var(--cg-shot-source-aspect)));
+  --cg-contain-width: min(100cqw, calc(100cqh * var(--cg-shot-source-aspect)));
+  --cg-fit-weight: clamp(0, var(--cg-shot-contain), 1);
+  --cg-fit-width: calc(
+    var(--cg-cover-width) * (1 - var(--cg-fit-weight)) + var(--cg-contain-width) *
+      var(--cg-fit-weight)
+  );
+  --cg-fit-height: calc(var(--cg-fit-width) / var(--cg-shot-source-aspect));
+  --cg-fit-x: calc((100cqw - var(--cg-fit-width)) / 2);
+  --cg-fit-y: calc((100cqh - var(--cg-fit-height)) / 2);
+  left: max(0px, var(--cg-fit-x));
+  top: max(0px, var(--cg-fit-y));
+  width: min(100cqw, var(--cg-fit-width));
+  height: min(100cqh, var(--cg-fit-height));
+}
+
+.cg-live-layout-shot-picture[data-fit-to-shot] img {
+  left: calc(min(0px, var(--cg-fit-x)) - var(--cg-fit-width) * var(--cg-shot-jpeg-x-factor));
+  top: calc(min(0px, var(--cg-fit-y)) - var(--cg-fit-height) * var(--cg-shot-jpeg-y-factor));
+  width: calc(var(--cg-fit-width) * var(--cg-shot-jpeg-width-factor));
+  height: calc(var(--cg-fit-height) * var(--cg-shot-jpeg-height-factor));
 }
 
 .cg-live-layout-shot-placeholder {

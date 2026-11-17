@@ -89,3 +89,11 @@
 - [x] Verify an older Cut-only page and a page with an effect can update their resident frames on the active engine and settle verified reserve seats in place.
 - [x] Verify no placement is sent to an unmapped reserve or to an engine promoted while the active effect is in flight.
 - [x] Rerun the full Bridge live-seating integration suite and typecheck on Windows.
+
+## Portrait-to-landscape preset switches
+
+- [x] Share a phase start deadline between native pictures and the template artwork.
+- [x] Animate fill and clip of retained inputs when the destination fit changes.
+- [x] Support directional departure with fade and verify parked-seat geometry and rollback.
+- [ ] Capture a real PGM switch with the intended station engine to measure border and input alignment.
+- [ ] Verify native input corner clipping once the Playout engine exposes a supported per-plate radius.

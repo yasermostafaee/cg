@@ -8,6 +8,7 @@ import {
   inputSlideVector,
   frameTransitionPhases,
   frameTransitionProgress,
+  presetDepartureRect,
   presetTransitionDurations,
   readCgControl,
   withCgControl,
@@ -15,6 +16,31 @@ import {
 } from '../src/index.js';
 
 describe('live frame transitions', () => {
+  it('keeps legacy exit fade and translates explicit slide directions in scene pixels', () => {
+    const legacy = { motion: 'ease-in-out', fade: false, durationMs: 400 } as const;
+    expect(FrameTransitionSchema.parse(legacy)).toEqual(legacy);
+    const from = { x: 100, y: 200, width: 500, height: 400 };
+    const raster = { width: 1920, height: 1080 };
+    const positions = {
+      left: { x: -1820, y: 200 },
+      right: { x: 2020, y: 200 },
+      up: { x: 100, y: -880 },
+      down: { x: 100, y: 1280 },
+    };
+    for (const exitDirection of InputTransitionDirectionSchema.options) {
+      expect(FrameTransitionSchema.parse({ ...legacy, exitDirection }).exitDirection).toBe(
+        exitDirection,
+      );
+      expect(presetDepartureRect(from, exitDirection, raster)).toEqual({
+        ...from,
+        ...positions[exitDirection],
+      });
+    }
+    expect(FrameTransitionSchema.safeParse({ ...legacy, exitDirection: 'diagonal' }).success).toBe(
+      false,
+    );
+  });
+
   it('accepts only a dedicated authored Focus slide phase with forward progress', () => {
     const focusSlide: NonNullable<FrameTransitionPhase['focusSlide']> = {
       viewport: { x: 40, y: 20, width: 1840, height: 1040 },

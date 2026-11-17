@@ -66,7 +66,8 @@
   font-size: var(--r-text-sm);
 }
 
-.cg-live-layout-effect-method {
+.cg-live-layout-effect-method,
+.cg-live-layout-effect-fields > .cg-preset-departure-control {
   grid-column: 1 / -1;
 }
 

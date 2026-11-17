@@ -43,6 +43,7 @@ import { frameBox } from './rehearsalFrames.js';
 import { measureRehearsalBounds } from './rehearsalBounds.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import {
+  followPvwPresetPictures,
   paintPvwPlatePictures,
   paintPvwSourceTransition,
   type PvwInputEffect,
@@ -634,6 +635,7 @@ export function RehearsalFrame({
             effect,
             presetFramePeriodMs,
             controlLiveLayout === undefined && html.includes(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER),
+            liveSources.resolution,
           )
         : undefined;
     if (plan === undefined) {
@@ -649,6 +651,19 @@ export function RehearsalFrame({
     }
     inputEffect.current?.cancel();
     const restore = retainPresetArtwork(doc, plan);
+    const retainedFrames = new Set(plan.retained);
+    const retainedPlateIds = new Set(
+      Object.entries(previousLook?.transitionFrames ?? {})
+        .filter(([, { frameKey }]) => retainedFrames.has(frameKey))
+        .map(([plateId]) => plateId),
+    );
+    const stopFollowingPictures = followPvwPresetPictures(
+      doc,
+      current?.livePlates ?? [],
+      livePlatesRef.current,
+      sourceFramesRef.current,
+      retainedPlateIds,
+    );
     const cue: RehearsalPresetCue = { doc, lookId, payload, commit: push };
     let appliedPayload: string | undefined;
     const commit = (phase?: FrameTransitionPhase): void => {
@@ -658,6 +673,7 @@ export function RehearsalFrame({
     const phaseStep = (phase: FrameTransitionPhase) => () => sendFramePhase(update, phase);
     const entries = plan.exit.map(phaseStep);
     entries.push(() => {
+      stopFollowingPictures?.();
       restore();
       // Enter the new preset and hold its titles in the same page update.
       commit(plan.enter);
@@ -665,6 +681,7 @@ export function RehearsalFrame({
     });
     onTransitionChange?.(itemId, true);
     const cancel = runRehearsalEffect(entries, (commitTarget) => {
+      stopFollowingPictures?.();
       restore();
       if (commitTarget && appliedPayload !== cue.payload) commit();
       runningEffect.current = undefined;

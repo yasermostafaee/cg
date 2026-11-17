@@ -12,6 +12,7 @@ import {
 } from '@cg/shared-schema';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { Icon } from '../../ui/Icon.js';
+import { PresetDepartureControl } from '../inspector/FrameEffectControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import './live-layout-effects.css';
 
@@ -91,6 +92,12 @@ export function LiveLayoutEditorEffects({
               <Checkbox id={fadeId} checked={focus.fade} onChange={(fade) => setFocus({ fade })} />
               Fade
             </label>
+            {(focus.motion !== 'cut' || focus.fade) && (
+              <PresetDepartureControl
+                direction={focus.exitDirection}
+                onChange={(exitDirection) => setFocus({ exitDirection })}
+              />
+            )}
           </div>
         </fieldset>
         <fieldset className="cg-live-layout-effect-controls">

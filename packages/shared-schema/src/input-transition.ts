@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { FRAME_TRANSITION_MAX_MS, FRAME_TRANSITION_MIN_MS } from './frame-transition.js';
+import { ScreenDirectionSchema, screenDirectionVector } from './screen-direction.js';
 
-export const InputTransitionDirectionSchema = z.enum(['left', 'right', 'up', 'down']);
+export const InputTransitionDirectionSchema = ScreenDirectionSchema;
 
 export const InputTransitionSchema = z.object({
   mode: z.enum(['cut', 'fade', 'push', 'slide-over']),
@@ -28,10 +29,5 @@ export function isInputSlideMode(mode: InputTransition['mode']): mode is 'push' 
 export function inputSlideVector(
   direction = DEFAULT_INPUT_SLIDE_DIRECTION,
 ): Readonly<{ x: number; y: number }> {
-  return {
-    left: { x: -1, y: 0 },
-    right: { x: 1, y: 0 },
-    up: { x: 0, y: -1 },
-    down: { x: 0, y: 1 },
-  }[direction];
+  return screenDirectionVector(direction);
 }

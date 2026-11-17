@@ -12,6 +12,8 @@ import {
 } from '@cg/shared-schema';
 import type { RuntimeClock } from './types.js';
 
+export const PLATE_EDGES_MOTION_RATIO = '--cg-plate-edges-motion-ratio';
+
 interface FramePlacementRenderer {
   apply(placements: readonly LiveFramePlacement[], lookId: string | undefined): void;
   animate(phase: FrameTransitionPhase, lookId: string | undefined): void;
@@ -34,6 +36,11 @@ export function createFramePlacementRenderer(
     Array.from(
       container.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]'),
       (wrapper) => [wrapper.dataset['cgFrameArtwork'], wrapper] as const,
+    ),
+  );
+  const plateEdgeWrappers = new Set(
+    [...wrappers.values()].filter(
+      (wrapper) => wrapper.querySelector('[data-cg-layout-plate-edges]') !== null,
     ),
   );
   const groupWrappers = new Map(
@@ -73,6 +80,9 @@ export function createFramePlacementRenderer(
   function paint(wrapper: HTMLElement, matrix: Affine): void {
     wrapper.style.position = 'absolute';
     wrapper.style.transform = `matrix(${[matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].join(',')})`;
+    if (plateEdgeWrappers.has(wrapper) && matrix.a !== 0) {
+      wrapper.style.setProperty(PLATE_EDGES_MOTION_RATIO, String(Math.abs(matrix.d / matrix.a)));
+    }
   }
 
   let animation: { handle?: number } | undefined;
@@ -90,6 +100,8 @@ export function createFramePlacementRenderer(
         wrapper.style.transform = '';
         wrapper.style.opacity = '';
       }
+      for (const wrapper of plateEdgeWrappers)
+        wrapper.style.removeProperty(PLATE_EDGES_MOTION_RATIO);
       for (const wrapper of groupWrappers.values()) wrapper.style.opacity = '';
       for (const placement of placements) {
         if (placement.lookId !== lookId) continue;

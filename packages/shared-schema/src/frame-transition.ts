@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { LiveFramePlacementSchema } from './frame-placement.js';
+import type { LiveSourceRect } from './live-source.js';
+import {
+  ScreenDirectionSchema,
+  screenDirectionVector,
+  type ScreenDirection,
+} from './screen-direction.js';
 
 export const FRAME_TRANSITION_MIN_MS = 100;
 export const FRAME_TRANSITION_MAX_MS = 1_000;
@@ -9,8 +15,20 @@ export const FrameTransitionSchema = z.object({
   motion: z.enum(['cut', 'linear', 'ease-in', 'ease-out', 'ease-in-out', 'bounce', 'elastic']),
   fade: z.boolean(),
   durationMs: z.number().int().min(FRAME_TRANSITION_MIN_MS).max(FRAME_TRANSITION_MAX_MS),
+  /** A departing plate can slide while it fades. Omission leaves its position unchanged. */
+  exitDirection: ScreenDirectionSchema.optional(),
 });
 export type FrameTransition = z.infer<typeof FrameTransitionSchema>;
+
+/** Move matching picture and artwork geometry by one output width or height. */
+export function presetDepartureRect(
+  from: LiveSourceRect,
+  direction: ScreenDirection,
+  raster: Pick<LiveSourceRect, 'width' | 'height'>,
+): LiveSourceRect {
+  const { x, y } = screenDirectionVector(direction);
+  return { ...from, x: from.x + x * raster.width, y: from.y + y * raster.height };
+}
 
 /** The authored plate and artwork retained between two preset instances. */
 export const PresetTransitionFrameSchema = z.object({

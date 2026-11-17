@@ -6,6 +6,7 @@ import {
   type LiveFramePlacement,
 } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
+import { PLATE_EDGES_MOTION_RATIO } from '../src/frame-placement.js';
 import { buildThumbnailScene } from '../src/thumbnail-scene.js';
 import { lowerThirdScene } from './fixtures.js';
 
@@ -158,6 +159,91 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     scene.bindings = [];
     return scene;
   };
+
+  it('updates New live layout edge compensation through a plate resize', async () => {
+    const scene = movableFrameScene();
+    const child = scene.compositions?.[0];
+    const layer = child?.layers[0];
+    const plate = layer?.children[0];
+    const box = scene.layers[0]?.children[0];
+    if (
+      child === undefined ||
+      layer === undefined ||
+      plate?.type !== 'video-placeholder' ||
+      box?.type !== 'composition'
+    ) {
+      throw new Error('Missing plate fixture');
+    }
+    const { width, height } = scene.resolution;
+    child.id = box.compositionId = 'layout-frame-guest';
+    box.transform.size = { w: width / 4, h: height / 2 };
+    plate.id = 'guest-plate';
+    plate.operatorPlacement = 'free';
+    plate.transform = {
+      ...box.transform,
+      size: { w: width, h: height },
+    };
+    layer.children.push({
+      ...plate,
+      id: 'guest-border',
+      type: 'shape',
+      shape: 'rect',
+      stroke: { color: '#ffffff', width: 12 },
+      cornerRadius: 36,
+      liveForeground: true,
+    });
+    scene.controlLiveLayout = {
+      id: scene.id,
+      name: scene.name,
+      resolution: scene.resolution,
+      frameRate: scene.frameRate,
+      frames: [
+        { id: 'guest', title: 'Guest', border: { color: '#ffffff', width: 12, radius: 36 } },
+      ],
+      presets: [
+        {
+          id: 'default',
+          name: 'Default',
+          frameIds: ['guest'],
+          arrangement: 'side-by-side',
+          horizontalGap: 0,
+          verticalGap: 0,
+          reverse: false,
+          hiddenTitles: [],
+          hiddenFocusTitles: [],
+        },
+      ],
+      defaultPresetId: 'default',
+      background: { kind: 'color', color: '#000000' },
+      effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+    };
+    const runtime = createRuntime(scene, { skipFontLoad: true, installGlobals: false });
+    const wrap = document.querySelector<HTMLElement>('[data-cg-frame-artwork="box"]');
+    const border = wrap?.querySelector<HTMLElement>('[data-cg-element-id="guest-border"]');
+    const picture = wrap?.querySelector<HTMLElement>('[data-cg-live-source="guest"]');
+    if (wrap == null || border == null || picture == null) throw new Error('Missing plate DOM');
+    expect(border.hasAttribute('data-cg-layout-plate-edges')).toBe(true);
+    expect(border.style.borderTopWidth).toBe('12px');
+    expect(picture.hasAttribute('data-cg-layout-plate-edges')).toBe(true);
+    expect(picture.style.overflow).toBe('hidden');
+
+    await runtime.update(
+      withCgControl(
+        {},
+        {
+          framePlacements: [
+            {
+              frameKey: 'box/guest-plate',
+              rect: { x: 0, y: 0, width: width / 2, height: height / 2 },
+            },
+          ],
+        },
+      ),
+    );
+    expect(wrap.style.getPropertyValue(PLATE_EDGES_MOTION_RATIO)).toBe('0.5');
+    await runtime.update(withCgControl({}, { framePlacements: [] }));
+    expect(wrap.style.getPropertyValue(PLATE_EDGES_MOTION_RATIO)).toBe('');
+  });
 
   it('moves a move-only frame and its bound title as one artwork without resizing either', async () => {
     const scene = movableFrameScene();

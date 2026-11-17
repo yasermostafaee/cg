@@ -33,8 +33,11 @@ The configured duration is converted to display frames and divided between the a
 exit, motion and entrance stages. PVW uses that same frame budget and only reserves a move
 stage when a shared frame actually moves or fades. Selected Fade dips the retained picture
 during that stage. A short dissolve requires at least two output frames.
-An outgoing group fades as a unit while the retained frame holds. If the existing native layer
-order would obscure a retained frame, the overlapping group is hidden before the shared motion.
+An outgoing group fades as a unit while the retained frame holds. The operator can add motion
+toward any screen edge. The mixed input, any mask fragments, and its artwork receive the same
+translation. A higher native seat that would cross a retained frame falls back to Fade in place.
+If the existing native layer order would already obscure a retained frame, the overlapping
+group is hidden before the shared motion.
 The switch parks departing seats with their normal opacity and then fades in the arriving group
 at its destination. An unsafe or unverifiable change continues to use the existing guarded
 preset path. A refused effect restores applied geometry and opacity while the row still owns
@@ -47,6 +50,12 @@ and unrelated text stay visible. The title hold goes into the first destination 
 it covers both sides of a switch. Release on both passes follows native mixer settlement;
 the destination's authored visibility takes effect. Older exported pages are rebuilt from
 their saved design by the template import/rebuild path.
+
+Each delayed phase uses a monotonic start deadline after staging the native mixer batch.
+Before sending a page update, the Bridge measures the remaining delay. It commits the staged
+mixer commands after the same delay has elapsed. Shared native seats animate changes to their
+source fill and clip even when the plate box itself stays fixed. PVW follows the moving plate
+box and preserves the pictured source's aspect on both sides of a regular, unmasked switch.
 
 On a connection loss, the Bridge reserves any seats the arrival actually started. On recovery it
 mutes and hides those seats before the shared mixer buffer is committed, clears them, and

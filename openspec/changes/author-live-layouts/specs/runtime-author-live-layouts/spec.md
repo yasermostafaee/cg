@@ -43,6 +43,9 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 
 - **WHEN** the operator opens Advanced plate controls and enters border color, width and radius
 - **THEN** the outline is drawn inside the plate and follows it across preview, presets and Focus
+- **AND** the authored stroke remains equally thick on every side of a landscape or portrait plate
+- **AND** the editor draws its selection outline outside the authored stroke
+- **AND** the editor and PVW clip the input picture to the configured corner radius
 - **AND** a zero-width border is hidden
 - **AND** the border is saved in the VCG without changing the input crop or mask
 
@@ -53,6 +56,7 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **AND** each plate can override the preset ratio and input fit
 - **AND** a separate single-plate preset can show the same input at 16:9 with Fit whole picture
 - **AND** the editor, PVW and Programme use the saved preset framing
+- **AND** during editor motion the framing changes continuously with the plate while the input keeps its aspect ratio
 
 #### Scenario: See the current editing selection
 

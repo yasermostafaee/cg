@@ -85,6 +85,97 @@ const pendingInputPicture = new WeakMap<HTMLElement, { sourceId: string }>();
 type Picture = NonNullable<ReturnType<typeof pictureFor>>;
 const paintedPictures = new WeakMap<HTMLElement, { picture: Picture; plate: PlatePlacement }>();
 
+/** Keep the source pixels proportional while the template moves their containing plate. */
+export function followPvwPresetPictures(
+  doc: Document,
+  before: readonly PlatePlacement[],
+  after: readonly PlatePlacement[],
+  frames: ReadonlyMap<string, PvwSourceFrame>,
+  retained: ReadonlySet<string>,
+): (() => void) | undefined {
+  const view = doc.defaultView;
+  const previous = new Map(before.map((plate) => [plate.plateId, plate]));
+  const next = new Map(after.map((plate) => [plate.plateId, plate]));
+  const reveals = new Set(
+    [...before, ...after].flatMap(({ reveal }) => (reveal ? [reveal.targetSourceId] : [])),
+  );
+  const axes = ['x', 'y', 'width', 'height'] as const;
+  const moving = Array.from(
+    doc.querySelectorAll<HTMLElement>('[data-cg-pvw-picture-kind="own"]'),
+  ).flatMap((part) => {
+    const node = part.parentElement;
+    const image = part.querySelector('img');
+    const id = node?.dataset['cgLiveSource'];
+    if (node === null || image === null || id === undefined || !retained.has(id) || reveals.has(id))
+      return [];
+    const from = previous.get(id);
+    const to = next.get(id);
+    if (
+      from === undefined ||
+      to === undefined ||
+      from.mask !== undefined ||
+      to.mask !== undefined ||
+      from.reveal !== undefined ||
+      to.reveal !== undefined ||
+      from.sourceId !== to.sourceId ||
+      part.dataset['sourceId'] !== from.sourceId ||
+      !sameBox(node, from)
+    )
+      return [];
+    const first = pictureFor(from, frames);
+    const last = pictureFor(to, frames);
+    if (first === undefined || last === undefined) return [];
+    const axis = axes.reduce((most, key) =>
+      Math.abs(to[key] - from[key]) > Math.abs(to[most] - from[most]) ? key : most,
+    );
+    const distance = to[axis] - from[axis];
+    if (Math.abs(distance) < 1) return [];
+    return [
+      {
+        node,
+        part,
+        image,
+        first,
+        last,
+        axis,
+        from,
+        distance,
+        partStyle: part.style.cssText,
+        imageStyle: image.style.cssText,
+      },
+    ];
+  });
+  if (view === null || moving.length === 0) return undefined;
+
+  let request: number;
+  const paint = () => {
+    const samples = moving.map((item) => ({ ...item, box: item.node.getBoundingClientRect() }));
+    for (const { part, image, first, last, axis, from, distance, box } of samples) {
+      if (box.width <= 0 || box.height <= 0) continue;
+      const progress = Math.max(0, Math.min(1, (box[axis] - from[axis]) / distance));
+      const interpolate = (start: FitRect, end: FitRect): FitRect => ({
+        x: start.x + (end.x - start.x) * progress,
+        y: start.y + (end.y - start.y) * progress,
+        width: start.width + (end.width - start.width) * progress,
+        height: start.height + (end.height - start.height) * progress,
+      });
+      const visible = intersectNormalizedRects(interpolate(first.picture, last.picture), box);
+      if (visible === null) continue;
+      placeWithin(part, visible, box);
+      placeWithin(image, interpolate(first.jpeg, last.jpeg), visible);
+    }
+    request = view.requestAnimationFrame(paint);
+  };
+  request = view.requestAnimationFrame(paint);
+  return () => {
+    view.cancelAnimationFrame(request);
+    for (const { part, image, partStyle, imageStyle } of moving) {
+      part.style.cssText = partStyle;
+      image.style.cssText = imageStyle;
+    }
+  };
+}
+
 export interface PvwInputEffect {
   cancel(): void;
   refresh?(plates: readonly PlatePlacement[], frames: ReadonlyMap<string, PvwSourceFrame>): void;
