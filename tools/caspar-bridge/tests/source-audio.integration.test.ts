@@ -102,8 +102,8 @@ describe('passive source audio via the Playout catalogue', () => {
     expect(modern).toEqual({
       payload: {
         readings: [
-          { sourceId: LIVE, state: 'measured', dbFs: [-22, -24], validForMs: 300 },
-          { sourceId: PLAYLIST, state: 'measured', dbFs: SURROUND, validForMs: 300 },
+          { sourceId: LIVE, engine: 'A', state: 'measured', dbFs: [-22, -24], validForMs: 300 },
+          { sourceId: PLAYLIST, engine: 'A', state: 'measured', dbFs: SURROUND, validForMs: 300 },
         ],
       },
     });
@@ -116,13 +116,19 @@ describe('passive source audio via the Playout catalogue', () => {
     ]);
     expect((await read(1, [PLAYLIST])).payload).toEqual({
       readings: [
-        { sourceId: PLAYLIST, state: 'measured', dbFs: SURROUND.slice(0, 16), validForMs: 300 },
+        {
+          sourceId: PLAYLIST,
+          engine: 'A',
+          state: 'measured',
+          dbFs: SURROUND.slice(0, 16),
+          validForMs: 300,
+        },
       ],
     });
 
     sampleAgeMs = 650;
     expect((await read(1, [LIVE])).payload).toEqual({
-      readings: [{ sourceId: LIVE, state: 'has-audio' }],
+      readings: [{ sourceId: LIVE, engine: 'A', state: 'has-audio' }],
     });
     programmeCode = 'other-channel';
     expect((await read(1, [LIVE])).payload).toEqual({ readings: [] });
@@ -137,6 +143,7 @@ describe('passive source audio via the Playout catalogue', () => {
     expect(batched.payload).toEqual({
       readings: moreInputs.map((entry) => ({
         sourceId: inputSourceId(entry.id),
+        engine: 'A',
         state: 'unknown',
       })),
     });

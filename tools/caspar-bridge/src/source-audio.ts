@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { createHash } from 'node:crypto';
 import {
   MAX_SOURCE_AUDIO_CHANNELS,
   type ChannelRequest,
@@ -151,14 +152,7 @@ export class SourceAudioService {
       const stillCurrent = (): boolean =>
         !controller.signal.aborted && sameTarget(target, this.targetFor(owner, channel));
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4500)]);
-      const result = this.#read(
-        target,
-        tokenId,
-        route,
-        [...sources.values()],
-        signal,
-        stillCurrent,
-      );
+      const result = this.#read(target, route, [...sources.values()], signal, stillCurrent);
       poll = { target, demand, controller, result };
       this.#polls.set(owner, poll);
       const started = poll;
@@ -213,14 +207,15 @@ export class SourceAudioService {
 
   async #read(
     target: Target,
-    tokenId: string,
     route: string,
     sources: Selector[],
     signal: AbortSignal,
     stillCurrent: () => boolean,
   ): Promise<Map<string, Sample>> {
     const samples = new Map<string, Sample>();
-    const token = JSON.stringify([target.origin, tokenId]);
+    const token = createHash('sha256')
+      .update(JSON.stringify([target.origin, target.bearer]))
+      .digest('hex');
     if (this.#activeTokens.has(token)) return samples;
     this.#activeTokens.add(token);
     try {

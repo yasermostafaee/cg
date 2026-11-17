@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { MEDIA_THUMBNAIL_DATA_URL_PREFIX } from '@cg/shared-ipc';
 import { useModalForeground } from '../../ui/modalForeground.js';
+import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 
 const MAX_CACHED_POSTERS = 64;
 const MAX_POSTER_ATTEMPTS = 3;
 const POSTER_RETRY_DELAY_MS = 1_000;
 
-export type MediaThumbnailLoader = (id: string) => Promise<string | null>;
+export type MediaThumbnailLoader = ((id: string) => Promise<string | null>) & {
+  origin?: (id: string) => PreviewEngine | undefined;
+};
 
 /** Reuse poster reads for visible media cards while this picker is open. */
-export function createMediaThumbnailLoader(): MediaThumbnailLoader {
+export function createMediaThumbnailLoader(channel?: number): MediaThumbnailLoader {
   const cache = new Map<string, Promise<string | null>>();
-  return (id) => {
+  const origins = new Map<string, PreviewEngine>();
+  const load: MediaThumbnailLoader = (id) => {
     const cached = cache.get(id);
     if (cached !== undefined) {
       cache.delete(id);
@@ -19,14 +23,24 @@ export function createMediaThumbnailLoader(): MediaThumbnailLoader {
       return cached;
     }
     const first = cache.keys().next().value;
-    if (cache.size >= MAX_CACHED_POSTERS && first !== undefined) cache.delete(first);
+    if (cache.size >= MAX_CACHED_POSTERS && first !== undefined) {
+      cache.delete(first);
+      origins.delete(first);
+    }
     const request = Promise.resolve()
-      .then(() => window.cg.sources.mediaThumbnail({ id }))
+      .then(() =>
+        window.cg.sources.mediaThumbnail({ id, ...(channel === undefined ? {} : { channel }) }),
+      )
       .then(
-        (result) =>
-          result.ok && result.dataUrl?.startsWith(MEDIA_THUMBNAIL_DATA_URL_PREFIX) === true
-            ? result.dataUrl
-            : null,
+        (result) => {
+          if (result.ok && result.dataUrl?.startsWith(MEDIA_THUMBNAIL_DATA_URL_PREFIX) === true) {
+            if (result.engine === undefined) origins.delete(id);
+            else origins.set(id, result.engine);
+            return result.dataUrl;
+          }
+          origins.delete(id);
+          return null;
+        },
         () => null,
       )
       .then((poster) => {
@@ -36,19 +50,29 @@ export function createMediaThumbnailLoader(): MediaThumbnailLoader {
     cache.set(id, request);
     return request;
   };
+  load.origin = (id) => origins.get(id);
+  return load;
 }
 
 export function MediaThumbnail({
   id,
   load,
+  onPreviewEngineChange,
 }: {
   id: string | undefined;
   load: MediaThumbnailLoader;
+  onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
   const foreground = useModalForeground();
   const tile = useRef<HTMLSpanElement>(null);
   const [picture, setPicture] = useState<{ id: string; src: string | null }>();
   const poster = picture?.id === id ? (picture?.src ?? null) : null;
+  const [decoded, setDecoded] = useState<{ id: string; engine?: PreviewEngine }>();
+
+  useEffect(() => {
+    if (poster === null) setDecoded(undefined);
+    onPreviewEngineChange?.(poster !== null && decoded?.id === id ? decoded?.engine : undefined);
+  }, [poster, decoded, id, onPreviewEngineChange]);
 
   useEffect(() => {
     const element = tile.current;
@@ -99,7 +123,17 @@ export function MediaThumbnail({
       {poster === null ? (
         'No poster'
       ) : (
-        <img src={poster} alt="" onError={() => setPicture(undefined)} />
+        <img
+          src={poster}
+          alt=""
+          onLoad={() => {
+            if (id !== undefined) {
+              const engine = load.origin?.(id);
+              setDecoded({ id, ...(engine === undefined ? {} : { engine }) });
+            }
+          }}
+          onError={() => setPicture(undefined)}
+        />
       )}
     </span>
   );

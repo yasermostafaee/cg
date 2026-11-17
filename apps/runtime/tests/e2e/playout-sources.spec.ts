@@ -25,6 +25,51 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 test.use({ playoutSources: E2E_PLAYOUT });
 
+test('a received B picture emphasizes its existing B badge while A remains unavailable', async ({
+  app,
+}) => {
+  const page = app.page;
+  const defaults = await openDefaults(app);
+  await page.evaluate((jpegBase64) => {
+    const capabilities = window.cg.auth.capabilities();
+    if (capabilities === null) throw new Error('Expected station capabilities');
+    window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+    window.cg.link.status = () => 'live';
+    window.cg.sources.presence = async ({ sourceIds }) => ({
+      engines: ['A', 'B'],
+      sources: Object.fromEntries(sourceIds.map((id) => [id, { A: 'missing', B: 'present' }])),
+    });
+    window.cg.sourcePreviews.thumbnails = async ({ sourceIds }) => ({
+      frames: sourceIds.map((sourceId) => ({
+        sourceId,
+        engine: 'B',
+        signal: 'present',
+        jpegBase64,
+        width: 64,
+        height: 64,
+      })),
+    });
+  }, FRAME_B.toString('base64'));
+  await defaults.locator('[data-defaults-select="l-1"]').click();
+  const row = picker(page).locator('.cg-vlist-action-row', {
+    has: page.locator('[data-picker-input="in-studio-1"]'),
+  });
+  await expect(row.locator('img')).toBeVisible();
+  const a = row.locator('[data-source-presence-server="A"]');
+  const b = row.locator('[data-source-presence-server="B"]');
+  await expect(a).toHaveAttribute('data-source-presence-state', 'missing');
+  await expect(a).not.toHaveAttribute('data-source-preview-provider', '');
+  await expect(b).toHaveAttribute('data-source-preview-provider', '');
+  await expect(b).toHaveAttribute('title', 'Server B: available. Preview from server B');
+  expect(await b.evaluate((element) => getComputedStyle(element).borderTopColor)).toBe(
+    await b.evaluate((element) => getComputedStyle(element).color),
+  );
+  expect(
+    await row.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth),
+  ).toBe(64);
+  await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+});
+
 const TPL = 'tpl-e2e-picker';
 
 /** Two plates, one look placing both — the shape Plate inputs exists for. */

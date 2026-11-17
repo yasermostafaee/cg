@@ -15,6 +15,7 @@ import { createMediaThumbnailLoader, type MediaThumbnailLoader } from './MediaTh
 import { formatMediaDuration } from './SourceLabel.js';
 import { subscribeMediaPreviewFrame } from './inputThumbnailDemand.js';
 import './source-media-preview.css';
+import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 
 interface SourceMediaPreviewProps {
   id: string;
@@ -24,6 +25,7 @@ interface SourceMediaPreviewProps {
   poster?: string | undefined;
   loadThumbnail?: MediaThumbnailLoader;
   inline?: boolean;
+  onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }
 
 interface PreviewRequest {
@@ -33,7 +35,7 @@ interface PreviewRequest {
 }
 
 export function SourceMediaPreview(props: SourceMediaPreviewProps): JSX.Element {
-  const { mediaOpen, mediaClose } = window.cg.sourcePreviews;
+  const { mediaOpen, mediaClose } = window.cg.sourcePreviews ?? {};
   if (mediaOpen === undefined || mediaClose === undefined || props.channel === undefined) {
     return <SampledSourceMediaPreview {...props} />;
   }
@@ -67,7 +69,17 @@ function matchesReadyPreview(
 }
 
 function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element {
-  const { id, name, channel, durationMs, poster, inline = false, mediaOpen, mediaClose } = props;
+  const {
+    id,
+    name,
+    channel,
+    durationMs,
+    poster,
+    inline = false,
+    mediaOpen,
+    mediaClose,
+    onPreviewEngineChange,
+  } = props;
   const foreground = useModalForeground();
   const video = useRef<HTMLVideoElement>(null);
   const playbackButton = useRef<HTMLButtonElement>(null);
@@ -82,6 +94,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const currentIntent = useRef(intent);
   const [muted, setMuted] = useState(true);
   const [videoVisible, setVideoVisible] = useState(false);
+  const [videoOrigin, setVideoOrigin] = useState<PreviewEngine>();
+  const [posterOrigin, setPosterOrigin] = useState<PreviewEngine>();
   const [buffering, setBuffering] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const refresh = useRef<(() => void) | null>(null);
@@ -251,14 +265,24 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     release.current?.();
   };
 
-  if (preview?.state === 'unsupported') return <SampledSourceMediaPreview {...props} />;
-
   const posterUrl = preview?.posterUrl ?? poster;
   const showVideo =
     videoVisible &&
     intent !== 'stopped' &&
     preview?.state === 'ready' &&
     preview.videoUrl !== undefined;
+  const displayedEngine = showVideo
+    ? videoOrigin
+    : posterUrl === undefined
+      ? undefined
+      : posterOrigin;
+  useEffect(() => {
+    if (posterUrl === undefined) setPosterOrigin(undefined);
+    if (!showVideo) setVideoOrigin(undefined);
+    if (preview?.state !== 'unsupported') onPreviewEngineChange?.(displayedEngine);
+  }, [displayedEngine, onPreviewEngineChange, preview?.state, posterUrl, showVideo]);
+
+  if (preview?.state === 'unsupported') return <SampledSourceMediaPreview {...props} />;
   let message = '';
   if (intent !== 'stopped') {
     if (playerError !== null) message = playerError;
@@ -268,10 +292,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       message = preview.message ?? 'Preview unavailable';
     } else if (buffering) message = 'Loading…';
   }
-  const origin =
-    preview?.engine === undefined
-      ? null
-      : `Server ${preview.engine}${preview.host === undefined ? '' : ` · ${preview.host}`}`;
+  const origin = displayedEngine === undefined ? null : `Server ${displayedEngine}`;
 
   return (
     <section
@@ -299,6 +320,10 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             preload="metadata"
             playsInline
             hidden={!showVideo}
+            onLoadedData={(event) => {
+              if (matchesReadyPreview(event.currentTarget, currentPreview.current))
+                setVideoOrigin(currentPreview.current?.engine);
+            }}
             onLoadedMetadata={(event) => {
               const player = event.currentTarget;
               if (Number.isFinite(player.duration) && player.duration > 0) {
@@ -320,7 +345,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
               setBuffering(false);
             }}
             onWaiting={() => setBuffering(true)}
-            onPlaying={() => setBuffering(false)}
+            onEmptied={() => setVideoOrigin(undefined)}
+            onPlaying={(event) => {
+              setBuffering(false);
+              if (matchesReadyPreview(event.currentTarget, currentPreview.current))
+                setVideoOrigin(currentPreview.current?.engine);
+            }}
             onTimeUpdate={(event) => {
               position.current = Math.round(event.currentTarget.currentTime * 1_000);
               setPositionMs(position.current);
@@ -338,6 +368,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
                 !matchesReadyPreview(event.currentTarget, currentPreview.current)
               )
                 return;
+              setVideoOrigin(undefined);
               release.current?.();
               setPlayerError('Preview cannot play in this browser.');
               currentIntent.current = 'paused';
@@ -348,11 +379,19 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
         {posterUrl === undefined ? (
           <span hidden={showVideo}>No picture</span>
         ) : (
-          <img src={posterUrl} alt="" hidden={showVideo} />
+          <img
+            src={posterUrl}
+            alt=""
+            hidden={showVideo}
+            onLoad={() =>
+              setPosterOrigin(posterUrl === preview?.posterUrl ? preview?.engine : undefined)
+            }
+            onError={() => setPosterOrigin(undefined)}
+          />
         )}
         {inline && origin !== null && (
           <span className="cg-source-media-preview__origin" title={origin}>
-            {preview?.engine}
+            {displayedEngine}
           </span>
         )}
       </div>
@@ -421,12 +460,16 @@ function SampledSourceMediaPreview({
   poster,
   loadThumbnail,
   inline = false,
+  onPreviewEngineChange,
 }: SourceMediaPreviewProps): JSX.Element {
   const foreground = useModalForeground();
   const end = Math.min(Math.ceil(durationMs ?? 0) - 1, MAX_MEDIA_PREVIEW_POSITION_MS);
   const enabled = channel !== undefined && end > 0;
   const autoPlay = inline && enabled;
-  const loadPoster = useMemo(() => loadThumbnail ?? createMediaThumbnailLoader(), [loadThumbnail]);
+  const loadPoster = useMemo(
+    () => loadThumbnail ?? createMediaThumbnailLoader(channel),
+    [loadThumbnail, channel],
+  );
   const [loadedPoster, setLoadedPoster] = useState<string | null>(null);
   const [positionMs, setPositionMs] = useState(0);
   const position = useRef(positionMs);
@@ -435,11 +478,17 @@ function SampledSourceMediaPreview({
     autoPlay ? { positionMs: 0, startedAt: performance.now() } : null,
   );
   const [picture, setPicture] = useState<string | null>(null);
+  const [pictureOrigin, setPictureOrigin] = useState<PreviewEngine>();
+  const [decodedOrigin, setDecodedOrigin] = useState<PreviewEngine>();
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>(
     autoPlay ? 'loading' : 'idle',
   );
   const playing = request !== null && request.startedAt !== null;
   const src = picture ?? poster ?? loadedPoster;
+  useEffect(() => {
+    if (src === null) setDecodedOrigin(undefined);
+    onPreviewEngineChange?.(src === null ? undefined : decodedOrigin);
+  }, [src, decodedOrigin, onPreviewEngineChange]);
   const playbackButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (inline) playbackButton.current?.focus();
@@ -476,6 +525,7 @@ function SampledSourceMediaPreview({
         }
         misses = 0;
         setPicture(MEDIA_THUMBNAIL_DATA_URL_PREFIX + frame.jpegBase64);
+        setPictureOrigin(frame.engine);
         setStatus('ready');
         if (startedAt === null) setRequest(null);
       },
@@ -525,7 +575,20 @@ function SampledSourceMediaPreview({
         {src === null ? (
           <span>{status === 'loading' ? 'Loading frame…' : 'No picture'}</span>
         ) : (
-          <img src={src} alt="" />
+          <img
+            src={src}
+            alt=""
+            onLoad={() =>
+              setDecodedOrigin(
+                picture === null
+                  ? poster === undefined
+                    ? loadPoster.origin?.(id)
+                    : undefined
+                  : pictureOrigin,
+              )
+            }
+            onError={() => setDecodedOrigin(undefined)}
+          />
         )}
       </div>
       {enabled && (

@@ -19,6 +19,8 @@ const geometry = z.object({
 const frame = z
   .object({
     sourceId,
+    /** The independently authenticated node which delivered this frame. */
+    engine: z.enum(['A', 'B']).optional(),
     signal: z.enum(['present', 'absent', 'unknown']),
     jpegBase64: z.string().max(174764).optional(),
     width: z.number().int().min(1).max(640).optional(),
@@ -66,9 +68,14 @@ export const MAX_SOURCE_AUDIO_BATCH = 32;
 export const MAX_SOURCE_AUDIO_CHANNELS = 32;
 
 const sourceAudioReading = z.discriminatedUnion('state', [
-  z.object({ sourceId, state: z.enum(['unknown', 'has-audio', 'no-audio']) }),
   z.object({
     sourceId,
+    engine: z.enum(['A', 'B']).optional(),
+    state: z.enum(['unknown', 'has-audio', 'no-audio']),
+  }),
+  z.object({
+    sourceId,
+    engine: z.enum(['A', 'B']).optional(),
     state: z.literal('measured'),
     dbFs: z.array(z.number().finite()).min(1).max(MAX_SOURCE_AUDIO_CHANNELS),
     validForMs: z.number().positive().max(300),

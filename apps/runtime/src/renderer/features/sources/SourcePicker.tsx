@@ -46,6 +46,11 @@ import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
+import {
+  usePreviewOrigins,
+  type PreviewEngine,
+  type PreviewOriginChanged,
+} from './usePreviewOrigins.js';
 import { useInputCheckSurface, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { SourceMediaPreview } from './SourceMediaPreview.js';
 import {
@@ -346,7 +351,7 @@ function PickerPanel({
   const [mediaView, setMediaView] = useState<InputView>('grid');
   const tabChanged = useRef(false);
   const media = useMediaSearch();
-  const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
+  const loadThumbnail = useMemo(() => createMediaThumbnailLoader(previewChannel), [previewChannel]);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
   const choice = choices.find((entry) => entry.value === value);
@@ -555,6 +560,7 @@ function InputsTab({
   onViewChange: (view: InputView) => void;
 }): JSX.Element {
   const [filter, setFilter] = useState('');
+  const { origins, publish } = usePreviewOrigins();
   const list = useRef<VirtualListHandle>(null);
   const tiled = view === 'grid';
   const needle = filter.trim().toLowerCase();
@@ -601,6 +607,7 @@ function InputsTab({
       trailing: (
         <InputThumbnail
           source={source}
+          onPreviewEngineChange={(engine) => publish(source.id, engine)}
           channel={previewChannel}
           meterChannel={offChannel ? undefined : previewChannel}
           inputCheck={checkable ? inputCheck : undefined}
@@ -614,7 +621,12 @@ function InputsTab({
           <bdi className="cg-picker-row__name" dir={directionOf(name)}>
             {name}
           </bdi>
-          <SourcePresenceBadges presence={presence} sourceId={source.id} accessible={false} />
+          <SourcePresenceBadges
+            presence={presence}
+            sourceId={source.id}
+            accessible={false}
+            previewEngine={origins.get(source.id)}
+          />
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
@@ -790,6 +802,8 @@ function mediaRow(
   presence: SourcePresenceView | null,
   grid: boolean,
   previewChannel: number | undefined,
+  previewEngine: PreviewEngine | undefined,
+  onPreviewEngineChange: PreviewOriginChanged,
 ): VirtualRow {
   const selected = item.id === value;
   const name = sourceDisplayName(item.name, 'media');
@@ -800,11 +814,16 @@ function mediaRow(
       : null,
   ].filter((f): f is string => f !== null);
   const previewing = preview?.key === key;
+  const canPreview = item.unavailable !== true || presence?.sources[item.id]?.B === 'present';
   const poster = (
-    <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
+    <MediaThumbnail
+      id={item.id}
+      load={loadThumbnail}
+      onPreviewEngineChange={onPreviewEngineChange}
+    />
   );
   const canPlay = previewChannel !== undefined && (item.durationMs ?? 0) > 1;
-  const previewButton = item.unavailable !== true && (!grid || canPlay) && (
+  const previewButton = canPreview && (!grid || canPlay) && (
     <Button
       variant={grid ? 'icon' : 'neutral'}
       className="cg-picker-preview-button"
@@ -835,6 +854,7 @@ function mediaRow(
             channel={previewChannel}
             loadThumbnail={loadThumbnail}
             inline
+            onPreviewEngineChange={onPreviewEngineChange}
           />
         ) : (
           <>
@@ -855,7 +875,12 @@ function mediaRow(
             <bdi className="cg-picker-row__name" dir={directionOf(name)}>
               {name}
             </bdi>
-            <SourcePresenceBadges presence={presence} sourceId={item.id} accessible={false} />
+            <SourcePresenceBadges
+              presence={presence}
+              sourceId={item.id}
+              accessible={false}
+              previewEngine={previewEngine}
+            />
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
             )}
@@ -902,6 +927,7 @@ function MediaTab({
   const sortMenuId = useId();
   const [sortOpen, setSortOpen] = useState(false);
   const [preview, setPreview] = useState<MediaPreviewSelection>();
+  const { origins, publish } = usePreviewOrigins();
   const grid = view === 'grid';
   const { ref: resultsRef, width } = useElementWidth<HTMLDivElement>();
   const resultsWidth = width ?? 1100;
@@ -940,6 +966,8 @@ function MediaTab({
           presence,
           grid,
           previewChannel,
+          origins.get(item.id),
+          (engine) => publish(item.id, engine),
         ),
       );
     };
@@ -961,14 +989,30 @@ function MediaTab({
     }
     for (const item of media.items) addMedia(`all:${item.id}`, item);
     return { rows: out, mediaByKey };
-  }, [media.items, bound, value, loadThumbnail, preview, presence, grid, previewChannel]);
+  }, [
+    media.items,
+    bound,
+    value,
+    loadThumbnail,
+    preview,
+    presence,
+    grid,
+    previewChannel,
+    origins,
+    publish,
+  ]);
 
   const chooseMedia = (index: number): void => {
     const key = rows[index]?.key;
     const item = key === undefined ? undefined : mediaByKey.get(key);
     if (key === undefined || item === undefined) return;
     onPick(item.id);
-    if (!grid) setPreview(item.unavailable === true ? undefined : { key, item });
+    if (!grid)
+      setPreview(
+        item.unavailable === true && presence?.sources[item.id]?.B !== 'present'
+          ? undefined
+          : { key, item },
+      );
   };
   const keys = useListKeys(rows, list, chooseMedia, grid);
 

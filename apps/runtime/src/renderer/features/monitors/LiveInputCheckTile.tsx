@@ -14,6 +14,7 @@ import { liveInputPictures } from './liveInputPicture.js';
 import { PgmAudioPlayer, PGM_AUDIO_SAMPLE_RATE, type PcmOut } from './pgmAudioPlayer.js';
 import { InputAudioRails } from '../sources/InputAudioMeter.js';
 import './live-input-check-tile.css';
+import type { PreviewEngine, PreviewOriginChanged } from '../sources/usePreviewOrigins.js';
 
 const PICTURE_TIMEOUT_MS = 2_500;
 const CAPTIONS = {
@@ -31,18 +32,25 @@ export function LiveInputCheckTile({
   view,
   onClose,
   onStall,
+  onPreviewEngineChange,
 }: {
   view: LivePreviewStatus;
   onClose: () => void;
   onStall: (previewId: string) => void;
+  onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
   const { channel, previewId } = view;
   const canvas = useRef<HTMLCanvasElement>(null);
   const ready = view.state === 'ready';
   const [decoded, setDecoded] = useState(false);
+  const [decodedOrigin, setDecodedOrigin] = useState<PreviewEngine>();
   const [busCount, setBusCount] = useState(2);
   const measuredBuses = view.dbFs?.length ?? 0;
   const pictureLive = ready && decoded;
+
+  useEffect(() => {
+    onPreviewEngineChange?.(pictureLive ? decodedOrigin : undefined);
+  }, [pictureLive, decodedOrigin, onPreviewEngineChange]);
 
   useLayoutEffect(() => {
     if (measuredBuses > 0) setBusCount(Math.max(2, measuredBuses));
@@ -50,6 +58,7 @@ export function LiveInputCheckTile({
 
   useEffect(() => {
     if (!ready) return undefined;
+    setDecoded(false);
     const drawing = canvas.current;
     const context = drawing?.getContext('2d');
     const abort = new AbortController();
@@ -80,6 +89,7 @@ export function LiveInputCheckTile({
           if (drawing.width !== bitmap.width) drawing.width = bitmap.width;
           if (drawing.height !== bitmap.height) drawing.height = bitmap.height;
           context.drawImage(bitmap, 0, 0);
+          setDecodedOrigin(view.engine);
           setDecoded(true);
           clearTimeout(deadline);
           deadline = setTimeout(failed, PICTURE_TIMEOUT_MS);
@@ -94,7 +104,7 @@ export function LiveInputCheckTile({
       clearTimeout(deadline);
       context?.clearRect(0, 0, drawing?.width ?? 0, drawing?.height ?? 0);
     };
-  }, [channel, onStall, previewId, ready]);
+  }, [channel, onStall, previewId, ready, view.engine]);
 
   const sound = useRef<{ context: AudioContext; player: PgmAudioPlayer } | null>(null);
   const [audio, setAudio] = useState<'off' | 'connecting' | 'playing' | 'unavailable'>('off');

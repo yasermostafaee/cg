@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -24,6 +25,7 @@ import {
 } from './support/fake-playout.js';
 import { track } from './support/harness.js';
 import { twoChannelRig, waitUntil } from './support/two-channel-rig.js';
+import { FRAME_B } from './support/fake-pgm-feed.js';
 
 const FINGERPRINT = 'a'.repeat(64);
 const BYTES = Buffer.from(Array.from({ length: 65_536 }, (_, index) => index % 251));
@@ -580,142 +582,170 @@ it('opens a searched media item through the authenticated Bridge socket and HTTP
   ).toEqual([]);
 });
 
-it('reads cached media from independently authenticated mapped B after A and its catalogue disappear', async () => {
-  const mediaId = FAKE_MEDIA_IDS.studio1;
-  const fingerprint = fakeFingerprint(mediaId);
-  const replicaId = `replica-${fakeFingerprint('reserve-preview')}`;
-  const root = `/api/v1/channels/reserve-local/media-previews/${replicaId}`;
-  const a = track(await startFakePlayout({ verifyBearers: true }), (p) => p.stop());
-  a.setChannels(FAKE_CATALOGUE.map((row) => ({ ...row, videoMode: '1080i5000' })));
-  let bReads = 0;
-  const b = track(
-    await startFakePlayout({
-      verifyBearers: true,
-      mediaPreviews: async (req, res) => {
-        bReads++;
-        const url = new URL(req.url ?? '/', 'http://engine');
-        if (url.pathname === root)
-          res.writeHead(200, { 'content-type': 'application/json' }).end(
-            JSON.stringify({
-              mediaId: replicaId,
-              fingerprint,
-              durationMs: 12_000,
-              browserMode: 'direct',
-              proxy: { state: 'notPrepared' },
-              fileUrl: `${root}/file?revision=${fingerprint}`,
-              proxyUrl: `${root}/proxy?revision=${fingerprint}`,
-              prepareUrl: `${root}/proxy`,
-              posterUrl: `${root}/poster`,
-            }),
+it.each(['missing', 'offline'] as const)(
+  'reads cached media from independently authenticated mapped B when A is %s',
+  async (state) => {
+    const mediaId = FAKE_MEDIA_IDS.studio1;
+    const fingerprint = fakeFingerprint(mediaId);
+    const replicaId = `replica-${fakeFingerprint('reserve-preview')}`;
+    const root = `/api/v1/channels/reserve-local/media-previews/${replicaId}`;
+    const a = track(await startFakePlayout({ verifyBearers: true }), (p) => p.stop());
+    a.setChannels(FAKE_CATALOGUE.map((row) => ({ ...row, videoMode: '1080i5000' })));
+    let bReads = 0;
+    const b = track(
+      await startFakePlayout({
+        verifyBearers: true,
+        mediaThumbnail: (req, res) => {
+          expect(new URL(req.url ?? '/', 'http://engine').searchParams.get('fingerprint')).toBe(
+            fingerprint,
           );
-        else if (url.pathname === `${root}/file`)
           res
-            .writeHead(206, {
-              'content-type': 'video/mp4',
-              'content-range': `bytes 0-3/${BYTES.length}`,
-              'content-length': 4,
-            })
-            .end(BYTES.subarray(0, 4));
-        else res.writeHead(404).end();
-      },
-    }),
-    (p) => p.stop(),
-  );
-  b.setChannels([
-    {
-      id: 'reserve-local',
-      name: 'Reserve mirror',
-      casparHost: '127.0.0.1',
-      casparChannel: 2,
-      videoMode: '1080i5000',
-      mirrorOf: { playout: a.baseUrl, id: 'fake-programme' },
-    },
-  ]);
-  b.setMedia([
-    {
-      id: replicaId,
-      name: 'Studio reserve',
-      clip: 'D:/Reserve/Studio.mp4',
-      type: 'video',
-      fingerprint,
-      durationMs: 12_000,
-      folder: 'Reserve',
-      updatedAt: '2026-11-18T00:00:00Z',
-    },
-  ]);
-  const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-relay-reserve-')), (p) =>
-    fs.rmSync(p, { recursive: true, force: true }),
-  );
-  const udp = dgram.createSocket('udp4');
-  await new Promise<void>((resolve) => udp.bind(0, '127.0.0.1', resolve));
-  const oscPort = udp.address().port;
-  await new Promise<void>((resolve) => udp.close(resolve));
-  const core = track(
-    await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, channels: 2 }),
-    (m) => m.stop(),
-  );
-  let clock = Date.now();
-  const rig = await twoChannelRig({
-    bridge: {
-      playout: { auth: 'playout', address: a.baseUrl, issuer: a.issuer },
-      backupPlayoutAddress: b.baseUrl,
-      bridgeSessionPath: path.join(dir, 'session.json'),
-      playoutCatalogueOptions: { now: () => clock },
-    },
-  });
-  await rig.handle.runtime.setConfig({
-    ...rig.connection,
-    servers: {
-      ...rig.connection.servers,
-      B: { host: '127.0.0.1', amcpPort: core.amcpPort, oscPort },
-    },
-  });
-  const client = await openClient(rig.handle);
-  expect(
-    (await client.authenticate('admin', (await a.issueToken({ user: 'admin' })).token)).error,
-  ).toBeUndefined();
-  expect(
-    (
-      await client.ask('b-signin', 'bridgeSession.backup.sign-in', {
-        username: 'cg-admin',
-        password: FAKE_PLAYOUT_PASSWORD,
-      })
-    ).payload,
-  ).toEqual({ ok: true });
-  let mapping: BackupChannelsState | undefined;
-  await waitUntil(async () => {
-    const state = (await client.ask('mapping', 'backupChannels.state'))
-      .payload as BackupChannelsState;
-    mapping = state;
-    return (
-      state.backup?.channels.some((entry) => entry.channel === 1 && entry.backupChannel === 2) ===
-      true
+            .writeHead(200, { 'content-type': 'image/jpeg', 'content-length': FRAME_B.length })
+            .end(FRAME_B);
+        },
+        mediaPreviews: async (req, res) => {
+          bReads++;
+          const url = new URL(req.url ?? '/', 'http://engine');
+          if (url.pathname === root)
+            res.writeHead(200, { 'content-type': 'application/json' }).end(
+              JSON.stringify({
+                mediaId: replicaId,
+                fingerprint,
+                durationMs: 12_000,
+                browserMode: 'direct',
+                proxy: { state: 'notPrepared' },
+                fileUrl: `${root}/file?revision=${fingerprint}`,
+                proxyUrl: `${root}/proxy?revision=${fingerprint}`,
+                prepareUrl: `${root}/proxy`,
+                posterUrl: `${root}/poster`,
+              }),
+            );
+          else if (url.pathname === `${root}/file`)
+            res
+              .writeHead(206, {
+                'content-type': 'video/mp4',
+                'content-range': `bytes 0-3/${BYTES.length}`,
+                'content-length': 4,
+              })
+              .end(BYTES.subarray(0, 4));
+          else res.writeHead(404).end();
+        },
+      }),
+      (p) => p.stop(),
     );
-  }, 'the verified backup mapping').catch(() => {
-    expect(mapping).toMatchObject({
-      backup: { channels: [{ channel: 1, state: 'mapped', backupChannel: 2 }] },
+    b.setChannels([
+      {
+        id: 'reserve-local',
+        name: 'Reserve mirror',
+        casparHost: '127.0.0.1',
+        casparChannel: 2,
+        videoMode: '1080i5000',
+        mirrorOf: { playout: a.baseUrl, id: 'fake-programme' },
+      },
+    ]);
+    b.setMedia([
+      {
+        id: replicaId,
+        name: 'Studio reserve',
+        clip: 'D:/Reserve/Studio.mp4',
+        type: 'video',
+        fingerprint,
+        durationMs: 12_000,
+        folder: 'Reserve',
+        updatedAt: '2026-11-18T00:00:00Z',
+      },
+    ]);
+    const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-relay-reserve-')), (p) =>
+      fs.rmSync(p, { recursive: true, force: true }),
+    );
+    const udp = dgram.createSocket('udp4');
+    await new Promise<void>((resolve) => udp.bind(0, '127.0.0.1', resolve));
+    const oscPort = udp.address().port;
+    await new Promise<void>((resolve) => udp.close(resolve));
+    const core = track(
+      await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, channels: 2 }),
+      (m) => m.stop(),
+    );
+    let clock = Date.now();
+    const rig = await twoChannelRig({
+      bridge: {
+        playout: { auth: 'playout', address: a.baseUrl, issuer: a.issuer },
+        backupPlayoutAddress: b.baseUrl,
+        bridgeSessionPath: path.join(dir, 'session.json'),
+        playoutCatalogueOptions: { now: () => clock },
+      },
     });
-  });
-  const sourceId = mediaSourceId(mediaId);
-  expect(
-    (await client.ask('media', 'sources.media-search', { q: 'Studio 1' })).error,
-  ).toBeUndefined();
-  await a.goOffline();
-  clock += 60_000;
-  await rig.handle.playoutCatalogue?.refresh();
-  expect(rig.handle.playoutCatalogue?.rows()).toBeNull();
-  const reply = await client.ask('reserve-open', 'sourcePreviews.mediaOpen', {
-    channel: 1,
-    sourceId,
-    prepare: true,
-  });
-  expect(reply.error).toBeUndefined();
-  const preview = reply.payload as MediaPlaybackPreview;
-  expect(preview).toMatchObject({ state: 'ready', engine: 'B' });
-  const response = await fetch(`http://127.0.0.1:${rig.handle.port}${preview.videoUrl!}`, {
-    headers: { range: 'bytes=0-3' },
-  });
-  expect(response.status).toBe(206);
-  expect(Buffer.from(await response.arrayBuffer())).toEqual(BYTES.subarray(0, 4));
-  expect(bReads).toBe(2);
-}, 20_000);
+    await rig.handle.runtime.setConfig({
+      ...rig.connection,
+      servers: {
+        ...rig.connection.servers,
+        B: { host: '127.0.0.1', amcpPort: core.amcpPort, oscPort },
+      },
+    });
+    const client = await openClient(rig.handle);
+    expect(
+      (await client.authenticate('admin', (await a.issueToken({ user: 'admin' })).token)).error,
+    ).toBeUndefined();
+    expect(
+      (
+        await client.ask('b-signin', 'bridgeSession.backup.sign-in', {
+          username: 'cg-admin',
+          password: FAKE_PLAYOUT_PASSWORD,
+        })
+      ).payload,
+    ).toEqual({ ok: true });
+    let mapping: BackupChannelsState | undefined;
+    await waitUntil(async () => {
+      const state = (await client.ask(randomUUID(), 'backupChannels.state'))
+        .payload as BackupChannelsState;
+      mapping = state;
+      return (
+        state.backup?.channels.some((entry) => entry.channel === 1 && entry.backupChannel === 2) ===
+        true
+      );
+    }, 'the verified backup mapping').catch(() => {
+      expect(mapping).toMatchObject({
+        backup: { channels: [{ channel: 1, state: 'mapped', backupChannel: 2 }] },
+      });
+    });
+    const sourceId = mediaSourceId(mediaId);
+    expect(
+      (await client.ask('media', 'sources.media-search', { q: 'Studio 1' })).error,
+    ).toBeUndefined();
+    if (state === 'missing') {
+      expect(await rig.handle.playoutSources?.ensureBound(sourceId)).toEqual({ ok: true });
+      a.setMedia([]);
+      await rig.handle.playoutSources?.freshClipFor(sourceId, 'previous-clip');
+      expect(rig.handle.playoutSources?.mediaForPresence(sourceId)?.state).toBe('missing');
+    } else {
+      await a.goOffline();
+      clock += 60_000;
+      await rig.handle.playoutCatalogue?.refresh();
+      expect(rig.handle.playoutCatalogue?.rows()).toBeNull();
+    }
+    const reply = await client.ask('reserve-open', 'sourcePreviews.mediaOpen', {
+      channel: 1,
+      sourceId,
+      prepare: true,
+    });
+    expect(reply.error).toBeUndefined();
+    const preview = reply.payload as MediaPlaybackPreview;
+    expect(preview).toMatchObject({ state: 'ready', engine: 'B' });
+    const response = await fetch(`http://127.0.0.1:${rig.handle.port}${preview.videoUrl!}`, {
+      headers: { range: 'bytes=0-3' },
+    });
+    expect(response.status).toBe(206);
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(BYTES.subarray(0, 4));
+    expect(bReads).toBe(2);
+    const poster = await client.ask('reserve-poster', 'sources.media-thumbnail', {
+      channel: 1,
+      id: sourceId,
+    });
+    expect(poster.payload).toEqual({
+      ok: true,
+      engine: 'B',
+      dataUrl: 'data:image/jpeg;base64,' + FRAME_B.toString('base64'),
+    });
+  },
+  20_000,
+);

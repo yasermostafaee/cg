@@ -1,5 +1,9 @@
 import { useState, useSyncExternalStore } from 'react';
-import { canCheckLiveInput, SUGGESTED_LIVE_SOURCE_LAYER_RANGE } from '@cg/shared-ipc';
+import {
+  canCheckLiveInput,
+  sourcePreviewable,
+  SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
+} from '@cg/shared-ipc';
 import { KIND_ICON, KIND_WORD } from './sourceKinds.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -15,6 +19,7 @@ import { videoModeWords } from '../stationSetup/videoModeWords.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges } from './SourcePresenceBadges.js';
+import { usePreviewOrigins } from './usePreviewOrigins.js';
 import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputViewSwitch, type InputView } from './InputViewSwitch.js';
 import {
@@ -88,6 +93,7 @@ export function SourcesSection({
     inputs.map(({ id }) => id),
   );
   const [view, setView] = useState<InputView>('grid');
+  const { origins, publish } = usePreviewOrigins();
   const [bandStart, setBandStart] = useState<string | null>(null);
   const [bandEnd, setBandEnd] = useState<string | null>(null);
   const [applyingBand, setApplyingBand] = useState(false);
@@ -184,8 +190,9 @@ export function SourcesSection({
             >
               <InputThumbnail
                 source={source}
+                onPreviewEngineChange={(engine) => publish(source.id, engine)}
                 channel={channel}
-                meterChannel={source.status === undefined ? channel : undefined}
+                meterChannel={sourcePreviewable(source) ? channel : undefined}
                 inputCheck={
                   inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel)
                     ? inputCheck
@@ -205,7 +212,11 @@ export function SourcesSection({
                   >
                     {sourceDisplayName(source.name, source.origin)}
                   </bdi>
-                  <SourcePresenceBadges presence={sourcePresence} sourceId={source.id} />
+                  <SourcePresenceBadges
+                    presence={sourcePresence}
+                    sourceId={source.id}
+                    previewEngine={origins.get(source.id)}
+                  />
                 </div>
                 <div className="cg-resource__detail">
                   <span

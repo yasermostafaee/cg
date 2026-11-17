@@ -7,7 +7,7 @@ import {
   LIVE_PREVIEW_MAX_JPEG_BYTES,
   playoutInputIdOf,
   redactUrlCredentials,
-  sourceSeatable,
+  sourcePreviewable,
   sourceShowableOn,
   type ChannelRequest,
   type ChannelResponse,
@@ -35,6 +35,7 @@ export interface LivePreviewTarget {
   origin: string;
   code: string;
   bearer: string;
+  engine?: 'A' | 'B';
 }
 
 export interface LivePreviewAudit {
@@ -68,13 +69,33 @@ interface Check {
   replacedPrior: boolean;
 }
 
+interface PendingStart {
+  readonly req: Start;
+  readonly generation: number;
+  readonly token: AuthSession['token'];
+  work: Promise<LivePreviewStatus> | null;
+  cancelled?: Fault;
+}
+
 const EXPIRED = { state: 'expired', message: 'The input preview ended.' } as const;
 const REPLACED = { state: 'replaced', message: 'Another check replaced this preview.' } as const;
 const STALLED = { state: 'stalled', message: 'The preview picture stopped.' } as const;
 const FORBIDDEN = { state: 'forbidden', message: 'Sign in again to check an input.' } as const;
 
-function status(req: LivePreviewHandle, sourceName: string, fault: Fault): LivePreviewStatus {
-  return { channel: req.channel, previewId: req.previewId, sourceName, ...fault, dbFs: null };
+function status(
+  req: LivePreviewHandle,
+  sourceName: string,
+  fault: Fault,
+  engine?: 'A' | 'B',
+): LivePreviewStatus {
+  return {
+    channel: req.channel,
+    previewId: req.previewId,
+    sourceName,
+    ...fault,
+    dbFs: null,
+    ...(engine === undefined ? {} : { engine }),
+  };
 }
 
 function unavailable(source: SourceDefinition | undefined): Fault {
@@ -91,6 +112,8 @@ function unavailable(source: SourceDefinition | undefined): Fault {
 /** C-023. One check per socket and one lease per programme channel on the configured Playout. */
 export class LivePreviewService {
   readonly #owners = new Map<AuthSession, Check>();
+  readonly #pendingStarts = new Map<AuthSession, PendingStart>();
+  readonly #startGenerations = new WeakMap<AuthSession, number>();
   readonly #active = new Map<number, Check>();
   readonly #queue = new Map<number, Promise<unknown>>();
   readonly #disconnected = new WeakSet<AuthSession>();
@@ -98,18 +121,98 @@ export class LivePreviewService {
   #closed = false;
 
   constructor(
-    private readonly resolve: (owner: AuthSession, channel: number) => LivePreviewTarget | null,
+    private readonly resolve: (
+      owner: AuthSession,
+      channel: number,
+      sourceId: string,
+    ) => LivePreviewTarget | null,
     private readonly source: (id: string) => SourceDefinition | undefined,
     private readonly audit: (row: LivePreviewAudit) => void,
+    private readonly inputIdFor?: (
+      owner: AuthSession,
+      channel: number,
+      sourceId: string,
+    ) => string | null,
+    private readonly prepare?: (
+      owner: AuthSession,
+      channel: number,
+      sourceId: string,
+      stillCurrent: () => boolean,
+    ) => Promise<void>,
   ) {
     this.#tick = setInterval(() => this.#sweep(), 1000);
     this.#tick.unref();
   }
 
   start(owner: AuthSession | null, req: Start): Promise<LivePreviewStatus> {
+    if (owner === null || this.#closed || this.#disconnected.has(owner))
+      return Promise.resolve(status(req, 'Input', FORBIDDEN));
+    const existing = this.#pendingStarts.get(owner);
+    if (
+      existing?.req.channel === req.channel &&
+      existing.req.previewId === req.previewId &&
+      existing.req.sourceId === req.sourceId &&
+      existing.work !== null
+    )
+      return existing.work;
+    if (existing !== undefined) existing.cancelled = REPLACED;
+    const generation = (this.#startGenerations.get(owner) ?? 0) + 1;
+    this.#startGenerations.set(owner, generation);
+    const pending: PendingStart = { req, generation, token: owner.token, work: null };
+    this.#pendingStarts.set(owner, pending);
+    const work = this.#prepareStart(owner, req, pending).finally(() => {
+      if (this.#pendingStarts.get(owner) === pending) this.#pendingStarts.delete(owner);
+    });
+    pending.work = work;
+    return work;
+  }
+
+  async #prepareStart(
+    owner: AuthSession | null,
+    req: Start,
+    pending?: PendingStart,
+  ): Promise<LivePreviewStatus> {
+    if (owner !== null) {
+      try {
+        await this.prepare?.(
+          owner,
+          req.channel,
+          req.sourceId,
+          () =>
+            !this.#closed &&
+            pending?.cancelled === undefined &&
+            this.#pendingStarts.get(owner) === pending &&
+            this.#startGenerations.get(owner) === pending?.generation &&
+            owner.token === pending?.token,
+        );
+      } catch {
+        return status(
+          req,
+          'Input',
+          pending?.cancelled ?? {
+            state: 'unavailable',
+            message: 'Could not prepare the input preview.',
+          },
+        );
+      }
+      if (
+        pending !== undefined &&
+        (pending.cancelled !== undefined ||
+          this.#pendingStarts.get(owner) !== pending ||
+          this.#startGenerations.get(owner) !== pending.generation)
+      ) {
+        return status(
+          req,
+          redactUrlCredentials(this.source(req.sourceId)?.name ?? 'Input').slice(0, 256),
+          pending.cancelled ?? REPLACED,
+        );
+      }
+      if (pending !== undefined && owner.token !== pending.token)
+        return status(req, 'Input', FORBIDDEN);
+    }
     const source = this.source(req.sourceId);
     const sourceName = redactUrlCredentials(source?.name ?? 'Input').slice(0, 256);
-    const target = owner === null ? null : this.resolve(owner, req.channel);
+    const target = owner === null ? null : this.resolve(owner, req.channel, req.sourceId);
     const token = owner?.token;
     if (
       this.#closed ||
@@ -121,7 +224,10 @@ export class LivePreviewService {
     ) {
       return Promise.resolve(status(req, sourceName, FORBIDDEN));
     }
-    const inputId = playoutInputIdOf(req.sourceId);
+    const inputId =
+      this.inputIdFor === undefined
+        ? playoutInputIdOf(req.sourceId)
+        : this.inputIdFor(owner, req.channel, req.sourceId);
     if (inputId === null || source === undefined || !canCheckLiveInput(source, req.channel)) {
       this.audit({
         actor: token.principal.name,
@@ -146,7 +252,7 @@ export class LivePreviewService {
       inputId,
       target,
       client: new PlayoutLivePreview(target.origin, target.code, target.bearer),
-      view: status(req, sourceName, { state: 'connecting' }),
+      view: status(req, sourceName, { state: 'connecting' }, target.engine),
       lease: null,
       opened: now,
       seen: now,
@@ -228,9 +334,14 @@ export class LivePreviewService {
     check.lease = lease;
     check.renewAt = Date.now() + lease.renewAfterSeconds * 1000;
     check.meterUntil = 0;
-    check.view = status(check.req, check.view.sourceName, {
-      state: lease.state === 'ready' ? 'ready' : 'connecting',
-    });
+    check.view = status(
+      check.req,
+      check.view.sourceName,
+      {
+        state: lease.state === 'ready' ? 'ready' : 'connecting',
+      },
+      check.target.engine,
+    );
     if (lease.state === 'ready') this.#recordStart(check, true);
     return check.view;
   }
@@ -312,7 +423,7 @@ export class LivePreviewService {
         : undefined;
     for (const sourceId of new Set(sourceIds)) {
       const source = this.source(sourceId);
-      if (source === undefined || !sourceSeatable(source) || !sourceShowableOn(source, channel))
+      if (source === undefined || !sourcePreviewable(source) || !sourceShowableOn(source, channel))
         continue;
       if (current?.req.sourceId === sourceId && canCheckLiveInput(source, channel)) {
         const { dbFs } = current.view;
@@ -320,6 +431,7 @@ export class LivePreviewService {
         if (dbFs !== null && dbFs.length > 0 && validForMs > 0) {
           readings.push({
             sourceId,
+            ...(current.target.engine === undefined ? {} : { engine: current.target.engine }),
             state: 'measured',
             dbFs: dbFs.slice(0, maxChannels),
             validForMs,
@@ -335,12 +447,18 @@ export class LivePreviewService {
   }
 
   stop(owner: AuthSession | null, req: LivePreviewHandle): { ok: true } {
+    if (owner !== null) {
+      const pending = this.#pendingStarts.get(owner);
+      if (pending?.req.channel === req.channel && pending.req.previewId === req.previewId)
+        this.#cancelPending(owner, EXPIRED);
+    }
     const check = this.#find(owner, req);
     if (check !== undefined) this.#end(check, EXPIRED);
     return { ok: true };
   }
 
   drop(owner: AuthSession): void {
+    this.#cancelPending(owner, EXPIRED);
     const check = this.#owners.get(owner);
     if (check !== undefined) this.#end(check, EXPIRED);
     this.#owners.delete(owner);
@@ -352,6 +470,9 @@ export class LivePreviewService {
   }
 
   changed(owner: AuthSession): void {
+    const pending = this.#pendingStarts.get(owner);
+    if (pending !== undefined && pending.token !== owner.token)
+      this.#cancelPending(owner, FORBIDDEN);
     const check = this.#owners.get(owner);
     if (check !== undefined && !check.terminal && !this.#usable(check)) this.drop(owner);
   }
@@ -486,11 +607,13 @@ export class LivePreviewService {
 
   #usable(check: Check): boolean {
     if (this.#closed || check.terminal) return false;
-    const target = this.resolve(check.owner, check.req.channel);
+    const target = this.resolve(check.owner, check.req.channel, check.req.sourceId);
     return (
       target?.bearer === check.target.bearer &&
       target.origin === check.target.origin &&
-      target.code === check.target.code
+      target.code === check.target.code &&
+      (this.inputIdFor === undefined ||
+        this.inputIdFor(check.owner, check.req.channel, check.req.sourceId) === check.inputId)
     );
   }
 
@@ -504,7 +627,7 @@ export class LivePreviewService {
   #end(check: Check, fault: Fault, stop = true): LivePreviewStatus {
     if (check.terminal) return check.view;
     check.terminal = true;
-    check.view = status(check.req, check.view.sourceName, fault);
+    check.view = status(check.req, check.view.sourceName, fault, check.target.engine);
     for (const feed of check.feeds.values()) feed.abort();
     if (this.#active.get(check.req.channel) === check) this.#active.delete(check.req.channel);
     this.#recordStart(check, false, fault.state);
@@ -585,7 +708,15 @@ export class LivePreviewService {
   async dispose(): Promise<void> {
     this.#closed = true;
     clearInterval(this.#tick);
+    for (const owner of this.#pendingStarts.keys()) this.#cancelPending(owner, EXPIRED);
     for (const owner of this.#owners.keys()) this.drop(owner);
     while (this.#queue.size > 0) await Promise.allSettled(this.#queue.values());
+  }
+
+  #cancelPending(owner: AuthSession, fault: Fault): void {
+    const pending = this.#pendingStarts.get(owner);
+    if (pending !== undefined) pending.cancelled = fault;
+    this.#pendingStarts.delete(owner);
+    this.#startGenerations.set(owner, (this.#startGenerations.get(owner) ?? 0) + 1);
   }
 }

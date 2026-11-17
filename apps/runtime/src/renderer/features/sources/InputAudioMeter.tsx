@@ -6,12 +6,18 @@ import {
   type CSSProperties,
   type Ref,
 } from 'react';
-import { isPlaylistOutput, type SourceAudioReading, type SourceDefinition } from '@cg/shared-ipc';
+import {
+  isPlaylistOutput,
+  sourcePreviewable,
+  type SourceAudioReading,
+  type SourceDefinition,
+} from '@cg/shared-ipc';
 import { meterPercent } from '../monitors/meterScale.js';
 import { subscribeInputAudio } from './inputAudioDemand.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from './sourceStore.js';
 import './input-audio-meter.css';
+import type { PreviewEngine } from './usePreviewOrigins.js';
 
 const stereoLabels = ['L', 'R'] as const;
 
@@ -37,18 +43,19 @@ export function InputAudioMeter({
   name,
   edge = false,
   style,
+  previewEngine,
 }: {
   sourceId: string;
   channel: number | undefined;
   name: string;
   edge?: boolean;
   style?: CSSProperties;
+  previewEngine?: PreviewEngine | undefined;
 }): JSX.Element | null {
   const foreground = useModalForeground();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const source = inputAudioSource(sourceId);
-  const meterChannel =
-    source !== undefined && source.status !== 'unavailable' ? channel : undefined;
+  const meterChannel = source !== undefined && sourcePreviewable(source) ? channel : undefined;
   const ref = useRef<HTMLSpanElement>(null);
   const [snapshot, setSnapshot] = useState<InputAudioSnapshot>();
   useEffect(() => {
@@ -102,7 +109,10 @@ export function InputAudioMeter({
   if (source === undefined) return null;
   const current =
     snapshot?.channel === meterChannel && snapshot?.sourceId === sourceId ? snapshot : undefined;
-  const reading = current?.reading;
+  const reading =
+    previewEngine === undefined || current?.reading?.engine === previewEngine
+      ? current?.reading
+      : undefined;
   const count = current?.count ?? stereoLabels.length;
   const state = reading?.state ?? 'unknown';
   const levels = reading?.state === 'measured' ? reading.dbFs : [];

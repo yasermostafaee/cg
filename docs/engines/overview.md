@@ -307,6 +307,12 @@ poster streams through the Bridge HTTP server. The service uses the streaming Pl
 transport with range headers, backpressure and cancellation. `SourceMediaPreview` consumes
 the typed open/close lifecycle and selects native video or the compatible sampled player.
 
+`RoutedSourceReads` selects snapshot, PVW and audio reads per logical source while
+retaining an independent preview client on each engine. Reserve selectors come from
+B-local D10 mappings or fingerprint-matched D11 rows. Accepted frames and media
+resources carry their serving-engine metadata; the UI applies provenance only when
+the picture decodes. These read fallbacks do not change programme authority.
+
 ## Where the engines live
 
 | Engine / package                                          | Responsibility                                                                                                                                                                                                                                                                                   |

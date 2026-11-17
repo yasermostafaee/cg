@@ -3,7 +3,7 @@ import { defineChannel } from '../channel.js';
 import {
   isPlaylistOutput,
   sourceLoopsOn,
-  sourceSeatable,
+  sourcePreviewable,
   sourceShowableOn,
 } from '../playout-sources.js';
 import type { SourceDefinition } from './sources.js';
@@ -15,6 +15,8 @@ const stream = z.enum(['picture', 'audio']);
 
 export const LivePreviewStatusSchema = handle.extend({
   sourceName: z.string().max(256),
+  /** Provenance of the picture/audio lease, never the programme authority. */
+  engine: z.enum(['A', 'B']).optional(),
   state: z.enum([
     'connecting',
     'ready',
@@ -66,8 +68,7 @@ export function canCheckLiveInput(source: SourceDefinition, channel: number): bo
   return (
     source.origin === 'input' &&
     !isPlaylistOutput(source) &&
-    source.departed !== true &&
-    sourceSeatable(source) &&
+    sourcePreviewable(source) &&
     sourceShowableOn(source, channel) &&
     !sourceLoopsOn(source, channel)
   );

@@ -29,6 +29,11 @@
   color: var(--r-error-text);
 }
 
+.cg-source-presence > [data-source-preview-provider] {
+  border-color: currentColor;
+  box-shadow: inset 0 0 0 0.5px currentColor;
+}
+
 .cg-picker .cg-vlist-option[aria-disabled='true']:has(.cg-source-presence) {
   opacity: 1;
 }

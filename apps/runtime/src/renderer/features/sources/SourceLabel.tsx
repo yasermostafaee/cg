@@ -8,6 +8,7 @@ import { Tag } from '../../ui/Tag.js';
 import { inputAudioSource } from './InputAudioMeter.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import { SourcePresenceBadges } from './SourcePresenceBadges.js';
+import { usePreviewOrigins } from './usePreviewOrigins.js';
 import {
   currentSourceCatalog,
   seenMediaItem,
@@ -99,6 +100,7 @@ export function SourceLabel({
   presenceAccessible?: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
+  const { origins, publish } = usePreviewOrigins();
   const source = labelledSource(sourceId);
   if (source === null) {
     return (
@@ -133,12 +135,19 @@ export function SourceLabel({
         <span className="cg-source-label__meta">{formatMediaDuration(source.durationMs)}</span>
       )}
       {input !== undefined && (
-        <InputThumbnail source={input} channel={meterChannel} meterChannel={meterChannel} compact />
+        <InputThumbnail
+          source={input}
+          channel={meterChannel}
+          meterChannel={meterChannel}
+          compact
+          onPreviewEngineChange={(engine) => publish(input.id, engine)}
+        />
       )}
       <SourcePresenceBadges
         presence={presence}
         sourceId={sourceId}
         accessible={presenceAccessible}
+        previewEngine={sourceId ? origins.get(sourceId) : undefined}
       />
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>

@@ -1,5 +1,6 @@
 import type { SourcePresenceView } from '@cg/shared-ipc';
 import './source-presence-badges.css';
+import type { PreviewEngine } from './usePreviewOrigins.js';
 
 const SERVERS = ['A', 'B'] as const;
 const AVAILABILITY_WORDS = {
@@ -30,14 +31,18 @@ export function SourcePresenceBadges({
   presence,
   sourceId,
   accessible = true,
+  previewEngine,
 }: {
   presence: SourcePresenceView | null;
   sourceId: string | null | undefined;
   accessible?: boolean;
+  previewEngine?: PreviewEngine | undefined;
 }): JSX.Element | null {
   const servers = forSource(presence, sourceId);
   if (servers === null) return null;
-  const label = servers.map(({ label: state }) => state).join('. ');
+  const label =
+    servers.map(({ label: state }) => state).join('. ') +
+    (previewEngine === undefined ? '' : `. Preview from server ${previewEngine}`);
   return (
     <span
       className="cg-source-presence"
@@ -52,7 +57,8 @@ export function SourcePresenceBadges({
           key={server}
           data-source-presence-server={server}
           data-source-presence-state={state}
-          title={title}
+          data-source-preview-provider={previewEngine === server ? '' : undefined}
+          title={previewEngine === server ? `${title}. Preview from server ${server}` : title}
         >
           {server}
         </span>

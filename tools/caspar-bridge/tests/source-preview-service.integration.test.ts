@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as dgram from 'node:dgram';
+import { createMock } from '@cg/amcp-mock';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   SourcePreviewPvwChannel,
@@ -13,7 +18,13 @@ import { describe, expect, it } from 'vitest';
 import type { SourcePreviewSelector } from '../src/playout-source-previews.js';
 import { openClient, type Client } from './support/auth-harness.js';
 import { FakeLivePreview } from './support/fake-live-preview.js';
-import { FAKE_MEDIA_IDS, startFakePlayout } from './support/fake-playout.js';
+import {
+  FAKE_MEDIA_IDS,
+  FAKE_INPUTS,
+  FAKE_CATALOGUE,
+  FAKE_PLAYOUT_PASSWORD,
+  startFakePlayout,
+} from './support/fake-playout.js';
 import { FRAME_A, FRAME_B } from './support/fake-pgm-feed.js';
 import { track } from './support/harness.js';
 import { twoChannelRig, waitUntil } from './support/two-channel-rig.js';
@@ -43,6 +54,10 @@ async function bodyOf<T>(request: IncomingMessage): Promise<T> {
 }
 
 class FakeSourcePreviews {
+  readonly base: string;
+  constructor(private readonly code = 'fake-programme') {
+    this.base = `/api/v1/channels/${code}/source-previews`;
+  }
   readonly requests: { method: string | undefined; path: string; owner: string }[] = [];
   readonly starts: Lease[] = [];
   readonly stops: { id: string; owner: string; generation: string }[] = [];
@@ -59,7 +74,7 @@ class FakeSourcePreviews {
     const owner = request.headers.authorization ?? '';
     const { pathname: path, searchParams } = url;
     this.requests.push({ method: request.method, path, owner });
-    if (path === BASE && request.method === 'GET') {
+    if (path === this.base && request.method === 'GET') {
       send(response, 200, {
         contractVersion: 1,
         opensReceivers: false,
@@ -79,7 +94,7 @@ class FakeSourcePreviews {
       });
       return;
     }
-    if (path === BASE && request.method === 'POST') {
+    if (path === this.base && request.method === 'POST') {
       const input = await bodyOf<Pick<Lease, 'source' | 'requestId'>>(request);
       const lease = { id: `sub-${this.starts.length + 1}`, owner, ...input };
       this.leases.set(lease.id, lease);
@@ -87,17 +102,17 @@ class FakeSourcePreviews {
       send(response, 200, {
         ...this.#identity(lease),
         coreGeneration: 1,
-        channelCode: 'fake-programme',
+        channelCode: this.code,
         requestId: lease.requestId,
         expiresAt: new Date(Date.now() + 90_000).toISOString(),
         renewAfterSeconds: 30,
-        frameUrl: `${BASE}/${lease.id}/frame`,
+        frameUrl: `${this.base}/${lease.id}/frame`,
         receiverOpened: false,
         audioSubscribed: false,
       });
       return;
     }
-    if (path === BASE + '/snapshots' && request.method === 'POST') {
+    if (path === this.base + '/snapshots' && request.method === 'POST') {
       const { sources } = await bodyOf<{ sources: SourcePreviewSelector[] }>(request);
       this.snapshots.push(sources);
       send(response, 200, {
@@ -111,7 +126,7 @@ class FakeSourcePreviews {
       });
       return;
     }
-    const [id, action] = path.slice(BASE.length + 1).split('/');
+    const [id, action] = path.slice(this.base.length + 1).split('/');
     const lease = this.leases.get(id ?? '');
     if (lease === undefined || lease.owner !== owner) {
       send(response, 404, { error: 'sourcePreview.notFound' });
@@ -212,6 +227,228 @@ const thumbnails = (client: Client, sourceIds: string[]) =>
   );
 
 describe('C-023 independent source previews through authenticated Bridge WebSocket', () => {
+  it.each(['A', 'B'] as const)(
+    'reads a B-only input with independent snapshot, PVW, audio and listen provenance while %s is active',
+    async (active) => {
+      const passiveA = new FakeSourcePreviews();
+      const passiveB = new FakeSourcePreviews('reserve-local');
+      const liveB = new FakeLivePreview();
+      const meterSources: SourcePreviewSelector[][] = [];
+      const a = track(
+        await startFakePlayout({ verifyBearers: true, sourcePreviews: passiveA.handle }),
+        (p) => p.stop(),
+      );
+      a.setChannels(FAKE_CATALOGUE.map((row) => ({ ...row, videoMode: '1080i5000' })));
+      a.setInputs(
+        FAKE_INPUTS.map((input) =>
+          input.id === 'li-studio1' ? { ...input, available: false } : input,
+        ),
+      );
+      const b = track(
+        await startFakePlayout({
+          verifyBearers: true,
+          sourcePreviews: passiveB.handle,
+          livePreview: liveB.handle,
+          sourceAudio: async (req, res) => {
+            const { sources } = await bodyOf<{ sources: SourcePreviewSelector[] }>(req);
+            meterSources.push(sources);
+            send(res, 200, {
+              engineId: 'independent-b',
+              channelCode: 'reserve-local',
+              items: sources.map((source) => ({
+                source,
+                status: 200,
+                reading: {
+                  audio: { status: 'has-audio', channels: 2 },
+                  signal: 'present',
+                  peakDbfs: [-14, -18],
+                  sampledAt: new Date().toISOString(),
+                  sampleAgeMs: 0,
+                  validForMs: 500,
+                  stage: 'decoded-source-before-filters-and-mixer',
+                },
+              })),
+            });
+          },
+        }),
+        (p) => p.stop(),
+      );
+      b.setChannels([
+        {
+          id: 'reserve-local',
+          name: 'Reserve',
+          casparHost: '127.0.0.1',
+          casparChannel: 2,
+          videoMode: '1080i5000',
+          mirrorOf: { playout: a.baseUrl, id: 'fake-programme' },
+        },
+      ]);
+      b.setInputs([
+        {
+          id: 'li-replica-studio-b',
+          name: 'Studio reserve',
+          casparHost: '127.0.0.1',
+          producer: { kind: 'ndi', source: 'B CAMERA' },
+          available: true,
+          logicalMappings: [{ channelCode: 'reserve-local', logicalInputId: 'li-studio1' }],
+        },
+        {
+          id: 'li-replica-multicast-b',
+          name: 'Shared camera',
+          casparHost: '127.0.0.1',
+          producer: { kind: 'stream', url: 'udp://239.0.0.1:5555' },
+          available: true,
+          logicalMappings: [{ channelCode: 'reserve-local', logicalInputId: 'li-multicast' }],
+        },
+      ]);
+      const directory = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-read-source-b-')), (p) =>
+        fs.rmSync(p, { recursive: true, force: true }),
+      );
+      const udp = dgram.createSocket('udp4');
+      await new Promise<void>((resolve) => udp.bind(0, '127.0.0.1', resolve));
+      const oscPort = udp.address().port;
+      await new Promise<void>((resolve) => udp.close(resolve));
+      const coreB = track(
+        await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, channels: 2 }),
+        (core) => core.stop(),
+      );
+      const rig = await twoChannelRig({
+        bridge: {
+          playout: { auth: 'playout', address: a.baseUrl, issuer: a.issuer },
+          backupPlayoutAddress: b.baseUrl,
+          bridgeSessionPath: path.join(directory, 'session.json'),
+          pgmReturn: {
+            readTopology: async () => ({
+              members: [
+                {
+                  key: a.baseUrl,
+                  name: 'A',
+                  channelCode: 'fake-programme',
+                  physicalChannel: 1,
+                  pgmHost: '127.0.0.1',
+                },
+                {
+                  key: b.baseUrl,
+                  name: 'B',
+                  channelCode: 'reserve-local',
+                  physicalChannel: 2,
+                  pgmHost: '127.0.0.1',
+                },
+              ],
+              activeMemberKey: active === 'A' ? a.baseUrl : b.baseUrl,
+            }),
+          },
+        },
+      });
+      await rig.handle.runtime.setConfig({
+        ...rig.connection,
+        servers: {
+          ...rig.connection.servers,
+          B: { host: '127.0.0.1', amcpPort: coreB.amcpPort, oscPort },
+        },
+      });
+      const client = await openClient(rig.handle);
+      const primaryToken = (await a.issueToken({ user: 'admin' })).token;
+      expect((await client.authenticate(randomUUID(), primaryToken)).error).toBeUndefined();
+      expect(
+        (
+          await client.ask(randomUUID(), 'bridgeSession.backup.sign-in', {
+            username: 'cg-admin',
+            password: FAKE_PLAYOUT_PASSWORD,
+          })
+        ).payload,
+      ).toEqual({ ok: true });
+      const sourceId = inputSourceId('li-studio1');
+      await waitUntil(async () => {
+        const presence = await ask<{ sources: Record<string, { A: string; B: string }> }>(
+          client,
+          'playout.sourcePresence',
+          { channel: 1, sourceIds: [sourceId] },
+        );
+        return (
+          presence.sources[sourceId]?.A === 'missing' && presence.sources[sourceId]?.B === 'present'
+        );
+      }, 'A missing and independently mapped B present');
+      const before = (await rig.lines()).length;
+      expect((await thumbnails(client, [sourceId])).frames).toMatchObject([
+        { sourceId, engine: 'B', signal: 'present', jpegBase64: FRAME_A.toString('base64') },
+      ]);
+      const viewId = randomUUID();
+      expect((await pvw(client, viewId, [sourceId])).frames).toMatchObject([
+        { sourceId, engine: 'B', signal: 'present' },
+      ]);
+      expect(passiveA.snapshots).toEqual([]);
+      expect(passiveA.starts).toEqual([]);
+      expect(passiveB.snapshots).toEqual([[{ kind: 'live', inputId: 'li-replica-studio-b' }]]);
+      expect(passiveB.starts[0]?.source).toEqual({ kind: 'live', inputId: 'li-replica-studio-b' });
+      const audio = await ask<{ readings: { sourceId: string; engine: string; dbFs: number[] }[] }>(
+        client,
+        'sourcePreviews.audioLevels',
+        { channel: 1, sourceIds: [sourceId] },
+      );
+      expect(audio.readings).toMatchObject([{ sourceId, engine: 'B', dbFs: [-14, -18] }]);
+      expect(meterSources).toEqual([[{ kind: 'live', inputId: 'li-replica-studio-b' }]]);
+      const mixed = await pvw(client, viewId, [sourceId, LIVE]);
+      expect(mixed.frames.find((frame) => frame.sourceId === sourceId)?.engine).toBe('B');
+      expect(mixed.frames.find((frame) => frame.sourceId === LIVE)?.engine).toBe(active);
+      expect(
+        active === 'B' ? passiveB.starts.at(-1)?.source : passiveA.starts.at(-1)?.source,
+      ).toEqual({
+        kind: 'live',
+        inputId: active === 'B' ? 'li-replica-multicast-b' : 'li-multicast',
+      });
+      const check = { channel: 1, previewId: randomUUID() };
+      await ask(client, 'livePreview.start', { ...check, sourceId });
+      await waitUntil(
+        async () =>
+          (await ask<LivePreviewStatus>(client, 'livePreview.status', check)).state === 'ready',
+        'B-owned listen lease',
+      );
+      expect(await ask<LivePreviewStatus>(client, 'livePreview.status', check)).toMatchObject({
+        engine: 'B',
+        state: 'ready',
+      });
+      expect(liveB.starts[0]).toMatchObject({
+        channelCode: 'reserve-local',
+        body: { inputId: 'li-replica-studio-b' },
+      });
+      expect(
+        passiveB.requests.every(
+          (request) =>
+            request.owner.startsWith('Bearer ') && request.owner !== `Bearer ${primaryToken}`,
+        ),
+      ).toBe(true);
+      a.removeInput('li-studio1');
+      await rig.handle.playoutSources?.refresh(0);
+      expect(
+        rig.handle.runtime.sourceCatalog().sources.find((source) => source.id === sourceId)
+          ?.departed,
+      ).toBe(true);
+      expect((await pvw(client, viewId, [sourceId])).frames).toMatchObject([
+        { sourceId, engine: 'B' },
+      ]);
+      expect(await ask<LivePreviewStatus>(client, 'livePreview.status', check)).toMatchObject({
+        engine: 'B',
+        state: 'ready',
+      });
+      if (active === 'B') {
+        await a.goOffline();
+        expect((await pvw(client, viewId, [sourceId])).frames).toMatchObject([
+          { sourceId, engine: 'B' },
+        ]);
+      }
+      await ask(client, 'livePreview.stop', check);
+      await pvw(client, viewId, []);
+      expect(passiveB.leases.size).toBe(0);
+      expect(
+        (await rig.lines())
+          .slice(before)
+          .filter((line) => /^(?:CG|PLAY|STOP|CLEAR|MIXER|LOAD|LOADBG)\b/i.test(line)),
+      ).toEqual([]);
+    },
+    20_000,
+  );
+
   it('keeps a clean Playlist thumbnail while an independent NDI check owns its preview', async () => {
     const passive = new FakeSourcePreviews();
     const active = new FakeLivePreview();
@@ -245,6 +482,7 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
       frames: [
         {
           sourceId: PLAYLIST,
+          engine: 'A',
           signal: 'unknown',
           jpegBase64: FRAME_B.toString('base64'),
           width: 64,
@@ -317,6 +555,7 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
       frames: [
         {
           sourceId: id,
+          engine: 'A',
           signal: 'unknown',
           jpegBase64: FRAME_B.toString('base64'),
           width: 64,
@@ -325,6 +564,7 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
       ],
       mediaFrame: {
         sourceId: id,
+        engine: 'A',
         previewPositionMs: 3_250,
         signal: 'unknown',
         jpegBase64: FRAME_B.toString('base64'),
@@ -398,6 +638,7 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
     };
     const liveFrame = {
       sourceId: LIVE,
+      engine: 'A',
       signal: 'present',
       jpegBase64: FRAME_A.toString('base64'),
       width: 64,
@@ -405,6 +646,7 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
     };
     const playlistFrame = {
       sourceId: PLAYLIST,
+      engine: 'A',
       signal: 'unknown',
       jpegBase64: FRAME_B.toString('base64'),
       width: 64,
@@ -470,7 +712,7 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
       );
     }, 'the next decoded signal observation');
     expect(await pvw(first, firstView, [LIVE, PLAYLIST])).toEqual({
-      frames: [{ sourceId: LIVE, signal: 'absent' }, playlistFrame],
+      frames: [{ sourceId: LIVE, signal: 'absent', engine: 'A' }, playlistFrame],
     });
 
     expect(await pvw(first, randomUUID(), [])).toEqual({ frames: [] });

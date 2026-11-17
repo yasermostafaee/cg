@@ -214,6 +214,8 @@ import {
   SourcesConfigChannel,
   SourcesMediaSearchChannel,
   SourcesMediaThumbnailChannel,
+  MEDIA_THUMBNAIL_DATA_URL_PREFIX,
+  sourcePreviewable,
   SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
@@ -339,8 +341,13 @@ import { PlayoutPgmMonitors } from './playout-pgm-monitors.js';
 import type { readPlayoutPgmTopology } from './playout-pgm-topology.js';
 import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
 import type { SourcePreviewSelector } from './playout-source-previews.js';
-import { SourceAudioService } from './source-audio.js';
-import { SourcePreviewService } from './source-preview-service.js';
+import { RoutedSourceReads } from './routed-source-reads.js';
+import {
+  reservePreviewSelector,
+  sourceReadEngine,
+  sourceReadTarget,
+  type PreviewEngine,
+} from './source-read-routing.js';
 import {
   MediaPreviewService,
   mediaPreviewEngine,
@@ -3287,7 +3294,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       !(lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
     );
   };
-  const previewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
+  const primaryPreviewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
     const token = owner.token;
     if (previewOrigin === null || token === null || !previewPermitted(owner, channel)) return null;
     const named = stationChannelsFor(
@@ -3299,13 +3306,35 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ).channels.find(
       (row) => row.channel === channel && row.declared && row.permitted === true,
     )?.named;
-    return named == null ? null : { origin: previewOrigin, code: named.id, bearer: token.rawToken };
+    return named == null
+      ? null
+      : { origin: previewOrigin, code: named.id, bearer: token.rawToken, engine: 'A' };
   };
-  const livePreview = new LivePreviewService(
-    previewTarget,
-    (id) => runtime.sourceCatalog().sources.find((source) => source.id === id),
-    (row) => runtime.recordLivePreview(row),
-  );
+  const backupPreviewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
+    if (!previewPermitted(owner, channel)) return null;
+    const address = backupEngine?.address();
+    const bearer = backupEngine?.accessToken();
+    const physical = backupChannels.channelOnB(channel);
+    const endpoint = runtime.config().servers.B;
+    if (address == null || bearer == null || physical === null || endpoint === undefined)
+      return null;
+    const matches = backupEngine
+      ?.rows()
+      ?.filter(
+        (row) =>
+          row.casparChannel === physical && hostJoinsStation(row.casparHost, [endpoint.host]),
+      );
+    const row = matches?.length === 1 ? matches[0] : undefined;
+    return row === undefined || row.cgLicensed === false
+      ? null
+      : { origin: new URL(address).origin, code: row.id, bearer, engine: 'B' };
+  };
+  const readTarget = (
+    engine: PreviewEngine,
+    owner: AuthSession,
+    channel: number,
+  ): LivePreviewTarget | null =>
+    engine === 'A' ? primaryPreviewTarget(owner, channel) : backupPreviewTarget(owner, channel);
   const previewSelector = (
     owner: AuthSession,
     channel: number,
@@ -3346,98 +3375,90 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const inputId = playoutInputIdOf(source.id);
     return inputId === null ? null : { kind: 'live', inputId };
   };
-  const sourcePreviews = new SourcePreviewService(
-    previewTarget,
-    previewSelector,
-    (sourceId, atMs) => playoutSources?.mediaPreviewId(sourceId, atMs) ?? null,
-  );
-  const sourceAudio = new SourceAudioService(previewTarget, previewSelector);
   const backupPreviewMedia = new Map<string, { until: number; id: string | null }>();
+  const backupPreviewMediaId = async (
+    owner: AuthSession,
+    channel: number,
+    fingerprint: string,
+  ): Promise<string | null> => {
+    const address = backupEngine?.address();
+    const bearer = backupEngine?.accessToken();
+    const mediaUrl = backupEngine?.mediaUrl();
+    if (
+      address == null ||
+      bearer == null ||
+      mediaUrl == null ||
+      backupPreviewTarget(owner, channel) === null
+    )
+      return null;
+    const key = `${address}\n${bearer}\n${fingerprint}`;
+    let found = backupPreviewMedia.get(key);
+    if (found === undefined || Date.now() >= found.until) {
+      const url = new URL(mediaUrl);
+      url.searchParams.set('fingerprint', fingerprint);
+      const response = await playoutFetch(url, {
+        headers: { authorization: `Bearer ${bearer}` },
+        signal: AbortSignal.timeout(5000),
+        maxResponseBytes: 1024 * 1024,
+      }).catch(() => null);
+      const page =
+        response?.ok === true
+          ? parsePlayoutMediaPage(await response.json().catch(() => null))
+          : null;
+      const item = page?.items.find((entry) => entry.fingerprint === fingerprint);
+      found = { until: Date.now() + 15_000, id: item?.id ?? null };
+      backupPreviewMedia.set(key, found);
+      while (backupPreviewMedia.size > 64) {
+        const oldest = backupPreviewMedia.keys().next().value;
+        if (oldest === undefined) break;
+        backupPreviewMedia.delete(oldest);
+      }
+    }
+    if (
+      found.id === null ||
+      !previewPermitted(owner, channel) ||
+      backupEngine?.accessToken() !== bearer ||
+      backupEngine.address() !== address
+    )
+      return null;
+    return found.id;
+  };
+  const preferredReadEngine = async (
+    owner: AuthSession,
+    channel: number,
+  ): Promise<PreviewEngine | null> => {
+    const topology = await readProgrammeTopology(channel);
+    return mediaPreviewEngine(
+      topology?.active,
+      runtime.health().currentPrimary,
+      primaryPreviewTarget(owner, channel) !== null,
+    );
+  };
   const mediaPreviews = new MediaPreviewService({
     tickets,
     targetFor: async (owner, channel, sourceId): Promise<MediaPreviewTarget | null> => {
       if (!previewPermitted(owner, channel)) return null;
       const fingerprint = playoutSources?.mediaForPresence(sourceId)?.fingerprint;
-      const topology = await readProgrammeTopology(channel);
-      const primary = previewTarget(owner, channel);
-      const engine = mediaPreviewEngine(
-        topology?.active,
-        runtime.health().currentPrimary,
-        primary !== null,
-      );
-      if (engine === null) return null;
-      if (engine === 'A') {
-        const mediaId = playoutSources?.mediaPreviewId(sourceId);
-        if (primary === null || mediaId == null) return null;
+      return sourceReadTarget(await preferredReadEngine(owner, channel), async (engine) => {
+        const target = readTarget(engine, owner, channel);
+        if (target === null) return null;
+        if (engine === 'A' && playoutSources?.mediaForPresence(sourceId)?.state === 'missing')
+          return null;
+        const mediaId =
+          engine === 'A'
+            ? playoutSources?.mediaPreviewId(sourceId)
+            : fingerprint === undefined
+              ? null
+              : await backupPreviewMediaId(owner, channel, fingerprint);
+        if (mediaId == null || !previewPermitted(owner, channel)) return null;
         return {
-          ...primary,
+          ...target,
           mediaId,
           ...(fingerprint === undefined ? {} : { fingerprint }),
-          engine: 'A',
-          host: new URL(primary.origin).hostname,
+          engine,
+          host: new URL(target.origin).hostname,
         };
-      }
-      const address = backupEngine?.address();
-      const bearer = backupEngine?.accessToken();
-      const mediaUrl = backupEngine?.mediaUrl();
-      const physical = backupChannels.channelOnB(channel);
-      const endpoint = runtime.config().servers.B;
-      if (
-        address == null ||
-        bearer == null ||
-        mediaUrl == null ||
-        physical === null ||
-        endpoint === undefined ||
-        fingerprint === undefined
-      )
-        return null;
-      const matches = backupEngine
-        ?.rows()
-        ?.filter(
-          (row) =>
-            row.casparChannel === physical && hostJoinsStation(row.casparHost, [endpoint.host]),
-        );
-      const row = matches?.length === 1 ? matches[0] : undefined;
-      if (row === undefined || row.cgLicensed === false) return null;
-      const key = `${address}\n${bearer}\n${fingerprint}`;
-      let found = backupPreviewMedia.get(key);
-      if (found === undefined || Date.now() >= found.until) {
-        const url = new URL(mediaUrl);
-        url.searchParams.set('fingerprint', fingerprint);
-        const response = await playoutFetch(url, {
-          headers: { authorization: `Bearer ${bearer}` },
-          signal: AbortSignal.timeout(5000),
-          maxResponseBytes: 1024 * 1024,
-        }).catch(() => null);
-        const page =
-          response?.ok === true
-            ? parsePlayoutMediaPage(await response.json().catch(() => null))
-            : null;
-        const item = page?.items.find((entry) => entry.fingerprint === fingerprint);
-        found = { until: Date.now() + 15_000, id: item?.id ?? null };
-        backupPreviewMedia.set(key, found);
-        while (backupPreviewMedia.size > 64) {
-          const oldest = backupPreviewMedia.keys().next().value;
-          if (oldest === undefined) break;
-          backupPreviewMedia.delete(oldest);
-        }
-      }
-      if (
-        found.id === null ||
-        !previewPermitted(owner, channel) ||
-        backupEngine?.accessToken() !== bearer ||
-        backupEngine.address() !== address
-      )
-        return null;
-      return {
-        origin: new URL(address).origin,
-        code: row.id,
-        bearer,
-        mediaId: found.id,
-        fingerprint,
-        engine: 'B',
-        host: new URL(address).hostname,
-      };
+      });
     },
   });
   const sourcePresence = async (
@@ -3558,6 +3579,253 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     );
     return { engines, sources };
   };
+  const backupReadSelectors = new WeakMap<
+    AuthSession,
+    Map<number, { signature: string; sources: Map<string, SourcePreviewSelector> }>
+  >();
+  const selectedReadEngines = new WeakMap<AuthSession, Map<number, Map<string, PreviewEngine>>>();
+  const targetSignature = (target: LivePreviewTarget): string =>
+    JSON.stringify([target.origin, target.code, target.bearer]);
+  const readSelector = (
+    engine: PreviewEngine,
+    owner: AuthSession,
+    channel: number,
+    sourceId: string,
+  ): SourcePreviewSelector | null => {
+    if (engine === 'A')
+      return playoutSources?.mediaForPresence(sourceId)?.state === 'missing'
+        ? null
+        : previewSelector(owner, channel, sourceId);
+    const source = runtime.sourceCatalog().sources.find((entry) => entry.id === sourceId);
+    if (
+      source?.origin === 'input' &&
+      (!sourcePreviewable(source) ||
+        !sourceShowableOn(source, channel) ||
+        (source.playlistOf !== undefined && !previewPermitted(owner, source.playlistOf)))
+    )
+      return null;
+    const target = backupPreviewTarget(owner, channel);
+    const cached = backupReadSelectors.get(owner)?.get(channel);
+    return target === null || cached?.signature !== targetSignature(target)
+      ? null
+      : (cached.sources.get(sourceId) ?? null);
+  };
+  const prepareReadRoutes = async (
+    owner: AuthSession,
+    channel: number,
+    sourceIds: readonly string[],
+    stillCurrent: () => boolean = () => true,
+  ): Promise<ReadonlyMap<string, PreviewEngine>> => {
+    const empty = new Map<string, PreviewEngine>();
+    if (!stillCurrent() || !previewPermitted(owner, channel) || sourceIds.length === 0)
+      return empty;
+    const config = runtime.config();
+    const target = backupPreviewTarget(owner, channel);
+    const [preferred, presence, reserveRead] = await Promise.all([
+      preferredReadEngine(owner, channel),
+      sourcePresence(owner, { channel, sourceIds: [...new Set(sourceIds)].slice(0, 32) }),
+      target === null ? null : backupEngine?.readPlaylistInputs(),
+    ]);
+    if (!stillCurrent() || !previewPermitted(owner, channel) || config !== runtime.config())
+      return empty;
+    const current = backupPreviewTarget(owner, channel);
+    const sameBackup =
+      target !== null && current !== null && targetSignature(target) === targetSignature(current);
+    const signature = sameBackup ? targetSignature(target) : '';
+    const prior = backupReadSelectors.get(owner)?.get(channel);
+    const sources =
+      prior?.signature === signature
+        ? new Map(prior.sources)
+        : new Map<string, SourcePreviewSelector>();
+    const inputs = reserveRead?.kind === 'list' ? sourcePresenceInputsOf(reserveRead.body) : null;
+    const choices = new Map<string, PreviewEngine>();
+    await Promise.all(
+      [...new Set(sourceIds)].map(async (sourceId) => {
+        const source = runtime.sourceCatalog().sources.find((entry) => entry.id === sourceId);
+        const logicalId = playoutInputIdOf(sourceId);
+        const fingerprint = playoutSources?.mediaForPresence(sourceId)?.fingerprint;
+        let selector: SourcePreviewSelector | null = null;
+        if (sameBackup && target !== null && fingerprint !== undefined) {
+          const mediaId = await backupPreviewMediaId(owner, channel, fingerprint);
+          if (mediaId !== null) selector = { kind: 'media', mediaId };
+        } else if (
+          sameBackup &&
+          target !== null &&
+          config.servers.B !== undefined &&
+          logicalId !== null &&
+          source !== undefined &&
+          sourcePreviewable(source) &&
+          sourceShowableOn(source, channel)
+        ) {
+          const playlistChannel = source.playlistOf;
+          if (playlistChannel === undefined || previewPermitted(owner, playlistChannel)) {
+            selector = reservePreviewSelector(
+              inputs,
+              {
+                channelCode: target.code,
+                host: config.servers.B.host,
+                apiHost: new URL(target.origin).hostname,
+                playlistChannel:
+                  playlistChannel === undefined ? null : backupChannels.channelOnB(playlistChannel),
+              },
+              logicalId,
+              playlistChannel !== undefined,
+            );
+          }
+        }
+        if (selector === null) sources.delete(sourceId);
+        else sources.set(sourceId, selector);
+        const observed = presence.sources[sourceId];
+        const choice = sourceReadEngine(
+          preferred,
+          observed?.A ?? 'unknown',
+          selector === null ? 'missing' : (observed?.B ?? 'unknown'),
+        );
+        if (
+          choice !== null &&
+          (choice === 'A'
+            ? readSelector('A', owner, channel, sourceId) !== null
+            : selector !== null)
+        )
+          choices.set(sourceId, choice);
+      }),
+    );
+    const fresh = backupPreviewTarget(owner, channel);
+    if (
+      !stillCurrent() ||
+      !previewPermitted(owner, channel) ||
+      config !== runtime.config() ||
+      (sameBackup && (fresh === null || targetSignature(fresh) !== signature))
+    )
+      return empty;
+    while (sources.size > 128) {
+      const oldest = sources.keys().next().value;
+      if (oldest === undefined) break;
+      sources.delete(oldest);
+    }
+    const latest = backupReadSelectors.get(owner)?.get(channel);
+    const merged =
+      latest?.signature === signature
+        ? new Map(latest.sources)
+        : new Map<string, SourcePreviewSelector>();
+    for (const id of sourceIds) {
+      const selector = sources.get(id);
+      if (selector === undefined) merged.delete(id);
+      else merged.set(id, selector);
+    }
+    while (merged.size > 128) {
+      const oldest = merged.keys().next().value;
+      if (oldest === undefined) break;
+      merged.delete(oldest);
+    }
+    let ownerSelectors = backupReadSelectors.get(owner);
+    if (ownerSelectors === undefined) {
+      ownerSelectors = new Map();
+      backupReadSelectors.set(owner, ownerSelectors);
+    }
+    ownerSelectors.set(channel, { signature, sources: merged });
+    let byChannel = selectedReadEngines.get(owner);
+    if (byChannel === undefined) {
+      byChannel = new Map();
+      selectedReadEngines.set(owner, byChannel);
+    }
+    const selected = new Map(byChannel.get(channel));
+    for (const id of sourceIds) {
+      const engine = choices.get(id);
+      if (engine === undefined) selected.delete(id);
+      else selected.set(id, engine);
+    }
+    while (selected.size > 128) {
+      const oldest = selected.keys().next().value;
+      if (oldest === undefined) break;
+      selected.delete(oldest);
+    }
+    byChannel.set(channel, selected);
+    return choices;
+  };
+  const sourcePreviews = new RoutedSourceReads({
+    prepare: prepareReadRoutes,
+    target: readTarget,
+    selector: readSelector,
+    mediaId: (engine, owner, channel, sourceId, atMs) => {
+      if (engine === 'A') return playoutSources?.mediaPreviewId(sourceId, atMs) ?? null;
+      const selector = readSelector('B', owner, channel, sourceId);
+      return selector?.kind === 'media' ? (selector.mediaId ?? null) : null;
+    },
+  });
+  const sourceAudio = sourcePreviews;
+  const mediaThumbnail = async (
+    owner: AuthSession | null,
+    request: ChannelRequest<typeof SourcesMediaThumbnailChannel>,
+  ): Promise<{ ok: boolean; dataUrl?: string; engine?: PreviewEngine }> => {
+    if (request.channel === undefined) {
+      const result = await playoutSources?.mediaThumbnail(request.id);
+      return result?.ok === true ? { ...result, engine: 'A' } : { ok: false };
+    }
+    if (owner === null || !previewPermitted(owner, request.channel)) return { ok: false };
+    const channel = request.channel;
+    const result = await sourceReadTarget(
+      await preferredReadEngine(owner, channel),
+      async (engine) => {
+        if (engine === 'A') {
+          if (playoutSources?.mediaForPresence(request.id)?.state === 'missing') return null;
+          const response = await playoutSources?.mediaThumbnail(request.id);
+          return response?.ok === true ? { ...response, engine } : null;
+        }
+        const target = backupPreviewTarget(owner, channel);
+        const mediaUrl = backupEngine?.mediaUrl();
+        const fingerprint = playoutSources?.mediaForPresence(request.id)?.fingerprint;
+        if (
+          target === null ||
+          mediaUrl == null ||
+          fingerprint === undefined ||
+          (await backupPreviewMediaId(owner, channel, fingerprint)) === null
+        )
+          return null;
+        const provider = new HttpPlayoutSources({ inputsUrl: mediaUrl, mediaUrl }, () => {
+          const current = backupPreviewTarget(owner, channel);
+          return current !== null && targetSignature(current) === targetSignature(target)
+            ? target.bearer
+            : null;
+        });
+        const bytes = await provider.readMediaThumbnail(fingerprint);
+        const current = backupPreviewTarget(owner, channel);
+        return bytes === null ||
+          current === null ||
+          targetSignature(current) !== targetSignature(target)
+          ? null
+          : {
+              ok: true,
+              dataUrl: MEDIA_THUMBNAIL_DATA_URL_PREFIX + bytes.toString('base64'),
+              engine,
+            };
+      },
+    );
+    return result ?? { ok: false };
+  };
+  const selectedReadTarget = (
+    owner: AuthSession,
+    channel: number,
+    sourceId: string,
+  ): LivePreviewTarget | null => {
+    const engine = selectedReadEngines.get(owner)?.get(channel)?.get(sourceId);
+    return engine === undefined
+      ? primaryPreviewTarget(owner, channel)
+      : readTarget(engine, owner, channel);
+  };
+  const livePreview = new LivePreviewService(
+    selectedReadTarget,
+    (id) => runtime.sourceCatalog().sources.find((source) => source.id === id),
+    (row) => runtime.recordLivePreview(row),
+    (owner, channel, sourceId) => {
+      const engine = selectedReadEngines.get(owner)?.get(channel)?.get(sourceId);
+      const selector = engine === undefined ? null : readSelector(engine, owner, channel, sourceId);
+      return selector?.kind === 'live' ? selector.inputId : null;
+    },
+    async (owner, channel, sourceId, stillCurrent) => {
+      await prepareReadRoutes(owner, channel, [sourceId], stillCurrent);
+    },
+  );
   const playlistGainOrigin =
     primaryEngineAddress === null ? null : new URL(primaryEngineAddress).origin;
   const playlistGain = new PlaylistGainService(
@@ -3637,6 +3905,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     mediaPreviews,
     sourceAudio,
     sourcePresence,
+    mediaThumbnail,
     playlistGain,
     logsAvailable: options.logsDir !== undefined,
     setupPhase,
@@ -4160,7 +4429,6 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       livePreview.disconnect(session);
       void sourcePreviews.drop(session);
       mediaPreviews.drop(session);
-      sourceAudio.drop(session);
       playlistGain.drop(session);
       for (const off of unsubscribers) off();
       /*
@@ -4404,7 +4672,6 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     },
     async close() {
       for (const client of wss.clients) client.terminate();
-      sourceAudio.dispose();
       await livePreview.dispose();
       await sourcePreviews.dispose();
       mediaPreviews.dispose();
@@ -5224,9 +5491,13 @@ export function buildRoutes(
     /** `CENTRAL-BRIDGE-01` (D9) — a ticket for one of CG Bridge's HTTP resources. */
     issueTicket?: (grant: TicketGrant) => string;
     livePreview?: LivePreviewService;
-    sourcePreviews?: SourcePreviewService;
+    sourcePreviews?: Pick<RoutedSourceReads, 'pvw' | 'thumbnails' | 'drop'>;
+    mediaThumbnail?: (
+      owner: AuthSession | null,
+      request: ChannelRequest<typeof SourcesMediaThumbnailChannel>,
+    ) => Promise<{ ok: boolean; dataUrl?: string; engine?: PreviewEngine }>;
     mediaPreviews?: MediaPreviewService;
-    sourceAudio?: SourceAudioService;
+    sourceAudio?: Pick<RoutedSourceReads, 'read' | 'drop'>;
     sourcePresence?: (
       owner: AuthSession | null,
       request: ChannelRequest<typeof PlayoutSourcePresenceChannel>,
@@ -6005,6 +6276,7 @@ export function buildRoutes(
           if (
             current === undefined ||
             (reading.state === 'measured' &&
+              current.engine === reading.engine &&
               (current.state === 'has-audio' || current.state === 'unknown'))
           ) {
             readings.set(reading.sourceId, reading);
@@ -6532,6 +6804,7 @@ export function buildRoutes(
       'read',
       'read',
       (r: ChannelRequest<typeof SourcesMediaThumbnailChannel>) =>
+        paths.mediaThumbnail?.(currentAuthSession(), r) ??
         playoutSources?.mediaThumbnail(r.id) ?? { ok: false },
     ),
     // §1.A — a picker opened: read again if the last read is older than 5 s. Never waits.

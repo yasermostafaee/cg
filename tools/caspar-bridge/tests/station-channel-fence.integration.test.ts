@@ -653,6 +653,7 @@ describe('the census: every route that names a channel, classified', () => {
       'sourcePreviews.mediaOpen': ['req.channel'],
       'sourcePreviews.pvw': ['req.channel'],
       'sourcePreviews.thumbnails': ['req.channel'],
+      'sources.media-thumbnail': ['req.channel'],
       'playlistGain.get': ['req.channel'],
       'playlistGain.set': ['req.channel'],
       /*
@@ -746,6 +747,7 @@ describe('the census: every route that names a channel, classified', () => {
       'sourcePreviews.mediaOpen',
       'sourcePreviews.pvw',
       'sourcePreviews.thumbnails',
+      'sources.media-thumbnail',
       // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.
       'stack.clear-all',
       // `CENTRAL-BRIDGE-01` — a restore-report dismissal for the channel on screen.

@@ -11,6 +11,53 @@ const FIRST = '10000000-0000-4000-8000-000000000001';
 const SECOND = '10000000-0000-4000-8000-000000000002';
 const THIRD = '10000000-0000-4000-8000-000000000003';
 
+it('marks a preloaded paused video when playback starts without another loadeddata event', async () => {
+  mockPlayer();
+  const origin = vi.fn();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, false, origin);
+  try {
+    const video = view.host.querySelector('video')!;
+    await act(async () => video.dispatchEvent(new Event('loadeddata')));
+    await act(async () => view.host.querySelector('img')!.dispatchEvent(new Event('load')));
+    await act(async () => view.button('Play preview').click());
+    await act(async () => video.dispatchEvent(new Event('playing')));
+    expect(origin).toHaveBeenLastCalledWith('B');
+  } finally {
+    await view.close();
+  }
+});
+
+it('marks the received poster and video origin only after each new picture decodes', async () => {
+  mockPlayer();
+  const origin = vi.fn();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), engine: 'A', host: '192.0.2.32' })
+    .mockResolvedValue(ready(SECOND));
+  const view = await mount(mediaOpen, false, origin);
+  try {
+    const poster = view.host.querySelector('.cg-source-media-preview__picture img')!;
+    expect(origin).toHaveBeenLastCalledWith(undefined);
+    await act(async () => poster.dispatchEvent(new Event('load')));
+    expect(origin).toHaveBeenLastCalledWith('A');
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(origin).toHaveBeenLastCalledWith('A');
+    await act(async () => poster.dispatchEvent(new Event('load')));
+    expect(origin).toHaveBeenLastCalledWith('B');
+    await act(async () => view.button('Play preview').click());
+    expect(origin).toHaveBeenLastCalledWith(undefined);
+    await act(async () => view.host.querySelector('video')!.dispatchEvent(new Event('loadeddata')));
+    expect(origin).toHaveBeenLastCalledWith('B');
+    expect(view.take).not.toHaveBeenCalled();
+    expect(view.update).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
 function ready(previewId = FIRST): MediaPlaybackPreview {
   return {
     state: 'ready',
@@ -45,6 +92,7 @@ afterEach(() => {
 async function mount(
   mediaOpen: NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>,
   inline = false,
+  onPreviewEngineChange?: (engine: 'A' | 'B' | undefined) => void,
 ) {
   const previous = window.cg;
   const mediaClose = vi.fn(async () => ({ closed: true }));
@@ -71,6 +119,7 @@ async function mount(
             channel: 1,
             inline,
             poster: 'data:image/jpeg;base64,original-poster',
+            onPreviewEngineChange,
           }),
           covered
             ? createElement(Modal, {
@@ -114,6 +163,7 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
     const poster = view.host.querySelector('.cg-source-media-preview__picture img');
     expect(video.muted).toBe(true);
     expect(video.preload).toBe('metadata');
+    await act(async () => poster?.dispatchEvent(new Event('load')));
     expect(view.host.textContent).toContain('Server B');
     expect(mediaOpen).toHaveBeenCalledWith({ channel: 1, sourceId: 'md-film', prepare: true });
     await act(async () => view.button('Play preview').click());

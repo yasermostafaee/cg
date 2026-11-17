@@ -1446,9 +1446,10 @@ export const MEDIA_THUMBNAIL_DATA_URL_PREFIX = 'data:image/jpeg;base64,';
 /** Read the Playout's existing poster for a D11 media row known to the Bridge. */
 export const SourcesMediaThumbnailChannel = defineChannel(
   'sources.media-thumbnail',
-  z.object({ id: SourceCatalogIdSchema }),
+  z.object({ id: SourceCatalogIdSchema, channel: z.number().int().positive().optional() }),
   z.object({
     ok: z.boolean(),
+    engine: z.enum(['A', 'B']).optional(),
     dataUrl: z
       .string()
       .max(MEDIA_THUMBNAIL_DATA_URL_PREFIX.length + 4 * Math.ceil(MAX_MEDIA_THUMBNAIL_BYTES / 3))

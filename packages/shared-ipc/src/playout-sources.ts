@@ -626,6 +626,11 @@ export function sourceSeatable(entry: SourceDefinition): boolean {
   return entry.status === undefined;
 }
 
+/** Read-only previews may resolve an unavailable A source independently on B. */
+export function sourcePreviewable(entry: SourceDefinition): boolean {
+  return entry.status !== 'unusable';
+}
+
 /**
  * 🔴 `ROUTE-PLATES-01` — **IS THIS A PLAYOUT ROUTE?** A D10 input the Playout holds on its holder
  * channel, seated by `route://H-L` under contract v1.3's rules 1–5. The ONE question every door asks;

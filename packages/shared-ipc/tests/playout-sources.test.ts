@@ -20,6 +20,7 @@ import {
   redactUrlCredentials,
   sourceBindable,
   sourceSeatable,
+  sourcePreviewable,
   sourceShowableOn,
   unseatableClause,
   unseatableWords,
@@ -290,6 +291,9 @@ describe('buildPlayoutSourceCatalog (§1.B)', () => {
     });
     expect(sourceBindable(gone)).toBe(false);
     expect(sourceSeatable(gone)).toBe(false);
+    // A reserve may independently prove a read preview; binding and output seating remain refused.
+    expect(sourcePreviewable(gone)).toBe(true);
+    expect(sourcePreviewable({ ...gone, status: 'unusable' })).toBe(false);
   });
 
   it('bound media become media entries; a missing one is departed', () => {

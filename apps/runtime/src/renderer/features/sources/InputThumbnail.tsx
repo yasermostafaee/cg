@@ -2,7 +2,7 @@ import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { VideoOff } from 'lucide-react';
 import {
-  sourceSeatable,
+  sourcePreviewable,
   sourceShowableOn,
   type SourceDefinition,
   type SourcePreviewFrame,
@@ -14,6 +14,7 @@ import { LiveInputCheckTile } from '../monitors/LiveInputCheckTile.js';
 import { useLiveInputCheck, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { InputAudioMeter } from './InputAudioMeter.js';
 import { subscribeInputThumbnail } from './inputThumbnailDemand.js';
+import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 
 const PLACEHOLDER_DESCRIPTION = 'Picture placeholder. Input signal status is unknown.';
 const SNAPSHOT_HOLD_MS = 5_000;
@@ -26,6 +27,7 @@ export function InputThumbnail({
   compact = false,
   inputCheck,
   onCheck,
+  onPreviewEngineChange,
 }: {
   source: SourceDefinition;
   channel?: number | undefined;
@@ -33,13 +35,13 @@ export function InputThumbnail({
   compact?: boolean;
   inputCheck?: InputCheckSurface | undefined;
   onCheck?: ((source: SourceDefinition) => void) | undefined;
+  onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
   const foreground = useModalForeground();
   const previewChannel =
     channel !== undefined &&
     source.origin === 'input' &&
-    source.departed !== true &&
-    sourceSeatable(source) &&
+    sourcePreviewable(source) &&
     sourceShowableOn(source, channel)
       ? channel
       : undefined;
@@ -60,6 +62,10 @@ export function InputThumbnail({
     frame: SourcePreviewFrame;
   }>();
   const [brokenPicture, setBrokenPicture] = useState<string>();
+  const [decodedOrigin, setDecodedOrigin] = useState<{
+    sourceId: string;
+    engine?: PreviewEngine;
+  }>();
   const frame =
     snapshot?.channel === previewChannel && snapshot?.frame.sourceId === sourceId
       ? snapshot.frame
@@ -69,6 +75,14 @@ export function InputThumbnail({
       ? `data:image/jpeg;base64,${frame.jpegBase64}`
       : undefined;
   const picture = src === undefined || src === brokenPicture ? null : src;
+
+  useEffect(() => {
+    if (picture === null) setDecodedOrigin(undefined);
+    if (!active)
+      onPreviewEngineChange?.(
+        picture !== null && decodedOrigin?.sourceId === sourceId ? decodedOrigin.engine : undefined,
+      );
+  }, [active, picture, decodedOrigin, sourceId, onPreviewEngineChange]);
 
   useEffect(() => {
     if (snapshot === undefined || !foreground || active) return;
@@ -133,6 +147,7 @@ export function InputThumbnail({
           requestAnimationFrame(() => element.current?.focus());
         }}
         onStall={control.stall}
+        onPreviewEngineChange={onPreviewEngineChange}
       />
     );
   }
@@ -147,7 +162,21 @@ export function InputThumbnail({
     picture === null ? 'cg-input-thumbnail' : 'cg-input-thumbnail cg-media-thumbnail';
   const content =
     picture !== null ? (
-      <img src={picture} alt="" onError={() => setBrokenPicture(picture)} />
+      <img
+        src={picture}
+        alt=""
+        onLoad={(event) => {
+          if (event.currentTarget.getAttribute('src') === picture)
+            setDecodedOrigin({
+              sourceId,
+              ...(frame?.engine === undefined ? {} : { engine: frame.engine }),
+            });
+        }}
+        onError={() => {
+          setDecodedOrigin(undefined);
+          setBrokenPicture(picture);
+        }}
+      />
     ) : compact ? (
       <Icon icon={VideoOff} size={12} />
     ) : frame?.signal === 'absent' ? (
@@ -190,6 +219,11 @@ export function InputThumbnail({
       {thumbnail}
       <InputAudioMeter
         sourceId={sourceId}
+        previewEngine={
+          picture !== null && decodedOrigin?.sourceId === sourceId
+            ? decodedOrigin.engine
+            : undefined
+        }
         channel={meterChannel}
         name={sourceDisplayName(source.name, 'input')}
       />

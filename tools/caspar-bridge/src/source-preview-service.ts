@@ -162,14 +162,24 @@ export class SourcePreviewService {
   readonly #lastBatch = new Map<string, number>();
   readonly #targetFor: (owner: AuthSession, channel: number) => Target | null;
   readonly #selectorFor: SelectorFor;
-  readonly #mediaPreviewId: (sourceId: string, atMs: number) => string | null;
+  readonly #mediaPreviewId: (
+    sourceId: string,
+    atMs: number,
+    owner: AuthSession,
+    channel: number,
+  ) => string | null;
   readonly #timer: ReturnType<typeof setInterval>;
   #disposed = false;
 
   constructor(
     targetFor: (owner: AuthSession, channel: number) => Target | null,
     selectorFor: SelectorFor,
-    mediaPreviewId: (sourceId: string, atMs: number) => string | null,
+    mediaPreviewId: (
+      sourceId: string,
+      atMs: number,
+      owner: AuthSession,
+      channel: number,
+    ) => string | null,
   ) {
     this.#targetFor = targetFor;
     this.#selectorFor = selectorFor;
@@ -235,11 +245,16 @@ export class SourcePreviewService {
   async thumbnails(owner: AuthSession | null, req: ThumbnailRequest): Promise<Frames> {
     if (owner === null || this.#disposed) return EMPTY;
     const scope = this.#scope(owner, req.channel);
-    const ownerKey = owner.token?.jti;
-    if (scope === null || ownerKey == null) return EMPTY;
+    if (scope === null || owner.token?.jti == null) return EMPTY;
+    const ownerKey = createHash('sha256')
+      .update(JSON.stringify([scope.target.origin, scope.target.bearer]))
+      .digest('hex');
     const requested = [...this.#selectors(owner, req.channel, req.sourceIds)];
     const media = req.mediaPosition;
-    const mediaId = media === undefined ? null : this.#mediaPreviewId(media.sourceId, media.atMs);
+    const mediaId =
+      media === undefined
+        ? null
+        : this.#mediaPreviewId(media.sourceId, media.atMs, owner, req.channel);
     if (
       (requested.length === 0 && mediaId === null) ||
       Date.now() < (this.#lastBatch.get(ownerKey) ?? 0)
@@ -265,6 +280,8 @@ export class SourcePreviewService {
       positioned === undefined || media === undefined
         ? undefined
         : this.#positionedFrame(
+            owner,
+            req.channel,
             media,
             positioned.mediaId,
             result.value.items[wanted.length]?.frame,
@@ -281,13 +298,15 @@ export class SourcePreviewService {
   }
 
   #positionedFrame(
+    owner: AuthSession,
+    channel: number,
     media: MediaPosition,
     mediaId: string,
     frame: UpstreamFrame | null | undefined,
   ): MediaPreviewFrame | undefined {
     if (
       frame == null ||
-      this.#mediaPreviewId(media.sourceId, media.atMs) !== mediaId ||
+      this.#mediaPreviewId(media.sourceId, media.atMs, owner, channel) !== mediaId ||
       (frame.requestedPositionMs != null && frame.requestedPositionMs !== media.atMs)
     )
       return undefined;
