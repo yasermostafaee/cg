@@ -50,6 +50,8 @@ the bug; the first operator to use the new control would have created it.
   second control.
 - **Zero persisted keys change**, proved by two census tests that derive every persisted key
   and file from the tree and compare them to the inventory at `576a72eb`.
+- Successful backup removal selects A picture, A audio and selected-source meters at this console,
+  using its existing monitor preference key. Playout's declared group remains authoritative.
 
 ## Impact
 

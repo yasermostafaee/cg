@@ -193,7 +193,7 @@ field it replaces and show the kind icon, the name, a muted duration for media, 
 above the field when there is no room, with the call site's special rows above two tabs, `Inputs n` and
 `Media n`. Inputs SHALL appear in the Playout's order with the name only, never the kind or a URL; media SHALL be
 searched as the operator types (debounced 250 ms), paged by 50 as the list nears its end in a virtualised list, with
-a `Recent` group for an empty query and the current binding pinned. Media SHALL never appear under Inputs nor
+one Name/Recent order menu and the current binding pinned. Media captions SHALL omit folder paths. Media SHALL never appear under Inputs nor
 inputs under Media. The picker SHALL be operable by keyboard and SHALL isolate every name in `<bdi>`. While it is
 open it SHALL own the keyboard and the pointer: Escape SHALL close the panel alone and return focus to its field,
 and nothing pressed, typed or right-clicked in it SHALL reach the surface beneath.

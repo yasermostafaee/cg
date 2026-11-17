@@ -46,8 +46,8 @@
       ],
       "fixes": [
         {
-          "fa": "در حالت Off air، دکمهٔ Remove backup اتصال ذخیره‌شدهٔ سرور B را حذف می‌کند و پنل و انتخاب‌های مربوط به آن را در PGM به‌روز می‌کند.",
-          "en": "With graphics off air, Remove backup saves the removal of Server B and refreshes its PGM panel and monitor choices."
+          "fa": "در حالت Off air، دکمهٔ Remove backup اتصال ذخیره‌شدهٔ سرور B را حذف می‌کند. تصویر و صدای PGM روی A و ویومتر روی حالت Selected قرار می‌گیرند. انتخاب‌ها پس از بازکردن دوبارهٔ اپ هم حفظ می‌شوند.",
+          "en": "With graphics off air, Remove backup saves the removal of Server B. PGM picture and sound select A, with meters in Selected mode. These choices persist after reopening the app."
         },
         {
           "fa": "اندازهٔ تصویر ورودی هنگام بررسی ثابت می‌ماند. هاور کارت‌ها اسکرول را جابه‌جا نمی‌کند و انتخاب منبع مشخص می‌ماند. فرمت ورودی در تنظیمات یک‌خطی است. مدیاها یک فهرست و یک منوی مرتب‌سازی Name/Recent دارند و مسیر پوشه زیر آن‌ها حذف شده است.",

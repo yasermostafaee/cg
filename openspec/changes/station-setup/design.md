@@ -48,7 +48,11 @@ The footer closes the dialog through its existing dirty-draft guard. Advanced ca
 omitted, so the ordinary server gate, teardown and persistence remain authoritative. Its
 configuration event preserves unrelated Advanced edits. A backup added only to the local
 draft is discarded locally. Legacy PGM targets follow the remaining declaration and normalize
-old B selections to A or Follow. Playout-supplied programme topology remains its own authority.
+old B selections to A or Follow. Accepted removal also sets the local persisted monitor selections
+to A picture, A audio and selected-source meters. The existing preference hook shares a single
+snapshot across Settings and the monitor, and each setter merges only its changed field so the
+three updates retain each other's values. Playout-supplied programme topology remains its own
+authority. Its B member can remain listed while this console's B picture and audio viewers are closed.
 
 **The on-air guard did not widen, and that is stated rather than assumed.** The old
 delimiters dialog's reason for being separate — _"a gate that is right for a host change and

@@ -3,10 +3,14 @@ import type {
   BackupChannelsState,
   ConnectionConfig,
   PgmMeterReading,
+  PgmEngine,
   PgmReturnStatus,
   PgmTopology,
 } from '@cg/shared-ipc';
-import { wavHeader } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
+import {
+  startFakePgmFeed,
+  wavHeader,
+} from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 
 /**
  * `R-104` — the shipped PROGRAM UI with a paired station: independent A/B pictures, one explicit
@@ -21,6 +25,7 @@ interface ProgramMonitorSeed {
   readonly topology?: PgmTopology;
   readonly managedPlayoutAddress?: string;
   readonly removableBackup?: boolean;
+  readonly feedAddresses?: Partial<Record<PgmEngine, string>>;
 }
 
 interface TestProgrammeAudioState {
@@ -121,9 +126,17 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
                 ? w.programmeTopology
                 : null,
             );
+          if (value.feedAddresses !== undefined) {
+            bridge.pgmReturn.feedUrl = (_channel, engine = 'A') => {
+              const address = value.feedAddresses?.[engine];
+              return Promise.resolve(address === undefined ? null : `${address}/1`);
+            };
+          }
           bridge.pgmReturn.audioUrl = (_channel, engine = 'A', resourceKey) =>
             Promise.resolve(
-              '/pgm-topology-test-audio/' + engine + '/' + (resourceKey ?? 'unbound'),
+              value.feedAddresses?.[engine] !== undefined
+                ? `${value.feedAddresses[engine]}/sound`
+                : '/pgm-topology-test-audio/' + engine + '/' + (resourceKey ?? 'unbound'),
             );
           const subscribe = bridge.meters.onReading;
           bridge.meters.onReading = (handler) => {
@@ -234,6 +247,98 @@ for (const display of ['B', 'both'] as const) {
     await expect(
       page.getByLabel('Programme sound source').locator('option[value="B"]'),
     ).toHaveCount(0);
+  });
+}
+
+for (const display of ['B', 'both'] as const) {
+  test(`Remove backup selects A locally with managed ${display} returns and releases B viewers`, async ({
+    page,
+  }) => {
+    // Browser clients consume Bridge's extensionless sound route. Keep the same real PCM stream
+    // without a .wav download URL that host download managers may intercept before fetch sees it.
+    const primary = await startFakePgmFeed({ fps: 10, audioPath: '/sound' });
+    const backup = await startFakePgmFeed({ fps: 10, audioPath: '/sound' });
+    try {
+      await open(page, {
+        removableBackup: true,
+        backupChannel: 2,
+        managedPlayoutAddress: 'http://192.0.2.32:8080',
+        feedAddresses: {
+          A: `http://127.0.0.1:${primary.port}`,
+          B: `http://127.0.0.1:${backup.port}`,
+        },
+        topology: {
+          channel: 1,
+          active: 'B',
+          members: [
+            { engine: 'A', name: 'Main', physicalChannel: 1, resourceKey: 'main-1' },
+            { engine: 'B', name: 'Reserve', physicalChannel: 2, resourceKey: 'reserve-2' },
+          ],
+        },
+        statuses: [
+          { engine: 'A', channel: 1, resourceKey: 'main-1', state: 'live' },
+          { engine: 'B', channel: 1, resourceKey: 'reserve-2', state: 'live' },
+        ],
+      });
+      await page.evaluate(async () => {
+        await window.cg.stack.clearAll();
+      });
+      await page
+        .getByRole('button', { name: display === 'both' ? 'All' : 'B', exact: true })
+        .click();
+      await expect.poll(() => backup.openCount()).toBe(1);
+      const source = page.getByLabel('Programme sound source');
+      await source.selectOption('B');
+      await page.getByRole('button', { name: 'Programme sound', exact: true }).click();
+      const meters = page.getByRole('button', { name: 'All programme meters', exact: true });
+      await meters.click();
+      await expect(meters).toHaveAttribute('aria-pressed', 'true');
+      await expect.poll(() => backup.audioOpenCount()).toBeGreaterThan(0);
+      await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+      const settings = page.getByRole('dialog', { name: 'Station setup', exact: true });
+      await settings.getByRole('tab', { name: 'Connection' }).click();
+      await settings.getByRole('button', { name: 'Remove backup', exact: true }).click();
+      await expect(settings.getByText('Backup connection removed.', { exact: true })).toBeVisible();
+      expect(
+        await page.evaluate(async () => (await window.cg.connections.config()).servers.B),
+      ).toBeUndefined();
+      await expect.poll(() => backup.openCount()).toBe(0);
+      await expect.poll(() => backup.audioOpenCount()).toBe(0);
+      await settings.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(page.locator('[data-pgm-screen="A"]')).toBeVisible();
+      await expect(page.locator('[data-pgm-screen="B"]')).toHaveCount(0);
+      await expect(source).toHaveValue('A');
+      await expect(meters).toHaveAttribute('aria-pressed', 'false');
+      await expect(page.getByRole('button', { name: 'B', exact: true })).toBeVisible();
+      expect(await page.evaluate(() => window.cg.pgmReturn.topology?.(1))).toMatchObject({
+        active: 'B',
+        members: [{ engine: 'A' }, { engine: 'B' }],
+      });
+      expect(
+        await page.evaluate(() =>
+          JSON.parse(localStorage.getItem('cg.runtime.pgm-monitor.v1') ?? '{}'),
+        ),
+      ).toMatchObject({ display: 'A', audio: 'A', meterMode: 'selected' });
+      const pictureReads = backup.connections.length;
+      const audioReads = backup.audioConnections.length;
+      await page.reload();
+      const show = page.getByRole('button', { name: 'Show monitors' });
+      if (await show.count()) await show.click();
+      await expect(page.locator('[data-pgm-screen="A"]')).toBeVisible();
+      await expect.poll(() => primary.openCount()).toBe(1);
+      await expect(page.locator('[data-pgm-screen="B"]')).toHaveCount(0);
+      await expect(page.getByLabel('Programme sound source')).toHaveValue('A');
+      expect(
+        await page.evaluate(async () => (await window.cg.connections.config()).servers.B),
+      ).toBeUndefined();
+      expect(backup.openCount()).toBe(0);
+      expect(backup.audioOpenCount()).toBe(0);
+      expect(backup.connections.length).toBe(pictureReads);
+      expect(backup.audioConnections.length).toBe(audioReads);
+    } finally {
+      await primary.stop();
+      await backup.stop();
+    }
   });
 }
 

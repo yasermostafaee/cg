@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { PgmEngineSchema, type PgmEngine } from '@cg/shared-ipc';
 
 export type ProgramDisplayMode = PgmEngine | 'both';
@@ -50,6 +50,29 @@ function write(value: Required<StoredPreferences>): void {
   }
 }
 
+let snapshot: Required<StoredPreferences> | undefined;
+const listeners = new Set<() => void>();
+
+function currentPreferences(): Required<StoredPreferences> {
+  snapshot ??= read();
+  return snapshot;
+}
+
+function subscribePreferences(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) snapshot = undefined;
+  };
+}
+
+/** Each setter merges against the latest shared value, including consecutive updates in one action. */
+function updatePreferences(patch: StoredPreferences): void {
+  snapshot = { ...currentPreferences(), ...patch };
+  write(snapshot);
+  for (const listener of listeners) listener();
+}
+
 export interface ProgramMonitorPreferences {
   readonly display: ProgramDisplayMode;
   readonly audio: ProgramAudioChoice;
@@ -67,11 +90,7 @@ export interface ProgramMonitorPreferences {
 export function useProgramMonitorPreferences(
   currentPrimary: PgmEngine | null,
 ): ProgramMonitorPreferences {
-  const [stored, setStored] = useState(read);
-  const update = useCallback((next: Required<StoredPreferences>): void => {
-    setStored(next);
-    write(next);
-  }, []);
+  const stored = useSyncExternalStore(subscribePreferences, currentPreferences, currentPreferences);
   const { display, audio, layout, showMeter, meterMode } = stored;
   const audioEngine = audio === 'follow' ? currentPrimary : audio;
   return useMemo(
@@ -82,12 +101,12 @@ export function useProgramMonitorPreferences(
       layout,
       showMeter,
       meterMode,
-      setDisplay: (mode: ProgramDisplayMode) => update({ ...stored, display: mode }),
-      setAudio: (choice: ProgramAudioChoice) => update({ ...stored, audio: choice }),
-      setLayout: (next: ProgramPictureLayout) => update({ ...stored, layout: next }),
-      setShowMeter: (show: boolean) => update({ ...stored, showMeter: show }),
-      setMeterMode: (mode: ProgramMeterMode) => update({ ...stored, meterMode: mode }),
+      setDisplay: (mode: ProgramDisplayMode) => updatePreferences({ display: mode }),
+      setAudio: (choice: ProgramAudioChoice) => updatePreferences({ audio: choice }),
+      setLayout: (next: ProgramPictureLayout) => updatePreferences({ layout: next }),
+      setShowMeter: (show: boolean) => updatePreferences({ showMeter: show }),
+      setMeterMode: (mode: ProgramMeterMode) => updatePreferences({ meterMode: mode }),
     }),
-    [audio, audioEngine, display, layout, showMeter, meterMode, stored, update],
+    [audio, audioEngine, display, layout, showMeter, meterMode],
   );
 }

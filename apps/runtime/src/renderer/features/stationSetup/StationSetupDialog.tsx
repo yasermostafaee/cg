@@ -37,6 +37,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { engineNameForMode, playoutEngineWording } from '../../ui/engineWording.js';
 import { useConnections } from '../../hooks/useConnections.js';
+import { useProgramMonitorPreferences } from '../monitors/useProgramMonitorPreferences.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
 import { isOnAirStatus } from '@cg/shared-schema';
@@ -528,6 +529,7 @@ export function StationSetupDialog({
   const items = useStack();
   // B-223 — the output check's technical surface reads the same health the banner does.
   const health = useConnections();
+  const monitorPreferences = useProgramMonitorPreferences(null);
   /*
     `RUNTIME-REDESIGN-01` Phase 7 — WHICH CHANNEL this dialog's per-channel tab reports: the
     same read the channel strip makes (`useSelectedChannel`), so the subtitle, the strip and
@@ -1813,6 +1815,9 @@ export function StationSetupDialog({
                           setLoaded(next);
                           setBackupEnabled(false);
                           setBackup(UNREAD_SERVERS.backup);
+                          monitorPreferences.setDisplay('A');
+                          monitorPreferences.setAudio('A');
+                          monitorPreferences.setMeterMode('selected');
                           setStatus('Backup connection removed.');
                           void window.cg.connections
                             .templateServe()

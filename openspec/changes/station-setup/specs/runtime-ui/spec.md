@@ -67,6 +67,7 @@ The on-air refusal that pre-disables `Apply servers` and removal of a declared b
 - **AND** the accepted configuration is persisted and B's connection is torn down, without requiring `Apply servers`
 - **AND** unrelated Advanced drafts remain unapplied and retain their edited values
 - **AND** a backup that exists only in the local draft can be removed locally
+- **AND** after accepted removal of a declared backup, this console selects A for programme picture and audio and selects the single-source meter mode through its existing persisted monitor preferences
 
 #### Scenario: Backup removal is refused while on air
 
@@ -79,6 +80,18 @@ The on-air refusal that pre-disables `Apply servers` and removal of a declared b
 - **AND** a saved B-only or A+B picture choice and a saved B audio choice resolve to A and Follow respectively
 - **AND** reloading the console and restarting Bridge preserve the single-server configuration
 - **WHEN** Playout supplies authoritative programme-group topology **THEN** its members continue to follow that topology independently of the optional legacy CG backup connection
+
+#### Scenario: Removing the optional CG backup while Playout still declares its group
+
+- **WHEN** the operator removes the configured CG backup while Playout still declares A and B as programme-group members **THEN** the local programme monitor selects A picture, A audio and selected-source meters
+- **AND** B's active picture and audio viewers close even when B or All pictures, B sound and all meters were previously selected
+- **AND** these local choices survive a console reload and B viewers stay closed
+- **AND** Playout's group membership and active-engine metadata remain authoritative and available through their existing monitor controls
+
+#### Scenario: Several monitor preference changes are one consistent local action
+
+- **WHEN** Settings updates the picture, sound and meter selections after accepted backup removal **THEN** every mounted consumer sees all three changes and unrelated layout and meter-visibility preferences are preserved
+- **AND** the existing persisted preference key is used, with no additional configuration flag
 
 #### Scenario: The on-air block is scoped to Servers
 

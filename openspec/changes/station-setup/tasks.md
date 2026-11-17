@@ -13,6 +13,19 @@
       reload. The combined programme-monitor and source UI run passed all 24 cases.
 - [ ] Record a completed green Linux E2E carrying this change.
 
+### Managed programme-group follow-up
+
+- [x] After accepted removal, persist A picture, A audio and selected-source meters through the
+      existing preference setters while retaining Playout's group metadata and controls.
+- [x] Share monitor preferences between mounted Settings and monitor consumers, merge consecutive
+      setter updates atomically, and preserve unrelated layout and visibility preferences.
+- [x] Pass 21 scoped Runtime DOM tests, including shared updates and storage-unavailable session behavior.
+- [x] Windows Edge verified managed B and All picture cases with two local MJPEG/PCM feeds, B viewer
+      counts reaching zero after removal and staying zero after reload, and group metadata retained.
+      The complete programme pair suite passed all 10 cases; Runtime typecheck and scoped lint passed.
+      Browser PCM uses the Bridge-style extensionless `/sound` route; this host's IDM interception of
+      `.wav` was diagnosed through its HTTP 204 response and is not counted as product evidence.
+
 ## 0. Premises
 
 - [x] 0.1 Pulled to `576a72eb`; the modal contract exists (`runtime-modal-contract`) and the

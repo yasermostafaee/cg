@@ -84,25 +84,24 @@ it('reads only visible media posters, reuses reads, and keeps poster clicks as s
     const tilesOf = (id: string) => [
       ...panel.querySelectorAll<HTMLElement>(`[data-picker-media="${id}"] [data-media-thumbnail]`),
     ];
-    const [recent, result] = tilesOf('md-clip-a');
+    expect(tilesOf('md-clip-a')).toHaveLength(1);
+    const [result] = tilesOf('md-clip-a');
     const [missing] = tilesOf('md-clip-b');
     const [broken] = tilesOf('md-clip-c');
-    expect([recent, result, missing, broken].map((tile) => tile?.textContent)).toEqual([
-      'No poster',
+    expect([result, missing, broken].map((tile) => tile?.textContent)).toEqual([
       'No poster',
       'No poster',
       'No poster',
     ]);
     expect(mediaThumbnail).not.toHaveBeenCalled();
     await act(async () => {
-      for (const tile of [recent, result, missing, broken]) visible.get(tile!)!();
+      for (const tile of [result, missing, broken]) visible.get(tile!)!();
     });
     expect(mediaThumbnail.mock.calls).toEqual([
       [{ id: 'md-clip-a' }],
       [{ id: 'md-clip-b' }],
       [{ id: 'md-clip-c' }],
     ]);
-    expect(recent?.querySelector('img')?.getAttribute('src')).toBe(jpeg);
     expect(result?.querySelector('img')?.getAttribute('src')).toBe(jpeg);
     expect(missing?.textContent).toBe('No poster');
     await act(async () => {

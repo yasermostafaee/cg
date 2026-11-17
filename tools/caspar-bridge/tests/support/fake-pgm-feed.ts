@@ -167,6 +167,8 @@ export interface FakePgmFeedOptions {
   readonly host?: string;
   readonly fps?: number;
   readonly frames?: readonly Buffer[];
+  /** Test browser clients can model Bridge's extensionless sound route; Core's default stays exact. */
+  readonly audioPath?: string;
   /**
    * TEST-ONLY — write each 20 ms sound chunk as two writes split at this byte, so a relay must carry a
    * part frame across writes. Absent: one write a chunk, as the core sends.
@@ -211,7 +213,9 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
       record.received = Buffer.concat([record.received, chunk]);
       if (record.requestAt !== null || !record.received.includes('\r\n\r\n')) return;
       record.requestAt = Date.now();
-      if (record.received.toString('latin1').startsWith('GET /audio.wav ')) {
+      if (
+        record.received.toString('latin1').startsWith(`GET ${options.audioPath ?? '/audio.wav'} `)
+      ) {
         // `PLAYOUT-FEATURES-01` E — the sound: this connection is the audio's, not the picture's.
         connections.splice(connections.indexOf(record), 1);
         audioConnections.push(record);
