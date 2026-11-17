@@ -66,8 +66,8 @@
           "en": "Plate borders have even edges and the input reframes with the plate during preset changes. Plate appearance and operator permissions have separate controls."
         },
         {
-          "fa": "در Station setup، ورودی‌ها پیش‌نمایش بزرگ‌تر و دو نمای Grid و List دارند. Apply servers به انتهای Advanced منتقل شده، اختلاف نسخهٔ Bridge و Control زرد دیده می‌شود و پنجرهٔ تاریخچه بزرگ‌تر است.",
-          "en": "Station setup offers larger source previews in Grid and List views. Apply servers sits in Advanced, Bridge and Control version differences appear in amber, and Version history opens in a larger window."
+          "fa": "در Station setup، ورودی‌ها پیش‌نمایش بزرگ‌تر و دو نمای Grid و List دارند. Apply servers به انتهای Advanced منتقل شده و اختلاف نسخهٔ Bridge و Control زرد دیده می‌شود. تاریخچهٔ نسخه‌ها در Designer تمام‌صفحه و در Control نزدیک تمام‌صفحه است و هر دو دکمهٔ Close دارند.",
+          "en": "Station setup offers larger source previews in Grid and List views. Apply servers sits in Advanced and Bridge and Control version differences appear in amber. Version history fills Designer's window and nearly fills Control's window. Both have a Close button."
         },
         {
           "fa": "نوار وضعیت سرورها را با Server A و Server B نشان می‌دهد و مشخص می‌کند کدام سرور فرمان‌های گرافیک را دریافت می‌کند. CG Failover دستی فقط برای اتصال مستقیم به CasparCG نمایش داده می‌شود. در PGM و پنجرهٔ ورود Bridge، آدرس سرور Playout برای اپراتور نمایش داده می‌شود.",
@@ -82,8 +82,8 @@
           "en": "When a backup is configured, small A and B badges show each server’s source or media availability. An unread catalogue or unknown fingerprint appears as unverified."
         },
         {
-          "fa": "نصاب شمارهٔ نسخه و پیشرفت عملیات را در تمام مراحل نشان می‌دهد. آیکون‌های Designer و Control با رنگ‌های متمایز به‌روز شده‌اند.",
-          "en": "Setup shows the version and progress throughout the installation. Designer and Control have refreshed, distinct icon accents."
+          "fa": "نصاب شمارهٔ نسخه و پیشرفت عملیات را در تمام مراحل نشان می‌دهد. آیکون Designer زمینهٔ سفید و نشان‌های رنگی بزرگ‌تر دارد. آیکون Control نشان سبز دارد و آیکون هر محصول در فایل نصب، میان‌بر دسکتاپ و بالای پنجرهٔ نصب یکسان است.",
+          "en": "Setup shows the version and progress throughout the installation. Designer has a white icon background and larger color accents. Control has a green accent. Each product uses the same icon for its installer, desktop shortcut, and setup header."
         }
       ],
       "planned": [],
@@ -382,7 +382,7 @@
         "en": "Release 1.2.5"
       },
       "date": "2026-11-14",
-      "status": "prepared",
+      "status": "published",
       "summary": {
         "fa": "نمایش موتورهای مرتبط Playout در PGM، اصلاح خروجی ماسک و زیرنویس، و پیشرفت واقعی کپی در نصب ویندوز.",
         "en": "Linked Playout programme monitoring, corrected mask and subtitle exports, and measured file copy progress in Windows Setup."
@@ -433,7 +433,7 @@
         "en": "Release 1.2.4"
       },
       "date": "2026-11-13",
-      "status": "prepared",
+      "status": "published",
       "summary": {
         "fa": "بستهٔ آزمایشی ویندوز برای بررسی چیدمان قاب‌های زنده و انتخاب ورودی در CG Control.",
         "en": "Windows test package for live frame arrangement and input selection in CG Control."
@@ -844,14 +844,14 @@
     {
       "version": "1.1.0",
       "title": {
-        "fa": "نسخهٔ آزمایشی برای ایستگاه Playout",
-        "en": "Playout station test release"
+        "fa": "نسخهٔ ۱.۱.۰",
+        "en": "Release 1.1.0"
       },
       "date": "2026-11-09",
-      "status": "development",
+      "status": "published",
       "summary": {
-        "fa": "این نسخه قابلیت‌ها و رفع باگ‌های پس از ۱.۰.۰ را برای آزمون داخلی آماده می‌کند. آزمون ورودی زنده و خروجی PGM روی ایستگاه Playout در دست پیگیری است.",
-        "en": "This build includes the features and fixes since 1.0.0 for internal testing. Live input and PGM acceptance on the Playout station are pending."
+        "fa": "قابلیت‌ها و رفع باگ‌های پس از ۱.۰.۰، شامل بررسی ورودی زنده، تنظیم قاب‌ها و بهبود ابزارهای Designer و CG Control.",
+        "en": "Features and fixes since 1.0.0, including live input checks, plate controls, and improvements to Designer and CG Control."
       },
       "features": [
         {
@@ -1069,7 +1069,7 @@
         "en": "First stable release"
       },
       "date": "2026-11-07",
-      "status": "prepared",
+      "status": "published",
       "summary": {
         "fa": "مجموعهٔ هماهنگ CG Bridge، CG Control و CG Designer با راهنمای نصب فارسی و checksum آمادهٔ تحویل شد.",
         "en": "Matching CG Bridge, CG Control and CG Designer installers were prepared with a Persian installation guide and checksums."

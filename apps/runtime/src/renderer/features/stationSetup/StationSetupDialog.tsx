@@ -2201,7 +2201,7 @@ export function StationSetupDialog({
           onClose={() => setHistoryOpen(false)}
           footer={
             <ModalAction actionRole="cancel" onClick={() => setHistoryOpen(false)}>
-              Done
+              Close
             </ModalAction>
           }
         >

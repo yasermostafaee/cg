@@ -260,7 +260,7 @@ the build stamp's) in its `title`, and SHALL read the same build stamp the splas
 #### Scenario: CG Designer
 
 - **WHEN** CG Designer opens on its start screen
-- **THEN** the line under "Broadcast template builder — …" reads `Version <release>`, above
+- **THEN** the line under the APASAI / CG DESIGNER brand reads `Version <release>`, above
   `New project`
 
 ### Requirement: The installers SHALL carry no private address and no test secret

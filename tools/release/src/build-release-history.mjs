@@ -7,34 +7,36 @@ const COPY = {
   fa: {
     dir: 'rtl',
     heading: 'نسخه‌ها و تغییرات',
-    description: 'تغییرات و دانلود نسخه‌های',
-    intro: 'هر نسخه را باز کنید تا قابلیت‌ها، رفع باگ‌ها، راهنما و فایل‌های نصب آن را ببینید.',
+    description: 'تغییرات نسخه‌های',
+    intro: 'قابلیت‌ها و رفع باگ‌های هر نسخه',
     features: 'قابلیت‌ها و بهبودها',
     fixes: 'رفع باگ‌ها',
     planned: 'در دست پیگیری',
-    next: 'بعدی',
-    downloads: 'دانلودهای این نسخه',
-    assets: ['راهنمای نصب', 'نصب CG Bridge', 'نصب CG Control', 'نصب CG Designer', 'Checksum'],
-    unavailable: 'لینک بعداً متصل می‌شود',
-    footer: 'فایل‌های هر نسخه پس از تعیین آدرس میزبان از همین صفحه در دسترس قرار می‌گیرند.',
+    pagination: 'صفحه‌بندی نسخه‌ها',
+    previous: 'صفحهٔ قبل',
+    nextPage: 'صفحهٔ بعد',
+    page: 'صفحه',
+    of: 'از',
     status: { development: 'در حال توسعه', prepared: 'آمادهٔ تحویل', published: 'منتشرشده' },
   },
   en: {
     dir: 'ltr',
     heading: 'Versions and release notes',
-    description: 'Release notes and downloads for',
-    intro: 'Open a version to see its features, bug fixes, installation guide and downloads.',
+    description: 'Release notes for',
+    intro: 'Features and fixes for each version',
     features: 'Features and improvements',
     fixes: 'Bug fixes',
     planned: 'In progress',
-    next: 'Next',
-    downloads: 'Downloads for this version',
-    assets: ['Installation guide (Persian)', 'CG Bridge setup', 'CG Control setup', 'CG Designer setup', 'Checksums'],
-    unavailable: 'Download link pending',
-    footer: 'Downloads become available here when the host address for the version is configured.',
+    pagination: 'Release history pages',
+    previous: 'Previous page',
+    nextPage: 'Next page',
+    page: 'Page',
+    of: 'of',
     status: { development: 'In development', prepared: 'Ready for delivery', published: 'Published' },
   },
 };
+
+const PAGE_SIZE = 15;
 
 function escapeHtml(value) {
   return String(value)
@@ -139,40 +141,6 @@ export function parseReleaseHistory(source) {
   return { product, releases };
 }
 
-function downloadsFor(release, copy) {
-  if (release.version === 'next') return '';
-  const names = releaseAssetNames(release.version);
-  const assets = [names.guide, names.bridge, names.control, names.designer, names.sums];
-  const items = assets
-    .map((file, index) => {
-      const label = escapeHtml(copy.assets[index]);
-      if (release.downloadBaseUrl === null) {
-        return (
-          '<span class="download disabled" aria-disabled="true" data-download-file="' +
-          escapeHtml(file) +
-          '"><strong>' +
-          label +
-          '</strong><small>' +
-          escapeHtml(file) +
-          '</small><em>' + escapeHtml(copy.unavailable) + '</em></span>'
-        );
-      }
-      const href = release.downloadBaseUrl + '/' + encodeURIComponent(file);
-      return (
-        '<a class="download" href="' +
-        escapeHtml(href) +
-        '" download><strong>' +
-        label +
-        '</strong><small>' +
-        escapeHtml(file) +
-        '</small></a>'
-      );
-    })
-    .join('');
-  return '<section class="downloads"><h3>' + escapeHtml(copy.downloads) +
-    '</h3><div class="download-grid">' + items + '</div></section>';
-}
-
 function list(title, items, className) {
   if (items.length === 0) return '';
   return (
@@ -186,15 +154,16 @@ function list(title, items, className) {
   );
 }
 
-function releaseCard(release, language, open) {
+function releaseCard(release, language, index) {
   const copy = COPY[language];
   const prefix = language === 'fa' ? 'version-' : 'en-version-';
-  const version = release.version === 'next' ? copy.next : 'v' + release.version;
+  const version = 'v' + release.version;
   return (
     '<details class="release" id="' + prefix +
     escapeHtml(release.version) +
     '"' +
-    (open ? ' open' : '') +
+    (index === 0 ? ' open' : '') +
+    (index >= PAGE_SIZE ? ' hidden' : '') +
     '><summary><span><bdi>' +
     escapeHtml(version) +
     '</bdi><strong>' +
@@ -215,7 +184,6 @@ function releaseCard(release, language, open) {
     list(copy.fixes, release.fixes.map((item) => item[language]), 'fixes') +
     '</div>' +
     list(copy.planned, release.planned.map((item) => item[language]), 'planned') +
-    downloadsFor(release, copy) +
     '</div></details>'
   );
 }
@@ -235,9 +203,8 @@ const STYLE = [
   '.release-body{border-top:1px solid var(--line);padding:22px 24px 28px}.summary{font-size:1.06rem;margin:0 0 18px}',
   'h3{font-size:1rem;margin:22px 0 8px;color:#d9f8f4}ul{margin:0;padding-inline-start:24px}li{margin:5px 0}.planned{color:var(--muted)}',
   '.change-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px}.change-groups section{background:#10212c;border:1px solid var(--line);border-radius:12px;padding:14px 16px}.change-groups h3{margin:0 0 8px}.features h3{color:#83e1d8}.fixes h3{color:var(--warm)}',
-  '.download-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.download{display:flex;flex-direction:column;text-decoration:none;color:var(--text);background:#102632;border:1px solid #2d5869;border-radius:12px;padding:12px 14px;min-height:92px}',
-  'a.download:hover{border-color:var(--accent);transform:translateY(-1px)}.download small{direction:ltr;text-align:left;color:var(--muted);overflow-wrap:anywhere}.download em{font-size:.78rem;color:var(--warm);font-style:normal;margin-top:auto}.disabled{opacity:.72}',
-  'footer{color:var(--muted);margin-top:28px;font-size:.9rem}@media(max-width:680px){main{width:min(100% - 20px,1080px);padding-top:30px}summary{align-items:flex-start;flex-direction:column}.meta{width:100%;justify-content:space-between}.release-body{padding:18px}}',
+  '.pagination{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:24px;color:var(--muted)}.pagination button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 14px;cursor:pointer}.pagination button:hover:enabled{border-color:var(--accent)}.pagination button:disabled{opacity:.45;cursor:default}.pagination button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}',
+  '[hidden]{display:none!important}@media(max-width:680px){main{width:min(100% - 20px,1080px);padding-top:30px}summary{align-items:flex-start;flex-direction:column}.meta{width:100%;justify-content:space-between}.release-body{padding:18px}}',
 ].join('');
 
 const LANGUAGE_PICKER = `
@@ -250,6 +217,32 @@ const SWITCH_LANGUAGE = `
 <script>
   const languageButtons = document.querySelectorAll('[data-language]');
   const languagePanels = document.querySelectorAll('[data-history-language]');
+  for (const panel of languagePanels) {
+    const cards = [...panel.querySelectorAll('.release')];
+    const previous = panel.querySelector('[data-page-previous]');
+    const next = panel.querySelector('[data-page-next]');
+    const status = panel.querySelector('[data-page-status]');
+    const count = Math.max(1, Math.ceil(cards.length / ${PAGE_SIZE}));
+    const number = new Intl.NumberFormat(panel.lang);
+    let page = 0;
+    const showPage = (index) => {
+      page = Math.max(0, Math.min(count - 1, index));
+      cards.forEach((card, position) => {
+        card.hidden = position < page * ${PAGE_SIZE} || position >= (page + 1) * ${PAGE_SIZE};
+      });
+      previous.disabled = page === 0;
+      next.disabled = page === count - 1;
+      status.textContent = status.dataset.pageLabel + ' ' + number.format(page + 1) + ' ' +
+        status.dataset.ofLabel + ' ' + number.format(count);
+    };
+    for (const [button, offset] of [[previous, -1], [next, 1]]) {
+      button.addEventListener('click', () => {
+        showPage(page + offset);
+        panel.scrollIntoView({ block: 'start' });
+      });
+    }
+    showPage(0);
+  }
   for (const button of languageButtons) {
     button.addEventListener('click', () => {
       const language = button.dataset.language;
@@ -266,9 +259,12 @@ const SWITCH_LANGUAGE = `
 function languagePanel(data, language) {
   const copy = COPY[language];
   const title = copy.heading + ' · ' + data.product;
-  const cards = data.releases
-    .map((release, index) => releaseCard(release, language, index === 0))
+  const releases = data.releases.filter((release) => release.version !== 'next');
+  const cards = releases
+    .map((release, index) => releaseCard(release, language, index))
     .join('\n');
+  const number = new Intl.NumberFormat(language);
+  const pageCount = Math.max(1, Math.ceil(releases.length / PAGE_SIZE));
   return [
     '<section id="history-' + language + '" data-history-language lang="' + language +
       '" dir="' + copy.dir + '" data-title="' + escapeHtml(title) + '"' +
@@ -276,7 +272,13 @@ function languagePanel(data, language) {
     '<header><h1>' + escapeHtml(copy.heading) + '</h1><p><bdi>' +
       escapeHtml(data.product) + '</bdi> · ' + escapeHtml(copy.intro) + '</p></header>',
     cards,
-    '<footer>' + escapeHtml(copy.footer) + '</footer></section>',
+    '<nav class="pagination" aria-label="' + escapeHtml(copy.pagination) + '">',
+    '<button type="button" data-page-previous disabled>' + escapeHtml(copy.previous) + '</button>',
+    '<span data-page-status data-page-label="' + escapeHtml(copy.page) + '" data-of-label="' +
+      escapeHtml(copy.of) + '" aria-live="polite" aria-atomic="true">' + escapeHtml(copy.page) + ' ' +
+      number.format(1) + ' ' + escapeHtml(copy.of) + ' ' + number.format(pageCount) + '</span>',
+    '<button type="button" data-page-next' + (pageCount === 1 ? ' disabled' : '') + '>' +
+      escapeHtml(copy.nextPage) + '</button></nav></section>',
   ].join('\n');
 }
 

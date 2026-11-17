@@ -164,9 +164,6 @@ export function LandingView(): JSX.Element {
             <span className={s.brandProduct}>CG DESIGNER</span>
           </span>
         </a>
-        <p className={s.brandSub}>
-          Broadcast template builder — pick a demo, open a recent project, or start fresh.
-        </p>
         {/*
           `CLIENT-TEST-RELEASE-01` B1 — THE LINE THAT NAMES THIS RELEASE on the start screen, where the
           Designer introduces itself and the first thing on screen at every launch (Help → About,

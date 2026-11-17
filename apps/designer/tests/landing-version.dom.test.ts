@@ -9,7 +9,7 @@ import { LandingView } from '../src/renderer/features/shell/LandingView.js';
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B1 — **CG DESIGNER NAMES ITS RELEASE IN ONE LINE**: its start screen,
- * under the line that says what the page is for — where it introduces itself, first on screen at every
+ * under the brand — where it introduces itself, first on screen at every
  * launch. (Help → About names it too, since `D-161`: `about-version.dom.test.ts`.)
  *
  * The version is read from this app's own `package.json`, the same file the build stamp reads.
@@ -48,15 +48,15 @@ async function renderLanding(): Promise<HTMLElement> {
 }
 
 describe('CLIENT-TEST-RELEASE-01 B1 — the version line on the Designer’s start screen', () => {
-  it('reads "Version <the manifest’s version>", right under the page’s own line', async () => {
+  it('reads "Version <the manifest’s version>", right under the brand', async () => {
     const host = await renderLanding();
     const line = host.querySelector<HTMLElement>('[data-testid="app-version"]');
     expect(line).not.toBeNull();
     expect(line?.textContent).toBe(`Version ${MANIFEST_VERSION}`);
-    // Positive control: the start screen rendered, and the line follows its tagline.
-    expect(line?.parentElement?.previousElementSibling?.textContent).toMatch(
-      /^Broadcast template builder/,
+    expect(line?.parentElement?.previousElementSibling?.getAttribute('data-testid')).toBe(
+      'apasai-brand',
     );
+    expect(host.textContent).not.toMatch(/Broadcast templates|Broadcast template builder/);
   });
 
   it('is a FACT, not a control — a Tag, not focusable — with the exact build in its title', async () => {

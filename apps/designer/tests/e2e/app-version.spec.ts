@@ -5,7 +5,7 @@ import { expect, test } from './fixtures/designer.js';
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B1 — **CG DESIGNER NAMES ITS RELEASE IN ONE LINE**, in the built app the
- * installer ships: its start screen, under the line that says what the page is for. The version is
+ * installer ships: its start screen, under the brand. The version is
  * read from this app's `package.json`, the file the build stamp reads; the geometry is measured here
  * because jsdom has none (golden rule 12).
  */
@@ -24,6 +24,30 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   const history = dialog.frameLocator('iframe[aria-label="Version history"]');
   const persian = history.getByRole('heading', { name: 'نسخه‌ها و تغییرات', exact: true });
   await expect(persian).toBeVisible();
+  const persianPages = history.getByRole('navigation', { name: 'صفحه‌بندی نسخه‌ها' });
+  await expect(persianPages).toBeVisible();
+  await expect(persianPages.getByRole('button')).toHaveCount(2);
+  await expect(persianPages.getByRole('button').nth(0)).toBeDisabled();
+  await expect(persianPages.getByRole('button').nth(1)).toBeDisabled();
+  await expect(history.locator('[id="version-next"], [id="en-version-next"]')).toHaveCount(0);
+  await expect(history.locator('.download-grid, .download')).toHaveCount(0);
+  await expect(
+    history.getByRole('heading', { name: 'دانلودهای این نسخه', exact: true }),
+  ).toHaveCount(0);
+  await expect(history.locator('[id="version-1.1.0"] [data-status]')).toHaveAttribute(
+    'data-status',
+    'published',
+  );
+  await expect(history.locator('[id="version-1.1.0"] [data-status]')).toHaveText('منتشرشده');
+  const viewport = page.viewportSize();
+  const frame = await dialog.boundingBox();
+  if (viewport === null || frame === null) throw new Error('Version history frame is missing');
+  expect(frame.x).toBe(0);
+  expect(frame.y).toBe(0);
+  expect(frame.width).toBe(viewport.width);
+  expect(frame.height).toBe(viewport.height);
+  const close = dialog.getByRole('button', { name: 'Close', exact: true });
+  await expect(close).toHaveCount(2);
   await expect(history.getByRole('heading', { name: 'رفع باگ‌ها' })).toBeVisible();
   expect(
     await persian.evaluate(async (heading) => {
@@ -33,18 +57,25 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   ).toBeGreaterThan(0);
   await history.getByRole('button', { name: 'English' }).click();
   await expect(history.locator('html')).toHaveAttribute('dir', 'ltr');
+  const englishPages = history.getByRole('navigation', { name: 'Release history pages' });
+  await expect(englishPages).toBeVisible();
+  await expect(englishPages.getByRole('button')).toHaveCount(2);
+  await expect(englishPages.getByRole('button').nth(0)).toBeDisabled();
+  await expect(englishPages.getByRole('button').nth(1)).toBeDisabled();
+  await expect(history.locator('[id="en-version-1.1.0"] [data-status]')).toHaveAttribute(
+    'data-status',
+    'published',
+  );
+  await expect(history.locator('[id="en-version-1.1.0"] [data-status]')).toHaveText('Published');
   await expect(history.getByRole('heading', { name: 'Features and improvements' })).toBeVisible();
   await expect(history.getByRole('heading', { name: 'Bug fixes' })).toBeVisible();
-  const currentRelease = history.locator(`[id="en-version-${VERSION}"]`);
   await expect(
-    currentRelease.getByRole('heading', { name: 'Downloads for this version' }),
-  ).toBeVisible();
+    history.getByRole('heading', { name: 'Downloads for this version', exact: true }),
+  ).toHaveCount(0);
   const historicalRelease = history.locator('[id="en-version-1.0.0"]');
   await historicalRelease.locator('summary').click();
-  await expect(
-    historicalRelease.getByRole('heading', { name: 'Downloads for this version' }),
-  ).toBeVisible();
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(historicalRelease).toHaveAttribute('open', '');
+  await close.last().click();
 
   await app.newProject('History');
   await page.getByRole('button', { name: 'Help', exact: true }).click();
@@ -52,7 +83,7 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   await expect(persian).toBeVisible();
 });
 
-test('B1 — the start screen reads "Version <release>" under its tagline, above New project', async ({
+test('B1 — the start screen reads "Version <release>" under its brand, above New project', async ({
   app,
 }) => {
   const page = app.page;
@@ -63,19 +94,20 @@ test('B1 — the start screen reads "Version <release>" under its tagline, above
   await expect(line).toBeVisible();
   await expect(line).toHaveAttribute('title', new RegExp(`^${VERSION.replaceAll('.', '\\.')} · `));
 
-  const [lineBox, taglineBox, newBox] = await Promise.all([
+  const [lineBox, brandBox, newBox] = await Promise.all([
     line.boundingBox(),
-    landing.getByText(/^Broadcast template builder/).boundingBox(),
+    landing.getByTestId('apasai-brand').boundingBox(),
     page.getByRole('button', { name: 'New project' }).boundingBox(),
   ]);
-  if (lineBox === null || taglineBox === null || newBox === null) {
-    throw new Error('the line, the tagline and New project all render');
+  if (lineBox === null || brandBox === null || newBox === null) {
+    throw new Error('the line, the brand and New project all render');
   }
-  // Its own line: below the tagline, above the first control, left-aligned with the tagline.
+  // Its own line below the brand, above the first control, aligned with the brand block.
   expect(lineBox.height).toBeGreaterThan(0);
-  expect(lineBox.y).toBeGreaterThanOrEqual(taglineBox.y + taglineBox.height);
+  expect(lineBox.y).toBeGreaterThanOrEqual(brandBox.y + brandBox.height);
   expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(newBox.y);
-  expect(Math.round(lineBox.x)).toBe(Math.round(taglineBox.x));
+  expect(Math.round(lineBox.x)).toBe(Math.round(brandBox.x));
+  await expect(landing.getByText(/Broadcast templates|Broadcast template builder/)).toHaveCount(0);
 });
 
 /**

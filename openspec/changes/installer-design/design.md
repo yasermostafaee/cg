@@ -95,15 +95,18 @@ Close. Exit codes stay the engine's contract: 0 done, 1 cancelled, 2 failed.
   (the console's chrome stack reaches `system-ui` before any bundled Latin face), and Consolas for the
   splash readout's `monospace`. Exo 2 and Vazirmatn are the template and Persian faces; the setup has no
   Persian text.
-- **The rail** is the splash: its ground, its relit APASAI mark (path data read from
-  `apps/runtime/brand/apasai-logo.svg`), its wordmark (`CG` heavy, the role light, tracked 0.3 em), its
+- **The rail** uses the splash's ground, the product's own tile at 48 DIP,
+  its wordmark (`CG` heavy, the role light, tracked 0.3 em), its
   brand-blue progress with its glow, and, drawn faintly at the foot, the product's own scene: CG Control's
   playout scene, CG Designer's artboard, CG Bridge's own (`installer-rail-art`, `P-067`; until `0.11.3`
   every rail drew CG Control's). **The page** is the sign-in card: its surface, its raised foot, its
   buttons and check box.
 - **Icons**: the console's lucide set (1.21.0), drawn as paths with lucide's stroke.
-- **The tile**: the app's own 512 px icon (B-290), rescaled once per DPI with a high-quality filter to
-  the exact device size; CG Bridge, which has no window of its own, wears CG Control's dark tile.
+- **The tile** uses the app's own 512 px icon (B-290), rescaled per DPI with a high-quality filter to
+  the exact device size. The rail and Welcome retain their two sizes in the render-target cache.
+  CG Bridge uses its own service tile. Designer uses a white tile with larger color accents and
+  Control uses a dark tile with a green accent. Each product's installer and desktop app use the
+  same source icon.
 
 ## 4. What stays the engines'
 
@@ -118,7 +121,7 @@ Close. Exit codes stay the engine's contract: 0 done, 1 cancelled, 2 failed.
 
 - Unit (`cargo test -p cg-setup`): the NSIS command-line parse; the trailer (signed and unsigned); the
   progress model against `cg-bridge.nsi`; the pages' words; the palette against `theme.ts`; the version
-  resource; the SVG paths of the mark and the icons.
+  resource, icon paths and exact-size header and Welcome bitmap caching.
 - Clean Windows (`desktop.yml`): every silent path against the engine alone and the installer (same exit
   codes); each installer driven through UI Automation — fresh, update, error — every page captured;
   "Launch when ready" starts the app; an update keeps the settings; each first screen with WebView2

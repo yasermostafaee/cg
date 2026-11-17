@@ -47,7 +47,11 @@ pub fn preview(args: &[String]) -> u32 {
     let mut failures = 0;
     for id in [ProductId::Control, ProductId::Designer, ProductId::Bridge] {
         let p = product(id);
-        let tile = if p.dark_tile { &dark } else { &light };
+        let tile: &[u8] = match id {
+            ProductId::Control => &dark,
+            ProductId::Designer => &light,
+            ProductId::Bridge => include_bytes!("../assets/bridge-icon.png"),
+        };
         let home = match id {
             ProductId::Bridge => r"C:\Program Files\CG Bridge".to_string(),
             _ => format!(r"C:\Users\operator\AppData\Local\{}", p.name),

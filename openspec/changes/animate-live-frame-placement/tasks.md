@@ -95,4 +95,8 @@
 - [x] Share a phase start deadline between native pictures and the template artwork.
 - [x] Animate fill and clip of retained inputs when the destination fit changes.
 - [x] Support directional entrance and departure with independent directions and fade.
+- [x] The carrying [Linux gate](https://github.com/yasermostafaee/cg/actions/runs/44128971338/job/134201941144)
+      and actual [E2E step](https://github.com/yasermostafaee/cg/actions/runs/44128971338/job/134201941267)
+      passed on `ca38e1551cb4f261101ea7f0e264c7d1b7e81348`, covering same-paint PVW picture/clip
+      updates and the bounded authored-border timing correction for observed `1080i5000` channels.
 - [ ] Capture a real PGM switch with the intended station engine to measure border and input alignment.

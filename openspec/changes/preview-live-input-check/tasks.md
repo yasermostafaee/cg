@@ -86,3 +86,7 @@
 - [ ] 6.9 Verify PVW picture continuity on the target station across preset and Focus changes.
 - [x] 6.10 Verify the Media tab's separate preview, Play/Pause/Stop and scrub interaction in
       Chromium with authorized frame responses. Verify preview leaves the source assignment intact.
+- [x] 6.11 The carrying [Linux E2E step](https://github.com/yasermostafaee/cg/actions/runs/44128971338/job/134201941267)
+      passed on `ca38e1551cb4f261101ea7f0e264c7d1b7e81348`, including source-picker reopening on the
+      current inherited selection, the matching tab and visible selected row, the single Grid/List
+      toggle, and separate Media preview without a binding change or automatic input check.

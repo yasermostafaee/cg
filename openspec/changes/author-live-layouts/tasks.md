@@ -45,4 +45,7 @@
 - [x] Align New live layout labels with Designer's Plate terminology.
 - [x] Save and render a rectangular per-plate border with editable color and width.
 - [x] Verify preset and per-plate aspect and fit in saved packages and Windows Chromium, including a 3:4 center crop and the same input in a 16:9 solo preset.
+- [x] The carrying [Linux E2E step](https://github.com/yasermostafaee/cg/actions/runs/44128971338/job/134201941267)
+      passed on `ca38e1551cb4f261101ea7f0e264c7d1b7e81348`, including authored preset/plate crop,
+      rectangular border visibility, operator crop/placement/mask permissions, and editor/PVW previews.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

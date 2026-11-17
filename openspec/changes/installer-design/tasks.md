@@ -13,8 +13,8 @@
 - [x] 1.3 The progress model: CG Bridge's logged steps (keyed to `cg-bridge.nsi`, tested); the apps'
       observed steps; within a step only bytes move the bar
 - [x] 1.4 The pages' model and layout: Welcome, Location, Installing, Done, Error; the words in one file
-- [x] 1.5 The painter: Direct2D / DirectWrite, the palette (tested against `theme.ts`), the mark (from
-      `apasai-logo.svg`), lucide icons, the tile rescaled per DPI
+- [x] 1.5 The painter: Direct2D / DirectWrite, the palette (tested against `theme.ts`), lucide icons,
+      and each product's own tile in the rail and Welcome, rescaled per DPI.
 - [x] 1.6 The window: frameless, DWM shadow and corners, its title bar, per-monitor DPI, keyboard,
       motion with reduced motion, the engine run and read on worker threads
 - [x] 1.7 UI Automation: every text and control, Invoke / Toggle / RangeValue
@@ -22,6 +22,9 @@
       checked, the blobs appended
 - [x] 1.9 Driven locally with a stand-in engine (the real engines must not run on the owner's machine):
       every page, exit codes 0 / 1 / 2, and the silent pass-through returning the engine's codes
+- [x] 1.10 Refresh Designer's white tile and larger color accents, and Control's green accent.
+      Verify 82 Windows Rust tests and offscreen setup captures at 100%, 150% and 200%, including
+      reuse of the two exact-size tile bitmaps between paints.
 
 ## 2. Release tooling and CI
 

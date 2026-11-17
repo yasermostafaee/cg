@@ -26,6 +26,21 @@ test('P-077 — version history opens inside Station setup and returns to the st
   const history = dialog.frameLocator('iframe[title="Version history"]');
   const heading = history.getByRole('heading', { name: 'نسخه‌ها و تغییرات', exact: true });
   await expect(heading).toBeVisible();
+  const persianPages = history.getByRole('navigation', { name: 'صفحه‌بندی نسخه‌ها' });
+  await expect(persianPages).toBeVisible();
+  await expect(persianPages.getByRole('button')).toHaveCount(2);
+  await expect(persianPages.getByRole('button').nth(0)).toBeDisabled();
+  await expect(persianPages.getByRole('button').nth(1)).toBeDisabled();
+  await expect(history.locator('[id="version-next"], [id="en-version-next"]')).toHaveCount(0);
+  await expect(history.locator('.download-grid, .download')).toHaveCount(0);
+  await expect(
+    history.getByRole('heading', { name: 'دانلودهای این نسخه', exact: true }),
+  ).toHaveCount(0);
+  await expect(history.locator('[id="version-1.1.0"] [data-status]')).toHaveAttribute(
+    'data-status',
+    'published',
+  );
+  await expect(history.locator('[id="version-1.1.0"] [data-status]')).toHaveText('منتشرشده');
   const viewport = page.viewportSize();
   const frame = await dialog.boundingBox();
   if (viewport === null || frame === null) throw new Error('Version history frame is missing');
@@ -36,8 +51,23 @@ test('P-077 — version history opens inside Station setup and returns to the st
   ).toBeLessThan(32);
   await history.getByRole('button', { name: 'English' }).click();
   await expect(history.locator('html')).toHaveAttribute('lang', 'en');
+  const englishPages = history.getByRole('navigation', { name: 'Release history pages' });
+  await expect(englishPages).toBeVisible();
+  await expect(englishPages.getByRole('button')).toHaveCount(2);
+  await expect(englishPages.getByRole('button').nth(0)).toBeDisabled();
+  await expect(englishPages.getByRole('button').nth(1)).toBeDisabled();
+  await expect(history.locator('[id="en-version-1.1.0"] [data-status]')).toHaveAttribute(
+    'data-status',
+    'published',
+  );
+  await expect(history.locator('[id="en-version-1.1.0"] [data-status]')).toHaveText('Published');
   await expect(history.getByRole('heading', { name: 'Bug fixes' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(
+    history.getByRole('heading', { name: 'Downloads for this version', exact: true }),
+  ).toHaveCount(0);
+  const close = dialog.getByRole('button', { name: 'Close', exact: true });
+  await expect(close).toHaveCount(2);
+  await close.last().click();
   await expect(settings.getByTestId('app-version')).toHaveText(`Version ${VERSION}`);
 });
 
@@ -70,4 +100,41 @@ test('B1 — Station setup reads "Version <release>" at the foot of its rail, in
   expect(lineBox.x).toBeGreaterThanOrEqual(railBox.x);
   expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(railBox.x + railBox.width);
   expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(dialogBox.y + dialogBox.height);
+});
+
+test('release history pages fifteen versions at a time in the generated page', async ({ app }) => {
+  const history = readFileSync(path.resolve(here, '../../../../docs/release/index.html'), 'utf8');
+  const fixture = `<script>
+    (() => {
+    const panel = document.getElementById('history-fa');
+    const releases = panel.querySelectorAll('.release');
+    const first = releases[0];
+    for (let index = releases.length; index < 32; index++) {
+      const copy = first.cloneNode(true);
+      copy.id = 'fixture-version-' + index;
+      copy.removeAttribute('open');
+      first.parentElement.insertBefore(copy, first.nextSibling);
+    }
+    })();
+  </script>`;
+  const markup = history.replace('<script>', fixture + '<script>');
+  expect(markup).not.toBe(history);
+  await app.page.setContent(markup);
+  const panel = app.page.locator('#history-fa');
+  const pagination = panel.getByRole('navigation', { name: 'صفحه‌بندی نسخه‌ها' });
+  const previous = pagination.locator('[data-page-previous]');
+  const next = pagination.locator('[data-page-next]');
+  const visible = panel.locator('.release:visible');
+  await expect(visible).toHaveCount(15);
+  await expect(previous).toBeDisabled();
+  await expect(next).toBeEnabled();
+  await next.click();
+  await expect(visible).toHaveCount(15);
+  await expect(previous).toBeEnabled();
+  await expect(next).toBeEnabled();
+  await next.click();
+  await expect(visible).toHaveCount(2);
+  await expect(next).toBeDisabled();
+  await previous.click();
+  await expect(visible).toHaveCount(15);
 });

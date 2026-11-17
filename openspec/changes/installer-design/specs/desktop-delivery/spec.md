@@ -66,6 +66,10 @@ multi-resolution source. The window SHALL carry no explanatory prose beyond the 
 
 #### Scenario: Welcome
 
+- **WHEN** any product's installer opens **THEN** its rail and Welcome show that product's own icon,
+  matching the installer's file icon and the installed app's desktop shortcut. Designer's icon has
+  a white background and larger color accents, and Control's icon has a green accent. Both sizes
+  remain crisp at 100%, 150% and 200% display scaling.
 - **WHEN** an installer opens on a machine without the product **THEN** Welcome reads "Install
   <product>?", shows the product's tile, "Publisher: APASAI" and "Version <release>" (from
   `tools/release`), and two or three lines on what it installs — for CG Bridge "A Windows service · ports

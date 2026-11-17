@@ -1,4 +1,6 @@
 fn main() {
+    // Refresh the executable's icon resources when the product artwork changes.
+    println!("cargo:rerun-if-changed=icons");
     // The app's own commands, and the permission each generates (`allow-playout-post`,
     // `allow-keyboard-language`, …), granted in `capabilities/console.json` to the console the app
     // bundles and to nothing else:

@@ -1,7 +1,7 @@
 //! The painter: Direct2D shapes and DirectWrite text, in DIPs, on any render target — the window's,
-//! or a bitmap's for the developer's preview. Every shape is vector (paths, rounded rects, the
-//! mark's own path data); the only bitmap is the app's tile, rescaled from its 512 px source to the
-//! exact device size, so nothing is stretched at 150 % or 200 %.
+//! or a bitmap's for the developer's preview. The app's own tile appears in the rail and on the
+//! welcome page, rescaled from its 512 px source to each exact device size. Shapes and text are
+//! vector, so the whole page stays crisp at 150 % and 200 %.
 
 use crate::icons::{self, Icon};
 use crate::layout::{
@@ -23,7 +23,7 @@ use windows::Win32::Graphics::DirectWrite::*;
 use windows::Win32::Graphics::Imaging::*;
 use windows_numerics::{Matrix3x2, Vector2};
 
-const LOGO_SVG: &str = include_str!("../../../../apps/runtime/brand/apasai-logo.svg");
+const HEADER_TILE: Rect = Rect::new((RAIL_W - 48.0) / 2.0, 24.0, 48.0, 48.0);
 
 pub fn color(c: Rgb, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F {
@@ -79,16 +79,13 @@ pub struct Gfx {
     formats: RefCell<HashMap<(Style, bool), IDWriteTextFormat>>,
     icons: RefCell<HashMap<(Icon, u32), Vec<ID2D1PathGeometry>>>,
     round: ID2D1StrokeStyle,
-    /// The APASAI mark at the rail's size, in place: (geometry, colour).
-    logo: Vec<(ID2D1PathGeometry, Rgb)>,
-    logo_w: f32,
 }
 
-/// Per render target: brushes and the tile at this DPI.
+/// Per render target: brushes and the header and welcome tile bitmaps at this DPI.
 #[derive(Default)]
 pub struct Device {
     brushes: HashMap<(u8, u8, u8, u16), ID2D1SolidColorBrush>,
-    tile: Option<(ID2D1Bitmap, u32)>,
+    tiles: HashMap<u32, ID2D1Bitmap>,
 }
 
 /// What the painter needs besides the scene: interaction and animation state.
@@ -138,44 +135,15 @@ impl Gfx {
                 },
                 None,
             )?;
-            let mut gfx = Gfx {
+            Ok(Gfx {
                 d2d,
                 dwrite,
                 wic,
                 formats: RefCell::new(HashMap::new()),
                 icons: RefCell::new(HashMap::new()),
                 round,
-                logo: Vec::new(),
-                logo_w: 0.0,
-            };
-            // The sign-in card's mark size (`.cg-apasai-mark svg { height: 36px }`).
-            gfx.build_logo(36.0)?;
-            Ok(gfx)
+            })
         }
-    }
-
-    /// The mark, from the brand file's own path data, relit for the dark ground as the splash
-    /// relights it (bars and swoosh); the arc keeps APASAI's exact blue.
-    fn build_logo(&mut self, height: f32) -> Result<()> {
-        let s = height / 96.0;
-        let x0 = RAIL_W / 2.0 - 114.0 * s / 2.0;
-        let place = Xform::scale_translate(s, s, x0, 34.0)
-            .then(Xform::scale_translate(0.01, -0.01, 0.0, 96.0));
-        for (class, color) in [
-            ("apasai-swoosh", palette::LOGO_SWOOSH),
-            ("apasai-arc", palette::BRAND),
-            ("apasai-bars", palette::LOGO_BARS),
-        ] {
-            let start = LOGO_SVG.find(&format!("class=\"{class}\"")).unwrap_or(0);
-            let end = start + LOGO_SVG[start..].find("</g>").unwrap_or(0);
-            for chunk in LOGO_SVG[start..end].split(" d=\"").skip(1) {
-                let d = chunk.split('"').next().unwrap_or("");
-                let cmds = place.map(&svgpath::parse(d));
-                self.logo.push((self.geometry(&cmds, true)?, color));
-            }
-        }
-        self.logo_w = 114.0 * s;
-        Ok(())
     }
 
     pub fn geometry(&self, cmds: &[Cmd], filled: bool) -> Result<ID2D1PathGeometry> {
@@ -362,10 +330,8 @@ impl Gfx {
         png: &[u8],
         px: u32,
     ) -> Option<ID2D1Bitmap> {
-        if let Some((b, at)) = &dev.tile {
-            if *at == px {
-                return Some(b.clone());
-            }
+        if let Some(bitmap) = dev.tiles.get(&px) {
+            return Some(bitmap.clone());
         }
         unsafe {
             let stream = windows::Win32::UI::Shell::SHCreateMemStream(Some(png))?;
@@ -394,7 +360,7 @@ impl Gfx {
             )
             .ok()?;
             let bmp = rt.CreateBitmapFromWicBitmap(&conv, None).ok()?;
-            dev.tile = Some((bmp.clone(), px));
+            dev.tiles.insert(px, bmp.clone());
             Some(bmp)
         }
     }
@@ -646,11 +612,8 @@ fn rail(p: &mut Painter, f: &Frame) {
     p.vline(RAIL_W - 0.5, 0.0, WIN_H, palette::BORDER);
     // `P-067` — the product's OWN scene, faint above Help (CG Control's is the one every rail drew).
     draw_art(p, &rail_art::display_list(rail_art::rail_art(f.product)));
-    // The lockup: the mark, then the wordmark — `CG` heavy, the role light, tracked 0.3 em.
-    for (geo, c) in &p.g.logo.clone() {
-        let b = p.brush(*c, 1.0);
-        unsafe { p.rt.FillGeometry(geo, &b, None) };
-    }
+    // Each installer uses the same product tile here and on its welcome page.
+    product_tile(p, f, HEADER_TILE);
     wordmark(p, f.role);
     // The steps.
     for (i, step) in f.scene.rail.iter().enumerate() {
@@ -777,8 +740,7 @@ fn wordmark(p: &mut Painter, role: &str) {
     let m = Gfx::metrics(&layout);
     // CSS centres the INK (`text-indent` matches the trailing spacing); so do we.
     let x = RAIL_W / 2.0 - (m.widthIncludingTrailingWhitespace - spacing) / 2.0;
-    // Under the mark (34 + 36), a 10 px gap, a 13 px line: its centre at 86.5.
-    let y = 86.5 - m.height / 2.0;
+    let y = HEADER_TILE.bottom() + 10.0;
     let b = p.brush(palette::SPLASH_INK, 1.0);
     unsafe {
         p.rt.DrawTextLayout(v(x, y), &layout, &b, D2D1_DRAW_TEXT_OPTIONS_NONE)
@@ -904,6 +866,23 @@ fn rail_step(p: &mut Painter, step: &RailStep, t: f32) {
     );
 }
 
+fn product_tile(p: &mut Painter, f: &Frame, target: Rect) {
+    let px = (target.w * p.scale).round() as u32;
+    if let Some(png) = f.tile_png {
+        if let Some(bitmap) = p.g.tile(p.rt, p.dev, png, px) {
+            unsafe {
+                p.rt.DrawBitmap(
+                    &bitmap,
+                    Some(&rect(target)),
+                    1.0,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                    None,
+                )
+            };
+        }
+    }
+}
+
 fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
     match item {
         Item::Text {
@@ -924,20 +903,7 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
         }
         Item::Icon { rect, icon, color } => p.icon(*icon, rect.x, rect.y, rect.w, *color, 1.0, 2.0),
         Item::Tile { rect } => {
-            let px = (rect.w * p.scale).round() as u32;
-            if let Some(png) = f.tile_png {
-                if let Some(bmp) = p.g.tile(p.rt, p.dev, png, px) {
-                    unsafe {
-                        p.rt.DrawBitmap(
-                            &bmp,
-                            Some(&self::rect(*rect)),
-                            1.0,
-                            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                            None,
-                        )
-                    };
-                }
-            }
+            product_tile(p, f, *rect);
             // The safe-area ticks the splash draws around its monitor, around the app's own tile.
             let (l, t, r, b) = (
                 rect.x - 8.0,
@@ -1281,6 +1247,7 @@ fn focus_ring(p: &mut Painter, r: Rect, radius: f32) {
 #[cfg(test)]
 mod product_colour_tests {
     use super::*;
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 
     #[test]
     fn every_product_has_a_distinct_setup_ground_and_rail() {
@@ -1291,5 +1258,55 @@ mod product_colour_tests {
                 assert_ne!(product_rail(*id), product_rail(*other));
             }
         }
+    }
+
+    #[test]
+    fn header_and_welcome_tiles_keep_their_native_sizes_at_each_dpi() {
+        unsafe {
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
+        }
+        {
+            let gfx = Gfx::new().unwrap();
+            let target = unsafe {
+                let surface = gfx
+                    .wic
+                    .CreateBitmap(
+                        256,
+                        256,
+                        &GUID_WICPixelFormat32bppPBGRA,
+                        WICBitmapCacheOnLoad,
+                    )
+                    .unwrap();
+                gfx.d2d
+                    .CreateWicBitmapRenderTarget(
+                        &surface,
+                        &D2D1_RENDER_TARGET_PROPERTIES {
+                            r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap()
+            };
+            let target: ID2D1RenderTarget = target.cast().unwrap();
+            for png in [
+                include_bytes!("../../../../apps/runtime/src-tauri/icons/icon.png").as_slice(),
+                include_bytes!("../../../../apps/designer/src-tauri/icons/icon.png").as_slice(),
+                include_bytes!("../../assets/bridge-icon.png").as_slice(),
+            ] {
+                for scale in [1.0f32, 1.5, 2.0] {
+                    let mut device = Device::default();
+                    let header_px = (HEADER_TILE.w * scale).round() as u32;
+                    let header = gfx.tile(&target, &mut device, png, header_px).unwrap();
+                    let welcome_px = (88.0 * scale).round() as u32;
+                    let welcome = gfx.tile(&target, &mut device, png, welcome_px).unwrap();
+                    assert_eq!(unsafe { header.GetPixelSize().width }, header_px);
+                    assert_eq!(unsafe { welcome.GetPixelSize().width }, welcome_px);
+                    let again = gfx.tile(&target, &mut device, png, header_px).unwrap();
+                    assert_eq!(header.as_raw(), again.as_raw());
+                    assert_eq!(device.tiles.len(), 2);
+                }
+            }
+        }
+        unsafe { CoUninitialize() };
     }
 }

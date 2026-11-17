@@ -26,6 +26,16 @@ export const modal = style({
   fontSize: '0.9rem',
 });
 
+export const fullScreenModal = style({
+  position: 'fixed',
+  inset: 0,
+  width: '100vw',
+  height: '100dvh',
+  maxHeight: '100dvh',
+  border: 0,
+  borderRadius: 0,
+});
+
 export const header = style({
   display: 'flex',
   alignItems: 'center',
@@ -62,6 +72,8 @@ export const body = style({
   flexDirection: 'column',
   gap: '0.6rem',
 });
+
+export const fullScreenBody = style({ flex: 1, padding: 0, overflow: 'hidden' });
 
 /**
  * `B-319` — THE ACTION ROW. One line packed to its end while one line holds the buttons, which is

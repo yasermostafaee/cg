@@ -1,4 +1,6 @@
 fn main() {
+    // Refresh the executable's icon resources when the product artwork changes.
+    println!("cargo:rerun-if-changed=icons");
     // The app's own commands, and the permission each generates (`allow-keyboard-language`,
     // `allow-close-guard`, `allow-close-request-seen`, `allow-close-window-now`,
     // `allow-pick-text-source-file`, `allow-reload-text-source-file`), granted in

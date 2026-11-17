@@ -29,4 +29,8 @@ describe('the page', () => {
     expect(icon).toContain(inner);
     expect(icon).toContain('#00AEEF');
   });
+
+  it('refreshes native icon resources when artwork changes', () => {
+    expect(read('../src-tauri/build.rs')).toContain('cargo:rerun-if-changed=icons');
+  });
 });

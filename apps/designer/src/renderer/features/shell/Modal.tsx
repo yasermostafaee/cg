@@ -37,6 +37,8 @@ interface ModalProps {
   minBodyHeight?: number | string;
   /** Optional card maximum height. Most dialogs keep the shared 82vh default. */
   maxHeight?: number | string;
+  /** Fill the viewport while keeping the shared header, footer and focus handling. */
+  fullScreen?: boolean;
 }
 
 export function Modal({
@@ -49,6 +51,7 @@ export function Modal({
   closeOnBackdrop = true,
   minBodyHeight,
   maxHeight,
+  fullScreen = false,
 }: ModalProps): JSX.Element {
   const boxRef = useRef<HTMLDivElement>(null);
   const fitFooter = useActionRowFit<HTMLDivElement>();
@@ -120,8 +123,12 @@ export function Modal({
       <div
         ref={boxRef}
         tabIndex={-1}
-        className={s.modal}
-        style={{ width, outline: 'none', ...(maxHeight !== undefined ? { maxHeight } : {}) }}
+        className={fullScreen ? `${s.modal} ${s.fullScreenModal}` : s.modal}
+        style={{
+          ...(!fullScreen ? { width } : {}),
+          outline: 'none',
+          ...(!fullScreen && maxHeight !== undefined ? { maxHeight } : {}),
+        }}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
@@ -139,7 +146,7 @@ export function Modal({
           </Control>
         </div>
         <div
-          className={s.body}
+          className={fullScreen ? `${s.body} ${s.fullScreenBody}` : s.body}
           style={minBodyHeight !== undefined ? { minHeight: minBodyHeight } : undefined}
         >
           {children}
