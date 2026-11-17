@@ -40,7 +40,7 @@ import {
  *
  *   - D11 `?fingerprint=` (`B-286`: the backup's own clip path) — through {@link accessToken};
  *   - D4, its `casparHost` resolved to the backup engine's host (rule 9);
- *   - D10 for a clean Playlist diagnostic, with the same bound and cadence as on the primary;
+ *   - D10 for independently qualified local Playlist seats, with the primary's source cadence;
  *   - `/api/cg/license` — reported on the backup's line, never a refusal of anything;
  *   - one server-side D9 read per access token gained — the introduction that lets this machine into the
  *     backup core's AMCP when the account holds `station-admin` (`BIA` 61-69);
@@ -214,6 +214,33 @@ export class BackupEngine {
       }
     | undefined;
 
+  #playlistAnswer:
+    | {
+        readonly parts: Parts;
+        readonly token: string;
+        readonly at: number;
+        readonly read: BackupPlaylistInputRead;
+      }
+    | undefined;
+  #playlistGeneration = 0;
+
+  /** Last independently authenticated D10, bounded in age; never borrows A's holder map. */
+  playlistInputs(): BackupPlaylistInputRead {
+    const answer = this.#playlistAnswer;
+    return answer !== undefined &&
+      answer.parts === this.#parts &&
+      answer.token === this.accessToken() &&
+      this.#now() - answer.at < SOURCES_POLL_MS * 2
+      ? answer.read
+      : { kind: 'unreadable' };
+  }
+
+  invalidatePlaylistInputs(): void {
+    this.#playlistGeneration += 1;
+    this.#playlistRead = undefined;
+    this.#playlistAnswer = undefined;
+  }
+
   /** Read the reserve list for diagnostics and presence without changing the primary catalogue. */
   readPlaylistInputs(): Promise<BackupPlaylistInputRead> {
     const parts = this.#parts;
@@ -224,9 +251,18 @@ export class BackupEngine {
     if (held?.parts === parts && held.token === token && now - held.at < SOURCES_POLL_MS)
       return held.response;
     const reader = new HttpPlayoutSources(parts.endpoints, () => token, this.#opts.readFetch);
+    const generation = ++this.#playlistGeneration;
     const response = reader.readInputs(null).then((answer): BackupPlaylistInputRead => {
-      if (this.#parts !== parts || this.accessToken() !== token) return { kind: 'no-session' };
-      return answer.kind === 'ok' ? { kind: 'list', body: answer.body } : { kind: 'unreadable' };
+      if (
+        this.#parts !== parts ||
+        this.accessToken() !== token ||
+        generation !== this.#playlistGeneration
+      )
+        return { kind: 'no-session' };
+      const read: BackupPlaylistInputRead =
+        answer.kind === 'ok' ? { kind: 'list', body: answer.body } : { kind: 'unreadable' };
+      this.#playlistAnswer = { parts, token, at: this.#now(), read };
+      return read;
     });
     this.#playlistRead = { parts, token, at: now, response };
     return response;

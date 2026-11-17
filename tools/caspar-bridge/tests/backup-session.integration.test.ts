@@ -231,6 +231,43 @@ async function take(handle: BridgeHandle, row: string): Promise<void> {
 }
 
 describe('🔴 R-085 — one Playout session per engine, each with its own account', () => {
+  it('discards a delayed pre-reconnect D10 after invalidation and preserves the new B epoch', async () => {
+    const { a, b } = await engines();
+    let reads = 0;
+    let release: ((response: Response) => void) | undefined;
+    const backup = track(
+      new BackupEngine({
+        primaryAddress: a.baseUrl,
+        addressOverride: b.baseUrl,
+        backupHost: () => '127.0.0.1',
+        sessionFile: path.join(scratch(), 'backup-delayed-inputs.json'),
+        audience: 'cg-control',
+        readFetch: async (input, init) => {
+          if (String(input).endsWith('/api/cg/inputs')) {
+            reads += 1;
+            if (reads === 1)
+              return new Promise<Response>((resolve) => {
+                release = resolve;
+              });
+            return new Response(JSON.stringify({ epoch: 'new-core', inputs: [] }), { status: 200 });
+          }
+          return fetch(input, init);
+        },
+      }),
+      (engine) => engine.dispose(),
+    );
+    backup.start();
+    expect(await backup.signIn(FAKE_ADMIN.username, PASS_B)).toEqual({ ok: true });
+    const old = backup.readPlaylistInputs();
+    await waitFor(() => release !== undefined);
+    backup.invalidatePlaylistInputs();
+    const fresh = await backup.readPlaylistInputs();
+    expect(fresh).toMatchObject({ kind: 'list', body: { epoch: 'new-core' } });
+    release?.(new Response(JSON.stringify({ epoch: 'old-core', inputs: [] }), { status: 200 }));
+    expect(await old).toEqual({ kind: 'no-session' });
+    expect(backup.playlistInputs()).toEqual(fresh);
+  });
+
   it('reads D10 for Playlist diagnostics only with B’s own authenticated session, at the D10 cadence', async () => {
     const { a, b } = await engines();
     const backup = track(

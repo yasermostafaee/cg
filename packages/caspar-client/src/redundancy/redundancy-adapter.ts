@@ -233,12 +233,18 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
     if (options.replica !== undefined) {
-      const { primary, peer, queue, settleMixer } = options.replica;
+      const { primary, peer, queue, settleMixer, verifiedLine } = options.replica;
       const label = this.backupLabel;
       const translated =
-        settleMixer === true && /^(?:MIXER |CG \d+-\d+ UPDATE )/.test(line) && !this.held.has(label)
-          ? this.ownLine({ line }, label)
-          : this.lineFor(label, line, options);
+        verifiedLine !== undefined
+          ? verifiedLine.current() && this.canReachReserve(label, line)
+            ? verifiedLine.line
+            : null
+          : settleMixer === true &&
+              /^(?:MIXER |CG \d+-\d+ UPDATE )/.test(line) &&
+              !this.held.has(label)
+            ? this.ownLine({ line }, label)
+            : this.lineFor(label, line, options);
       if (
         this.strategy !== 'mirror-sync' ||
         primary !== this.primarySession ||
@@ -252,6 +258,9 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       const result = await queue.enqueue(translated, {
         ...options,
         signal: this.roleSignal(options.signal),
+        ...(verifiedLine !== undefined && {
+          canDispatch: () => verifiedLine.current() && options.canDispatch?.() !== false,
+        }),
       });
       return { ...result, winner: label };
     }

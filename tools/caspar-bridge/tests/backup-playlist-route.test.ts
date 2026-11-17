@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeBackupPlaylistRoute,
+  resolveBackupPlaylistRoute,
   type BackupPlaylistScope,
 } from '../src/backup-playlist-route.js';
 
@@ -41,6 +42,15 @@ describe('the reserve D10 clean Playlist diagnostic', () => {
       'The backup engine advertises local Playlist route 2-7 for its channel 4.',
     );
     expect(describeInputs([primary])).toContain('did not list');
+    expect(
+      resolveBackupPlaylistRoute(
+        { kind: 'list', body: { inputs: [primary, backup], epoch: '2' } },
+        scope,
+      ),
+    ).toEqual({
+      epoch: '2',
+      producer: backup.producer,
+    });
   });
 
   it('requires B’s own session, a readable D10 epoch and a unique explicit row', () => {

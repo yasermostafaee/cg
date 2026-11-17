@@ -263,6 +263,7 @@ import {
   stationMutationChannel,
   type BackupChannelMap,
   type ServerBLineVerdict,
+  serverBLineRefusal,
 } from './server-b-line.js';
 import {
   captureActorContext,
@@ -335,6 +336,7 @@ import {
   STANDALONE_CHANNEL_UNAVAILABLE,
 } from './standalone-core-channels.js';
 import { type BackupClip, type BackupRefusalReason } from './backup-media.js';
+import type { ConfirmedBackupPlaylistRoute } from './backup-playlist-route.js';
 
 /** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's `PLAY` refused because server B, the primary now, has no copy. */
 export const BACKUP_NO_COPY_CODE = 'backup-no-copy';
@@ -538,6 +540,16 @@ interface MirroredLiveSeat {
   readonly peerQueue: ServerSession['queue'];
   readonly peerChannel: number;
   readonly producer: string;
+  readonly routeCurrent?: () => boolean;
+}
+
+interface PlaylistReplica {
+  readonly primary: ServerSession;
+  readonly peer: ServerSession;
+  readonly queue: ServerSession['queue'];
+  readonly channel: number;
+  readonly route: ConfirmedBackupPlaylistRoute;
+  readonly current: () => boolean;
 }
 
 interface PositionProposal {
@@ -2641,6 +2653,7 @@ export class CasparRuntime {
   #amcpGeneration = 0;
   /** `ROUTE-PLATES-01` rule 5 — the epoch a D10 read confirmed, and on which connection. */
   #routeEpochConfirmed: { readonly generation: number; readonly epoch: string } | null = null;
+  #backupConnectionGeneration = 0;
   /** `ROUTE-PLATES-01` rule 4 — the clock the `LOADBG` → `PLAY` window and the reveal wait use. */
   readonly #routeClock: RouteClock;
   /**
@@ -3410,6 +3423,10 @@ export class CasparRuntime {
           still the last thing anyone saw.
         */
         if (to === 'healthy' && from !== 'degraded') {
+          if (label === 'B') {
+            this.#backupConnectionGeneration += 1;
+            this.#mirroredLiveSeats.clear();
+          }
           for (const handler of [...this.#serverConnectedHandlers]) handler(label);
           this.#declaredConsumers.delete(label);
           this.#outputReadAt.delete(label);
@@ -4102,7 +4119,7 @@ export class CasparRuntime {
       const removeExempt = this.#removeExempt(item.itemId);
       // `FIELD-FIXES-01` B — why this row's last take was refused (see `#takeRefusals`).
       const takeRefusal = this.#takeRefusals.get(item.itemId);
-      // `ROUTE-PLATES-01` C4 — the backup carries this row without its Playout route plates.
+      // Unqualified A-local routes remain absent on B; independently seated B Playlists qualify.
       const backupUnmirrored = this.#backupUnmirrored(item.itemId);
       // `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for.
       const backupNoCopy = this.#backupNoCopy(item.itemId);
@@ -7061,6 +7078,16 @@ export class CasparRuntime {
     this.#observeBackupPlaylist = observe;
   }
 
+  #backupPlaylistRoute:
+    | ((destination: number, playlist: number) => ConfirmedBackupPlaylistRoute | null)
+    | null = null;
+
+  useBackupPlaylistRoutes(
+    resolve: (destination: number, playlist: number) => ConfirmedBackupPlaylistRoute | null,
+  ): void {
+    this.#backupPlaylistRoute = resolve;
+  }
+
   /**
    * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **SERVER B'S OWN `PLAY` FOR A CLIP**: the same line with the path
    * B's own Playout listed for the clip's fingerprint, or `null` — B is sent nothing — with the reason.
@@ -8501,11 +8528,18 @@ export class CasparRuntime {
       seat.peerQueue !== peer.queue ||
       seat.peerChannel !== peer.channelOnB ||
       seat.producer !== record.producer ||
-      record.backupRefused !== undefined ||
-      isPlayoutRouteRecord(record)
+      record.backupRefused !== undefined
     )
       return false;
     const producer = this.#observedProducer(page.session, record.slot);
+    if (isPlayoutRouteRecord(record)) {
+      return (
+        seat.routeCurrent?.() === true &&
+        producer !== undefined &&
+        oscProducerKind(producer) === 'route' &&
+        oscProducerKind(this.#observedProducer(peer.session, record.slot) ?? '') === 'route'
+      );
+    }
     return (
       producer !== undefined &&
       oscProducerKind(producer) !== 'html' &&
@@ -14177,7 +14211,9 @@ export class CasparRuntime {
           oscProducerKind(this.#observedProducer(effectPeer.session, slot) ?? '') === 'html',
       );
     const peerSeats = affected.filter(
-      (record) => record.backupRefused === undefined && !isPlayoutRouteRecord(record),
+      (record) =>
+        record.backupRefused === undefined &&
+        (!isPlayoutRouteRecord(record) || this.#hasResidentSeatMirror(page, record)),
     );
     const animatePeer =
       effectPeer !== undefined &&
@@ -14791,7 +14827,11 @@ export class CasparRuntime {
           for (const before of baseline) {
             // A route belongs to its active Playout engine. A flagged missing copy has no
             // reserve producer to move. Their absence must never disturb the active effect.
-            if (before.backupRefused !== undefined || isPlayoutRouteRecord(before)) continue;
+            if (
+              before.backupRefused !== undefined ||
+              (isPlayoutRouteRecord(before) && !this.#hasResidentSeatMirror(page, before))
+            )
+              continue;
             const after = nextBySeat.get(liveSeatId(before));
             if (after === undefined || adoptionKey(before.slot) !== adoptionKey(after.slot)) {
               delete page.mirror;
@@ -16828,7 +16868,63 @@ export class CasparRuntime {
     this.#mirroredLiveSeats.delete(key);
     // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
     if (placementIsPlayoutRoute(placement)) {
+      const primary = this.#adapter.primarySession;
+      const primaryQueue = primary.queue;
+      const peer = this.#adapter.backupSession;
+      const peerQueue = peer?.queue;
+      const channel = this.#backupChannels.channelOnB(placement.slot.channel);
+      const generation = this.#backupConnectionGeneration;
+      const resolved =
+        target === undefined &&
+        placement.source.playlistOf !== undefined &&
+        this.#adapter.currentPrimary === 'A' &&
+        peer !== null &&
+        channel !== null
+          ? this.#backupPlaylistRoute?.(placement.slot.channel, placement.source.playlistOf)
+          : null;
+      const current = () =>
+        resolved !== undefined &&
+        resolved !== null &&
+        resolved.current() &&
+        this.#adapter.currentPrimary === 'A' &&
+        primary === this.#adapter.primarySession &&
+        primary.queue === primaryQueue &&
+        peer !== null &&
+        peer === this.#adapter.backupSession &&
+        peer.queue === peerQueue &&
+        this.#backupConnectionGeneration === generation &&
+        channel !== null &&
+        channel === this.#backupChannels.channelOnB(placement.slot.channel) &&
+        this.#routeEpochIsCurrent(placement.epoch);
       const route = await this.#startRouteProducer(placement, signal, target);
+      if (
+        route.ok &&
+        route.onPrimary &&
+        resolved != null &&
+        peer !== null &&
+        peerQueue !== undefined &&
+        channel !== null &&
+        current()
+      ) {
+        const copied = await this.#startRouteProducer(placement, signal, undefined, {
+          primary,
+          peer,
+          queue: peerQueue,
+          channel,
+          route: resolved,
+          current,
+        });
+        if (copied.ok && current())
+          this.#mirroredLiveSeats.set(key, {
+            primary,
+            primaryQueue,
+            peer,
+            peerQueue,
+            peerChannel: channel,
+            producer: placement.producerArg,
+            routeCurrent: current,
+          });
+      }
       if (route.ok && route.onPrimary && placement.source.playlistOf !== undefined)
         this.#observeBackupPlaylist?.(placement.slot.channel, placement.source.playlistOf);
       return route;
@@ -16946,13 +17042,15 @@ export class CasparRuntime {
    *   `LOADBG` — a fresh one replaces it — once; missed twice, the seat is refused like a refused
    *   `PLAY`, and `FIELD-FIXES-01-A` decides the rest.
    * - Both lines carry the placement's epoch to the send seam, which refuses them unless it is the
-   *   current, confirmed one (rule 5), and both reach the PRIMARY ONLY, never journaled (C4).
+   *   current, confirmed one (rule 5). A's pair is primary-only; a separately resolved B-local
+   *   Playlist pair targets its pinned peer. Neither pair is journaled or replayed.
    * - A CUT: no transition word, and never inside `BEGIN…COMMIT` (nothing here uses one).
    */
   async #startRouteProducer(
     placement: LivePlatePlacement,
     signal?: AbortSignal,
     target?: PrimaryMixerTarget,
+    replica?: PlaylistReplica,
   ): Promise<{
     ok: boolean;
     onPrimary: boolean;
@@ -16964,21 +17062,28 @@ export class CasparRuntime {
     const clock = this.#routeClock;
     // A seat with no epoch still goes through the seam, which refuses `''` as stale: one door.
     const routeEpoch = placement.epoch ?? '';
-    const loadLine = this.#builder.loadBackground(placement.slot, placement.producer);
+    const producer = replica?.route.producer ?? placement.producer;
+    const loadLine = this.#builder.loadBackground(placement.slot, producer);
     /*
       Once a `LOADBG` has landed, a failure after it is `loaded`, not `refused`: the foreground is as
       it was, and a producer of THIS operation sits in the background (`refusal-cleanup.ts`). A reply
       that never came stays `unknown` — the `PLAY` may have promoted it.
     */
     let backgroundLoaded = false;
-    const sendOptions = { ...target, routeEpoch, ...(signal !== undefined && { signal }) };
+    const sendOptions = (lineOnB: string) => ({
+      ...target,
+      ...(replica === undefined
+        ? { routeEpoch }
+        : { playlistReplica: { ...replica, line: lineOnB } }),
+      ...(signal !== undefined && { signal }),
+    });
     const afterLoad = (sent: { ok: boolean; errorCode?: string }): SeatOutcome | undefined => {
       if (!backgroundLoaded) return undefined;
       const outcome = outcomeOf(sent);
       return outcome === 'refused' ? 'loaded' : outcome;
     };
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      if (signal?.aborted)
+      if (signal?.aborted || replica?.current() === false)
         return {
           ok: false,
           onPrimary: false,
@@ -16986,7 +17091,17 @@ export class CasparRuntime {
           outcome: backgroundLoaded ? 'loaded' : 'refused',
         };
       const loadedAt = clock.now();
-      const loaded = await this.#send(loadLine, this.#nextSeq(), 'urgent', sendOptions);
+      const loaded = await this.#send(
+        loadLine,
+        this.#nextSeq(),
+        'urgent',
+        sendOptions(
+          this.#builder.loadBackground(
+            { ...placement.slot, channel: replica?.channel ?? placement.slot.channel },
+            producer,
+          ),
+        ),
+      );
       if (!loaded.ok) {
         const outcome = afterLoad(loaded);
         return outcome === undefined ? loaded : { ...loaded, outcome };
@@ -16995,7 +17110,7 @@ export class CasparRuntime {
       const playAt = clock.now() + ROUTE_LOADBG_MIN_MS;
       if (playAt - loadedAt <= ROUTE_LOADBG_MAX_MS) {
         await sleepUntil(clock, playAt);
-        if (signal?.aborted)
+        if (signal?.aborted || replica?.current() === false)
           return { ok: false, onPrimary: false, errorCode: 'not-live', outcome: 'loaded' };
         // The sleep itself may have overrun the window: asked again, right before the PLAY.
         if (clock.now() - loadedAt <= ROUTE_LOADBG_MAX_MS) {
@@ -17004,7 +17119,12 @@ export class CasparRuntime {
             this.#builder.playLoaded(placement.slot),
             this.#nextSeq(),
             'urgent',
-            sendOptions,
+            sendOptions(
+              this.#builder.playLoaded({
+                ...placement.slot,
+                channel: replica?.channel ?? placement.slot.channel,
+              }),
+            ),
           );
           const outcome = played.ok ? undefined : afterLoad(played);
           return {
@@ -19608,13 +19728,17 @@ export class CasparRuntime {
 
   /**
    * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — **DOES THE BACKUP CARRY THIS ROW WITHOUT ITS LIVE
-   * BOXES?** A backup is declared and the row's seats include a Playout route, which is never
-   * mirrored (`#send`'s `mirror: false`). Every other plate mirrors as it always has.
+   * BOXES?** A backup is declared and a route has no current, acknowledged B-local Playlist seat.
+   * A-local holder routes are not portable; a B Playlist needs its own D10 proof.
    */
   #backupUnmirrored(itemId: string): boolean {
     return (
       this.#config.servers.B !== undefined &&
-      (this.#liveLayers.get(itemId) ?? []).some(isPlayoutRouteRecord)
+      (this.#liveLayers.get(itemId) ?? []).some(
+        (record) =>
+          isPlayoutRouteRecord(record) &&
+          this.#mirroredLiveSeats.get(adoptionKey(record.slot))?.routeCurrent?.() !== true,
+      )
     );
   }
 
@@ -23815,6 +23939,8 @@ export class CasparRuntime {
        * only, never journaled (C4). Absent on every other line — a hand-made `route://` included.
        */
       readonly routeEpoch?: string;
+      /** Independently resolved B-local Playlist pair; never translated from A or journaled. */
+      readonly playlistReplica?: PlaylistReplica & { readonly line: string };
       /**
        * `ROUTE-PLATES-01` §0.6 — the ONE door that addresses a channel this station does not
        * declare: {@link takeStrayOffAir}, on our own recorded stray's exact coordinate (never in
@@ -23930,8 +24056,29 @@ export class CasparRuntime {
         };
       }
     }
+    const playlistReplica = options.playlistReplica;
+    const playlistRefusal =
+      playlistReplica === undefined
+        ? null
+        : !playlistReplica.current() || playlistReplica.route.producer.layer === undefined
+          ? {
+              code: ROUTE_EPOCH_STALE_CODE,
+              reason: 'The backup Playlist route epoch or connection changed.',
+            }
+          : serverBLineRefusal(
+              playlistReplica.line,
+              {
+                map: this.#backupChannels,
+                isOwnLayer: (channel, layer) => this.#isOwnConfiguredLayer(channel, layer),
+              },
+              {
+                channel: playlistReplica.route.producer.channel,
+                layer: playlistReplica.route.producer.layer,
+              },
+            );
     const refusal =
-      options.routeEpoch !== undefined && !this.#routeEpochIsCurrent(options.routeEpoch)
+      playlistRefusal ??
+      (options.routeEpoch !== undefined && !this.#routeEpochIsCurrent(options.routeEpoch)
         ? {
             code: ROUTE_EPOCH_STALE_CODE,
             reason:
@@ -23948,13 +24095,13 @@ export class CasparRuntime {
             isOwnLayer: (channel, layer) =>
               this.#isOwnConfiguredLayer(channel, layer) ||
               (channel === options.strayTarget?.channel && layer === options.strayTarget.layer),
-            playoutRoute: options.routeEpoch !== undefined,
+            playoutRoute: options.routeEpoch !== undefined || playlistReplica !== undefined,
             // `MEDIA-PLATES-01` — `PAUSE` / `RESUME` / `CALL` only where the ledger holds a clip of ours.
             clipOn: (channel, layer) => this.#holdsClip(channel, layer),
             // `PLAYOUT-FEATURES-01` C — never the Playout's playout layer L; never a raise on the box.
             playoutLayerOn: (channel, layer) => this.#isPlayoutPlaylistLayer(channel, layer),
             audioLockedOn: (channel, layer) => this.#audioLockedOn(channel, layer),
-          });
+          }));
     if (refusal !== null) {
       this.#clearExpiry(seq);
       this.#reconciler.applyAck(seq, false, refusal.code);
@@ -23993,7 +24140,8 @@ export class CasparRuntime {
       this.#lastMixerTarget = target;
     }
     try {
-      // `ROUTE-PLATES-01` C4 — a Playout route reaches the primary only, and is never journaled.
+      // A route is primary-only. Its independently verified B-local Playlist uses the pinned
+      // replica branch below; neither operation is journaled.
       // `PLAYOUT-FEATURES-01` A — a clip's `PLAY` carries server B's own line; a transport verb to a
       // clip server B was sent nothing for reaches the primary only (B's layer holds nothing of ours).
       const recovery = this.#quickRestoreScope.getStore();
@@ -24043,32 +24191,42 @@ export class CasparRuntime {
         return { ok: false, onPrimary: false, errorCode: 'live-position-unavailable' };
       const result = await this.#adapter.send(
         line,
-        replicaPage !== undefined && peer !== undefined
+        playlistReplica !== undefined
           ? {
               ...sendOptions,
               replica: {
-                primary: replicaPage.session,
-                peer: peer.session,
-                queue: peer.queue,
-                ...(options.settleReplicaMixer === true && { settleMixer: true }),
+                primary: playlistReplica.primary,
+                peer: playlistReplica.peer,
+                queue: playlistReplica.queue,
+                verifiedLine: { line: playlistReplica.line, current: playlistReplica.current },
               },
-              ...(options.serverB !== undefined && { serverB: options.serverB }),
             }
-          : primaryOnly !== undefined
+          : replicaPage !== undefined && peer !== undefined
             ? {
                 ...sendOptions,
-                mirror: false,
-                primaryOwner: {
-                  session: primaryOnly,
-                  queue: primaryQueue ?? primaryOnly.queue,
+                replica: {
+                  primary: replicaPage.session,
+                  peer: peer.session,
+                  queue: peer.queue,
+                  ...(options.settleReplicaMixer === true && { settleMixer: true }),
                 },
                 ...(options.serverB !== undefined && { serverB: options.serverB }),
               }
-            : options.routeEpoch !== undefined || this.#primaryOnlyTransport(line)
-              ? { ...sendOptions, mirror: false }
-              : options.serverB !== undefined
-                ? { ...sendOptions, serverB: options.serverB }
-                : sendOptions,
+            : primaryOnly !== undefined
+              ? {
+                  ...sendOptions,
+                  mirror: false,
+                  primaryOwner: {
+                    session: primaryOnly,
+                    queue: primaryQueue ?? primaryOnly.queue,
+                  },
+                  ...(options.serverB !== undefined && { serverB: options.serverB }),
+                }
+              : options.routeEpoch !== undefined || this.#primaryOnlyTransport(line)
+                ? { ...sendOptions, mirror: false }
+                : options.serverB !== undefined
+                  ? { ...sendOptions, serverB: options.serverB }
+                  : sendOptions,
       );
       if (recovery !== undefined && !matchesPrimary()) {
         this.#clearExpiry(seq);

@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import {
+  CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
+} from '@cg/shared-schema';
+import {
   inputSourceId,
   isolateText,
   type ConnectionConfig,
@@ -14,6 +19,7 @@ import {
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import type { BackupChannelMap } from '../src/server-b-line.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { PlayoutSources } from '../src/playout-sources.js';
 import {
@@ -250,6 +256,7 @@ async function boot(
     readonly assignments: SourceAssignments;
     readonly provider?: LocalPlayoutSources;
     readonly backup?: boolean;
+    readonly backupChannels?: BackupChannelMap;
   } = { assignments: bind('single', { l1: INPUT_3 }) },
 ): Promise<Rig> {
   const clock = fakeRouteClock();
@@ -302,7 +309,7 @@ async function boot(
         seam = send;
       },
       // `B-316` — the subject here is ROUTES, on two mocks that share numbers by construction; said.
-      backupChannels: SAME_NUMBERS_ON_B,
+      backupChannels: options.backupChannels ?? SAME_NUMBERS_ON_B,
     },
   );
   runtime = r;
@@ -817,7 +824,7 @@ describe('§1.E — the send seam refuses what this station may never send', () 
 
 // ── §1.F — backup (rule 1, C4) ───────────────────────────────────────────────────────────────
 
-describe('§1.F — C4: a route plate is never mirrored to the backup', () => {
+describe('§1.F — C4: primary routes are never copied to the backup', () => {
   const playlist = {
     ...holderInput('pl-ch2', 'Playlist channel 2', 5),
     producer: { kind: 'route' as const, channel: 2, layer: 5 },
@@ -921,6 +928,170 @@ describe('§1.F — C4: a route plate is never mirrored to the backup', () => {
     await take(r, 'single');
     expect(inspected).toEqual([{ destination: 2, playlist: 2 }]);
     expect(routeLines(await backupLines())).toEqual([]);
+  });
+});
+
+describe('independently resolved reserve Playlist seats', () => {
+  const playlist: FakeInput = {
+    ...holderInput('pl-local', 'Local Playlist', 5),
+    producer: { kind: 'route', channel: 1, layer: 5, videoMode: '1080i5000' },
+    playlistOf: { casparHost: '127.0.0.1', casparChannel: 1 },
+  };
+  const reversed: BackupChannelMap = {
+    channelOnB: (channel) => (channel === 1 ? 2 : channel === 2 ? 1 : null),
+    channelOnBAtTake: (channel) => (channel === 1 ? 2 : channel === 2 ? 1 : null),
+    stationChannelOf: (channel) => (channel === 1 ? 2 : channel === 2 ? 1 : null),
+    release: () => undefined,
+  };
+
+  it('seats B’s own qualified route on B’s mapped destination and mirrors settled geometry', async () => {
+    const { r, backup, backupLines, sentSince, mark } = await boot({
+      assignments: bind('triple', {
+        l1: inputSourceId(playlist.id),
+        l2: MULTICAST,
+        l3: inputSourceId('li-studio1'),
+      }),
+      provider: new LocalPlayoutSources({ inputs: [...INPUTS, playlist] }),
+      backup: true,
+      backupChannels: reversed,
+    });
+    const requested: number[][] = [];
+    r.templateImport(
+      {
+        ...TRIPLE,
+        liveSources: {
+          ...TRIPLE.liveSources!,
+          looks: TRIPLE.liveSources!.looks!.map((look) => ({
+            ...look,
+            transitionFrames: {
+              l1: {
+                frameKey: `${look.id}-playlist`,
+                elementId: 'playlist',
+                artworkId: 'playlist-art',
+              },
+            },
+          })),
+        },
+      },
+      `<!doctype html><html><head>${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}${CG_LIVE_PRESET_RECOVERY_PAGE_MARKER}</head><body>Playlist</body></html>`,
+    );
+    r.useBackupPlaylistRoutes((destination, source) => {
+      requested.push([destination, source]);
+      return {
+        producer: { kind: 'route', channel: 2, layer: 7, videoMode: '1080i5000' },
+        epoch: 'B-epoch',
+        current: () => true,
+      };
+    });
+    const from = await mark();
+    await take(r, 'triple');
+    expect(requested).toEqual([[2, 1]]);
+    const onA = await sentSince(from);
+    const onB = await backupLines();
+    expect(onA).toContain('LOADBG 2-60 "route://1-5"');
+    expect(onB).toContain('LOADBG 1-60 "route://2-7"');
+    expect(onB.indexOf('PLAY 1-60')).toBeGreaterThan(onB.indexOf('LOADBG 1-60 "route://2-7"'));
+    expect(onB.some((line) => line.includes('route://1-5'))).toBe(false);
+    expect(backup?.layerState({ channel: 1, layer: 60 })?.producer).toBe('route');
+    expect(row(r)?.backupUnmirrored).toBeUndefined();
+    const before = onB.length;
+    const beforeA = await mark();
+    expect(await r.setActiveLook(ROW, 'look-3')).toEqual({ ok: true });
+    const fill = (await sentSince(beforeA)).find((line) => line.startsWith('MIXER 2-60 FILL '));
+    expect(fill).toBeDefined();
+    expect((await backupLines()).slice(before)).toContain(fill!.replace('2-60', '1-60'));
+    await waitFor(() => row(r)?.onAirPresetTransition === true, 'the preset-capable page');
+    await delay(150);
+    for (const look of ['look-1', 'look-3']) {
+      const effectA = await mark();
+      const effectB = (await backupLines()).length;
+      expect(
+        await r.setActiveLook(ROW, look, { motion: 'ease-in-out', fade: false, durationMs: 160 }),
+      ).toEqual({ ok: true });
+      const phasesA = (await sentSince(effectA)).filter(
+        (line) => line.startsWith('MIXER 2-60 FILL ') && line.includes('quad DEFER'),
+      );
+      const phasesB = (await backupLines())
+        .slice(effectB)
+        .filter((line) => line.startsWith('MIXER 1-60 FILL ') && line.includes('quad DEFER'));
+      expect(phasesA.length).toBeGreaterThan(0);
+      expect(phasesB).toEqual(phasesA.map((line) => line.replace('2-60', '1-60')));
+    }
+  });
+
+  it('never promotes a B route if its independently confirmed epoch changes during LOADBG wait', async () => {
+    const { r, clock, backupLines } = await boot({
+      assignments: bind('single', { l1: inputSourceId(playlist.id) }),
+      provider: new LocalPlayoutSources({ inputs: [...INPUTS, playlist] }),
+      backup: true,
+      backupChannels: reversed,
+    });
+    let current = true;
+    const sleep = clock.sleep;
+    clock.sleep = async (ms) => {
+      await sleep(ms);
+      if (clock.sleeps >= 2) current = false;
+    };
+    r.useBackupPlaylistRoutes(() => ({
+      producer: { kind: 'route', channel: 2, layer: 7 },
+      epoch: 'B-epoch',
+      current: () => current,
+    }));
+    await take(r, 'single');
+    const lines = await backupLines();
+    expect(lines).toContain('LOADBG 1-60 "route://2-7"');
+    expect(lines).not.toContain('PLAY 1-60');
+    expect(row(r)?.backupUnmirrored).toBe(true);
+  });
+
+  it('prepares a Playlist hidden on B when it is present only in a later preset', async () => {
+    const { r, backupLines } = await boot({
+      assignments: bind('triple', {
+        l1: inputSourceId(playlist.id),
+        l2: MULTICAST,
+        l3: inputSourceId('li-studio1'),
+      }),
+      provider: new LocalPlayoutSources({ inputs: [...INPUTS, playlist] }),
+      backup: true,
+      backupChannels: reversed,
+    });
+    r.templateImport(
+      {
+        ...TRIPLE,
+        liveSources: {
+          ...TRIPLE.liveSources!,
+          defaultLookId: 'look-other',
+          looks: [
+            {
+              id: 'look-other',
+              name: 'Other input',
+              entered: { mode: 'cut' },
+              rects: { l2: FULL },
+            },
+            ...TRIPLE.liveSources!.looks!,
+          ],
+        },
+      },
+      '<!doctype html><html><body>Hidden Playlist</body></html>',
+    );
+    r.useBackupPlaylistRoutes(() => ({
+      producer: { kind: 'route', channel: 2, layer: 7 },
+      epoch: 'B-epoch',
+      current: () => true,
+    }));
+    await take(r, 'triple');
+    const onB = await backupLines();
+    const layer = layerOf(r, 'l1');
+    const target = `1-${String(layer)}`;
+    const load = onB.indexOf(`LOADBG ${target} "route://2-7"`);
+    expect(load, JSON.stringify(onB)).toBeGreaterThan(0);
+    expect(onB.slice(0, load)).toContain(`MIXER ${target} OPACITY 0 DEFER`);
+    expect(onB.slice(0, load)).toContain(`MIXER ${target} VOLUME 0 DEFER`);
+    expect(onB.slice(0, load)).toContain('MIXER 1 COMMIT');
+    expect(await r.setActiveLook(ROW, 'look-3')).toEqual({ ok: true });
+    expect(
+      (await backupLines()).filter((line) => line === `LOADBG ${target} "route://2-7"`),
+    ).toHaveLength(1);
   });
 });
 

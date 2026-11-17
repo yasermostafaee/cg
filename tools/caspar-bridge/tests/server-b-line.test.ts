@@ -30,6 +30,17 @@ const b = new CommandBuilder();
 const slot = { channel: 1, layer: 80 };
 const plate = { channel: 1, layer: 60 };
 
+it('permits only an independently qualified B Playlist LOADBG while retaining target/layer guards', () => {
+  const source = { channel: 8, layer: 5 };
+  expect(serverBLineRefusal('LOADBG 2-60 "route://8-5"', ctx, source)).toBeNull();
+  expect(serverBLineRefusal('LOADBG 2-60 "route://8-5"', ctx)).not.toBeNull();
+  expect(serverBLineRefusal('LOADBG 2-60 "route://8-6"', ctx, source)).not.toBeNull();
+  expect(serverBLineRefusal('LOADBG 2-60 "route://8-5" AUTO', ctx, source)).not.toBeNull();
+  expect(serverBLineRefusal('LOADBG 2-5 "route://8-5"', ctx, source)).not.toBeNull();
+  expect(serverBLineRefusal('LOADBG 7-60 "route://8-5"', ctx, source)).not.toBeNull();
+  expect(serverBLineFor('LOADBG 1-60 "route://8-5"', ctx)).toHaveProperty('refused');
+});
+
 /** Every line shape the builder emits for the station's channel 1, and what B must get for each. */
 const SHAPES: readonly [string, string][] = [
   [b.load(slot, 'http://h/t', { f: 'x' }), 'CG 2-80 ADD'],

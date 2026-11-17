@@ -722,6 +722,46 @@ describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend',
   });
 });
 
+describe('RedundancyAdapter — independently verified replica producer lines', () => {
+  it('sends only the pinned B line, never journals it, and rechecks proof while queued', async () => {
+    const { adapter, mocks, sessions, queues } = await setup('mirror-sync', () => null);
+    const seenA: string[] = [];
+    const seenB: string[] = [];
+    mocks[0].setHandler('LOADBG', (request) => {
+      seenA.push(request.raw);
+      return { kind: 'ok', code: 202, verb: 'LOADBG' };
+    });
+    mocks[1].setHandler('LOADBG', (request) => {
+      seenB.push(request.raw);
+      return { kind: 'ok', code: 202, verb: 'LOADBG' };
+    });
+    let current = true;
+    const options = {
+      replica: {
+        primary: sessions.A,
+        peer: sessions.B,
+        queue: queues[1],
+        verifiedLine: {
+          line: 'LOADBG 2-60 "route://2-7"',
+          current: () => current,
+        },
+      },
+    };
+    expect((await adapter.send('LOADBG 1-60 "route://1-5"', options)).winner).toBe('B');
+    expect(seenA).toEqual([]);
+    expect(seenB).toEqual(['LOADBG 2-60 "route://2-7"']);
+    expect(adapter.journal.all()).toEqual([]);
+    queues[1].pause();
+    const pending = adapter.send('LOADBG 1-60 "route://1-5"', options);
+    const refused = expect(pending).rejects.toThrow();
+    current = false;
+    queues[1].resume();
+    await refused;
+    expect(seenB).toHaveLength(1);
+    expect(adapter.journal.all()).toEqual([]);
+  });
+});
+
 describe('RedundancyAdapter — ROUTE-PLATES-01 a line with `mirror: false`', () => {
   const route = 'PLAY 1-60 "route://9-12"';
 

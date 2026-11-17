@@ -23,7 +23,8 @@ import {
  *      (50–99) or the station's own configured layer, a channel-wide line only `MIXER M COMMIT` or `INFO M`.
  *      So a line that reached here untranslated — B's channel 1, a preview — is refused HERE.
  *
- * Server A's line never passes through either.
+ * Server A's line never passes through either. An independently resolved B-local Playlist
+ * bypasses generic translation and calls the destination guard with its exact qualified source.
  */
 
 /** Where every line for a station channel goes on server B, as CG Bridge holds it NOW. */
@@ -166,8 +167,13 @@ export interface ServerBGuardContext {
 export function serverBLineRefusal(
   lineOnB: string,
   ctx: ServerBGuardContext,
+  playlistSource?: { readonly channel: number; readonly layer: number },
 ): { readonly code: ServerBRefusalCode; readonly reason: string } | null {
-  if (ROUTE.test(lineOnB)) {
+  const qualifiedPlaylist =
+    playlistSource !== undefined &&
+    /^LOADBG \d+-\d+ "route:\/\/\d+-\d+"$/.test(lineOnB) &&
+    lineOnB.endsWith(`"route://${String(playlistSource.channel)}-${String(playlistSource.layer)}"`);
+  if (ROUTE.test(lineOnB) && !qualifiedPlaylist) {
     return { code: BACKUP_ROUTE_CODE, reason: 'a route:// is never sent to server B' };
   }
   if (isChannelFree(lineOnB)) return null;

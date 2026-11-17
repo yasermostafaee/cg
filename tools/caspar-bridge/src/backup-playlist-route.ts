@@ -3,6 +3,7 @@ import {
   SourceProducerSchema,
   canonicalPlayoutEpoch,
   parsePlayoutInputs,
+  type SourceProducer,
 } from '@cg/shared-ipc';
 import { hostIsOursFor } from './playout-catalogue.js';
 
@@ -18,11 +19,21 @@ export interface BackupPlaylistScope {
   readonly destinationVideoMode: string | undefined;
 }
 
-/** Diagnose whether the reserve advertises its own ready source for this mapped clean Playlist. */
-export function describeBackupPlaylistRoute(
+export interface BackupPlaylistRoute {
+  readonly producer: Extract<SourceProducer, { kind: 'route' }>;
+  readonly epoch: string;
+}
+
+export interface ConfirmedBackupPlaylistRoute extends BackupPlaylistRoute {
+  /** The same B session, D10 epoch, qualified producer and destination mapping are still in force. */
+  readonly current: () => boolean;
+}
+
+/** A route is resolved only from the reserve's own qualified, compatible Playlist row. */
+export function resolveBackupPlaylistRoute(
   read: BackupPlaylistInputRead,
   scope: BackupPlaylistScope,
-): string {
+): BackupPlaylistRoute | string {
   if (read.kind !== 'list') {
     return read.kind === 'no-session'
       ? 'The backup engine has no signed-in session for its input list.'
@@ -30,8 +41,8 @@ export function describeBackupPlaylistRoute(
   }
   const list = parsePlayoutInputs(read.body);
   if (list === null) return 'The backup engine answered with an invalid input list.';
-  if (canonicalPlayoutEpoch(list.epoch) === undefined)
-    return 'The backup engine input list has no core epoch.';
+  const epoch = canonicalPlayoutEpoch(list.epoch);
+  if (epoch === undefined) return 'The backup engine input list has no core epoch.';
 
   const isBackupHost = hostIsOursFor(scope.apiHost, () => [scope.host]);
   const matches = list.inputs.filter(
@@ -78,8 +89,17 @@ export function describeBackupPlaylistRoute(
   ) {
     return 'The backup engine did not confirm this route for the mapped destination and video mode.';
   }
-  return (
-    `The backup engine advertises local Playlist route ${String(route.channel)}-${String(route.layer)} ` +
-    `for its channel ${String(scope.destinationChannel)}.`
-  );
+  return { producer: route, epoch };
+}
+
+/** Operator diagnostic shares exactly the same validation as the seating resolver. */
+export function describeBackupPlaylistRoute(
+  read: BackupPlaylistInputRead,
+  scope: BackupPlaylistScope,
+): string {
+  const result = resolveBackupPlaylistRoute(read, scope);
+  return typeof result === 'string'
+    ? result
+    : `The backup engine advertises local Playlist route ${String(result.producer.channel)}-${String(result.producer.layer)} ` +
+        `for its channel ${String(scope.destinationChannel)}.`;
 }

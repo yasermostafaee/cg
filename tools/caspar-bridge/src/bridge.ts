@@ -357,7 +357,10 @@ import {
   type PlayoutVersionReaderOptions,
 } from './playout-version.js';
 import { BackupMediaLookup } from './backup-media.js';
-import { describeBackupPlaylistRoute } from './backup-playlist-route.js';
+import {
+  resolveBackupPlaylistRoute,
+  type BackupPlaylistInputRead,
+} from './backup-playlist-route.js';
 import {
   primaryInputPresence,
   reserveInputPresence,
@@ -2649,13 +2652,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   });
   if (backupEngine !== null) {
     const lastByPlaylist = new Map<string, string>();
-    runtime.useBackupPlaylistDiagnostics((destination, playlist) => {
+    runtime.useBackupPlaylistRoutes((destination, playlist) => {
       const map = runtime.backupChannelMap();
       const destinationChannel = map.channelOnB(destination);
       const playlistChannel = map.channelOnB(playlist);
       const endpoint = serverBEndpoint();
       const address = backupEngine.address();
-      if (endpoint === undefined || address === null) return;
+      const bearer = backupEngine.accessToken();
+      if (endpoint === undefined || address === null || bearer === null) return null;
       const say = (detail: string): void => {
         const key = `${address}:${String(destination)}:${String(playlist)}`;
         if (lastByPlaylist.get(key) === detail) return;
@@ -2666,37 +2670,58 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       };
       if (destinationChannel === null || playlistChannel === null) {
         say('The backup Playlist or destination channel is unmapped or held.');
-        return;
+        return null;
       }
-      void backupEngine.readPlaylistInputs().then((read) => {
+      const resolve = (read: BackupPlaylistInputRead) => {
         const currentEndpoint = serverBEndpoint();
         if (
           currentEndpoint?.host !== endpoint.host ||
           currentEndpoint.amcpPort !== endpoint.amcpPort ||
           backupEngine.address() !== address ||
+          backupEngine.accessToken() !== bearer ||
           runtime.backupChannelMap() !== map ||
           map.channelOnB(destination) !== destinationChannel ||
           map.channelOnB(playlist) !== playlistChannel
         ) {
-          return;
+          return null;
         }
-        const videoMode = backupEngine
+        const rows = backupEngine
           .rows()
-          ?.find(
+          ?.filter(
             (row) =>
               row.casparChannel === destinationChannel &&
               hostJoinsStation(row.casparHost, [endpoint.host]),
-          )?.videoMode;
-        say(
-          describeBackupPlaylistRoute(read, {
-            host: endpoint.host,
-            apiHost: new URL(address).hostname,
-            destinationChannel,
-            playlistChannel,
-            destinationVideoMode: videoMode ?? undefined,
-          }),
-        );
-      });
+          );
+        const row = rows?.length === 1 ? rows[0] : undefined;
+        if (row === undefined || row.cgLicensed === false) return null;
+        return resolveBackupPlaylistRoute(read, {
+          host: endpoint.host,
+          apiHost: new URL(address).hostname,
+          destinationChannel,
+          playlistChannel,
+          destinationVideoMode: row.videoMode ?? undefined,
+        });
+      };
+      const route = resolve(backupEngine.playlistInputs());
+      if (route === null || typeof route === 'string') {
+        if (route !== null) say(route);
+        return null;
+      }
+      say(
+        `Using B-local Playlist route ${String(route.producer.channel)}-${String(route.producer.layer)}.`,
+      );
+      return {
+        ...route,
+        current: () => {
+          const next = resolve(backupEngine.playlistInputs());
+          return (
+            next !== null &&
+            typeof next !== 'string' &&
+            next.epoch === route.epoch &&
+            JSON.stringify(next.producer) === JSON.stringify(route.producer)
+          );
+        },
+      };
     });
   }
   const recomputeBackupChannels = (): void => {
@@ -2707,7 +2732,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   runtime.configChanged.subscribe(recomputeBackupChannels);
   runtime.fixedConfigChanged.subscribe(recomputeBackupChannels);
   runtime.onServerConnected((label) => {
-    if (label === 'B') void backupEngine?.refreshChannels().then(recomputeBackupChannels);
+    if (label === 'B') {
+      backupEngine?.invalidatePlaylistInputs();
+      void backupEngine?.readPlaylistInputs();
+      void backupEngine?.refreshChannels().then(recomputeBackupChannels);
+    }
   });
   backupChannels.start();
   /** `R-089` — a station admin's entries, saved durably for the server B in force, then in force. */
@@ -2823,6 +2852,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const enginesListeners = new Set<(sessions: EngineSessions) => void>();
   let lastEngines = JSON.stringify(engineSessionsNow());
   const publishEngines = (): void => {
+    // Warm independent B D10 outside every playout verb, at the reader's bounded cadence.
+    void backupEngine?.readPlaylistInputs();
     const next = engineSessionsNow();
     const text = JSON.stringify(next);
     if (text === lastEngines) return;
