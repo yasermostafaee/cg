@@ -100,3 +100,7 @@
 - [x] 7.4 Windows Edge verified Station setup input formats occupy one line with the full value in the tooltip.
       The combined source/monitor run passed 24 tests. SourcePicker and nested-focus DOM checks passed 57 tests.
 - [ ] 7.5 Read the full gate and actual Linux E2E for the carrying commit.
+      On `8bc65225`, the full Linux gate passed and the actual E2E job passed 460 Designer,
+      480 Runtime and 2 pack-factory cases. Its sole failure was the Station setup geometry
+      fixture attempting guarded backup removal with its seeded graphic on air. A carrying
+      green result remains owed. [Failed job](https://github.com/yasermostafaee/cg/actions/runs/44160800438/job/134313901559).

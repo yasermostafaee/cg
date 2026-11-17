@@ -207,6 +207,10 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
+  // Clear the seeded CG stack so this removal scenario runs off air.
+  await page.evaluate(async () => {
+    await window.cg.stack.clearAll();
+  });
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
   await expect(dialog).toBeVisible();
@@ -329,6 +333,7 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   */
   await expect(dialog.locator('.cg-setup-empty')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Remove backup' }).click();
+  await expect(dialog.getByText('Backup connection removed.', { exact: true })).toBeVisible();
   await expect(dialog.locator('.cg-setup-empty')).toHaveCount(1);
 
   const empty = await dialog.locator('.cg-setup-empty').evaluate((el) => {
@@ -404,6 +409,12 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
 
     The tag reuses the section contract tag's chip tokens: one tag treatment at two levels.
   */
+  // Add a fresh backup draft before measuring its card-head tags.
+  await dialog.getByRole('button', { name: 'Add backup', exact: true }).click();
+  const addBackup = page.getByRole('dialog', { name: 'Add backup server', exact: true });
+  await addBackup.getByLabel('New backup host', { exact: true }).fill('192.0.2.43');
+  await addBackup.getByRole('button', { name: 'Add to draft', exact: true }).click();
+  await expect(addBackup).not.toBeVisible();
   const tags = dialog.getByRole('region', { name: 'CasparCG B' }).locator('.cg-setup-card-tag');
   const tag = await tags.filter({ hasText: 'Optional' }).evaluate((el) => {
     const c = getComputedStyle(el);
@@ -455,6 +466,17 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
     band is present, and the pinned region is ABSENT — so the two can never both carry it. The
     region's own job is re-asserted against a real event in `modal-message-containment.spec.ts`.
   */
+  // Reopen on air after leaving the completed removal outcome and the uncommitted backup draft.
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  const take = await page.evaluate(() => window.cg.stack.take({ itemId: 'item-logo-bug' }));
+  expect(take.accepted).toBe(true);
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog
+    .getByRole('tablist', { name: 'Station setup sections' })
+    .getByRole('tab', { name: /^Connection/ })
+    .click();
   const band = dialog.locator('[data-setup-notice]');
   await expect(band, 'the standing on-air block IS the pane’s notice now').toHaveCount(1);
   await expect(band).toContainText('Server changes are paused while on air');

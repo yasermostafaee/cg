@@ -2895,6 +2895,10 @@ existed"_. The same argument applies to the sources themselves.
   | `Reset to defaults` (destructive) | `DelimitersModal.tsx:90-95`           | 🔴 **no**                                                                |
   | `Remove backup` (default variant) | `ServerSettingsPanel.tsx:344-346`     | n/a — draft-only until APPLY                                             |
 
+  The backup row records the earlier audit. Since 2026-11-17, `StationSetupDialog.tsx` commits removal
+  of a declared B immediately through the existing off-air configuration guard. Removing an unapplied
+  backup draft discards that draft locally.
+
   ⇒ The vocabulary decision is not cosmetic: **two acts that destroy shared configuration do not
   confirm today**, and the Sources one cascades.
 
