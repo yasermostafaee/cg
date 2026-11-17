@@ -661,6 +661,7 @@ describe('the census: every route that names a channel, classified', () => {
       */
       'pgmReturn.ticket': ['req.channel'],
       'pgmReturn.topology': ['req.channel'],
+      'playout.sourcePresence': ['req.channel'],
       'playoutLayers.clear': ['req.channel'],
       /*
         `PLAYOUT-SOURCES-01` §1.F — `sources.set-config` carries the plate BAND only now, so the
@@ -738,6 +739,7 @@ describe('the census: every route that names a channel, classified', () => {
       'pgmReturn.topology',
       'playlistGain.get',
       'playlistGain.set',
+      'playout.sourcePresence',
       'playoutLayers.clear',
       'sourcePreviews.audioLevels',
       'sourcePreviews.pvw',
@@ -763,11 +765,13 @@ describe('the census: every route that names a channel, classified', () => {
       'templates.thumbnail.put',
     ]);
     for (const [name, route] of fenced) {
-      expect(stationRefusal(route, { channel: 1, layer: 72 }, r), name).toBe(
+      const details =
+        name === 'playout.sourcePresence' ? { sourceIds: ['missing-source'] } : { layer: 72 };
+      expect(stationRefusal(route, { channel: 1, ...details }, r), name).toBe(
         channelNotDeclaredRefusal(1),
       );
       // The declared channel is the positive control: the fence is not simply refusing everything.
-      expect(stationRefusal(route, { channel: 2, layer: 72 }, r), name).toBeNull();
+      expect(stationRefusal(route, { channel: 2, ...details }, r), name).toBeNull();
     }
     // …and the exempt two are not refused by it, whatever they name.
     for (const name of CHANNEL_DECLARING_ROUTES) {

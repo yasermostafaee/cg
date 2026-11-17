@@ -208,6 +208,13 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     expect(audio.error).toBeUndefined();
     expect(audio.payload).toEqual({ readings: [] });
 
+    const presence = await ask(ws, frames, 'presence', 'playout.sourcePresence', {
+      channel: 1,
+      sourceIds: ['missing-source'],
+    });
+    expect(presence.error).toBeUndefined();
+    expect(presence.payload).toMatchObject({ engines: ['A'] });
+
     const wrong = await ask(ws, frames, 'w', 'lock.release', { pin: '9999' });
     expect(wrong.error, 'release must not be refused BY THE LOCK').toBeUndefined();
     expect(wrong.payload).toMatchObject({ ok: false, reason: 'pin-mismatch' });
@@ -354,6 +361,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // `CENTRAL-BRIDGE-01` (D9) — a read: the picture's ticket. A locked console still watches air.
         'pgmReturn.ticket',
         'pgmReturn.topology',
+        'playout.sourcePresence',
         'playoutLayers.state',
         'rehearse.state',
         // `DESKTOP-APPS-01-D` d — a read of the tap before a channel is declared.

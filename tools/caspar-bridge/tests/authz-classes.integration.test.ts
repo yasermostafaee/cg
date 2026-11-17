@@ -286,6 +286,7 @@ describe('C-038 — the census: every route, classified', () => {
       */
       'pgmReturn.ticket',
       'pgmReturn.topology',
+      'playout.sourcePresence',
       'playoutLayers.state',
       'rehearse.state',
       /*
