@@ -2307,6 +2307,162 @@ it.each([
   },
 );
 
+it.each([false, true])(
+  'mirrors same-look frame geometry phases only to a proven resident B seat (refused B: %s)',
+  async (refuseBackup) => {
+    const info = template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true);
+    info.liveSources!.looks = [
+      {
+        id: 'layout',
+        name: 'Layout',
+        entered: { mode: 'cut' },
+        rects: { 'guest-1': BOX },
+        operatorFrames: { 'guest-1': FRAME },
+      },
+    ];
+    info.liveSources!.defaultLookId = 'layout';
+    const html = EFFECT_HTML.replace(
+      '</head>',
+      `${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}${CG_LIVE_PRESET_RECOVERY_PAGE_MARKER}</head>`,
+    );
+    const r = await boot({
+      template: info,
+      html,
+      mirrorChannel: 2,
+      catalog: catalog({
+        sources: [
+          {
+            id: 'src-a',
+            name: 'Camera',
+            format: '1080i5000',
+            producer: { kind: 'ndi', source: 'Camera' },
+          },
+        ],
+      }),
+    });
+    const active = mock!;
+    const reserve = backup!;
+    const slot = { channel: 2, layer: BAND.start };
+    if (refuseBackup) {
+      const play = defaultHandlers().get('PLAY')!;
+      reserve.setHandler('PLAY', (request, context, connection) => {
+        if (request.raw.startsWith(`PLAY 2-${String(slot.layer)} [NDI] `)) {
+          context.setLayer(slot, { producer: 'ndi', filePath: 'other-camera', onAir: true });
+          return { kind: 'err', code: 403, verb: 'PLAY' };
+        }
+        return play(request, context, connection);
+      });
+    }
+    expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+    await expect.poll(() => r.stackSnapshot()[0]?.onAirFrameTransition).toBe(true);
+    const beforeA = active.receivedCommands().length;
+    const beforeB = reserve.receivedCommands().length;
+    const placement = { ...MOVED_FRAME, lookId: 'layout' };
+    expect(
+      await r.setFramePlacements('item-1', [placement], undefined, {
+        motion: 'ease-in-out',
+        fade: true,
+        durationMs: 160,
+      }),
+    ).toEqual({ accepted: true });
+    const a = active.receivedCommands().slice(beforeA);
+    const b = reserve.receivedCommands().slice(beforeB);
+    const native = b.filter(({ line }) =>
+      /^MIXER 2-30 (?:FILL|CLIP) .+ \d+ ease\w+ DEFER$/.test(line),
+    );
+    expect(native.length > 0).toBe(!refuseBackup);
+    if (refuseBackup) {
+      expect(reserve.layerState(slot)?.filePath).toBe('other-camera');
+      expect(b.some(({ line }) => /^MIXER 2-30 (?:FILL|CLIP) /.test(line))).toBe(false);
+    } else {
+      expect(reserve.layerState(slot)?.fill).toEqual(
+        active.layerState({ channel: 1, layer: BAND.start })?.fill,
+      );
+      expect(reserve.layerState(slot)?.clip).toEqual(
+        active.layerState({ channel: 1, layer: BAND.start })?.clip,
+      );
+      const release = a.find(
+        ({ line }) => line.includes('framePlacements') && line.includes('frameTransition'),
+      );
+      expect(release).toBeDefined();
+      expect(native[0]!.at).toBeLessThan(release!.at);
+      expect(
+        b.some(({ line }) => line.startsWith('CG 2-10 UPDATE ') && line.includes('durationMs')),
+      ).toBe(true);
+      expect(b.some(({ line }) => line === 'MIXER 2 COMMIT')).toBe(true);
+    }
+    expect(r.stackSnapshot()[0]?.framePlacements).toEqual([placement]);
+  },
+);
+
+it('restores paired frame geometry after an active phase refusal and can retry without a stale reserve batch', async () => {
+  const info = template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true);
+  info.liveSources!.looks = [
+    {
+      id: 'layout',
+      name: 'Layout',
+      entered: { mode: 'cut' },
+      rects: { 'guest-1': BOX },
+      operatorFrames: { 'guest-1': FRAME },
+    },
+  ];
+  info.liveSources!.defaultLookId = 'layout';
+  const html = EFFECT_HTML.replace(
+    '</head>',
+    `${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}${CG_LIVE_PRESET_RECOVERY_PAGE_MARKER}</head>`,
+  );
+  const r = await boot({
+    template: info,
+    html,
+    mirrorChannel: 2,
+    catalog: catalog({
+      sources: [
+        {
+          id: 'src-a',
+          name: 'Camera',
+          format: '1080i5000',
+          producer: { kind: 'ndi', source: 'Camera' },
+        },
+      ],
+    }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const a = mock!;
+  const b = backup!;
+  const slotA = { channel: 1, layer: BAND.start };
+  const slotB = { channel: 2, layer: BAND.start };
+  const beforeA = a.layerState(slotA);
+  const beforeB = b.layerState(slotB);
+  const normal = defaultHandlers().get('CG')!;
+  let refused = false;
+  a.setHandler('CG', (request, context, connection) => {
+    if (
+      !refused &&
+      request.raw.startsWith('CG 1-32 UPDATE ') &&
+      request.raw.includes('durationMs')
+    ) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'CG' };
+    }
+    return normal(request, context, connection);
+  });
+  const placement = { ...MOVED_FRAME, lookId: 'layout' };
+  const transition = { motion: 'ease-in-out', fade: true, durationMs: 160 } as const;
+  expect(await r.setFramePlacements('item-1', [placement], undefined, transition)).toMatchObject({
+    accepted: false,
+  });
+  expect(refused).toBe(true);
+  expect(a.layerState(slotA)?.fill).toEqual(beforeA?.fill);
+  expect(a.layerState(slotA)?.clip).toEqual(beforeA?.clip);
+  expect(b.layerState(slotB)?.fill).toEqual(beforeB?.fill);
+  expect(b.layerState(slotB)?.clip).toEqual(beforeB?.clip);
+  expect(await r.setFramePlacements('item-1', [placement], undefined, transition)).toEqual({
+    accepted: true,
+  });
+  expect(b.layerState(slotB)?.fill).toEqual(a.layerState(slotA)?.fill);
+  expect(b.layerState(slotB)?.clip).toEqual(a.layerState(slotA)?.clip);
+});
+
 it('rolls back both programme passes if the foreground refuses a frame phase', async () => {
   const r = await boot({
     template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true),

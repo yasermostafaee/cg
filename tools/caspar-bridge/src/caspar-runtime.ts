@@ -6561,9 +6561,22 @@ export class CasparRuntime {
     this.#reconciler.on('item-changed', invalidate);
     this.#reconciler.on('item-removed', invalidate);
     if (effect !== undefined) page.session.on('state-change', connectionChanged);
+    // Same-look geometry uses the same proven peer staging and recovery as preset movement.
+    // Older pages keep their existing active effect and settled reserve update.
+    const pairedEffect =
+      effect !== undefined &&
+      activeTarget !== undefined &&
+      lookId !== undefined &&
+      this.#liveFramePage(item, CG_LIVE_PRESET_TRANSITION_PAGE_MARKER, true, true) === page
+        ? this.#runPresetFrameTransaction(item, page, baseline, lookId, lookId, changes, effect)
+        : undefined;
+    let settledEffect = false;
     try {
       if (!stillOwnsOutput()) return unavailable;
-      if (effect !== undefined) {
+      if (pairedEffect !== undefined) {
+        const executed = await pairedEffect.run();
+        if (!executed.ok) refusal = executed;
+      } else if (effect !== undefined) {
         const effectChanges = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
         if (changes.size > 0) {
           const plateIds = new Set(effect.plateIds);
@@ -6613,7 +6626,12 @@ export class CasparRuntime {
           }
         }
       }
-      if (refusal === undefined && activeTarget !== undefined && stillOwnsOutput()) {
+      if (
+        refusal === undefined &&
+        activeTarget !== undefined &&
+        pairedEffect === undefined &&
+        stillOwnsOutput()
+      ) {
         await this.#mirrorResidentGeometry(
           page,
           foreground,
@@ -6635,11 +6653,13 @@ export class CasparRuntime {
           this.#publishLiveLayers();
         }
         edit.record();
+        settledEffect = true;
         return { accepted: true };
       }
 
       // Reload can interrupt a transaction while the same page and seats remain on air.
       let restored = stillOwnsOutput(false);
+      if (pairedEffect !== undefined) restored = await pairedEffect.restore();
       if (restored && pageAttempted) {
         const oldPage = await updatePages(edit.rollback, true);
         restored = oldPage.ok && oldPage.onPrimary;
@@ -6685,6 +6705,7 @@ export class CasparRuntime {
               : 'Frame placement could not be confirmed. Check the current programme picture.',
       };
     } finally {
+      await pairedEffect?.dispose(settledEffect);
       if (this.#frameTransitionInterrupts.get(itemId) === cancel)
         this.#frameTransitionInterrupts.delete(itemId);
       this.#reconciler.off('item-changed', invalidate);
