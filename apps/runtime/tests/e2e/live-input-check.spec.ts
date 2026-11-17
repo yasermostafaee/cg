@@ -143,7 +143,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(passiveTile).toBeVisible();
     await expect(passiveTile).toHaveText('No signal');
     await expect(passiveTile).not.toHaveRole('button');
-    await options.getByRole('button', { name: 'List view', exact: true }).click();
+    await options.getByRole('button', { name: 'Switch to list view', exact: true }).click();
     const studioRow = options.getByRole('row').filter({
       has: page.locator('[data-picker-input="in-li-studio1"]'),
     });
@@ -156,9 +156,9 @@ test('C-023 · inspect input picture from source controls without changing a bin
     );
     expect(activeBackground).not.toBe(initialBackground);
     await studioTile.focus();
-    await options.getByRole('button', { name: 'List view', exact: true }).hover();
+    await options.getByRole('button', { name: 'Switch to grid view', exact: true }).hover();
     await expect(studioRow).toHaveCSS('background-color', activeBackground);
-    await options.getByRole('button', { name: 'Grid view', exact: true }).click();
+    await options.getByRole('button', { name: 'Switch to grid view', exact: true }).click();
     const anotherInput = options.locator('[data-picker-input="in-li-newscam"]');
     await anotherInput.hover();
     const initialOutline = await studioRow.evaluate((row) => getComputedStyle(row).borderColor);

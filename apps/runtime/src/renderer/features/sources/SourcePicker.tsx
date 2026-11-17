@@ -317,7 +317,7 @@ export function SourcePicker({
             channel={channel}
             previewChannel={thumbnailChannel}
             onPick={setDraft}
-            initialTab={isMediaId(value) ? 'media' : 'inputs'}
+            initialTab={isMediaId(selectedSource ?? '') ? 'media' : 'inputs'}
           />
         </Modal>
       )}
@@ -350,6 +350,11 @@ function PickerPanel({
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
+  const choice = choices.find((entry) => entry.value === value);
+  const effectiveSource =
+    choice !== undefined && (value === '' || labelledSource(value) === null)
+      ? (choice.names ?? '')
+      : value;
   const choicePresence = useSourcePresence(
     previewChannel,
     choices.flatMap(({ names }) => (names ? [names] : [])),
@@ -411,7 +416,7 @@ function PickerPanel({
             listId={`${base}-inputs`}
             inputs={inputs}
             server={catalog.inputsServer}
-            value={value}
+            value={effectiveSource}
             channel={channel}
             previewChannel={previewChannel}
             onPick={chooseInput}
@@ -422,7 +427,7 @@ function PickerPanel({
         ) : (
           <MediaTab
             listId={`${base}-media`}
-            value={value}
+            value={effectiveSource}
             media={media}
             previewChannel={previewChannel}
             focusSearch={tabChanged.current}
@@ -467,6 +472,12 @@ function useListKeys(
   onKeyDown: (e: KeyboardEvent<HTMLElement>, fromField?: boolean) => void;
 } {
   const [active, setActiveState] = useState<number | null>(null);
+  const selectedIndex = rows.findIndex((row) => row.kind === 'option' && row.selected === true);
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+    setActiveState(selectedIndex);
+    list.current?.scrollToIndex(selectedIndex);
+  }, [selectedIndex, tiled]);
   const setActive = (index: number): void => {
     setActiveState(index);
     list.current?.scrollToIndex(index);
@@ -949,18 +960,16 @@ function MediaTab({
     if (isMediaId(value) && !shownIds.has(value)) {
       const current = labelledSource(value);
       const entry = bound.find((s) => s.id === value);
-      if (current !== null) {
-        out.push({ kind: 'heading', key: 'Current', content: 'Current' });
-        addMedia(`current:${value}`, {
-          id: value,
-          name: current.name,
-          durationMs: current.durationMs,
-          folder: entry?.media?.folder,
-          width: entry?.media?.width,
-          height: entry?.media?.height,
-          unavailable: current.unavailable,
-        });
-      }
+      out.push({ kind: 'heading', key: 'Current', content: 'Current' });
+      addMedia(`current:${value}`, {
+        id: value,
+        name: current?.name ?? NOT_LISTED,
+        durationMs: current?.durationMs,
+        folder: entry?.media?.folder,
+        width: entry?.media?.width,
+        height: entry?.media?.height,
+        unavailable: current?.unavailable ?? true,
+      });
     }
     if (recent.length > 0) {
       out.push({ kind: 'heading', key: 'Recent', content: 'Recent' });

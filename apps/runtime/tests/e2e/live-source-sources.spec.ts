@@ -68,11 +68,11 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   // The Playout's inputs, in ITS order, by the names its operators gave them.
   const list = dialog.getByRole('region', { name: 'Inputs from the Playout' });
   const rows = list.locator('[data-source-input]');
-  const grid = dialog.getByRole('button', { name: 'Grid view' });
-  const listView = dialog.getByRole('button', { name: 'List view' });
+  const grid = dialog.getByRole('button', { name: 'Switch to grid view' });
+  const listView = dialog.getByRole('button', { name: 'Switch to list view' });
   const firstPicture = rows.first().locator('.cg-input-thumbnail');
   const firstTitle = rows.first().locator('.cg-resource__name');
-  await expect(grid).toHaveAttribute('aria-pressed', 'true');
+  await expect(listView).toHaveText('Grid');
   await expect(list).toHaveAttribute('data-input-view', 'grid');
   const gridPicture = await firstPicture.boundingBox();
   const gridTitle = await firstTitle.boundingBox();

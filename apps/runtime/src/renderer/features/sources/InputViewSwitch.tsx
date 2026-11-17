@@ -13,23 +13,13 @@ export function InputViewSwitch({
   onChange: (view: InputView) => void;
   ariaLabel?: string;
 }): JSX.Element {
+  const grid = view === 'grid';
+  const next = grid ? 'list' : 'grid';
+  const action = `Switch to ${next} view`;
   return (
     <div className="cg-picker-input-view" role="group" aria-label={ariaLabel}>
-      <Button
-        aria-label="Grid view"
-        aria-pressed={view === 'grid'}
-        active={view === 'grid'}
-        onClick={() => onChange('grid')}
-      >
-        <Icon icon={LayoutGrid} size={15} /> Grid
-      </Button>
-      <Button
-        aria-label="List view"
-        aria-pressed={view === 'list'}
-        active={view === 'list'}
-        onClick={() => onChange('list')}
-      >
-        <Icon icon={List} size={15} /> List
+      <Button aria-label={action} title={action} onClick={() => onChange(next)}>
+        <Icon icon={grid ? LayoutGrid : List} size={15} /> {grid ? 'Grid' : 'List'}
       </Button>
     </div>
   );

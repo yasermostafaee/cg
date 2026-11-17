@@ -32,8 +32,8 @@
           "en": "Move plate, Resize plate, and Crop input are independent operator permissions. Disabling Crop input keeps the crop authored in the preset."
         },
         {
-          "fa": "در پنجرهٔ انتخاب منبع، تصویر و صدای ورودی را در همان قاب بررسی کنید و با Select انتخاب را تأیید کنید. مدیا نمای Grid و List دارد. در Grid، Play، Pause، Stop و نوار زمانِ پیش‌نمایشِ بی‌صدا در خود کارت در دسترس‌اند.",
-          "en": "Preview and listen to live inputs in the picker tile and confirm the binding with Select. Media offers Grid and List views, with Play, Pause, Stop, and a draggable timeline inside each grid preview."
+          "fa": "پنجرهٔ انتخاب منبع روی تب و آیتم فعلی باز می‌شود. تصویر و صدای ورودی را در همان قاب بررسی کنید و با Select انتخاب را تأیید کنید. نما با یک دکمه بین Grid و List تغییر می‌کند. در Grid، Play، Pause، Stop و نوار زمانِ پیش‌نمایشِ بی‌صدا در خود کارت مدیا در دسترس‌اند.",
+          "en": "The source picker opens on the current source's tab and selection. Preview and listen inside the input tile, then confirm with Select. A single button toggles Grid and List. Media Grid offers inline Play, Pause, Stop, and a draggable timeline."
         },
         {
           "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید همراه Fade را جداگانه انتخاب کنید. چیدمان زندهٔ ذخیره‌شده را هم می‌توان از Templates به‌صورت VCG صادر و دوباره وارد کرد.",

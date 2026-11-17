@@ -81,6 +81,58 @@ async function openDefaults(app: {
 
 const picker = (page: Page): Locator => page.getByRole('dialog', { name: 'Choose a source' });
 
+test('reopening an inherited media source shows its selection without changing the binding or auditioning', async ({
+  app,
+}) => {
+  const page = app.page;
+  const defaults = await openDefaults(app);
+  await app.chooseSource(defaults.locator('[data-defaults-select="l-1"]'), {
+    media: 'Clip 090',
+    search: 'Clip 090',
+  });
+  await defaults.locator('[data-defaults-save]').click();
+  await expect(defaults).toHaveCount(0);
+  const field = app.inspector.locator('[data-look-binding="two:l-1"]');
+  await expect(field).toHaveAttribute('data-picker-value', '');
+  await expect(field).toContainText('Clip 090');
+  await page.evaluate(() => {
+    const state = { starts: 0 };
+    Object.assign(window, { pickerReopenTest: state });
+    const start = window.cg.livePreview.start;
+    window.cg.livePreview.start = (request) => {
+      state.starts++;
+      return start(request);
+    };
+  });
+  for (const view of ['grid', 'list']) {
+    await field.click();
+    const panel = picker(page);
+    await expect(panel.locator('[data-picker-tab="media"]')).toBeVisible();
+    if (view === 'list')
+      await panel.getByRole('button', { name: 'Switch to list view', exact: true }).click();
+    const selected = panel
+      .locator('[data-picker-media="md-m-clip-090"][aria-selected="true"]')
+      .first();
+    await expect(selected).toBeVisible();
+    const box = await selected.boundingBox();
+    const viewport = await panel.locator('[data-picker-list]').boundingBox();
+    if (box === null || viewport === null)
+      throw new Error('The inherited source must have a visible selection');
+    expect(box.y).toBeGreaterThanOrEqual(viewport.y - 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.y + viewport.height + 1);
+    await expect(panel.locator('[data-picker-choice=""]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(panel.getByRole('button', { name: 'Select', exact: true })).toBeDisabled();
+    await expect(panel.locator('.cg-source-media-preview')).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(field).toHaveAttribute('data-picker-value', '');
+  }
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { pickerReopenTest: { starts: number } }).pickerReopenTest.starts,
+    ),
+  ).toBe(0);
+});
+
 test('the large source picker shows larger pictures and restores the parent dialog focus', async ({
   app,
 }) => {
@@ -92,8 +144,11 @@ test('the large source picker shows larger pictures and restores the parent dial
   await field.click();
   const panel = picker(page);
   const inputs = panel.locator('[data-picker-tab="inputs"]');
-  const gridView = inputs.getByRole('button', { name: 'Grid view', exact: true });
-  const listView = inputs.getByRole('button', { name: 'List view', exact: true });
+  const gridView = inputs.getByRole('button', { name: 'Switch to grid view', exact: true });
+  const listView = inputs.getByRole('button', { name: 'Switch to list view', exact: true });
+  const viewToggle = inputs
+    .getByRole('group', { name: 'Input view', exact: true })
+    .getByRole('button');
   await expect(panel).toBeVisible();
   await expect(field).toHaveAttribute('aria-expanded', 'true');
   await expect(dialog).toBeVisible();
@@ -111,8 +166,9 @@ test('the large source picker shows larger pictures and restores the parent dial
   await expect(panel.getByRole('tab', { name: 'Inputs 7' })).toBeVisible();
   await expect(panel.getByRole('tab', { name: 'Media 124' })).toBeVisible();
   await expect(inputs).toHaveAttribute('data-input-view', 'grid');
-  await expect(gridView).toHaveAttribute('aria-pressed', 'true');
-  await expect(listView).toHaveAttribute('aria-pressed', 'false');
+  await expect(viewToggle).toHaveCount(1);
+  await expect(viewToggle).toHaveText('Grid');
+  await expect(listView).toBeVisible();
 
   const cards = inputs.locator('.cg-vlist-action-row');
   const card = cards.first();
@@ -162,8 +218,8 @@ test('the large source picker shows larger pictures and restores the parent dial
 
   await listView.click();
   await expect(inputs).toHaveAttribute('data-input-view', 'list');
-  await expect(listView).toHaveAttribute('aria-pressed', 'true');
-  await expect(gridView).toHaveAttribute('aria-pressed', 'false');
+  await expect(viewToggle).toHaveText('List');
+  await expect(gridView).toBeVisible();
   const [listFirst, listSecond] = await Promise.all([position(0), position(1)]);
   expect(listSecond.x).toBeCloseTo(listFirst.x, 0);
   expect(listSecond.y).toBeGreaterThan(listFirst.y);
@@ -441,7 +497,7 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   const panel = picker(page);
   await panel.getByRole('tab', { name: /^Media/ }).click();
   await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
-  await panel.getByRole('button', { name: 'List view', exact: true }).click();
+  await panel.getByRole('button', { name: 'Switch to list view', exact: true }).click();
   await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
   await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
   const play = panel.getByRole('button', { name: 'Play preview' });
@@ -472,7 +528,7 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
 
   await panel
     .getByRole('group', { name: 'Media view' })
-    .getByRole('button', { name: 'Grid view' })
+    .getByRole('button', { name: 'Switch to grid view' })
     .click();
   await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
   await expect(panel.locator('.cg-picker-player')).toHaveCount(0);
@@ -715,7 +771,7 @@ test.describe('source audio meters', () => {
     await expect(peak).toHaveAttribute('title', 'Audio peak -9 dBFS');
 
     // Stereo and multi-channel meters share a reserved area at the right of the List view.
-    await panel.getByRole('button', { name: 'List view' }).click();
+    await panel.getByRole('button', { name: 'Switch to list view' }).click();
     const peakRow = inputRow('in-studio-1');
     const silentPickerMeter = meter('in-studio-2');
     const silentPickerRow = inputRow('in-studio-2');
@@ -807,7 +863,7 @@ test.describe('source audio meters', () => {
     await expect(silent).toBeVisible();
     const neutralBorder = await silent.evaluate((el) => getComputedStyle(el).borderTopColor);
     await expect(withoutLevel).toHaveCSS('border-top-color', neutralBorder);
-    await page.getByRole('button', { name: 'List view' }).click();
+    await page.getByRole('button', { name: 'Switch to list view' }).click();
     const setupRow = (meterName: string) =>
       sources.locator('[data-source-input]', { has: page.getByRole('img', { name: meterName }) });
     await expectPictureEdgesAligned(

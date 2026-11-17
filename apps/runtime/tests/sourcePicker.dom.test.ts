@@ -469,6 +469,82 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     const other = await openPicker(await render({ value: 'in-studio1' }));
     expect(other.querySelector('[data-picker-tab="inputs"]')).not.toBeNull();
   });
+
+  it('opens on inherited media with its effective source highlighted and preserves inheritance until Select', async () => {
+    const onChange = vi.fn();
+    const field = await render({
+      choices: [{ value: '', label: 'Default', names: 'md-m-recent' }],
+      onChange,
+    });
+    const panel = await openPicker(field);
+    expect(panel.querySelector('[data-picker-tab="media"]')).not.toBeNull();
+    const selected = panel.querySelector('[data-picker-media="md-m-recent"]');
+    expect(selected?.getAttribute('aria-selected')).toBe('true');
+    expect(panel.querySelector('[data-picker-choice=""]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]')?.disabled).toBe(
+      true,
+    );
+    expect(panel.querySelector('.cg-source-media-preview')).toBeNull();
+    await closePicker();
+    expect(onChange).not.toHaveBeenCalled();
+    const reopened = await openPicker(field);
+    expect(
+      reopened.querySelector('[data-picker-media="md-m-recent"]')?.getAttribute('aria-selected'),
+    ).toBe('true');
+    await act(async () =>
+      reopened.querySelector<HTMLElement>('[data-picker-media="md-m-recent"]')?.click(),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    await confirmPicker(reopened);
+    expect(onChange).toHaveBeenCalledWith('md-m-recent');
+  });
+
+  it.each(['grid', 'list'])(
+    'reveals the selected media row in the virtual %s view without starting a preview',
+    async (view) => {
+      const panel = await openPicker(await render({ value: 'md-m-0040' }));
+      if (view === 'list')
+        await act(async () =>
+          panel.querySelector<HTMLButtonElement>('[aria-label="Switch to list view"]')?.click(),
+        );
+      const selected = panel.querySelector<HTMLElement>('[data-picker-media="md-m-0040"]');
+      expect(selected?.getAttribute('aria-selected')).toBe('true');
+      const list = panel.querySelector<HTMLElement>('[data-picker-list]');
+      expect(list?.scrollTop).toBeGreaterThan(0);
+      expect(list?.getAttribute('aria-activedescendant')).toBe(selected?.id);
+      expect(panel.querySelector('.cg-source-media-preview')).toBeNull();
+    },
+  );
+
+  it('pins an inherited media selection outside the first search page', async () => {
+    const panel = await openPicker(
+      await render({ choices: [{ value: '', label: 'Default', names: 'md-m-0100' }] }),
+    );
+    expect(panel.querySelector('[data-picker-tab="media"]')).not.toBeNull();
+    expect(panel.querySelector('[data-vlist-heading="Current"]')).not.toBeNull();
+    expect(
+      panel.querySelector('[data-picker-media="md-m-0100"]')?.getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(panel.querySelector('[data-picker-media="md-m-0100"]')?.textContent).not.toContain(
+      'md-m-0100',
+    );
+  });
+
+  it('highlights an inherited input and keeps its row visible when switching to List', async () => {
+    const panel = await openPicker(
+      await render({ choices: [{ value: '', label: 'Default', names: 'in-own2' }] }),
+    );
+    expect(panel.querySelector('[data-picker-tab="inputs"]')).not.toBeNull();
+    expect(
+      panel.querySelector('[data-picker-input="in-own2"]')?.getAttribute('aria-selected'),
+    ).toBe('true');
+    await act(async () =>
+      panel.querySelector<HTMLButtonElement>('[aria-label="Switch to list view"]')?.click(),
+    );
+    expect(panel.querySelector<HTMLElement>('[data-picker-list]')?.scrollTop).toBeGreaterThan(0);
+  });
 });
 
 describe('what cannot be chosen is SHOWN, disabled, with the reason — never hidden', () => {
@@ -623,7 +699,7 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     const panel = await openPicker(await render({}));
     await pickerTab(panel, 'Media');
     await act(async () =>
-      panel.querySelector<HTMLButtonElement>('[aria-label="List view"]')?.click(),
+      panel.querySelector<HTMLButtonElement>('[aria-label="Switch to list view"]')?.click(),
     );
     await settle();
     const list = panel.querySelector<HTMLElement>('[data-picker-list]');
@@ -667,7 +743,7 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     const panel = await openPicker(field);
     await pickerTab(panel, 'Media');
     await act(async () =>
-      panel.querySelector<HTMLButtonElement>('[aria-label="List view"]')?.click(),
+      panel.querySelector<HTMLButtonElement>('[aria-label="Switch to list view"]')?.click(),
     );
     expect(panel.getAttribute('aria-modal')).toBe('true');
     expect(panel.getAttribute('data-modal-size')).toBe('library');
@@ -725,9 +801,6 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
   it('pages a Media Grid by its actual tracks while keeping group headings short', async () => {
     const panel = await openPicker(await render({}));
     await pickerTab(panel, 'Media');
-    await act(async () =>
-      panel.querySelector<HTMLButtonElement>('[aria-label="Grid view"]')?.click(),
-    );
     const grid = panel.querySelector<HTMLElement>('[data-picker-list]');
     const heading = grid?.querySelector<HTMLElement>('[data-vlist-heading="Recent"]');
     const tile = grid?.querySelector<HTMLElement>('.cg-vlist-action-row');

@@ -428,12 +428,22 @@ existing binding. Checking a live input SHALL render video and offer local audio
 Audio SHALL start muted and SHALL stop when the check closes or another input is checked. In Station
 setup the same live check SHALL stay in the existing tile.
 
+Opening the picker SHALL select the tab and scroll position of the current effective source, including
+an inherited layout source. Its source row SHALL appear selected. Grid and List SHALL switch through
+one toggle that displays the current view.
+
 #### Scenario: Audition an input and confirm it
 
 - **WHEN** the operator chooses a live input **THEN** the picker highlights it and the field keeps its prior value
 - **AND WHEN** the operator enables preview audio **THEN** it plays locally without changing programme audio
 - **AND WHEN** the operator presses Select **THEN** the picker closes, preview audio stops, and the field displays the chosen source
 - **AND WHEN** the operator closes another staged choice without Select **THEN** the confirmed binding is preserved
+
+#### Scenario: Reopen the current source
+
+- **WHEN** the bound or inherited source is a media item **THEN** the picker opens Media with that item visible and selected
+- **AND WHEN** the source is a live input **THEN** it opens Inputs with that item visible and selected
+- **AND WHEN** the operator toggles Grid and List **THEN** the selected source is retained
 
 ### Requirement: The media picker SHALL offer an inline preview in its Grid view
 
