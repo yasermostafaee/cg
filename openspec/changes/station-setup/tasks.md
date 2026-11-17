@@ -11,11 +11,13 @@
       configuration after restart.
 - [x] Windows Edge passed both B and A+B selected cases with active B sound, immediate removal and
       reload. The combined programme-monitor and source UI run passed all 24 cases.
-- [ ] Record a completed green Linux E2E carrying this change.
-      The [actual E2E job on `8bc65225`](https://github.com/yasermostafaee/cg/actions/runs/44160800438/job/134313901559)
+- [x] The carrying [Linux E2E step](https://github.com/yasermostafaee/cg/actions/runs/44181430703/job/134386719504)
+      completed successfully on `160244d4533b217938da3b8d73448eacf3fc8210`, alongside the full Linux
+      gate. The actual E2E step passed 461 Designer, 481 Runtime and 2 pack-factory cases.
+      The earlier [actual E2E job on `8bc65225`](https://github.com/yasermostafaee/cg/actions/runs/44160800438/job/134313901559)
       failed the geometry fixture because its seeded on-air graphic correctly disabled removal.
-      The fixture also needs to add B again before measuring its draft tags. The full Linux gate
-      passed, and a carrying green E2E remains owed.
+      The fixture also omitted adding B again before measuring its draft tags. The full Linux gate
+      passed on that earlier run.
 - [x] Correct the geometry fixture through its normal off-air removal, nested Add backup form,
       and mock Take before the on-air notice measurements. All original assertions remain.
       Fresh Windows Edge passed all 3 geometry cases. The 19 server DOM cases, Runtime typecheck,

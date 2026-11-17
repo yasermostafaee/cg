@@ -99,16 +99,19 @@
       The menu receives focus after placement makes it visible, including keyboard selection and focus return.
 - [x] 7.4 Windows Edge verified Station setup input formats occupy one line with the full value in the tooltip.
       The combined source/monitor run passed 24 tests. SourcePicker and nested-focus DOM checks passed 57 tests.
-- [ ] 7.5 Read the full gate and actual Linux E2E for the carrying commit.
-      On `8bc65225`, the full Linux gate passed and the actual E2E job passed 460 Designer,
+- [x] 7.5 The carrying [Linux E2E step](https://github.com/yasermostafaee/cg/actions/runs/44181430703/job/134386719504)
+      completed successfully on `160244d4533b217938da3b8d73448eacf3fc8210`, alongside the full Linux
+      lint, typecheck, unit-test and build job. The actual E2E step passed 461 Designer cases,
+      481 Runtime cases and 2 pack-factory cases, with all 26 E2E tasks successful.
+      Earlier on `8bc65225`, the full Linux gate passed and the actual E2E job passed 460 Designer,
       480 Runtime and 2 pack-factory cases. Its sole failure was the Station setup geometry
-      fixture attempting guarded backup removal with its seeded graphic on air. A carrying
-      green result remains owed. [Failed job](https://github.com/yasermostafaee/cg/actions/runs/44160800438/job/134313901559).
+      fixture attempting guarded backup removal with its seeded graphic on air.
+      [Failed job](https://github.com/yasermostafaee/cg/actions/runs/44160800438/job/134313901559).
 - [x] 7.6 Keep an unknown or unsupported input preview distinct from confirmed signal loss in the
       large thumbnail fallback. Six scoped DOM cases passed, including unsupported NDI, missing
       frames, confirmed absence and compact accessibility. Runtime typecheck, scoped lint, fresh
       build and the Windows Edge live-input-check case passed with its geometry and eight-channel
-      meter assertions retained. Carrying Linux E2E remains owed under 7.5.
+      meter assertions retained. The carrying Linux result is recorded under 7.5.
 - [x] 7.7 Diagnose the local full-gate failure on `35f178e6` in the existing Bridge restart fixture.
       A trace retained Core playback while the OSC truth TTL changed the settled row from `on-air`
       to `playing`. The fixture now awaits both page resolutions before shutdown and requires
