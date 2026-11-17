@@ -2787,9 +2787,8 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
 test('R-119 applies the selected effect to both directions of a live preset switch', ({ page }) =>
   exercisePresetSwitch(page, false));
 
-test('R-119 animates the active preset with a configured backup and mirrors the settled preset', ({
-  page,
-}) => exercisePresetSwitch(page, false, undefined, true));
+test('R-119 animates preset switches on the active and verified backup engines', ({ page }) =>
+  exercisePresetSwitch(page, false, undefined, true));
 
 test('R-119 hides all fragments of a departing masked frame before the shared frame crosses it', ({
   page,
@@ -3149,8 +3148,16 @@ async function exercisePresetSwitch(
       expect(reserved).toContainEqual(
         expect.stringMatching(/^CG 2-59 UPDATE .*presetTransitionCommit/),
       );
-      expect(reserved.some((line) => line.includes('hidePresetTitlePlateIds'))).toBe(false);
-      expect(reserved.some((line) => /\s\d+ ease(?:in|out)quad DEFER$/i.test(line))).toBe(false);
+      expect(reserved).toContainEqual(
+        expect.stringMatching(/^CG 2-59 UPDATE .*hidePresetTitlePlateIds/),
+      );
+      for (const easing of ['easeinquad', 'easeoutquad']) {
+        expect(reserved).toContainEqual(
+          expect.stringMatching(
+            new RegExp(`^MIXER 2-${String(commonSlot.layer)} FILL .* \\d+ ${easing} DEFER$`, 'i'),
+          ),
+        );
+      }
       expect(reserve.layerState({ channel: 2, layer: commonSlot.layer })?.clip).toEqual(
         engine.layerState(commonSlot)?.clip,
       );

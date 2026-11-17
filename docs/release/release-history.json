@@ -3,6 +3,45 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.11",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۱۱",
+        "en": "Release 1.2.11"
+      },
+      "date": "2026-11-17",
+      "status": "prepared",
+      "summary": {
+        "fa": "تنظیم نسبت و برش قاب‌ها در هر پریست، انتخاب آسان‌تر ورودی و بهبود پیش‌نمایش و پخش روی رزرو.",
+        "en": "Per-preset plate framing, a larger source picker, and improvements to preview and reserve playback."
+      },
+      "features": [
+        {
+          "fa": "در New live layout نسبت قاب و شیوهٔ نمایش ورودی را برای کل پریست و برای هر Plate جداگانه تنظیم کنید. Crop edges قاب را با برش مرکزی پر می‌کند و Fit whole picture همهٔ تصویر ورودی را نشان می‌دهد.",
+          "en": "In New live layout, set aspect ratio and input fit for the preset or for each plate. Crop edges fills the plate with a center crop, and Fit whole picture shows the entire input."
+        },
+        {
+          "fa": "رنگ، ضخامت و شعاع گوشهٔ حاشیهٔ Plate قابل تنظیم است. حاشیه همراه قاب در افکت Focus حرکت می‌کند.",
+          "en": "Set a plate border's color, width, and corner radius. The border follows the plate during Focus transitions."
+        },
+        {
+          "fa": "انتخاب ورودی در پنجره‌ای با تصاویر و پوسترهای بزرگ‌تر انجام می‌شود. پیش‌نمایش مدیا دکمه‌های Play، Pause و Stop و نوار زمان قابل‌کشیدن دارد و فریم‌های نمونه‌برداری‌شدهٔ بی‌صدا را نشان می‌دهد.",
+          "en": "The source picker opens a larger dialog with input pictures and media posters. Media preview offers Play, Pause, Stop, and a draggable timeline with silent sampled frames."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "اگر تصویر PVW دیر برسد، همان تصویر بندانگشتی ورودی یا پوستر مدیا موقتاً داخل قاب نمایش داده می‌شود.",
+          "en": "PVW can temporarily show the source-picker image or media poster while the live preview frame is delayed."
+        },
+        {
+          "fa": "CG Bridge مدیای واجد شرایط را پیش از پخش روی هر دو موتور آماده می‌کند و افکت‌های پریست و Focus را برای رزرو تأییدشده هم اجرا می‌کند.",
+          "en": "CG Bridge prepares eligible media on both engines before playback and applies preset and Focus transitions on a confirmed reserve."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.10",
       "title": {
         "fa": "نسخهٔ ۱.۲.۱۰",
