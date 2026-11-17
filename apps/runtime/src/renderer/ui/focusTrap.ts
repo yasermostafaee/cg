@@ -51,14 +51,44 @@ import { useEffect, useRef, type RefObject } from 'react';
  * belongs to, and the lock always arms over whatever is already up.
  */
 const layers: symbol[] = [];
+const layerContainers = new Map<symbol, RefObject<HTMLElement>>();
+const layerListeners = new Set<() => void>();
 
-function pushLayer(token: symbol): void {
+/** Observe the same foreground ownership used by keyboard containment. */
+export function subscribeTrapLayers(listener: () => void): () => void {
+  layerListeners.add(listener);
+  return () => layerListeners.delete(listener);
+}
+
+export function hasTrapLayer(): boolean {
+  return layers.length > 0;
+}
+
+/** An authoring component can own a modal whose portal is below it in the React tree. */
+export function isForegroundTrapElement(element: HTMLElement | null): boolean {
+  const top = layers.at(-1);
+  return (
+    top === undefined ||
+    (element !== null && layerContainers.get(top)?.current?.contains(element) === true)
+  );
+}
+
+function publishLayers(): void {
+  for (const listener of layerListeners) listener();
+}
+
+function pushLayer(token: symbol, container: RefObject<HTMLElement>): void {
   layers.push(token);
+  layerContainers.set(token, container);
+  publishLayers();
 }
 
 function popLayer(token: symbol): void {
   const i = layers.lastIndexOf(token);
-  if (i >= 0) layers.splice(i, 1);
+  if (i < 0) return;
+  layers.splice(i, 1);
+  layerContainers.delete(token);
+  publishLayers();
 }
 
 /** Is `token` the surface the keyboard currently belongs to? */
@@ -161,7 +191,7 @@ export function useFocusTrap(
   useEffect(() => {
     if (!enabled) return;
 
-    pushLayer(self);
+    pushLayer(self, ref);
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const nominated =
       initialFocusSelector === undefined

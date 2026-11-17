@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { playoutMediaIdOf, type SourcePreviewFrame } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
 import { uuid } from '../../lib/uuid.js';
@@ -232,11 +232,13 @@ export function usePvwSourceFrames(
   visibleSources: readonly string[],
   enabled = true,
   mode: Reader['mode'] = 'stage',
+  retainWhilePaused = false,
 ): Frames {
   const pvw = window.cg?.sourcePreviews?.pvw;
   const sourceKey = JSON.stringify([...new Set(visibleSources)].slice(0, MAX_SOURCES));
   const sourceIds = useMemo(() => JSON.parse(sourceKey) as string[], [sourceKey]);
   const [snapshot, setSnapshot] = useState<Snapshot>(EMPTY_SNAPSHOT);
+  const previousApi = useRef<ReadFrames>();
 
   useEffect(() => {
     if (!enabled || pvw === undefined || channel === undefined || sourceIds.length === 0) return;
@@ -245,8 +247,42 @@ export function usePvwSourceFrames(
       feed = new PreviewFeed(pvw);
       feeds.set(pvw, feed);
     }
-    return feed.subscribe({ channel, sourceIds, mode, receive: setSnapshot });
-  }, [enabled, pvw, channel, sourceIds, mode]);
+    let retain = retainWhilePaused && previousApi.current === pvw;
+    previousApi.current = pvw;
+    let received = EMPTY_SNAPSHOT;
+    const stop = feed.subscribe({
+      channel,
+      sourceIds,
+      mode,
+      receive: (next) => {
+        received = next;
+        setSnapshot((previous) => {
+          if (!retain || previous.channel !== next.channel) return next;
+          const frames = new Map(previous.frames);
+          for (const [id, frame] of next.frames) {
+            if (
+              frame.signal !== 'absent' &&
+              frame.jpegBase64 === undefined &&
+              frames.get(id)?.jpegBase64 !== undefined
+            )
+              continue;
+            frames.set(id, frame);
+          }
+          return { channel: next.channel, frames };
+        });
+      },
+    });
+    const expiry = retain
+      ? setTimeout(() => {
+          retain = false;
+          setSnapshot(received);
+        }, SNAPSHOT_EXPIRE_MS)
+      : undefined;
+    return () => {
+      stop();
+      clearTimeout(expiry);
+    };
+  }, [enabled, pvw, channel, sourceIds, mode, retainWhilePaused]);
 
   return useMemo(() => {
     if (snapshot.channel !== channel || sourceIds.length === 0) return EMPTY_FRAMES;

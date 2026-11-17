@@ -63,7 +63,7 @@ function twoServer(
   };
 }
 
-async function bootPair(autoFailoverEnabled: boolean): Promise<void> {
+async function bootPair(autoFailoverEnabled: boolean, playoutLinked = false): Promise<void> {
   const oscA = await freeUdpPort();
   const oscB = await freeUdpPort();
   mockA = await createMock({ amcpPort: 0, oscPort: oscA, oscHost: '127.0.0.1', oscHz: 30 });
@@ -72,7 +72,7 @@ async function bootPair(autoFailoverEnabled: boolean): Promise<void> {
     twoServer(mockA.amcpPort, oscA, mockB.amcpPort, oscB, autoFailoverEnabled),
     {},
     // `B-316` — the two mocks share numbers by construction; said, never defaulted.
-    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B, playoutLinked },
   );
   runtime.start();
   // B-038 Phase 3 — serve the template so the (now-resolving) mock 202s `CG ADD`
@@ -121,3 +121,13 @@ it('manual failover via connections.failover switches primary and reports it', a
   // Commands continue to B (both servers up here).
   expect((await runtime!.load('m1', 'lower-third', {})).accepted).toBe(true);
 }, 20000);
+
+it('refuses manual CG failover on a Playout station without changing the active engine', async () => {
+  await bootPair(false, true);
+  expect(await runtime!.failover()).toEqual({ ok: false, newPrimary: 'A' });
+  expect(runtime!.currentPrimary).toBe('A');
+  expect(runtime!.health().lastFailover).toBeUndefined();
+  expect(
+    mockB!.receivedCommands().filter(({ line }) => /^(CG|PLAY|CLEAR|MIXER) /.test(line)),
+  ).toEqual([]);
+});

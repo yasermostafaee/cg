@@ -66,7 +66,10 @@ test('the PLAYOUT tab is bounded too: switching tabs never scrolls the page', as
 
   await app.playoutTab.click();
   await expect(app.playoutTab).toHaveAttribute('aria-selected', 'true');
-  await expect(app.layers.getByText('These layers belong to the PLAYOUT system')).toBeVisible();
+  await expect(
+    app.layers.getByText('Playout layers on this channel', { exact: true }),
+  ).toBeVisible();
+  await expect(app.layers.locator('[data-playout-layer]').first()).toBeVisible();
 
   const doc = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,

@@ -443,6 +443,7 @@ async function bootControlFocus(
   paired = false,
   startsWithSolo = false,
   switchMode: ControlLiveLayout['effects']['switch']['mode'] = 'motion',
+  bordered = false,
 ) {
   const cameras = {
     'guest-1': 'src-a',
@@ -454,7 +455,12 @@ async function bootControlFocus(
     name: 'Panel discussion',
     resolution: SCENE,
     frameRate: 25,
-    frames: focusFrameIds.map((id) => ({ id, title: id, sourceId: cameras[id] })),
+    frames: focusFrameIds.map((id) => ({
+      id,
+      title: id,
+      sourceId: cameras[id],
+      ...(bordered && { border: { color: '#0099ff', width: 5 } }),
+    })),
     presets: [
       {
         id: focusPreset,
@@ -533,6 +539,27 @@ async function bootControlFocus(
   await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
   return r;
 }
+
+it('advances the bordered interlaced artwork while keeping the native preset deadline', async () => {
+  const r = await bootControlFocus(false, false, 'motion', true);
+  const engine = mock!;
+  const mark = engine.receivedCommands().length;
+  expect(await r.setActiveLook('item-1', focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+  const logs = engine.receivedCommands().slice(mark);
+  const move = logs.flatMap((write) => {
+    if (!write.line.startsWith('CG ') || !write.line.includes('delayMs')) return [];
+    const command = parseAmcpLine(write.line);
+    const fields = decodeCgData(command!.args[3]!).data;
+    const phase = fields === null ? undefined : readCgControl(JSON.parse(fields))?.frameTransition;
+    return phase?.frames.some(({ from, to }) => from.width !== to.width)
+      ? [{ ...write, phase }]
+      : [];
+  });
+  expect(move).toHaveLength(2);
+  expect(move.every(({ phase }) => phase.delayMs === 0)).toBe(true);
+  const nativeCommit = logs.find(({ line, at }) => line === 'MIXER 1 COMMIT' && at >= move[1]!.at);
+  expect(nativeCommit?.at).toBeGreaterThanOrEqual(move[0]!.at + 25);
+});
 
 it('moves between bound Control Focus frames and restores the exact prior arrangement', async () => {
   const r = await bootControlFocus(true);
@@ -1426,6 +1453,53 @@ it('stages PVW framing without AMCP and restores it into the first hidden Take g
   expect(hideCommit).toBeGreaterThan(clip);
   expect(play).toBeGreaterThan(hideCommit);
   expect(r.previewPlateCrop(itemId, edit)).toMatchObject({ ok: false, targets: [] });
+});
+
+it('keeps the authored crop when permission is disabled and refuses cached operator targets on Preview and Programme', async () => {
+  const itemId = 'item-1';
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const base = template([{ id: 'guest-1', rect, fitMode: 'cover' }]);
+  const authored = { x: 0.2, y: 0.5 };
+  const live = base.liveSources!;
+  const withPermission = (allowOperatorCrop?: boolean): TemplateInfo => ({
+    ...base,
+    liveSources: {
+      ...live,
+      sources: live.sources.map((source) => ({
+        ...source,
+        allowOperatorCrop,
+        cropFocus: authored,
+      })),
+    },
+  });
+  const runtime = await boot({ template: withPermission() });
+  expect(await runtime.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  expect(runtime.enterPreview(itemId)).toEqual({ ok: true });
+  const [target] = runtime.previewPlateCrop(itemId).targets;
+  expect(target?.focus).toEqual(authored);
+  const edit = { token: target!.token, focus: { x: 0.9, y: 0.5 } };
+  expect(runtime.previewPlateCrop(itemId, undefined, [edit])).toMatchObject({ ok: true });
+  expect(runtime.stackSnapshot()[0]?.previewPlateCrops).toEqual([edit]);
+
+  expect(runtime.templateImport(withPermission(false), '<html>Locked crop</html>').registered).toBe(
+    true,
+  );
+  expect(runtime.previewPlateCrop(itemId)).toMatchObject({ ok: true, targets: [] });
+  expect(runtime.previewPlateCrop(itemId, undefined, [edit])).toMatchObject({ ok: false });
+  const beforeTake = (await recvLines()).length;
+  expect(await runtime.take(itemId)).toMatchObject({ accepted: true });
+  expect((await recvLines()).slice(beforeTake)).toContain(
+    'MIXER 1-30 FILL 0.325 0.25 0.5 0.5 DEFER',
+  );
+
+  const beforeEdit = (await recvLines()).length;
+  expect(await runtime.previewPlateCropOnAir(itemId)).toEqual({ ok: true, targets: [] });
+  expect(await runtime.previewPlateCropOnAir(itemId, [edit])).toMatchObject({ ok: false });
+  expect(await runtime.pgmPlateCrop(itemId)).toEqual({ ok: true, targets: [] });
+  expect(await runtime.pgmPlateCrop(itemId, { token: edit.token, dx: 0.05, dy: 0 })).toMatchObject({
+    ok: false,
+  });
+  expect((await recvLines()).slice(beforeEdit)).toEqual([]);
 });
 
 it('saves a resized matching-aspect PVW crop and uses it for the first hidden FILL', async () => {

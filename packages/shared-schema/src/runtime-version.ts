@@ -54,7 +54,7 @@ import type { Scene } from './scene.js';
  * 1.2.5 applies the direct text visibility of individual composition instances.
  * 1.2.6 applies the vertical offset of text inside its box.
  * 1.2.7 applies per-instance frame art and masked input variants.
- * 1.2.11 applies input fit overrides for shared plates in each preset.
+ * 1.2.11 applies input fit and crop overrides for shared plates in each preset.
  */
 export const CG_RUNTIME_VERSION = '1.2.11';
 export const LIVE_PRESET_FIT_RUNTIME_VERSION = '1.2.11';
@@ -66,7 +66,10 @@ export function requiredRuntimeVersionForScene(
 ): string {
   if (
     scene.lookGroups?.some(({ looks }) =>
-      looks.some(({ plateFits }) => Object.keys(plateFits ?? {}).length > 0),
+      looks.some(
+        ({ plateFits, plateCropFocuses }) =>
+          Object.keys(plateFits ?? {}).length > 0 || Object.keys(plateCropFocuses ?? {}).length > 0,
+      ),
     )
   )
     return LIVE_PRESET_FIT_RUNTIME_VERSION;
@@ -76,6 +79,12 @@ export function requiredRuntimeVersionForScene(
       matches(element) || (element.type === 'container' && element.children.some(visit));
     return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
   };
+  if (
+    hasElement(
+      (element) => element.type === 'video-placeholder' && element.allowOperatorCrop !== undefined,
+    )
+  )
+    return LIVE_PRESET_FIT_RUNTIME_VERSION;
   if (hasElement((element) => element.type === 'composition' && !!element.hiddenChildIds?.length))
     return '1.2.7';
   if (

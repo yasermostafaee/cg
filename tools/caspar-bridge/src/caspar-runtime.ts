@@ -32,6 +32,7 @@ import {
   LiveRevealRectSchema,
   MAX_PREVIEW_PLATE_CROPS,
   controlLiveLayoutFocusTarget,
+  controlLiveLayoutPlateBorder,
   controlLiveLayoutSoloTarget,
   defaultNestedValues,
   framePlacementFits,
@@ -173,6 +174,7 @@ import {
   lookPlateReveals,
   lookPlateRects,
   lookOperatorFrames,
+  lookOperatorCropAllowed,
   lookOperatorMasks,
   linkedMaskPlacements,
   framePlacementRects,
@@ -337,6 +339,7 @@ import { type BackupClip, type BackupRefusalReason } from './backup-media.js';
 /** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's `PLAY` refused because server B, the primary now, has no copy. */
 export const BACKUP_NO_COPY_CODE = 'backup-no-copy';
 import {
+  ROUTE_ENGINE_UNSUPPORTED_CODE,
   ROUTE_EPOCH_READ_MS,
   ROUTE_EPOCH_STALE_CODE,
   ROUTE_LOADBG_MAX_MS,
@@ -1082,11 +1085,12 @@ function routeWaitingMessage(plate: string | undefined): string {
   );
 }
 
-/** `ROUTE-PLATES-01` — a reconcile refused for a waiting route plate, naming it for the row's line. */
-function routeWaitingRefusal(
+/** `ROUTE-PLATES-01` — a refused route, distinguishing C4's engine limit from an unconfirmed epoch. */
+function routeRefusal(
   placement: LivePlatePlacement,
   /** `B-308` — the plate's `Plate N`, for the sentence; `refused.plateId` keeps the id. */
   plate: string | undefined,
+  onBackup = false,
 ): {
   readonly ok: false;
   readonly errorCode: string;
@@ -1098,8 +1102,10 @@ function routeWaitingRefusal(
 } {
   return {
     ok: false,
-    errorCode: ROUTE_WAITING_CODE,
-    message: routeWaitingMessage(plate),
+    errorCode: onBackup ? ROUTE_ENGINE_UNSUPPORTED_CODE : ROUTE_WAITING_CODE,
+    message: onBackup
+      ? `${plate ?? 'A plate'}: this Playout input cannot be routed to backup engine B. Nothing was sent.`
+      : routeWaitingMessage(plate),
     refused: {
       plateId: placement.plateId,
       source: { id: placement.source.id, name: placement.source.name, origin: 'input' },
@@ -6150,6 +6156,7 @@ export class CasparRuntime {
     const frameContract = (carrier: TemplateLiveSources) => ({
       ...carrier,
       allowOperatorAutoLayout: undefined,
+      sources: carrier.sources.map((source) => ({ ...source, allowOperatorCrop: undefined })),
       arrangements: carrier.arrangements?.map((arrangement) => ({
         ...arrangement,
         name: undefined,
@@ -6158,6 +6165,7 @@ export class CasparRuntime {
         ...look,
         name: undefined,
         allowOperatorAutoLayout: undefined,
+        operatorCrops: undefined,
         // The existing page already consumes individual placements for each preset.
         maskElementIds: undefined,
       })),
@@ -7582,7 +7590,7 @@ export class CasparRuntime {
       if (!mayRecover()) return { accepted: false, errorCode: 'disconnected' };
       if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
       if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
-      if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
+      if (!confirmed) return this.#refuseRouteUnavailable(itemId, routeSeat);
       if (
         this.#sourceCatalog.inputsEpoch !== epochBefore ||
         this.#previewPlateCrops.get(itemId) !== cropsBefore ||
@@ -10699,9 +10707,10 @@ export class CasparRuntime {
         sourceAspect: aspect.aspect,
         fitMode: fitMode.mode,
       };
+      const cropAllowed = lookOperatorCropAllowed(carrier, frame.lookId, frame.plateId);
       const cropAspect = sourceAspect(frame.source);
       const box =
-        fitMode.mode === 'cover' && cropAspect !== null
+        cropAllowed && fitMode.mode === 'cover' && cropAspect !== null
           ? this.liveSourceFitFor({ ...fitInput, sourceAspect: null })
           : undefined;
       // A move/resize changes the fit, not the identity of the saved source-relative Pan crop.
@@ -10747,9 +10756,10 @@ export class CasparRuntime {
         appliedToken = tokenFor(appliedBox, identity);
       }
       const masked = masks[frame.plateId] !== undefined || reveals[frame.plateId] !== undefined;
-      const stagedCrop = masked
-        ? undefined
-        : this.#previewPlateCrops.get(itemId)?.find((crop) => crop.token === appliedToken);
+      const stagedCrop =
+        masked || !cropAllowed
+          ? undefined
+          : this.#previewPlateCrops.get(itemId)?.find((crop) => crop.token === appliedToken);
       if (
         positionProposal !== undefined &&
         stagedCrop !== undefined &&
@@ -10757,16 +10767,19 @@ export class CasparRuntime {
         token !== stagedCrop.token
       )
         positionProposal.cropTokens.set(stagedCrop.token, token);
-      const liveCrop = masked
-        ? undefined
-        : this.#liveCropFocuses.get(itemId)?.get(cropKey(frame.lookId, frame.plateId));
+      const liveCrop =
+        masked || !cropAllowed
+          ? undefined
+          : this.#liveCropFocuses.get(itemId)?.get(cropKey(frame.lookId, frame.plateId));
       const landedFocus = liveCrop?.producer === seat.seatId ? liveCrop.focus : undefined;
       const savedFocus =
         stagedCrop?.focus ?? lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
       const currentFocus =
         landedFocus === undefined ? savedFocus : { ...savedFocus, ...landedFocus };
       const proposedFocus =
-        !masked && frame.lookId === lookId ? proposedCrops?.get(frame.plateId) : undefined;
+        cropAllowed && !masked && frame.lookId === lookId
+          ? proposedCrops?.get(frame.plateId)
+          : undefined;
       const cropFocus =
         proposedFocus === undefined ? currentFocus : { ...currentFocus, ...proposedFocus };
       const continuousFit = this.liveSourceFitFor({ ...fitInput, cropFocus });
@@ -12641,6 +12654,7 @@ export class CasparRuntime {
       if (
         record.held === true ||
         masked.has(plateId) ||
+        !lookOperatorCropAllowed(carrier, lookId, plateId) ||
         record.revealOverlay === true ||
         rect === undefined ||
         plateFit?.mode !== 'cover' ||
@@ -14008,6 +14022,26 @@ export class CasparRuntime {
     const placements = this.#framePlacements.get(itemId);
     const masks = this.#maskPlacements.get(itemId);
     const pageSlots = foreground === undefined ? [page.slot] : [page.slot, foreground];
+    const layout = this.#templates.infoOf(page.version)?.controlLiveLayout;
+    const movingFrames = new Set([
+      ...effect.plateIds,
+      ...(effect.departure?.plateIds ?? []),
+      ...(effect.arrival?.plateIds ?? []),
+    ]);
+    const mode = this.#channelSettings
+      .state()
+      .observed.find((read) => read.channel === channel)?.mode;
+    const advanceArtwork =
+      this.#lookMixerHoldMs === undefined &&
+      mode?.trim().toLowerCase() === '1080i5000' &&
+      foreground !== undefined &&
+      layout?.frames.some(
+        (frame) =>
+          movingFrames.has(frame.id) &&
+          controlLiveLayoutPlateBorder(frame, layout.resolution) !== undefined,
+      ) === true
+        ? this.#channelFrameMsFor(channel)
+        : 0;
     const supportsTitleHold = this.#hasFramePlacementMarker(
       page.version,
       CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
@@ -14413,6 +14447,16 @@ export class CasparRuntime {
       // Spend the paint allowance once across both HTML pages and mixer COMMIT.
       // Each page receives the remaining allowance when its update is sent.
       const startsAt = performance.now() + (phase.delayMs ?? 0);
+      // Recorded 720p50 had -3..+2 px skew without compensation. At 1080i50,
+      // native and CEF ran at the same rate, but starting the artwork one frame
+      // earlier reduced the measured edge error from -33..-14 px to -8..+12 px.
+      // This offsets presentation latency; separate output clocks can still
+      // differ by a field. Keep native COMMIT on its existing deadline.
+      const movingArtwork =
+        phase.focusSlide !== undefined ||
+        phase.frames.some(({ from, to }) => !sameMixerRect(from, to, 1e-8));
+      const pageStartsAt =
+        phase.durationMs > 0 && movingArtwork ? startsAt - advanceArtwork : startsAt;
       const sent = await sendPages(
         (slot) =>
           this.#builder.update(
@@ -14423,7 +14467,7 @@ export class CasparRuntime {
                 frameTransition: {
                   ...phase,
                   ...(phase.delayMs !== undefined && {
-                    delayMs: remainingFramePhaseDelay(startsAt),
+                    delayMs: remainingFramePhaseDelay(pageStartsAt),
                   }),
                 },
                 ...(presetEffectId !== undefined && { presetEffectId }),
@@ -15873,7 +15917,11 @@ export class CasparRuntime {
     if (routeSeat !== undefined) {
       const epochBefore = this.#sourceCatalog.inputsEpoch;
       if (!(await this.#ensureRouteEpoch()))
-        return routeWaitingRefusal(routeSeat, this.#plateLabelOf(itemId, routeSeat.plateId));
+        return routeRefusal(
+          routeSeat,
+          this.#plateLabelOf(itemId, routeSeat.plateId),
+          this.#adapter.currentPrimary === 'B',
+        );
       if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
         plan = planReconcile();
         if (!plan.ok) return refusePlan(plan);
@@ -15885,7 +15933,7 @@ export class CasparRuntime {
         return record?.held === true && record.epoch !== this.#sourceCatalog.inputsEpoch;
       });
       if (staleReturn !== undefined)
-        return routeWaitingRefusal(staleReturn, this.#plateLabelOf(itemId, staleReturn.plateId));
+        return routeRefusal(staleReturn, this.#plateLabelOf(itemId, staleReturn.plateId));
     }
     /*
       🔴 `LOOK-SWITCH-01` / `B-273` — A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE `beforeApply` TELLS
@@ -21633,10 +21681,10 @@ export class CasparRuntime {
 
   /**
    * Manual operator failover (the `connections.failover` channel). Real
-   * switch; refused (`ok: false`) when no backup is declared (B-046).
+   * switch for direct stations; refused when Playout owns redundancy or no backup is declared.
    */
   async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
-    const ok = await this.#adapter.failover('manual');
+    const ok = !this.#playoutLinked && (await this.#adapter.failover('manual'));
     const newPrimary = this.#adapter.currentPrimary;
     // B-141 — `server` records which machine is primary AFTER the switch, which
     // is the fact someone reading the log the next day is actually asking about.
@@ -21645,6 +21693,7 @@ export class CasparRuntime {
       action: 'failover',
       server: newPrimary === 'A' ? 'primary' : 'backup',
       outcome: ok ? 'ok' : 'failed',
+      ...(this.#playoutLinked ? { errorCode: 'playout-managed-failover' } : {}),
     });
     return { ok, newPrimary };
   }
@@ -22831,6 +22880,8 @@ export class CasparRuntime {
    * confirmed on this connection, else one bounded read to confirm it. `false` = no route may be sent.
    */
   async #ensureRouteEpoch(): Promise<boolean> {
+    // C4's local holder restriction cannot be repaired by refreshing A's input catalogue.
+    if (this.#adapter.currentPrimary !== 'A') return false;
     if (this.#routeEpochIsCurrent(this.#sourceCatalog.inputsEpoch)) return true;
     return (
       (await this.#confirmRouteEpoch()) &&
@@ -22869,23 +22920,27 @@ export class CasparRuntime {
   }
 
   /**
-   * `ROUTE-PLATES-01` rule 5 — a take refused because no epoch could be confirmed for its route
-   * plate: before any AMCP, the row says it in its one line, and nothing was sent.
+   * `ROUTE-PLATES-01` — before any AMCP, name the actual route restriction on the row: C4 on
+   * engine B, or rule 5 while the epoch on A is unconfirmed.
    */
-  #refuseRouteWaiting(itemId: string, placement: LivePlatePlacement): TakeVerdict {
+  #refuseRouteUnavailable(itemId: string, placement: LivePlatePlacement): TakeVerdict {
+    const { errorCode, message } = routeRefusal(
+      placement,
+      this.#plateLabelOf(itemId, placement.plateId),
+      this.#adapter.currentPrimary === 'B',
+    );
     this.#recordTakeRefusal(itemId, {
-      code: ROUTE_WAITING_CODE,
+      code: errorCode,
       plateId: placement.plateId,
       sourceId: placement.source.id,
       sourceName: placement.source.name,
       sourceOrigin: 'input',
     });
-    const message = routeWaitingMessage(this.#plateLabelOf(itemId, placement.plateId));
     // The log line keeps the id beside the sentence, for a technician (`B-308`).
     process.stderr.write(
       `[caspar-bridge] take refused for ${itemId} (plate "${placement.plateId}"): ${message}\n`,
     );
-    return { accepted: false, errorCode: ROUTE_WAITING_CODE, message, refusalOnRow: true };
+    return { accepted: false, errorCode, message, refusalOnRow: true };
   }
 
   /** `ROUTE-PLATES-01` — the row's one line for a route plate that waits, and one log line. */

@@ -1,0 +1,43 @@
+.cg-live-layout-crop-controls {
+  display: grid;
+  min-width: 0;
+  gap: var(--r-space-2);
+  color: var(--r-text-secondary);
+  font-size: var(--r-text-sm);
+}
+
+.cg-live-layout-crop-head,
+.cg-live-layout-crop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-space-2);
+}
+
+.cg-live-layout-crop-head {
+  justify-content: space-between;
+}
+
+.cg-live-layout-crop-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.75rem), 1fr));
+  gap: var(--r-space-2);
+}
+
+.cg-live-layout-crop-values > label {
+  display: grid;
+  align-content: end;
+  min-width: 0;
+  gap: var(--r-space-1);
+}
+
+.cg-live-layout-crop-values .cg-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.cg-live-layout-border-visibility {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-2);
+}

@@ -15,6 +15,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { uuid } from '../../lib/uuid.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
 
 interface InputCheck {
   readonly surface: string;
@@ -219,16 +220,18 @@ export interface InputCheckSurface {
 }
 
 export function useInputCheckSurface(channel: number | undefined, visible = true, scope?: string) {
+  const foreground = useModalForeground();
+  const showing = visible && foreground;
   const surface = useId();
   const control = useLiveInputCheck();
   const stop = control?.stop;
   useEffect(() => {
-    if (!visible) return undefined;
+    if (!showing) return undefined;
     return () => stop?.(surface);
-  }, [channel, scope, stop, surface, visible]);
+  }, [channel, scope, stop, surface, showing]);
 
   const inputCheck: InputCheckSurface | undefined =
-    visible && channel !== undefined && control?.enabled === true
+    showing && channel !== undefined && control?.enabled === true
       ? {
           surface,
           channel,

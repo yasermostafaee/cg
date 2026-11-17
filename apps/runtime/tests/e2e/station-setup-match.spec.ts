@@ -715,12 +715,13 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
     return {
       colour: getComputedStyle(el).color,
       insideCard: card !== null,
-      /* It is the LAST thing in its card — a help strip sits under the body, behind a rule. */
-      last: card?.lastElementChild === el,
+      /* The local help strip follows the fields and precedes this card's own Apply row. */
+      beforeApply:
+        el.nextElementSibling?.querySelector('[aria-label="Apply server settings"]') != null,
     };
   });
   expect(ink.insideCard, 'a help strip belongs to ONE card').toBe(true);
-  expect(ink.last).toBe(true);
+  expect(ink.beforeApply).toBe(true);
   /*
     🔴 `R-055` — A SIGNAL MUST NOT SAY WHAT IT DOES NOT MEAN. This was an amber `Notice` for a
     fact that refuses nothing: a remote CasparCG is a configuration. Amber in this dialog means
@@ -854,15 +855,23 @@ test('§5 — Close sits only where there is nothing to commit, and it is the di
     );
   };
 
-  for (const tab of ['Channel', 'Live sources', 'Text file delimiters'] as const) {
+  for (const tab of ['Channel', 'Live sources', 'Text file delimiters', 'Connection'] as const) {
     await go(tab);
     await expect(footClose, `${tab} has nothing to commit, so it offers the way out`).toBeVisible();
   }
-  for (const tab of ['Connection', 'Layers'] as const) {
-    await go(tab);
-    await expect(footClose, `${tab} carries a Close beside its Apply`).toHaveCount(0);
-    await expect(dialog.getByRole('button', { name: /^Apply / })).toBeVisible();
-  }
+  await go('Connection');
+  const originalHost = await dialog.getByLabel('Primary host').inputValue();
+  await dialog.getByLabel('Primary host').fill('192.168.1.50');
+  await expect(footClose, 'an unapplied Connection draft offers Revert').toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Revert', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Apply server settings' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Revert', exact: true }).click();
+  await expect(dialog.getByLabel('Primary host')).toHaveValue(originalHost);
+  await expect(footClose).toBeVisible();
+
+  await go('Layers');
+  await expect(footClose, 'Layers carries a Close beside its Apply').toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /^Apply / })).toBeVisible();
 
   // …and pressing it dismisses, from a clean tab, exactly as the ✕ does.
   await go('Text file delimiters');

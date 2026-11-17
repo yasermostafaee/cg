@@ -4,6 +4,7 @@ import {
   useEngineName,
 } from '../../ui/engineWording.js';
 import { useState } from 'react';
+import type { AuthCapabilities } from '../../../shared/runtime-bridge.js';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
 import {
@@ -52,8 +53,8 @@ import { Tag } from '../../ui/Tag.js';
  * the Inspector's delimiter gear, and the Layers panel's empty state.
  *
  * What this bar carries now is STATUS — plus the two controls the reference's own bar draws
- * nowhere, so there was no reference decision to move them by: the manual FAILOVER (guard item
- * 17, the remedy for the pill beside it) and the LOCK (whose PIN is ephemeral and belongs with
+ * nowhere, so there was no reference decision to move them by: direct-mode manual FAILOVER and
+ * the LOCK (whose PIN is ephemeral and belongs with
  * the engage, `STATION-CHROME-01` §7).
  */
 
@@ -350,7 +351,10 @@ const STRATEGY_LABEL: Record<ConnectionHealth['strategy'], string> = {
 export function StatusBar({
   engines,
   backupChannels,
+  connectionMode,
 }: {
+  /** The bridge's advertised mode, shared with Station setup; Playout owns its server selection. */
+  connectionMode?: AuthCapabilities['mode'] | undefined;
   /**
    * `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, handed down by the shell (a prop,
    * not a subscription: this bar's dom specs stub only the connection channels — see `CONSOLE-MATCH-03`
@@ -366,6 +370,7 @@ export function StatusBar({
   const engine = useEngineName();
   const playoutLinked = engine === PLAYOUT_ENGINE_NAME;
   const programmeScope = playoutLinked ? ' Apasai Playout switches programme separately.' : '';
+  const directConnection = connectionMode === 'off';
   const health = useConnections();
   // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
   // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
@@ -489,10 +494,7 @@ export function StatusBar({
   ].filter((notice) => notice !== undefined);
   const failoverTitle =
     failoverBlock ??
-    [
-      `Switch graphics control to Server ${failoverTarget}.` + programmeScope,
-      ...failoverNotice,
-    ].join(' ');
+    [`Switch graphics control to Server ${failoverTarget}.`, ...failoverNotice].join(' ');
 
   /*
    * 🔴 `CONSOLE-MATCH-03` §5 — THE FOUR UNICODE GLYPHS ARE GONE FROM THIS BAR.
@@ -691,7 +693,7 @@ export function StatusBar({
              comes down as a prop from the shell, which already holds it.
       */}
       <span style={styles.spacer} />
-      {holdsOperator && (
+      {holdsOperator && directConnection && (
         <AsyncButton
           /*
           R-055 — the DEFAULT variant, not `caution`.
@@ -735,7 +737,7 @@ export function StatusBar({
         one-door decision are both intact and travelled with the button; nothing about which
         tab it opens on changed.
 
-        ⚠ WHAT STAYED HERE, and why it is not an oversight: the manual FAILOVER control and
+        ⚠ WHAT STAYED HERE, and why it is not an oversight: the direct-mode manual FAILOVER control and
         the LOCK. The reference's bar draws NEITHER, so there is no reference decision to
         follow for either. Failover is deletion-guard item 17 and belongs beside the fault
         states it answers — it is the remedy for the pill two elements to its left. The lock's

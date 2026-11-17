@@ -244,6 +244,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
       // carrier that spelled it out would be a second place the default lives.
       ...(el.fitMode !== undefined ? { fitMode: el.fitMode } : {}),
       ...(el.cropFocus !== undefined ? { cropFocus: el.cropFocus } : {}),
+      ...(el.allowOperatorCrop !== undefined && { allowOperatorCrop: el.allowOperatorCrop }),
       ...(el.revealMask !== undefined ? { revealMask: el.revealMask } : {}),
       ...(el.liveMask !== undefined ? { liveMask: el.liveMask } : {}),
       dynamic: roles?.has('fill') ?? false,
@@ -287,6 +288,7 @@ export interface TemplateLookCarrier {
   transitionPaintOrder?: string[] | undefined;
   transitionDepartureGroups?: Record<string, string[]> | undefined;
   operatorMaskEdits?: string[] | undefined;
+  operatorCrops?: Record<string, boolean> | undefined;
   /** Route key → authored plate identity for sharing own-mask edits across presets. */
   maskElementIds?: Record<string, string> | undefined;
   /**
@@ -449,6 +451,7 @@ export function collectLookCarrier(scene: Scene): {
   const transitionFramesByLook = new Map<string, Record<string, PresetTransitionFrame>>();
   const transitionGroupsByLook = new Map<string, Map<string, Set<string>>>();
   const operatorMaskEditsByLook = new Map<string, string[]>();
+  const operatorCropsByLook = new Map<string, Record<string, boolean>>();
   const maskElementIdsByLook = new Map<string, Record<string, string>>();
   const fallbacksByLook = new Map<string, string[]>();
   const firstPlateFor = new Map<string, string>();
@@ -526,6 +529,11 @@ export function collectLookCarrier(scene: Scene): {
       const rects = rectsByLook.get(look.id);
       if (rects === undefined || routeKey in rects) continue;
       rects[routeKey] = flat.rect;
+      if (el.allowOperatorCrop !== undefined) {
+        const crops = operatorCropsByLook.get(look.id) ?? {};
+        crops[routeKey] = el.allowOperatorCrop;
+        operatorCropsByLook.set(look.id, crops);
+      }
       const operatorFrame = operatorFrames.get(flat.key);
       if (operatorFrame !== undefined) {
         const frames = operatorFramesByLook.get(look.id) ?? {};
@@ -579,9 +587,13 @@ export function collectLookCarrier(scene: Scene): {
         const fits = fitsByLook.get(look.id);
         if (fits !== undefined) fits[routeKey] = fitMode;
       }
-      if (el.cropFocus !== undefined) {
+      const cropFocus =
+        look.plateCropFocuses !== undefined && Object.hasOwn(look.plateCropFocuses, routeKey)
+          ? look.plateCropFocuses[routeKey]
+          : el.cropFocus;
+      if (cropFocus !== undefined) {
         const focuses = focusesByLook.get(look.id);
-        if (focuses !== undefined) focuses[routeKey] = el.cropFocus;
+        if (focuses !== undefined) focuses[routeKey] = cropFocus;
       }
       if (el.revealMask !== undefined) {
         const reveals = revealsByLook.get(look.id);
@@ -669,6 +681,7 @@ export function collectLookCarrier(scene: Scene): {
             ),
           }),
         }),
+        ...(operatorCropsByLook.has(l.id) && { operatorCrops: operatorCropsByLook.get(l.id) }),
         ...(operatorMaskEditsByLook.has(l.id) && {
           operatorMaskEdits: operatorMaskEditsByLook.get(l.id),
         }),

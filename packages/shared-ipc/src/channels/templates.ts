@@ -122,6 +122,8 @@ export const TemplateLookSchema = z.object({
   /** Nested composition path → all plates potentially seated under that artwork. */
   transitionDepartureGroups: z.record(z.string(), z.array(IdSchema)).optional(),
   operatorMaskEdits: z.array(IdSchema).optional(),
+  /** Route key → explicit operator crop permission for this look's plate. */
+  operatorCrops: z.record(z.string(), z.boolean()).optional(),
   /** Route key → authored plate identity. Older carriers keep per-preset edits. */
   maskElementIds: z.record(z.string(), IdSchema).optional(),
   /**
@@ -352,6 +354,17 @@ export function lookPlateFits(
     (s): s is typeof s & { fitMode: LiveFitMode } => s.fitMode !== undefined,
   );
   return Object.fromEntries(stated.map((s) => [s.sourceId, s.fitMode] as const));
+}
+
+/** Missing permission preserves crop editing for existing templates. */
+export function lookOperatorCropAllowed(
+  live: TemplateLiveSources,
+  lookId: string | undefined,
+  plateId: string,
+): boolean {
+  const look = activeLookOf(live, lookId);
+  if (look !== undefined) return look.operatorCrops?.[plateId] !== false;
+  return live.sources.find(({ sourceId }) => sourceId === plateId)?.allowOperatorCrop !== false;
 }
 
 /** D-178 — routeKey → authored crop focus for the active look. */

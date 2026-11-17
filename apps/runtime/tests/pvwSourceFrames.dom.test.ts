@@ -36,68 +36,77 @@ function sample(sourceId: string): PvwSourceFrame {
   return { sourceId, signal: 'present', jpegBase64: 'sample', width: 64, height: 36 };
 }
 
-it('keeps the input aspect while the preview moves from a portrait crop to full picture', () => {
-  const doc = document.implementation.createHTMLDocument();
-  const node = doc.createElement('div');
-  node.dataset['cgLiveSource'] = 'camera';
-  doc.body.append(node);
-  Object.defineProperty(doc, 'defaultView', { value: window });
-  const original: PlatePlacement = {
-    plateId: 'camera',
-    elementId: 'plate',
-    sourceId: 'input',
-    sourceName: 'Studio',
-    x: 0,
-    y: 0,
-    width: 90,
-    height: 120,
-    cropEdges: true,
-  };
-  const destination: PlatePlacement = {
-    ...original,
-    x: 10,
-    y: 20,
-    width: 192,
-    height: 108,
-  };
-  delete destination.cropEdges;
-  const bounds = vi
-    .spyOn(node, 'getBoundingClientRect')
-    .mockReturnValue(new DOMRect(0, 0, 90, 120));
-  const frames = new Map([['input', sample('input')]]);
-  let animationTick: FrameRequestCallback | undefined;
-  const request = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((tick) => {
-    animationTick = tick;
-    return 1;
-  });
-  const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-  let stop: (() => void) | undefined;
-  try {
-    paintPvwPlatePictures(doc, [original], frames);
-    const image = node.querySelector('img');
-    const clip = image?.parentElement;
-    if (image == null || clip == null) throw new Error('Preview picture was not mounted');
-    const before = image.style.width;
-    stop = followPvwPresetPictures(doc, [original], [destination], frames, new Set(['camera']));
-    expect(stop).toBeDefined();
-    bounds.mockReturnValue(new DOMRect(5, 10, 141, 114));
-    animationTick?.(0);
-    const width =
-      (141 * Number.parseFloat(clip.style.width) * Number.parseFloat(image.style.width)) / 10_000;
-    const height =
-      (114 * Number.parseFloat(clip.style.height) * Number.parseFloat(image.style.height)) / 10_000;
-    expect(width / height).toBeCloseTo(16 / 9);
-    expect(width).toBeCloseTo(202.67);
-    expect(image.style.width).not.toBe(before);
-    stop?.();
-    stop = undefined;
-    expect(image.style.width).toBe(before);
-  } finally {
-    stop?.();
-    request.mockRestore();
-    cancel.mockRestore();
-  }
-});
+it.each([false, true])(
+  'refits a preview picture in the same paint as its moving frame (mask: %s)',
+  async (masked) => {
+    const doc = document.implementation.createHTMLDocument();
+    const artwork = doc.createElement('div');
+    artwork.dataset['cgFrameArtwork'] = 'camera-artwork';
+    const node = doc.createElement('div');
+    node.dataset['cgLiveSource'] = 'camera';
+    artwork.append(node);
+    doc.body.append(artwork);
+    const original: PlatePlacement = {
+      plateId: 'camera',
+      elementId: 'plate',
+      sourceId: 'input',
+      sourceName: 'Studio',
+      x: 0,
+      y: 0,
+      width: 90,
+      height: 120,
+      cropEdges: true,
+      ...(masked && {
+        mask: { mode: 'inside', rects: [{ x: 0.25, y: 0.2, width: 0.5, height: 0.6 }] },
+      }),
+    };
+    const destination: PlatePlacement = {
+      ...original,
+      x: 10,
+      y: 20,
+      width: 192,
+      height: 108,
+    };
+    delete destination.cropEdges;
+    const bounds = vi
+      .spyOn(node, 'getBoundingClientRect')
+      .mockReturnValue(new DOMRect(0, 0, 90, 120));
+    const frames = new Map([['input', sample('input')]]);
+    const request = vi.spyOn(window, 'requestAnimationFrame');
+    let stop: (() => void) | undefined;
+    try {
+      paintPvwPlatePictures(doc, [original], frames);
+      const image = node.querySelector('img');
+      const clip = image?.parentElement;
+      if (image == null || clip == null) throw new Error('Preview picture was not mounted');
+      const before = image.style.width;
+      stop = followPvwPresetPictures(doc, [original], [destination], frames, new Set(['camera']));
+      expect(stop).toBeDefined();
+      bounds.mockReturnValue(new DOMRect(5, 10, 141, 114));
+      artwork.style.transform = 'matrix(1.567,0,0,0.95,5,10)';
+      await Promise.resolve();
+      expect(request).not.toHaveBeenCalled();
+      const width =
+        (141 * Number.parseFloat(clip.style.width) * Number.parseFloat(image.style.width)) / 10_000;
+      const height =
+        (114 * Number.parseFloat(clip.style.height) * Number.parseFloat(image.style.height)) /
+        10_000;
+      expect(width / height).toBeCloseTo(16 / 9);
+      expect(width).toBeCloseTo(202.67);
+      if (masked) {
+        expect(Number.parseFloat(clip.style.width)).toBeCloseTo(50);
+        expect(Number.parseFloat(clip.style.height)).toBeCloseTo(60);
+      }
+      expect(image.style.width).not.toBe(before);
+      stop?.();
+      stop = undefined;
+      expect(image.style.width).toBe(before);
+    } finally {
+      stop?.();
+      request.mockRestore();
+    }
+  },
+);
 
 it('shares one station lease and retains common pictures while preview demand and sample batches change', async () => {
   vi.useFakeTimers();

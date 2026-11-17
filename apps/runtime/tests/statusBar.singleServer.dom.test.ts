@@ -83,7 +83,9 @@ async function renderStatusBar(health: ConnectionHealth): Promise<HTMLDivElement
   document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(createElement(StrictMode, null, createElement(StatusBar)));
+    root.render(
+      createElement(StrictMode, null, createElement(StatusBar, { connectionMode: 'off' })),
+    );
     // Let the health()/lock.state() promises resolve into state.
     await Promise.resolve();
   });

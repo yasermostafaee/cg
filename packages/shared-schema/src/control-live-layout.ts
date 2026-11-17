@@ -19,8 +19,10 @@ import {
 import {
   DEFAULT_LIVE_FIT_MODE,
   fitPictureToBox,
+  LiveCropFocusSchema,
   LiveFitModeSchema,
   LiveFrameResizeSchema,
+  type LiveCropFocus,
   type LiveFitMode,
 } from './live-fit.js';
 import { calculateLiveSourceAutoLayout, liveSourceRowCounts } from './live-source-auto-layout.js';
@@ -117,6 +119,7 @@ const ControlLiveLayoutFrameSchema = z.object({
     .optional(),
   fitMode: LiveFitModeSchema.optional(),
   operatorMove: z.boolean().optional(),
+  operatorCrop: z.boolean().optional(),
   operatorPlacement: z.union([z.literal('locked'), LiveFrameResizeSchema]).optional(),
   liveMask: LivePlateMaskSchema.optional(),
   allowOperatorMaskEdit: z.boolean().optional(),
@@ -165,6 +168,7 @@ const ControlLiveLayoutPlateAspectSchema = z
   .max(CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MAX);
 const ControlLiveLayoutPlateOverrideSchema = z.object({
   aspectRatio: ControlLiveLayoutPlateAspectSchema.optional(),
+  cropFocus: LiveCropFocusSchema.optional(),
   fitMode: LiveFitModeSchema.optional(),
 });
 export type ControlLiveLayoutPlateOverride = z.infer<typeof ControlLiveLayoutPlateOverrideSchema>;
@@ -185,6 +189,15 @@ const ControlLiveLayoutPresetSchema = z.object({
   reverse: z.boolean(),
   hiddenTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
   hiddenFocusTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
+  hiddenBorders: z
+    .array(ControlLiveLayoutFrameIdSchema)
+    .max(CONTROL_LIVE_LAYOUT_MAX_FRAMES)
+    .optional(),
+  hiddenFocusBorders: z
+    .array(ControlLiveLayoutFrameIdSchema)
+    .max(CONTROL_LIVE_LAYOUT_MAX_FRAMES)
+    .optional(),
+  plateCropFocus: LiveCropFocusSchema.optional(),
   plateAspectRatio: ControlLiveLayoutPlateAspectSchema.optional(),
   plateFitMode: LiveFitModeSchema.optional(),
   plateOverrides: z
@@ -215,6 +228,14 @@ export function controlLiveLayoutPlateFit(
     frame.fitMode ??
     DEFAULT_LIVE_FIT_MODE
   );
+}
+
+/** Recall the plate's authored crop, or inherit the preset's crop when there is no override. */
+export function controlLiveLayoutPlateCropFocus(
+  preset: ControlLiveLayoutPreset,
+  frameId: string,
+): LiveCropFocus | undefined {
+  return preset.plateOverrides?.[frameId]?.cropFocus ?? preset.plateCropFocus;
 }
 
 const ControlLiveLayoutBackgroundSchema = z.discriminatedUnion('kind', [
@@ -318,10 +339,18 @@ export const ControlLiveLayoutSchema = z
     if (!presetIds.has(layout.defaultPresetId))
       issue(['defaultPresetId'], 'Choose a default preset.');
     for (const [index, preset] of layout.presets.entries()) {
-      for (const key of ['frameIds', 'hiddenTitles', 'hiddenFocusTitles'] as const) {
-        if (new Set(preset[key]).size !== preset[key].length)
+      for (const key of [
+        'frameIds',
+        'hiddenTitles',
+        'hiddenFocusTitles',
+        'hiddenBorders',
+        'hiddenFocusBorders',
+      ] as const) {
+        const ids = preset[key];
+        if (ids === undefined) continue;
+        if (new Set(ids).size !== ids.length)
           issue(['presets', index, key], 'A frame can occur only once in this list.');
-        if (preset[key].some((id) => !frameIds.has(id)))
+        if (ids.some((id) => !frameIds.has(id)))
           issue(['presets', index, key], 'This preset refers to a removed frame.');
       }
       if (Object.keys(preset.plateOverrides ?? {}).some((id) => !preset.frameIds.includes(id)))
@@ -404,6 +433,15 @@ export function controlLiveLayoutTitleHidden(
   const hiddenInFocus = preset.hiddenFocusTitles.includes(frameId);
   if (focused) return hiddenInFocus;
   return preset.hiddenTitles.includes(frameId) || (preset.frameIds.length === 1 && hiddenInFocus);
+}
+
+/** Each named preset and its Focus destinations can hide the shared border independently. */
+export function controlLiveLayoutBorderHidden(
+  preset: ControlLiveLayoutPreset,
+  frameId: string,
+  focused: boolean,
+): boolean {
+  return (focused ? preset.hiddenFocusBorders : preset.hiddenBorders)?.includes(frameId) === true;
 }
 
 /** Frame ids in effective on-screen arrangement order. */

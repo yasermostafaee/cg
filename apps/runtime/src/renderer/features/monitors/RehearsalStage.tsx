@@ -572,6 +572,7 @@ export function RehearsalStage({
     (plate) =>
       scopedCropItems.has(plate.itemId) &&
       plate.cropEdges === true &&
+      plate.operatorCropLocked !== true &&
       plate.mask === undefined &&
       plate.reveal === undefined &&
       plateInRaster(plate, raster),

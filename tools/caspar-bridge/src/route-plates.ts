@@ -80,6 +80,9 @@ export const ROUTE_EPOCH_READ_MS = 1_500;
  */
 export const ROUTE_WAITING_CODE = 'route-epoch-waiting';
 
+/** C4 — a local Playout holder route is supported only while engine A is active. */
+export const ROUTE_ENGINE_UNSUPPORTED_CODE = 'route-engine-unsupported';
+
 /** The send seam's refusal of a route line whose epoch is not the current one (nothing is sent). */
 export const ROUTE_EPOCH_STALE_CODE = 'route-epoch-stale';
 

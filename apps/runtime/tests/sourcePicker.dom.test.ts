@@ -622,6 +622,9 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
   it('draws only the rows in view, and asks for the next page near the end — once', async () => {
     const panel = await openPicker(await render({}));
     await pickerTab(panel, 'Media');
+    await act(async () =>
+      panel.querySelector<HTMLButtonElement>('[aria-label="List view"]')?.click(),
+    );
     await settle();
     const list = panel.querySelector<HTMLElement>('[data-picker-list]');
     // 50 loaded; far fewer drawn.
@@ -663,6 +666,9 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     const field = await render({ onChange });
     const panel = await openPicker(field);
     await pickerTab(panel, 'Media');
+    await act(async () =>
+      panel.querySelector<HTMLButtonElement>('[aria-label="List view"]')?.click(),
+    );
     expect(panel.getAttribute('aria-modal')).toBe('true');
     expect(panel.getAttribute('data-modal-size')).toBe('library');
     const id = 'md-m-studio1';
@@ -680,6 +686,69 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(onChange).toHaveBeenCalledWith(id);
     expect(panel.isConnected).toBe(false);
     expect(document.activeElement).toBe(field);
+  });
+
+  it('keeps Media Grid virtualized, plays inside one tile, and still needs Select', async () => {
+    const onChange = vi.fn();
+    const field = await render({ onChange, channel: 1 });
+    const panel = await openPicker(field);
+    await pickerTab(panel, 'Media');
+    let media = panel.querySelector<HTMLElement>('[data-picker-tab="media"]');
+    expect(media?.dataset['mediaView']).toBe('grid');
+    await pickerTab(panel, 'Inputs');
+    await pickerTab(panel, 'Media');
+    media = panel.querySelector<HTMLElement>('[data-picker-tab="media"]');
+    expect(media?.isConnected).toBe(true);
+    expect(media?.dataset['mediaView']).toBe('grid');
+    expect(media?.querySelector('.cg-picker-player')).toBeNull();
+    expect(media?.querySelectorAll('[data-picker-media]').length).toBeLessThan(50);
+    const select = panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]');
+    expect(select?.disabled).toBe(true);
+    const id = 'md-m-studio1';
+    const item = media?.querySelector<HTMLElement>('[data-picker-media="' + id + '"]');
+    const tile = item?.closest('.cg-vlist-action-row');
+    expect(tile).not.toBeNull();
+    await act(async () =>
+      tile?.querySelector<HTMLButtonElement>('[data-picker-preview="' + id + '"]')?.click(),
+    );
+    expect(tile?.querySelector('.cg-source-media-preview--tile')).not.toBeNull();
+    expect(tile?.querySelector('[aria-label="Pause preview"]')).not.toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(item?.getAttribute('aria-selected')).toBe('false');
+    await act(async () => item?.click());
+    expect(item?.getAttribute('aria-selected')).toBe('true');
+    expect(onChange).not.toHaveBeenCalled();
+    await confirmPicker(panel);
+    expect(onChange).toHaveBeenCalledWith(id);
+  });
+
+  it('pages a Media Grid by its actual tracks while keeping group headings short', async () => {
+    const panel = await openPicker(await render({}));
+    await pickerTab(panel, 'Media');
+    await act(async () =>
+      panel.querySelector<HTMLButtonElement>('[aria-label="Grid view"]')?.click(),
+    );
+    const grid = panel.querySelector<HTMLElement>('[data-picker-list]');
+    const heading = grid?.querySelector<HTMLElement>('[data-vlist-heading="Recent"]');
+    const tile = grid?.querySelector<HTMLElement>('.cg-vlist-action-row');
+    expect(heading).not.toBeNull();
+    expect(tile).not.toBeNull();
+    expect(parseInt(heading!.style.height, 10)).toBeLessThan(parseInt(tile!.style.height, 10));
+    const spacer = grid?.querySelector<HTMLElement>('.cg-vlist-spacer');
+    const viewportHeight = Number.parseInt(grid?.style.height ?? '', 10);
+    const contentHeight = Number.parseInt(spacer?.style.height ?? '', 10);
+    const before = searches.filter((request) => request.cursor !== undefined).length;
+    await act(async () => {
+      Object.defineProperty(grid!, 'scrollTop', {
+        value: contentHeight - viewportHeight,
+        configurable: true,
+      });
+      grid?.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    await settle();
+    const paged = searches.filter((request) => request.cursor !== undefined);
+    expect(paged.length - before).toBe(1);
+    expect(paged.at(-1)?.cursor).toBe('50');
   });
 
   it('a Playout that does not answer says so, with Retry', async () => {

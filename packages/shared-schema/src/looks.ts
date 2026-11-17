@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { LiveSourceIdSchema } from './elements.js';
-import { LiveFitModeSchema } from './live-fit.js';
+import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
 import { IdSchema } from './primitives.js';
 
 /**
@@ -93,6 +93,8 @@ export const LookSchema = z.object({
   allowOperatorAutoLayout: z.boolean().optional(),
   /** Overrides for reused plate artwork whose input fit differs in this look. */
   plateFits: z.record(LiveSourceIdSchema, LiveFitModeSchema).optional(),
+  /** The authored input crop of a reused live plate in this look. */
+  plateCropFocuses: z.record(LiveSourceIdSchema, LiveCropFocusSchema).optional(),
 });
 export type Look = z.infer<typeof LookSchema>;
 

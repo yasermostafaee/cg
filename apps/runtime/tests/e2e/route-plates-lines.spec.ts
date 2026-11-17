@@ -9,10 +9,11 @@ import { expect, test } from './fixtures/runtime.js';
  *     could not be confirmed stays empty, and says so;
  *   - rule 1: `<row> · Plate N: “ورودی ۴” can't be shown on CH n.` — an input the Playout does not
  *     offer for this row's channel is refused before any AMCP;
- *   - C4: the backup details explain when a row carries a route on the primary.
+ *   - C4: a local route refused on active engine B names that engine restriction on its row;
+ *     the backup details explain when a row carries a route on the primary.
  *
  * The wire half of each is `tools/caspar-bridge/tests/route-plates.integration.test.ts`; what only
- * this can prove is what the operator SEES. The two refusals come from the mock's one-shot switch
+ * this can prove is what the operator SEES. The refusals come from the mock's one-shot switch
  * seam (`CG_E2E_REFUSE_NEXT_SWITCH`) on the seeded look-bearing row, shaped exactly as the bridge
  * records them; the backup line from its one-shot take seam (`CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE`).
  *
@@ -23,6 +24,8 @@ import { expect, test } from './fixtures/runtime.js';
 // The row's name is composed by the console; the plate label and the clause are the refusal's.
 // `live-3` is the seeded template's third plate, and the `right` look needs it.
 const WAITING_TAIL = / · Plate 3: waiting for the Playout's input list\.$/;
+const ENGINE_UNSUPPORTED_TAIL =
+  / · Plate 3: this Playout input cannot be routed to backup engine B\.$/;
 const NOT_SHOWABLE_TAIL = / · Plate 3: “ورودی ۴” can't be shown on CH 1\.$/;
 const LIVE_INPUT_NOTE = 'Live inputs routed through Playout remain on the primary engine.';
 
@@ -31,6 +34,11 @@ for (const { what, refusal, tail } of [
     what: 'rule 5 — a route that waits for the Playout’s input list',
     refusal: { code: 'route-epoch-waiting', plateId: 'live-3', sourceOrigin: 'input' },
     tail: WAITING_TAIL,
+  },
+  {
+    what: 'C4 — a local Playout route unsupported on backup engine B',
+    refusal: { code: 'route-engine-unsupported', plateId: 'live-3', sourceOrigin: 'input' },
+    tail: ENGINE_UNSUPPORTED_TAIL,
   },
   {
     what: 'rule 1 — an input the Playout does not offer on this channel',

@@ -78,6 +78,9 @@ it('reads only visible media posters, reuses reads, and keeps poster clicks as s
     const panel = await openPicker(host.querySelector<HTMLElement>('[role="combobox"]')!);
     expect(mediaThumbnail).not.toHaveBeenCalled();
     await pickerTab(panel, 'Media');
+    await act(async () =>
+      panel.querySelector<HTMLButtonElement>('[aria-label="List view"]')?.click(),
+    );
     const tilesOf = (id: string) => [
       ...panel.querySelectorAll<HTMLElement>(`[data-picker-media="${id}"] [data-media-thumbnail]`),
     ];

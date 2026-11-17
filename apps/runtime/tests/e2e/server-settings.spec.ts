@@ -73,7 +73,7 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
   */
   await expect(panel.getByRole('button', { name: 'Close server settings' })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: 'Close' }).click();
+  await panel.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(panel).toBeHidden();
 
   // 2. Clear All is available while the row itself is protected from removal.
@@ -162,7 +162,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   await expect(panel.getByText(/^Applied\./)).toBeVisible();
 
   // The value survives a close/reopen — which is the whole point of giving it a stored layer.
-  await panel.getByRole('button', { name: 'Close' }).click();
+  await panel.getByRole('button', { name: 'Close', exact: true }).click();
   await openServers(page);
   await expect(panel.getByLabel('Graphics host')).toHaveValue('192.168.21.93');
   await expect(panel.getByLabel('Graphics port')).toHaveValue('7911');

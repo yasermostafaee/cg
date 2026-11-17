@@ -3,6 +3,7 @@ import {
   activeLookOf,
   assignmentsOnChannel,
   lookMaskedPlateIds,
+  lookOperatorCropAllowed,
   lookOperatorFrames,
   lookPlateFits,
   lookPlateFocuses,
@@ -107,7 +108,9 @@ export function LiveFrameAdjustments({
   const rects = lookPlateRects(live, lookId);
   const masked = lookMaskedPlateIds(live, lookId);
   const cropEligible = (plateId: string): boolean =>
-    rects[plateId] !== undefined && !masked.has(plateId);
+    rects[plateId] !== undefined &&
+    !masked.has(plateId) &&
+    lookOperatorCropAllowed(live, lookId, plateId);
   const fitOverride = assignmentsOnChannel(currentSourceAssignments(), channel).assignments.some(
     (entry) =>
       entry.templateId === item.templateId &&

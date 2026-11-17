@@ -8,10 +8,12 @@ import {
   DEFAULT_LIVE_FIT_MODE,
   LIVE_PRESET_FIT_RUNTIME_VERSION,
   controlLiveLayoutAttachments,
+  controlLiveLayoutBorderHidden,
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
   controlLiveLayoutPlateBorder,
+  controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutRects,
   controlLiveLayoutTitleHidden,
@@ -34,6 +36,7 @@ import {
   type FieldBinding,
   type FrameRate,
   type Layer,
+  type LiveCropFocus,
   type LiveFitMode,
   type LiveSourceRect,
   type Look,
@@ -448,6 +451,7 @@ function frameComposition(
       ...(resize !== 'locked' && { operatorPlacement: resize }),
       ...(operatorMove !== undefined && { operatorMove }),
       ...(frame.liveMask !== undefined && { liveMask: frame.liveMask }),
+      ...(frame.operatorCrop !== undefined && { allowOperatorCrop: frame.operatorCrop }),
       ...(frame.allowOperatorMaskEdit === true && { allowOperatorMaskEdit: true }),
       showFallback: false,
     },
@@ -467,6 +471,7 @@ function frameComposition(
         ...(plate.liveMask !== undefined && { liveMask: plate.liveMask }),
         ...(resize !== 'locked' && { operatorPlacement: resize }),
         ...(operatorMove !== undefined && { operatorMove }),
+        ...(frame.operatorCrop !== undefined && { allowOperatorCrop: frame.operatorCrop }),
         ...(frame.allowOperatorMaskEdit === true && { allowOperatorMaskEdit: true }),
         showFallback: false,
       });
@@ -583,15 +588,17 @@ export function buildControlLiveLayoutScene(
   ) => {
     const instanceId = 'layout-look-' + id;
     const plateFits: Record<string, LiveFitMode> = {};
+    const plateCropFocuses: Record<string, LiveCropFocus> = {};
     const children = frames.flatMap((frame, index): CompositionElement[] => {
       const rect = rects[frame.id];
       if (rect === undefined) return [];
+      const fit = controlLiveLayoutPlateFit(preset, frame);
       if (
         !focused &&
         (preset.plateOverrides?.[frame.id]?.fitMode !== undefined ||
           preset.plateFitMode !== undefined)
       ) {
-        plateFits[frame.id] = controlLiveLayoutPlateFit(preset, frame);
+        plateFits[frame.id] = fit;
       }
       const attachments = byFrame.get(frame.id) ?? [];
       const included = new Set([
@@ -611,6 +618,12 @@ export function buildControlLiveLayoutScene(
           hasMaskedInput = true;
           hiddenChildIds.push(frame.id + '-plate');
         }
+      }
+      if (controlLiveLayoutBorderHidden(preset, frame.id, focused))
+        hiddenChildIds.push(frame.id + '-border');
+      if (!focused && fit === 'cover' && frame.liveMask === undefined && !hasMaskedInput) {
+        const cropFocus = controlLiveLayoutPlateCropFocus(preset, frame.id);
+        if (cropFocus !== undefined) plateCropFocuses[frame.id] = cropFocus;
       }
       const hiddenTextIds = controlLiveLayoutTitleHidden(preset, frame.id, focused)
         ? frameCompositions
@@ -649,6 +662,7 @@ export function buildControlLiveLayoutScene(
       entered: CUT_LOOK_TRANSITION,
       allowOperatorAutoLayout: !focused,
       ...(Object.keys(plateFits).length > 0 && { plateFits }),
+      ...(Object.keys(plateCropFocuses).length > 0 && { plateCropFocuses }),
     });
   };
 
@@ -824,7 +838,16 @@ export async function compileControlLiveLayout(
   }
 
   let minRuntimeVersion = requiredRuntimeVersionForScene(scene, true);
-  if (
+  const hasPresetPlateSettings = layout.presets.some(
+    ({ hiddenBorders, hiddenFocusBorders, plateCropFocus, plateOverrides }) =>
+      (hiddenBorders?.length ?? 0) > 0 ||
+      (hiddenFocusBorders?.length ?? 0) > 0 ||
+      plateCropFocus !== undefined ||
+      Object.values(plateOverrides ?? {}).some(({ cropFocus }) => cropFocus !== undefined),
+  );
+  if (hasPresetPlateSettings) {
+    minRuntimeVersion = LIVE_PRESET_FIT_RUNTIME_VERSION;
+  } else if (
     minRuntimeVersion !== LIVE_PRESET_FIT_RUNTIME_VERSION &&
     (layout.background.kind === 'none' || (layout.frameAttachments?.length ?? 0) > 0)
   ) {

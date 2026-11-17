@@ -716,7 +716,13 @@ export function App(): JSX.Element {
         )}
         {/* `AUDIT-CLOSE-01` B1 — the two doors are in the app header now; this bar is
             STATUS, plus the two controls the reference draws nowhere (see its own note). */}
-        {shellChromeVisible && <StatusBar engines={engines} backupChannels={backupChannels} />}
+        {shellChromeVisible && (
+          <StatusBar
+            engines={engines}
+            backupChannels={backupChannels}
+            connectionMode={capabilities?.mode}
+          />
+        )}
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
           by delegation — nothing new has to be wired, which is the point (see

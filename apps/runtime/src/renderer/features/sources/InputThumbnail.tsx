@@ -9,6 +9,7 @@ import {
 } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
 import { LiveInputCheckTile } from '../monitors/LiveInputCheckTile.js';
 import { useLiveInputCheck, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { InputAudioMeter } from './InputAudioMeter.js';
@@ -33,6 +34,7 @@ export function InputThumbnail({
   inputCheck?: InputCheckSurface | undefined;
   onCheck?: ((source: SourceDefinition) => void) | undefined;
 }): JSX.Element {
+  const foreground = useModalForeground();
   const previewChannel =
     channel !== undefined &&
     source.origin === 'input' &&
@@ -56,13 +58,10 @@ export function InputThumbnail({
   const [snapshot, setSnapshot] = useState<{
     channel: number;
     frame: SourcePreviewFrame;
-    expiresAt: number;
   }>();
   const [brokenPicture, setBrokenPicture] = useState<string>();
   const frame =
-    snapshot?.channel === previewChannel &&
-    snapshot?.frame.sourceId === sourceId &&
-    snapshot.expiresAt > Date.now()
+    snapshot?.channel === previewChannel && snapshot?.frame.sourceId === sourceId
       ? snapshot.frame
       : undefined;
   const src =
@@ -72,17 +71,19 @@ export function InputThumbnail({
   const picture = src === undefined || src === brokenPicture ? null : src;
 
   useEffect(() => {
-    if (snapshot === undefined) return;
+    if (snapshot === undefined || !foreground || active) return;
+    // Pause expiration while covered, then allow one refresh window after returning.
     const timer = setTimeout(
       () => setSnapshot((previous) => (previous === snapshot ? undefined : previous)),
-      Math.max(0, snapshot.expiresAt - Date.now()),
+      SNAPSHOT_HOLD_MS,
     );
     return () => clearTimeout(timer);
-  }, [snapshot]);
+  }, [snapshot, foreground, active]);
 
   useEffect(() => {
     const tile = element.current;
     if (
+      !foreground ||
       previewChannel === undefined ||
       active ||
       tile === null ||
@@ -105,8 +106,7 @@ export function InputThumbnail({
               (frame.signal !== 'absent' && frame.jpegBase64 === undefined)
             )
               return;
-            const expiresAt = Date.now() + SNAPSHOT_HOLD_MS;
-            setSnapshot({ channel: previewChannel, frame, expiresAt });
+            setSnapshot({ channel: previewChannel, frame });
           },
         });
       } else if (unsubscribe !== undefined) {
@@ -121,7 +121,7 @@ export function InputThumbnail({
       observer.disconnect();
       unsubscribe?.();
     };
-  }, [active, previewChannel, sourceId, checkable]);
+  }, [active, foreground, previewChannel, sourceId, checkable]);
 
   if (active && check != null && control !== null) {
     return (

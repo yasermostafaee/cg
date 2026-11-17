@@ -16,22 +16,28 @@ import {
 import {
   CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH,
   CONTROL_LIVE_LAYOUT_MAX_FRAMES,
+  DEFAULT_LIVE_CROP_FOCUS,
   ControlLiveLayoutSchema,
   LiveRevealRectSchema,
   controlLiveLayoutAttachments,
+  controlLiveLayoutBorderHidden,
   controlLiveLayoutFontFamily,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutMovePresetFrame,
+  controlLiveLayoutPlateCropFocus,
+  controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
   sameLiveMaskRect,
   type ControlLiveLayout,
   type ControlLiveLayoutBackground,
   type ControlLiveLayoutArrangement,
+  type ControlLiveLayoutFrame,
   type ControlLiveLayoutFrameAttachment,
   type ControlLiveLayoutPlateOverride,
   type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
+  type LiveCropFocus,
   type LiveRevealRect,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
@@ -40,6 +46,7 @@ import { ColorInput } from '../../ui/ColorInput.js';
 import { FileInput } from '../../ui/FileInput.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { uuid } from '../../lib/uuid.js';
@@ -99,7 +106,7 @@ function nextPresetName(presets: readonly ControlLiveLayoutPreset[]): string {
   return `Preset ${String(number)}`;
 }
 
-function visibleTitle(
+function setVisibility(
   currentlyHidden: readonly string[],
   frameId: string,
   visible: boolean,
@@ -183,6 +190,7 @@ export function LiveLayoutEditor({
   const [showPreviewMeters, setShowPreviewMeters] = useState(false);
   const [maskSelection, setMaskSelection] = useState<{ frameId: string; index: number }>();
   const [maskEditFrameId, setMaskEditFrameId] = useState<string>();
+  const [cropEditFrameId, setCropEditFrameId] = useState<string>();
   const [attachmentId, setAttachmentId] = useState<string>();
   const [attachmentEditing, setAttachmentEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -205,7 +213,8 @@ export function LiveLayoutEditor({
   const frameSources = layout.frames.flatMap(({ sourceId }) =>
     sourceId === undefined ? [] : [sourceId],
   );
-  const sourceFrames = usePvwSourceFrames(channel, frameSources, true, 'editor');
+  const foreground = useModalForeground(preview);
+  const sourceFrames = usePvwSourceFrames(channel, frameSources, foreground, 'editor', true);
   const sourcePresence = useSourcePresence(channel, frameSources);
 
   useEffect(() => {
@@ -259,6 +268,25 @@ export function LiveLayoutEditor({
     (focusId === undefined ? geometry[frame.id] !== undefined : focusId === frame.id);
   const frameAttachments =
     frame === undefined ? [] : controlLiveLayoutFrameAttachments(layout, preset, frame.id);
+  function canCropPlate(candidate: ControlLiveLayoutFrame): boolean {
+    return (
+      preset !== undefined &&
+      preset.frameIds.includes(candidate.id) &&
+      controlLiveLayoutPlateFit(preset, candidate) === 'cover' &&
+      candidate.liveMask === undefined &&
+      !controlLiveLayoutFrameAttachments(layout, preset, candidate.id).some(
+        ({ sourceId }) => attachmentAssets.get(sourceId)?.plate !== undefined,
+      )
+    );
+  }
+
+  const canEditPresetCrop = layout.frames.some(canCropPlate);
+  const plateCrop =
+    preset !== undefined && frame !== undefined && canCropPlate(frame)
+      ? (controlLiveLayoutPlateCropFocus(preset, frame.id) ?? DEFAULT_LIVE_CROP_FOCUS)
+      : undefined;
+  const editingCrop =
+    plateCrop !== undefined && frame?.id === cropEditFrameId && focusId === undefined && !busy;
   const activeAttachment =
     frameAttachments.find(({ id }) => id === attachmentId) ?? frameAttachments[0];
   const editingAttachment =
@@ -303,7 +331,9 @@ export function LiveLayoutEditor({
     if (preset === undefined || frame === undefined || !preset.frameIds.includes(frame.id)) return;
     const selection = { ...preset.plateOverrides?.[frame.id], ...patch };
     const changes =
-      selection.aspectRatio === undefined && selection.fitMode === undefined
+      selection.aspectRatio === undefined &&
+      selection.fitMode === undefined &&
+      selection.cropFocus === undefined
         ? omitPlateOverride(preset, frame.id)
         : { plateOverrides: { ...preset.plateOverrides, [frame.id]: selection } };
     if (
@@ -315,7 +345,27 @@ export function LiveLayoutEditor({
     else updatePreset(changes);
   }
 
+  function setCropEditing(editing: boolean): void {
+    if (editing) {
+      setMaskEditFrameId(undefined);
+      setAttachmentEditing(false);
+      setFocusId(undefined);
+    }
+    setCropEditFrameId(editing ? frame?.id : undefined);
+  }
+
+  function updatePlateCrop(cropFocus: LiveCropFocus | undefined): void {
+    setFocusId(undefined);
+    updatePlateOverride({ cropFocus });
+  }
+
+  function updateDefaultCrop(plateCropFocus: LiveCropFocus | undefined): void {
+    setFocusId(undefined);
+    updatePreset({ plateCropFocus });
+  }
+
   function choosePreset(next: ControlLiveLayoutPreset): void {
+    setCropEditFrameId(undefined);
     setFocusId(undefined);
     setAttachmentEditing(false);
     setPresetId(next.id);
@@ -366,6 +416,7 @@ export function LiveLayoutEditor({
         current.defaultPresetId === preset.id ? (next?.id ?? '') : current.defaultPresetId,
     }));
     if (next === undefined) {
+      setCropEditFrameId(undefined);
       setPresetId(undefined);
       setFocusId(undefined);
       setAttachmentEditing(false);
@@ -377,6 +428,7 @@ export function LiveLayoutEditor({
   function appendFrame(): void {
     if (layout.frames.length >= CONTROL_LIVE_LAYOUT_MAX_FRAMES) return;
     const id = `frame-${uuid()}`;
+    setCropEditFrameId(undefined);
     setFocusId(undefined);
     setFrameId(id);
     setLayout((current) => ({
@@ -402,6 +454,7 @@ export function LiveLayoutEditor({
     if (frame === undefined || (mode !== 'create' && layout.frames.length <= 1)) return;
     const frames = layout.frames.filter(({ id }) => id !== frame.id);
     const next = frames[Math.min(layout.frames.indexOf(frame), frames.length - 1)];
+    setCropEditFrameId(undefined);
     setFocusId(undefined);
     setFrameId(next?.id);
     setLayout((current) => ({
@@ -421,6 +474,12 @@ export function LiveLayoutEditor({
           arrangement: arrangementForCount(candidate.arrangement, frameIds.length),
           hiddenTitles: candidate.hiddenTitles.filter((id) => id !== frame.id),
           hiddenFocusTitles: candidate.hiddenFocusTitles.filter((id) => id !== frame.id),
+          ...(candidate.hiddenBorders !== undefined && {
+            hiddenBorders: candidate.hiddenBorders.filter((id) => id !== frame.id),
+          }),
+          ...(candidate.hiddenFocusBorders !== undefined && {
+            hiddenFocusBorders: candidate.hiddenFocusBorders.filter((id) => id !== frame.id),
+          }),
           ...(candidate.frameAttachments !== undefined && {
             frameAttachments: candidate.frameAttachments.filter(
               ({ frameId }) => frameId !== frame.id,
@@ -434,6 +493,7 @@ export function LiveLayoutEditor({
   function includeFrame(id: string, included: boolean): void {
     if (preset === undefined || (mode !== 'create' && !included && preset.frameIds.length === 1))
       return;
+    if (!included && cropEditFrameId === id) setCropEditFrameId(undefined);
     const frameIds = included
       ? [...preset.frameIds, id]
       : preset.frameIds.filter((value) => value !== id);
@@ -511,6 +571,7 @@ export function LiveLayoutEditor({
           frameAttachments: [...(promoted.frameAttachments ?? []), attachment],
         };
       });
+      if (source.plate !== undefined) setCropEditFrameId(undefined);
       setAttachmentEditing(false);
       setAttachmentId(attachment.id);
     } catch (cause) {
@@ -587,6 +648,7 @@ export function LiveLayoutEditor({
   }
 
   function focusFrame(id: string): void {
+    setCropEditFrameId(undefined);
     if (focusId === undefined) {
       focusOrigin.current = id;
       requestAnimationFrame(() => returnButton.current?.focus());
@@ -886,6 +948,11 @@ export function LiveLayoutEditor({
                 showMeters={showPreviewMeters}
                 attachmentSources={attachmentAssets}
                 onFocus={focusFrame}
+                cropEditor={
+                  editingCrop && plateCrop !== undefined
+                    ? { frameId: frame.id, focus: plateCrop, onChange: updatePlateCrop }
+                    : undefined
+                }
                 placementEditor={
                   editingMask ? (
                     <LiveLayoutEditorRectOverlay
@@ -929,6 +996,8 @@ export function LiveLayoutEditor({
                   preset={preset}
                   onChange={rebuildArrangement}
                   onFitChange={(plateFitMode) => updatePreset({ plateFitMode })}
+                  canEditCrop={canEditPresetCrop}
+                  onCropChange={updateDefaultCrop}
                 />
               )}
               <LiveLayoutEditorEffects
@@ -990,7 +1059,10 @@ export function LiveLayoutEditor({
                         aria-describedby={frameDescription || undefined}
                         active={candidate.id === frame.id}
                         aria-pressed={candidate.id === frame.id}
-                        onClick={() => setFrameId(candidate.id)}
+                        onClick={() => {
+                          if (candidate.id !== frame.id) setCropEditFrameId(undefined);
+                          setFrameId(candidate.id);
+                        }}
                       >
                         <span className="cg-input-picture-meter">
                           <span className="cg-live-layout-frame-thumbnail" aria-hidden="true">
@@ -1168,7 +1240,7 @@ export function LiveLayoutEditor({
                         checked={!preset.hiddenTitles.includes(frame.id)}
                         onChange={(show) =>
                           updatePreset({
-                            hiddenTitles: visibleTitle(preset.hiddenTitles, frame.id, show),
+                            hiddenTitles: setVisibility(preset.hiddenTitles, frame.id, show),
                           })
                         }
                       />
@@ -1180,7 +1252,7 @@ export function LiveLayoutEditor({
                         checked={!preset.hiddenFocusTitles.includes(frame.id)}
                         onChange={(show) =>
                           updatePreset({
-                            hiddenFocusTitles: visibleTitle(
+                            hiddenFocusTitles: setVisibility(
                               preset.hiddenFocusTitles,
                               frame.id,
                               show,
@@ -1221,15 +1293,61 @@ export function LiveLayoutEditor({
                           onChange: updatePlateOverride,
                         }
                   }
+                  borderVisibility={
+                    preset === undefined
+                      ? undefined
+                      : {
+                          showInPreset: !controlLiveLayoutBorderHidden(preset, frame.id, false),
+                          showInFocus: !controlLiveLayoutBorderHidden(preset, frame.id, true),
+                          belongsToPreset: framePosition >= 0,
+                          onPresetChange: (show) =>
+                            updatePreset({
+                              hiddenBorders: setVisibility(
+                                preset.hiddenBorders ?? [],
+                                frame.id,
+                                show,
+                              ),
+                            }),
+                          onFocusChange: (show) =>
+                            updatePreset({
+                              hiddenFocusBorders: setVisibility(
+                                preset.hiddenFocusBorders ?? [],
+                                frame.id,
+                                show,
+                              ),
+                            }),
+                        }
+                  }
+                  crop={
+                    plateCrop === undefined
+                      ? undefined
+                      : {
+                          value: plateCrop,
+                          editing: editingCrop,
+                          canEditPreview:
+                            geometry[frame.id] !== undefined && frame.sourceId !== undefined,
+                          canReset: preset?.plateOverrides?.[frame.id]?.cropFocus !== undefined,
+                          onChange: updatePlateCrop,
+                          onEditChange: setCropEditing,
+                          onReset: () => updatePlateCrop(undefined),
+                        }
+                  }
                   activeIndex={maskIndex}
                   canEditMask={canEditMask}
                   editingMask={editingMask}
                   onSelectMaskWindow={selectMaskWindow}
                   onMaskEditingChange={(editing) => {
-                    if (editing) setAttachmentEditing(false);
+                    if (editing) {
+                      setAttachmentEditing(false);
+                      setCropEditFrameId(undefined);
+                    }
                     setMaskEditFrameId(editing ? frame.id : undefined);
                   }}
-                  onChange={(patch) => updateFrame((candidate) => ({ ...candidate, ...patch }))}
+                  onChange={(patch) => {
+                    if (patch.liveMask !== undefined || patch.fitMode === 'contain')
+                      setCropEditFrameId(undefined);
+                    updateFrame((candidate) => ({ ...candidate, ...patch }));
+                  }}
                 />
                 <LiveLayoutEditorFrameAttachments
                   attachments={frameAttachments}
@@ -1251,6 +1369,7 @@ export function LiveLayoutEditor({
                   onEditChange={(editing) => {
                     if (editing) {
                       setMaskEditFrameId(undefined);
+                      setCropEditFrameId(undefined);
                       setAttachmentId(activeAttachment?.id);
                     }
                     setAttachmentEditing(editing);

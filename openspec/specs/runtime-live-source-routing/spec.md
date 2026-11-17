@@ -282,3 +282,19 @@ the binding-change check, the own-layer test, the published catalogue, the boot 
   catalogue is published again
 - **WHEN** a bank on the standard map is declared instead **THEN** the band is unchanged and nothing is
   published (the control)
+
+### Requirement: A CG Control live layout SHALL save a crop and border choices with each preset
+
+In New live layout, an unmasked plate using Crop edges SHALL use its authored crop override, then
+its preset's crop default, then a centered crop. Editing a crop SHALL preserve the plate aspect
+ratio. Preset view and Focus SHALL each use their authored border visibility for the plate. Export
+and import SHALL preserve those settings. The operator's Crop input permission SHALL govern crop
+adjustments in the control console independently of movement, resize, and the saved crop itself.
+
+#### Scenario: Frame a portrait plate and keep it when exporting
+
+- **WHEN** the operator sets a preset's crop default **THEN** its eligible plates use that crop
+- **AND WHEN** the operator adjusts one plate in Preview **THEN** the other plates retain their own crop
+- **AND WHEN** the operator hides a border for Focus **THEN** that plate can retain its border in the preset
+- **AND WHEN** a plate's operator Crop input permission is off **THEN** the saved crop still appears and the operator cannot adjust it
+- **AND WHEN** the layout is exported and imported **THEN** the settings are retained

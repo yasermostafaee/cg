@@ -91,6 +91,15 @@ describe('errorCodeMessage — §8, the codes that used to name the wrong machin
  * operators out of four to the wrong screen.
  */
 describe('errorCodeMessage — C-015 live plate refusals', () => {
+  it('distinguishes a backup route limitation from an input list that is still pending', () => {
+    expect(errorCodeMessage('route-engine-unsupported')).toBe(
+      'This Playout input cannot be routed to backup engine B — nothing was sent.',
+    );
+    expect(errorCodeMessage('route-epoch-waiting')).toBe(
+      'Waiting for the Playout’s input list — nothing was sent.',
+    );
+  });
+
   it('an unassigned plate says the hole would be EMPTY and where to assign it', () => {
     const msg = errorCodeMessage('live-source-unassigned') ?? '';
     expect(msg).toContain('empty');

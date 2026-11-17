@@ -1,9 +1,12 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import {
+  DEFAULT_LIVE_CROP_FOCUS,
   DEFAULT_LIVE_FIT_MODE,
+  controlLiveLayoutBorderHidden,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutPlateBorder,
+  controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutTitleHidden,
@@ -20,6 +23,7 @@ import {
   type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
   type FrameTransition,
+  type LiveCropFocus,
   type LiveSourceRect,
   type Resolution,
 } from '@cg/shared-schema';
@@ -45,12 +49,25 @@ import { LiveLayoutFrameAttachmentArt } from './LiveLayoutFrameAttachmentArt.js'
 
 type Rects = Readonly<Record<string, LiveSourceRect>>;
 
+interface ShotFit {
+  contain: number;
+  crop: LiveCropFocus;
+}
+
+interface CropEditor {
+  frameId: string;
+  focus: LiveCropFocus;
+  onChange: (focus: LiveCropFocus) => void;
+}
+
+const DEFAULT_SHOT_FIT: ShotFit = { contain: 1, crop: DEFAULT_LIVE_CROP_FOCUS };
+
 interface View {
   presetId: string;
   focused: string | undefined;
   soloFrameId: string | undefined;
   rects: Rects;
-  fits: ReadonlyMap<string, number>;
+  fits: ReadonlyMap<string, ShotFit>;
 }
 
 const easings = {
@@ -82,18 +99,102 @@ function fitWeight(input: ControlLiveLayoutFrame): number {
   return (input.fitMode ?? DEFAULT_LIVE_FIT_MODE) === 'contain' ? 1 : 0;
 }
 
+function fitProperties(fit: ShotFit) {
+  return {
+    '--cg-shot-contain': String(fit.contain),
+    '--cg-shot-crop-x': String(fit.crop.x),
+    '--cg-shot-crop-y': String(fit.crop.y),
+    '--cg-shot-crop-zoom': String(fit.crop.zoom ?? 1),
+  };
+}
+
+function sourcePictureAspect(source: PvwSourceFrame | undefined): number | null {
+  const aspect =
+    source?.geometry?.sourceAspect ??
+    (source?.width !== undefined && source.height !== undefined
+      ? source.width / source.height
+      : null);
+  return aspect !== null && Number.isFinite(aspect) && aspect > 0 ? aspect : null;
+}
+
+function CropDragSurface({
+  editor,
+  sourceAspect,
+  label,
+}: {
+  editor: CropEditor;
+  sourceAspect: number;
+  label: string;
+}): JSX.Element {
+  const drag = useRef<{
+    x: number;
+    y: number;
+    travelX: number;
+    travelY: number;
+    focus: LiveCropFocus;
+  }>();
+  const adjust = (focus: LiveCropFocus, x: number, y: number): void =>
+    editor.onChange({ ...focus, x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) });
+  return (
+    <button
+      type="button"
+      className="cg-live-layout-crop-drag"
+      aria-label={'Adjust crop for ' + label}
+      title="Drag the picture or use the arrow keys to adjust the crop"
+      onPointerDown={(event) => {
+        if (!event.isPrimary || event.button !== 0) return;
+        const { width, height } = event.currentTarget.getBoundingClientRect();
+        const { picture } = fitPictureToBox(
+          { x: 0, y: 0, width, height },
+          sourceAspect,
+          'cover',
+          editor.focus,
+        );
+        drag.current = {
+          x: event.clientX,
+          y: event.clientY,
+          travelX: picture.width - width,
+          travelY: picture.height - height,
+          focus: editor.focus,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const origin = drag.current;
+        if (origin === undefined || !event.isPrimary) return;
+        const shiftX = origin.travelX > 0.1 ? (event.clientX - origin.x) / origin.travelX : 0;
+        const shiftY = origin.travelY > 0.1 ? (event.clientY - origin.y) / origin.travelY : 0;
+        adjust(origin.focus, origin.focus.x - shiftX, origin.focus.y - shiftY);
+      }}
+      onLostPointerCapture={() => {
+        drag.current = undefined;
+      }}
+      onKeyDown={(event) => {
+        const dx = Number(event.key === 'ArrowLeft') - Number(event.key === 'ArrowRight');
+        const dy = Number(event.key === 'ArrowUp') - Number(event.key === 'ArrowDown');
+        if (dx === 0 && dy === 0) return;
+        event.preventDefault();
+        const step = event.shiftKey ? 0.1 : 0.01;
+        adjust(editor.focus, editor.focus.x + dx * step, editor.focus.y + dy * step);
+      }}
+    />
+  );
+}
+
 function ShotInput({
   source,
   input,
   frame,
   fallback,
   pictureBox,
+  cropFocus,
 }: {
   source: PvwSourceFrame | undefined;
   input: ControlLiveLayoutFrame;
   frame: LiveSourceRect;
   fallback: string;
   pictureBox?: LiveSourceRect | undefined;
+  cropFocus?: LiveCropFocus | undefined;
 }): JSX.Element {
   const { width, height } = frame;
   const box = { x: 0, y: 0, width, height };
@@ -126,19 +227,9 @@ function ShotInput({
     );
   }
 
-  const sourceAspect =
-    source.geometry?.sourceAspect ??
-    (source.width !== undefined && source.height !== undefined
-      ? source.width / source.height
-      : null);
+  const sourceAspect = sourcePictureAspect(source);
   const url = `data:image/jpeg;base64,${source.jpegBase64}`;
-  if (
-    mask === undefined &&
-    pictureBox === undefined &&
-    sourceAspect !== null &&
-    Number.isFinite(sourceAspect) &&
-    sourceAspect > 0
-  ) {
+  if (mask === undefined && pictureBox === undefined && sourceAspect !== null) {
     const active = source.geometry?.activeRect ?? { x: 0, y: 0, width: 1, height: 1 };
     return (
       <div
@@ -162,6 +253,7 @@ function ShotInput({
     seat,
     sourceAspect,
     input.fitMode ?? DEFAULT_LIVE_FIT_MODE,
+    cropFocus,
   );
   const jpeg =
     source.geometry === undefined ? picture : fullJpegRect(picture, source.geometry.activeRect);
@@ -270,7 +362,7 @@ function motionKeys(
   shownBefore: boolean,
   shownAfter: boolean,
   zIndex: string,
-  fit: { from: number; to: number },
+  fit: { from: ShotFit; to: ShotFit },
 ): { keys: Keyframe[]; duration: number } {
   const steps = frameTransitionPhases(effect, Math.round((effect.durationMs * frameRate) / 1_000));
   const count = steps.reduce((total, step) => total + step.frames, 0);
@@ -280,7 +372,7 @@ function motionKeys(
       ...cssRect(from, raster),
       opacity: shownBefore ? 1 : 0,
       zIndex,
-      '--cg-shot-contain': String(fit.from),
+      ...fitProperties(fit.from),
       offset: 0,
     },
   ];
@@ -293,9 +385,17 @@ function motionKeys(
     let opacity = step.opacity;
     if (!shownBefore) opacity *= time;
     if (!shownAfter) opacity *= 1 - time;
+    const blend = (from: number, to: number): number => from + (to - from) * step.progress;
     keys.push({
       ...cssRect(blendRect(from, to, step.progress), raster),
-      '--cg-shot-contain': String(fit.from + (fit.to - fit.from) * step.progress),
+      ...fitProperties({
+        contain: blend(fit.from.contain, fit.to.contain),
+        crop: {
+          x: blend(fit.from.crop.x, fit.to.crop.x),
+          y: blend(fit.from.crop.y, fit.to.crop.y),
+          zoom: blend(fit.from.crop.zoom ?? 1, fit.to.crop.zoom ?? 1),
+        },
+      }),
       opacity,
       zIndex,
       offset: time,
@@ -317,6 +417,7 @@ export function LiveLayoutEditorPreview({
   attachmentSources,
   onFocus,
   placementEditor,
+  cropEditor,
 }: {
   channel: number;
   layout: ControlLiveLayout;
@@ -330,6 +431,7 @@ export function LiveLayoutEditorPreview({
   attachmentSources: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
   onFocus: (frameId: string) => void;
   placementEditor?: ReactNode;
+  cropEditor?: CropEditor | undefined;
 }): JSX.Element {
   const stage = useRef<HTMLDivElement>(null);
   const active = useRef<Animation[]>([]);
@@ -357,10 +459,18 @@ export function LiveLayoutEditorPreview({
   useLayoutEffect(() => {
     if (stage.current === null) return;
     const shots = [...stage.current.querySelectorAll<HTMLElement>('[data-layout-preview-shot]')];
-    const fits = new Map<string, number>();
+    const fits = new Map<string, ShotFit>();
     for (const shot of shots) {
       const id = shot.dataset.layoutPreviewShot;
-      if (id !== undefined) fits.set(id, Number(shot.style.getPropertyValue('--cg-shot-contain')));
+      if (id === undefined) continue;
+      fits.set(id, {
+        contain: Number(shot.style.getPropertyValue('--cg-shot-contain')),
+        crop: {
+          x: Number(shot.style.getPropertyValue('--cg-shot-crop-x')),
+          y: Number(shot.style.getPropertyValue('--cg-shot-crop-y')),
+          zoom: Number(shot.style.getPropertyValue('--cg-shot-crop-zoom')),
+        },
+      });
     }
     const before = previous.current;
     previous.current = { presetId: preset.id, focused, soloFrameId, rects: visible, fits };
@@ -392,7 +502,7 @@ export function LiveLayoutEditorPreview({
         const box = {
           ...opacity,
           zIndex: incoming ? '3' : '2',
-          '--cg-shot-contain': String((incoming ? fits.get(id) : before.fits.get(id)) ?? 1),
+          ...fitProperties((incoming ? fits.get(id) : before.fits.get(id)) ?? DEFAULT_SHOT_FIT),
         };
         const keys =
           change.mode === 'fade'
@@ -443,8 +553,8 @@ export function LiveLayoutEditorPreview({
       const activeFocus =
         focused === id || (before.focused === id && before.presetId === preset.id);
       const zIndex = activeFocus || shared ? '3' : shownAfter ? '2' : '1';
-      const previousFit = before.fits.get(id) ?? 1;
-      const nextFit = fits.get(id) ?? 1;
+      const previousFit = before.fits.get(id) ?? DEFAULT_SHOT_FIT;
+      const nextFit = fits.get(id) ?? DEFAULT_SHOT_FIT;
       const { keys, duration } = motionKeys(
         from,
         to,
@@ -498,6 +608,7 @@ export function LiveLayoutEditorPreview({
           const preview = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
           const source = labelledSource(sourceId);
           const titleHidden = controlLiveLayoutTitleHidden(preset, id, focused !== undefined);
+          const borderHidden = controlLiveLayoutBorderHidden(preset, id, focused !== undefined);
           const graphics = controlLiveLayoutFrameAttachments(layout, preset, id);
           const graphicWithInput = graphics.find(
             ({ sourceId }) => attachmentSources.get(sourceId)?.plate !== undefined,
@@ -523,6 +634,13 @@ export function LiveLayoutEditorPreview({
             focused === undefined
               ? { ...authoredInput, fitMode: controlLiveLayoutPlateFit(preset, authoredInput) }
               : authoredInput;
+          const canCrop =
+            previewInput.fitMode === 'cover' &&
+            previewInput.liveMask === undefined &&
+            pictureBox === undefined &&
+            focused === undefined;
+          const cropFocus = canCrop ? controlLiveLayoutPlateCropFocus(preset, id) : undefined;
+          const sourceAspect = sourcePictureAspect(preview);
           return (
             <div
               key={id}
@@ -538,7 +656,10 @@ export function LiveLayoutEditorPreview({
                   opacity: activeShot ? 1 : 0,
                   pointerEvents: activeShot ? 'auto' : 'none',
                   zIndex: focused === id ? '3' : '1',
-                  '--cg-shot-contain': fitWeight(previewInput),
+                  ...fitProperties({
+                    contain: fitWeight(previewInput),
+                    crop: cropFocus ?? DEFAULT_LIVE_CROP_FOCUS,
+                  }),
                 } as CSSProperties
               }
             >
@@ -548,6 +669,7 @@ export function LiveLayoutEditorPreview({
                   input={previewInput}
                   frame={rect}
                   pictureBox={pictureBox}
+                  cropFocus={cropFocus}
                   fallback={`Plate ${number}`}
                 />
               </div>
@@ -580,7 +702,14 @@ export function LiveLayoutEditorPreview({
                   ))}
                 </div>
               )}
-              <ShotBorder input={input} raster={raster} />
+              {!borderHidden && <ShotBorder input={input} raster={raster} />}
+              {activeShot && canCrop && sourceAspect !== null && cropEditor?.frameId === id && (
+                <CropDragSurface
+                  editor={cropEditor}
+                  sourceAspect={sourceAspect}
+                  label={focusLabel}
+                />
+              )}
               {activeSingle === undefined && activeShot && (
                 <Button
                   className="cg-live-layout-focus-action"

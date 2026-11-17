@@ -73,6 +73,7 @@ async function render(
   engines: EngineSessions | null,
   engineName = 'CasparCG',
   backupChannels?: BackupChannelsState,
+  connectionMode: 'playout' | 'off' | undefined = 'off',
 ): Promise<HTMLElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -85,6 +86,7 @@ async function render(
         { value: engineName },
         createElement(StatusBar, {
           engines,
+          connectionMode,
           ...(backupChannels === undefined ? {} : { backupChannels }),
         }),
       ),
@@ -150,16 +152,14 @@ describe('RELEASE-0112-01 — the status bar’s engine chips', () => {
 
   it('keeps the server names in station order when B becomes the primary graphics target', async () => {
     stubBridge('live', 'B');
-    const el = await render(null, PLAYOUT_ENGINE_NAME);
+    const el = await render(null, PLAYOUT_ENGINE_NAME, undefined, 'playout');
     const status = el.textContent ?? '';
 
     expect(status).toContain('Server A · CG standby · HEALTHY');
     expect(status).toContain('Server B · CG active · HEALTHY');
     expect(status.indexOf('Server A')).toBeLessThan(status.indexOf('Server B'));
     expect(el.querySelector('[title="CG Bridge command strategy"]')).toBeNull();
-    expect(el.querySelector('button[aria-label="Manual CG failover"]')?.getAttribute('title')).toBe(
-      'Switch graphics control to Server A. Apasai Playout switches programme separately.',
-    );
+    expect(el.querySelector('button[aria-label="Manual CG failover"]')).toBeNull();
   });
 
   it('names incomplete target setup before a switch while leaving acceptance to the Bridge', async () => {
@@ -197,6 +197,22 @@ describe('RELEASE-0112-01 — the status bar’s engine chips', () => {
     expect(el.querySelector('[title="CG Bridge command strategy"]')?.textContent).toBe(
       'Synchronous mirroring',
     );
+  });
+
+  it('uses the advertised mode for manual failover independently of the displayed engine name', async () => {
+    stubBridge('live');
+    const el = await render(null, 'CasparCG', undefined, 'playout');
+    expect(el.querySelector('button[aria-label="Manual CG failover"]')).toBeNull();
+  });
+
+  it('waits for the advertised direct mode before exposing manual failover', async () => {
+    stubBridge('live');
+    const el = await render(null);
+    expect(el.querySelector('button[aria-label="Manual CG failover"]')).not.toBeNull();
+    await act(async () => {
+      root?.render(createElement(StatusBar));
+    });
+    expect(el.querySelector('button[aria-label="Manual CG failover"]')).toBeNull();
   });
 
   it('no engine lines (a bridge too old to know them): no chip', async () => {

@@ -688,6 +688,13 @@ describe('Playout quick restore after an observed empty-programme restart', () =
       await onAir(r, 'item-2');
       const core = mock;
       if (core === null) throw new Error('no mock');
+      await waitFor(
+        () =>
+          core.layerState(slot)?.onAir === true &&
+          core.layerState({ channel: 1, layer: 11 })?.onAir === true,
+        5000,
+        'both programme producers before restart',
+      );
       const before = (await recvLines()).length;
       const restart = core.restartCore({ downMs: 600 });
       const actions = {
@@ -712,7 +719,11 @@ describe('Playout quick restore after an observed empty-programme restart', () =
           expect(statusOf(r, 'item-2')).toBe('idle');
         } else {
           await waitFor(() => statusOf(r, 'item-2') === 'on-air', 5000, 'the untouched row');
-          expect(core.layerState({ channel: 1, layer: 11 })?.onAir).toBe(true);
+          await waitFor(
+            () => core.layerState({ channel: 1, layer: 11 })?.onAir === true,
+            5000,
+            'the restored untouched producer',
+          );
         }
         await delay(150);
         const writes = programmeWrites(await since(before)).filter((line) =>

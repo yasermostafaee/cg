@@ -14,6 +14,7 @@ import {
   activeLookOf,
   framePlacementRects,
   linkedMaskPlacements,
+  lookOperatorCropAllowed,
   lookOperatorFrames,
   lookOperatorMasks,
   lookPlateFits,
@@ -107,6 +108,7 @@ export interface PlatePlacement {
   captionInTemplate?: true;
   /** The active fit mode crops the input at the edges of this box. */
   cropEdges?: true;
+  operatorCropLocked?: true;
   focus?: LiveCropFocus;
   mask?: LivePlateMask;
   reveal?: LiveRevealMask;
@@ -366,6 +368,9 @@ export function platePlacements(
           },
         }),
         ...(fitMode === 'cover' && { cropEdges: true as const }),
+        ...(!lookOperatorCropAllowed(live, activeLookId, plateId) && {
+          operatorCropLocked: true as const,
+        }),
         ...(focuses[plate.sourceId] !== undefined && { focus: focuses[plate.sourceId] }),
         ...(masks[plate.sourceId] !== undefined && { mask: masks[plate.sourceId] }),
         ...(reveals[plate.sourceId] !== undefined && { reveal: reveals[plate.sourceId] }),

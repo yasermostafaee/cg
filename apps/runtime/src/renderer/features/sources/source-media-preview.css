@@ -62,3 +62,28 @@
   grid-column: 1 / -1;
   min-block-size: 1lh;
 }
+
+.cg-source-media-preview--tile {
+  position: relative;
+  gap: 0;
+}
+
+.cg-source-media-preview--tile .cg-source-media-preview__transport {
+  position: absolute;
+  inset: auto 0 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--r-space-1);
+  padding: var(--r-space-1);
+  background: color-mix(in srgb, var(--r-monitor-bg) 90%, transparent);
+}
+
+.cg-source-media-preview--tile .cg-source-media-preview__controls > .cg-btn {
+  min-inline-size: 1.65rem;
+  min-block-size: 1.65rem;
+  padding: 0;
+}
+
+.cg-source-media-preview--tile .cg-source-media-preview__status:empty,
+.cg-source-media-preview--tile .cg-source-media-preview__time {
+  display: none;
+}

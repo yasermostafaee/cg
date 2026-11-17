@@ -1,12 +1,15 @@
 import { ArrowLeftRight, LayoutGrid, MoveHorizontal, MoveVertical } from 'lucide-react';
 import {
+  DEFAULT_LIVE_CROP_FOCUS,
   controlLiveLayoutRects,
+  type LiveCropFocus,
   type ControlLiveLayout,
   type ControlLiveLayoutArrangement,
   type ControlLiveLayoutPreset,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { LiveLayoutEditorCropControls } from './LiveLayoutEditorCropControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import { LiveLayoutEditorPlatePresentation } from './LiveLayoutEditorPlatePresentation.js';
 import './live-layout-arrangement.css';
@@ -28,11 +31,15 @@ export function LiveLayoutEditorArrange({
   preset,
   onChange,
   onFitChange,
+  canEditCrop,
+  onCropChange,
 }: {
   layout: ControlLiveLayout;
   preset: ControlLiveLayoutPreset;
   onChange: (patch: Partial<ControlLiveLayoutPreset>) => void;
   onFitChange: (fit: ControlLiveLayoutPreset['plateFitMode']) => void;
+  canEditCrop: boolean;
+  onCropChange: (crop: LiveCropFocus | undefined) => void;
 }): JSX.Element | null {
   const count = preset.frameIds.length;
   if (count === 0) return null;
@@ -135,6 +142,16 @@ export function LiveLayoutEditorArrange({
             </div>
           </div>
         </>
+      )}
+      {canEditCrop && (
+        <LiveLayoutEditorCropControls
+          key={preset.id + '-crop'}
+          scope="preset"
+          value={preset.plateCropFocus ?? DEFAULT_LIVE_CROP_FOCUS}
+          canReset={preset.plateCropFocus !== undefined}
+          onChange={onCropChange}
+          onReset={() => onCropChange(undefined)}
+        />
       )}
     </section>
   );

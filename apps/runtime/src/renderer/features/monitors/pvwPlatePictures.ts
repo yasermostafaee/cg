@@ -83,7 +83,10 @@ function sameBox(node: HTMLElement, plate: PlatePlacement): boolean {
 
 const pendingInputPicture = new WeakMap<HTMLElement, { sourceId: string }>();
 type Picture = NonNullable<ReturnType<typeof pictureFor>>;
-const paintedPictures = new WeakMap<HTMLElement, { picture: Picture; plate: PlatePlacement }>();
+const paintedPictures = new WeakMap<
+  HTMLElement,
+  { picture: Picture; plate: PlatePlacement; windowIndex?: number }
+>();
 
 /** Keep the source pixels proportional while the template moves their containing plate. */
 export function followPvwPresetPictures(
@@ -93,7 +96,6 @@ export function followPvwPresetPictures(
   frames: ReadonlyMap<string, PvwSourceFrame>,
   retained: ReadonlySet<string>,
 ): (() => void) | undefined {
-  const view = doc.defaultView;
   const previous = new Map(before.map((plate) => [plate.plateId, plate]));
   const next = new Map(after.map((plate) => [plate.plateId, plate]));
   const reveals = new Set(
@@ -104,17 +106,25 @@ export function followPvwPresetPictures(
     doc.querySelectorAll<HTMLElement>('[data-cg-pvw-picture-kind="own"]'),
   ).flatMap((part) => {
     const node = part.parentElement;
+    const artwork = node?.closest<HTMLElement>('[data-cg-frame-artwork]');
     const image = part.querySelector('img');
     const id = node?.dataset['cgLiveSource'];
-    if (node === null || image === null || id === undefined || !retained.has(id) || reveals.has(id))
+    const windowIndex = paintedPictures.get(part)?.windowIndex;
+    if (
+      node === null ||
+      artwork == null ||
+      image === null ||
+      id === undefined ||
+      windowIndex === undefined ||
+      !retained.has(id) ||
+      reveals.has(id)
+    )
       return [];
     const from = previous.get(id);
     const to = next.get(id);
     if (
       from === undefined ||
       to === undefined ||
-      from.mask !== undefined ||
-      to.mask !== undefined ||
       from.reveal !== undefined ||
       to.reveal !== undefined ||
       from.sourceId !== to.sourceId ||
@@ -125,6 +135,19 @@ export function followPvwPresetPictures(
     const first = pictureFor(from, frames);
     const last = pictureFor(to, frames);
     if (first === undefined || last === undefined) return [];
+    const fromWindows = pictureWindows(from);
+    const toWindows = pictureWindows(to);
+    const fromWindow = fromWindows[windowIndex];
+    const toWindow = toWindows[windowIndex];
+    if (
+      fromWindows.length !== toWindows.length ||
+      fromWindow === undefined ||
+      toWindow === undefined
+    )
+      return [];
+    const fromClip = intersectNormalizedRects(first.visible, fromWindow);
+    const toClip = intersectNormalizedRects(last.visible, toWindow);
+    if (fromClip === null || toClip === null) return [];
     const axis = axes.reduce((most, key) =>
       Math.abs(to[key] - from[key]) > Math.abs(to[most] - from[most]) ? key : most,
     );
@@ -133,10 +156,13 @@ export function followPvwPresetPictures(
     return [
       {
         node,
+        artwork,
         part,
         image,
         first,
         last,
+        fromClip,
+        toClip,
         axis,
         from,
         distance,
@@ -145,12 +171,24 @@ export function followPvwPresetPictures(
       },
     ];
   });
-  if (view === null || moving.length === 0) return undefined;
+  if (moving.length === 0) return undefined;
 
-  let request: number;
+  // The picture measures the transform just written by the page. A separate rAF
+  // registered before the page would otherwise use the previous animation sample.
   const paint = () => {
     const samples = moving.map((item) => ({ ...item, box: item.node.getBoundingClientRect() }));
-    for (const { part, image, first, last, axis, from, distance, box } of samples) {
+    for (const {
+      part,
+      image,
+      first,
+      last,
+      fromClip,
+      toClip,
+      axis,
+      from,
+      distance,
+      box,
+    } of samples) {
       if (box.width <= 0 || box.height <= 0) continue;
       const progress = Math.max(0, Math.min(1, (box[axis] - from[axis]) / distance));
       const interpolate = (start: FitRect, end: FitRect): FitRect => ({
@@ -159,16 +197,18 @@ export function followPvwPresetPictures(
         width: start.width + (end.width - start.width) * progress,
         height: start.height + (end.height - start.height) * progress,
       });
-      const visible = intersectNormalizedRects(interpolate(first.picture, last.picture), box);
+      const visible = interpolate(fromClip, toClip);
       if (visible === null) continue;
       placeWithin(part, visible, box);
       placeWithin(image, interpolate(first.jpeg, last.jpeg), visible);
     }
-    request = view.requestAnimationFrame(paint);
   };
-  request = view.requestAnimationFrame(paint);
+  const observer = new MutationObserver(paint);
+  for (const artwork of new Set(moving.map((item) => item.artwork))) {
+    observer.observe(artwork, { attributes: true, attributeFilter: ['style'] });
+  }
   return () => {
-    view.cancelAnimationFrame(request);
+    observer.disconnect();
     for (const { part, image, partStyle, imageStyle } of moving) {
       part.style.cssText = partStyle;
       image.style.cssText = imageStyle;
@@ -404,6 +444,7 @@ export function paintPvwPlatePictures(
     fit: NonNullable<ReturnType<typeof pictureFor>>,
     window: FitRect,
     kind: 'own' | 'reveal',
+    windowIndex?: number,
   ): void {
     const visible = intersectNormalizedRects(fit.visible, window);
     if (visible === null) return;
@@ -429,7 +470,11 @@ export function paintPvwPlatePictures(
       node.append(part);
     }
     pendingInputPicture.delete(part);
-    paintedPictures.set(part, { picture: fit, plate });
+    paintedPictures.set(part, {
+      picture: fit,
+      plate,
+      ...(windowIndex === undefined ? {} : { windowIndex }),
+    });
     retained.delete(key);
     placeWithin(part, visible, plate);
     const image = part.querySelector('img');
@@ -447,7 +492,15 @@ export function paintPvwPlatePictures(
     if (own !== undefined) {
       const windows = pictureWindows(plate);
       for (const [index, window] of windows.entries()) {
-        addPicture(plate, node, JSON.stringify([plate.plateId, 'own', index]), own, window, 'own');
+        addPicture(
+          plate,
+          node,
+          JSON.stringify([plate.plateId, 'own', index]),
+          own,
+          window,
+          'own',
+          index,
+        );
       }
     }
     if (plate.reveal === undefined) continue;

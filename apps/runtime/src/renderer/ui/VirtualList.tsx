@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -77,11 +78,65 @@ export interface VirtualListProps {
   withActions?: boolean;
   /** Lay out a short catalogue in responsive tiles. Large libraries use virtual rows. */
   tiled?: boolean;
+  /** Virtualized tiles for a paged library. A heading spans the full width. */
+  columns?: number;
+  gap?: number;
+  headingHeight?: number;
 }
 
 /** The option id for a row, for a field's `aria-activedescendant`. */
 export function optionId(listId: string, index: number): string {
   return `${listId}-opt-${String(index)}`;
+}
+
+interface RowPosition {
+  readonly top: number;
+  readonly height: number;
+  readonly column: number;
+}
+
+function layoutRows(
+  rows: readonly VirtualRow[],
+  rowHeight: number,
+  headingHeight: number,
+  columns: number,
+  gap: number,
+) {
+  let top = 0;
+  let column = 0;
+  const positions = rows.map((row): RowPosition => {
+    if (row.kind === 'heading') {
+      if (column > 0) top += rowHeight + gap;
+      column = 0;
+      const position = { top, height: headingHeight, column: 0 };
+      top += headingHeight;
+      return position;
+    }
+    const position = { top, height: rowHeight, column };
+    column += 1;
+    if (column === columns) {
+      column = 0;
+      top += rowHeight + gap;
+    }
+    return position;
+  });
+  const last = positions.at(-1);
+  return { positions, height: last === undefined ? 0 : last.top + last.height };
+}
+
+/** Find the viewport boundary in the sorted track positions. */
+function indexAt(positions: readonly RowPosition[], at: number, edge: 'top' | 'bottom'): number {
+  let start = 0;
+  let end = positions.length;
+  while (start < end) {
+    const middle = Math.floor((start + end) / 2);
+    const position = positions[middle];
+    if (position === undefined) break;
+    if (edge === 'top' ? position.top < at : position.top + position.height <= at)
+      start = middle + 1;
+    else end = middle;
+  }
+  return start;
 }
 
 export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(function VirtualList(
@@ -100,6 +155,9 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     overscan = 6,
     withActions = false,
     tiled = false,
+    columns,
+    gap = 0,
+    headingHeight = rowHeight,
     data,
   },
   ref,
@@ -107,6 +165,13 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   const viewport = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const nearEndFired = useRef(false);
+
+  const virtualColumns = columns ?? 1;
+  const columnWidth = `calc((100% - ${(virtualColumns - 1) * gap}px) / ${virtualColumns})`;
+  const layout = useMemo(
+    () => layoutRows(tiled ? [] : rows, rowHeight, headingHeight, virtualColumns, gap),
+    [tiled, rows, rowHeight, headingHeight, virtualColumns, gap],
+  );
 
   useImperativeHandle(
     ref,
@@ -121,9 +186,11 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
           });
           return;
         }
-        const top = index * rowHeight;
+        const position = layout.positions[index];
+        if (position === undefined) return;
+        const { top, height: itemHeight } = position;
         if (top < el.scrollTop) el.scrollTop = top;
-        else if (top + rowHeight > el.scrollTop + height) el.scrollTop = top + rowHeight - height;
+        else if (top + itemHeight > el.scrollTop + height) el.scrollTop = top + itemHeight - height;
         setScrollTop(el.scrollTop);
       },
       focus(): void {
@@ -131,17 +198,17 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       },
       columnCount(): number {
         const tiles = viewport.current?.firstElementChild;
-        if (!tiled || tiles == null) return 1;
+        if (!tiled || tiles == null) return virtualColumns;
         return Math.max(1, getComputedStyle(tiles).gridTemplateColumns.trim().split(/\s+/).length);
       },
     }),
-    [rowHeight, height, tiled],
+    [layout, height, tiled, virtualColumns],
   );
 
-  const first = tiled ? 0 : Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
-  const last = tiled
-    ? rows.length
-    : Math.min(rows.length, Math.ceil((scrollTop + height) / rowHeight) + overscan);
+  const first = tiled ? 0 : Math.max(0, indexAt(layout.positions, scrollTop, 'bottom') - overscan);
+  // Include the whole last visible track, even when the next item starts within the viewport.
+  const lastInView = indexAt(layout.positions, scrollTop + height, 'top');
+  const last = tiled ? rows.length : Math.min(rows.length, lastInView + overscan);
 
   // The next page: once per approach to the end, re-armed when the list grows.
   useEffect(() => {
@@ -149,12 +216,11 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   }, [rows.length]);
   useEffect(() => {
     if (onNearEnd === undefined || nearEndFired.current) return;
-    const lastInView = Math.ceil((scrollTop + height) / rowHeight);
     if (rows.length - lastInView <= nearEndRows) {
       nearEndFired.current = true;
       onNearEnd();
     }
-  }, [scrollTop, height, rowHeight, rows.length, nearEndRows, onNearEnd]);
+  }, [lastInView, rows.length, nearEndRows, onNearEnd]);
 
   const optionAt = (target: EventTarget | null, includeActionRow: boolean): number | null => {
     if (!(target instanceof Element)) return null;
@@ -186,18 +252,28 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
         if (index !== null && index !== activeIndex) onActiveChange(index);
       }}
       onClick={(e) => {
-        if (e.target instanceof Element && e.target.closest('button') !== null) return;
-        const index = optionAt(e.target, tiled);
+        if (e.target instanceof Element && e.target.closest('button, input') !== null) return;
+        const index = optionAt(e.target, tiled || columns !== undefined);
         if (index !== null) onPick(index);
       }}
     >
-      <div
-        className="cg-vlist-spacer"
-        style={tiled ? undefined : { height: rows.length * rowHeight }}
-      >
+      <div className="cg-vlist-spacer" style={tiled ? undefined : { height: layout.height }}>
         {rows.slice(first, last).map((row, offset) => {
           const index = first + offset;
-          const style = tiled ? undefined : { top: index * rowHeight, height: rowHeight };
+          const position = layout.positions[index];
+          const style =
+            position === undefined
+              ? undefined
+              : {
+                  top: position.top,
+                  height: position.height,
+                  ...(columns !== undefined &&
+                    row.kind === 'option' && {
+                      insetInlineStart: `calc(${position.column} * (${columnWidth} + ${gap}px))`,
+                      insetInlineEnd: 'auto',
+                      inlineSize: columnWidth,
+                    }),
+                };
           if (row.kind === 'heading') {
             return (
               <div

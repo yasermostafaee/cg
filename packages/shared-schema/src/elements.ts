@@ -1572,6 +1572,8 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   operatorMove: z.boolean().optional(),
   /** Allow CG Control to move and resize this plate's authored mask windows. */
   allowOperatorMaskEdit: z.boolean().optional(),
+  /** Whether CG Control can adjust the input crop; absent retains the existing behavior. */
+  allowOperatorCrop: z.boolean().optional(),
   /**
    * R-105 — what the graphics bed paints underneath this live picture. Absent preserves the
    * long-standing Designer choice: Bars. `posterAssetId` supplies the image branch's asset.

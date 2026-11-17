@@ -17,6 +17,7 @@ import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { PlayoutSources } from '../src/playout-sources.js';
 import {
+  ROUTE_ENGINE_UNSUPPORTED_CODE,
   ROUTE_EPOCH_STALE_CODE,
   ROUTE_LOADBG_MAX_MS,
   ROUTE_LOADBG_MIN_MS,
@@ -817,6 +818,70 @@ describe('§1.E — the send seam refuses what this station may never send', () 
 // ── §1.F — backup (rule 1, C4) ───────────────────────────────────────────────────────────────
 
 describe('§1.F — C4: a route plate is never mirrored to the backup', () => {
+  const playlist = {
+    ...holderInput('pl-ch2', 'Playlist channel 2', 5),
+    producer: { kind: 'route' as const, channel: 2, layer: 5 },
+    playlistOf: { casparHost: '127.0.0.1', casparChannel: 2 },
+  };
+
+  it.each([
+    { name: 'a local live input', sourceId: INPUT_3 },
+    { name: 'the local Playlist output', sourceId: inputSourceId(playlist.id) },
+  ])(
+    'names the engine restriction for $name after CG Failover, with no route sent',
+    async ({ sourceId }) => {
+      const provider = new LocalPlayoutSources({ inputs: [...INPUTS, playlist] });
+      const { r, sources, mark, sentSince, backupLines } = await boot({
+        assignments: bind('single', { l1: sourceId }),
+        backup: true,
+        provider,
+      });
+      let inputReads = 0;
+      r.setInputsConfirmer((timeoutMs) => {
+        inputReads += 1;
+        return sources.confirmInputs(timeoutMs);
+      });
+      expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
+      expect(await r.loadFixed(BED, ROW, 'single', {})).toEqual({ accepted: true });
+      const from = await mark();
+      const backupFrom = (await backupLines()).length;
+
+      expect(await r.take(ROW)).toEqual({
+        accepted: false,
+        errorCode: ROUTE_ENGINE_UNSUPPORTED_CODE,
+        message:
+          'Plate 1: this Playout input cannot be routed to backup engine B. Nothing was sent.',
+        refusalOnRow: true,
+      });
+      expect(row(r)?.takeRefusal).toMatchObject({
+        code: ROUTE_ENGINE_UNSUPPORTED_CODE,
+        plateId: 'l1',
+        sourceId,
+      });
+      expect(inputReads).toBe(0);
+      expect(
+        (await sentSince(from)).filter((line) => /^(LOADBG|PLAY|MIXER|CG|CLEAR) /.test(line)),
+      ).toEqual([]);
+      expect(
+        (await backupLines())
+          .slice(backupFrom)
+          .filter((line) => /^(LOADBG|PLAY|MIXER|CG|CLEAR) /.test(line)),
+      ).toEqual([]);
+      expect(r.liveLayers().get(ROW) ?? []).toEqual([]);
+
+      // The same confirmed input remains usable when CG returns to its local engine.
+      expect(await r.failover()).toEqual({ ok: true, newPrimary: 'A' });
+      const backOnA = await mark();
+      expect(await r.take(ROW)).toEqual({ accepted: true });
+      expect(inputReads).toBeGreaterThan(0);
+      expect(routeLines(await sentSince(backOnA)).some((line) => line.startsWith('LOADBG '))).toBe(
+        true,
+      );
+      expect(routeLines(await backupLines())).toEqual([]);
+      expect(row(r)?.takeRefusal).toBeUndefined();
+    },
+  );
+
   it('🔴 no route command reaches server B, and the row says so; control: a stream plate mirrors as today', async () => {
     const { r, backupLines } = await boot({
       assignments: bind('duo', { l1: INPUT_3, l2: MULTICAST }),

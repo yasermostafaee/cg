@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, Square } from 'lucide-react';
 import { MAX_MEDIA_PREVIEW_POSITION_MS, MEDIA_THUMBNAIL_DATA_URL_PREFIX } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { RangeInput } from '../../ui/RangeInput.js';
-import { createMediaThumbnailLoader } from './MediaThumbnail.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
+import { createMediaThumbnailLoader, type MediaThumbnailLoader } from './MediaThumbnail.js';
 import { formatMediaDuration } from './SourceLabel.js';
 import { subscribeMediaPreviewFrame } from './inputThumbnailDemand.js';
 import './source-media-preview.css';
@@ -16,6 +17,8 @@ interface SourceMediaPreviewProps {
   durationMs?: number | undefined;
   channel?: number | undefined;
   poster?: string | undefined;
+  loadThumbnail?: MediaThumbnailLoader;
+  inline?: boolean;
 }
 
 interface PreviewRequest {
@@ -30,20 +33,34 @@ export function SourceMediaPreview({
   durationMs,
   channel,
   poster,
+  loadThumbnail,
+  inline = false,
 }: SourceMediaPreviewProps): JSX.Element {
-  const loadPoster = useMemo(createMediaThumbnailLoader, []);
-  const [loadedPoster, setLoadedPoster] = useState<string | null>(null);
-  const [positionMs, setPositionMs] = useState(0);
-  const [request, setRequest] = useState<PreviewRequest | null>(null);
-  const [picture, setPicture] = useState<string | null>(null);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+  const foreground = useModalForeground();
   const end = Math.min(Math.ceil(durationMs ?? 0) - 1, MAX_MEDIA_PREVIEW_POSITION_MS);
   const enabled = channel !== undefined && end > 0;
+  const autoPlay = inline && enabled;
+  const loadPoster = useMemo(() => loadThumbnail ?? createMediaThumbnailLoader(), [loadThumbnail]);
+  const [loadedPoster, setLoadedPoster] = useState<string | null>(null);
+  const [positionMs, setPositionMs] = useState(0);
+  const position = useRef(positionMs);
+  position.current = positionMs;
+  const [request, setRequest] = useState<PreviewRequest | null>(() =>
+    autoPlay ? { positionMs: 0, startedAt: performance.now() } : null,
+  );
+  const [picture, setPicture] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>(
+    autoPlay ? 'loading' : 'idle',
+  );
   const playing = request !== null && request.startedAt !== null;
   const src = picture ?? poster ?? loadedPoster;
+  const playbackButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (inline) playbackButton.current?.focus();
+  }, [inline]);
 
   useEffect(() => {
-    if (poster !== undefined) return;
+    if (!foreground || poster !== undefined || loadedPoster !== null) return;
     let current = true;
     void loadPoster(id).then((value) => {
       if (current) setLoadedPoster(value);
@@ -51,11 +68,12 @@ export function SourceMediaPreview({
     return () => {
       current = false;
     };
-  }, [id, loadPoster, poster]);
+  }, [id, loadPoster, poster, foreground]);
 
   useEffect(() => {
-    if (!enabled || channel === undefined || request === null) return;
-    const { positionMs: from, startedAt } = request;
+    if (!foreground || !enabled || channel === undefined || request === null) return;
+    const from = request.startedAt === null ? request.positionMs : position.current;
+    const startedAt = request.startedAt === null ? null : performance.now();
     const at = (): number =>
       Math.min(end, from + (startedAt === null ? 0 : Math.floor(performance.now() - startedAt)));
     let misses = 0;
@@ -88,7 +106,7 @@ export function SourceMediaPreview({
       stopReading();
       clearInterval(clock);
     };
-  }, [channel, enabled, end, id, request]);
+  }, [channel, enabled, end, id, request, foreground]);
 
   const start = (nextPosition: number, play: boolean): void => {
     setPositionMs(nextPosition);
@@ -105,11 +123,18 @@ export function SourceMediaPreview({
     status === 'unavailable' ? 'Preview unavailable' : status === 'loading' ? 'Loading frame…' : '';
 
   return (
-    <section className="cg-source-media-preview" aria-label="Media preview">
-      <div className="cg-source-media-preview__heading">
-        <IsolatedName>{name}</IsolatedName>
-        <span>{enabled ? 'Silent preview · sampled frames' : 'Poster'}</span>
-      </div>
+    <section
+      className={
+        inline ? 'cg-source-media-preview cg-source-media-preview--tile' : 'cg-source-media-preview'
+      }
+      aria-label="Media preview"
+    >
+      {!inline && (
+        <div className="cg-source-media-preview__heading">
+          <IsolatedName>{name}</IsolatedName>
+          <span>{enabled ? 'Silent preview · sampled frames' : 'Poster'}</span>
+        </div>
+      )}
       <div className="cg-source-media-preview__picture">
         {src === null ? (
           <span>{status === 'loading' ? 'Loading frame…' : 'No picture'}</span>
@@ -120,25 +145,19 @@ export function SourceMediaPreview({
       {enabled && (
         <div className="cg-source-media-preview__transport">
           <div className="cg-source-media-preview__controls">
-            {playing ? (
-              <Button
-                variant="icon"
-                title="Pause preview"
-                aria-label="Pause preview"
-                onClick={() => start(positionMs, false)}
-              >
-                <Icon icon={Pause} size={16} />
-              </Button>
-            ) : (
-              <Button
-                variant="icon"
-                title="Play preview"
-                aria-label="Play preview"
-                onClick={() => start(positionMs === end ? 0 : positionMs, true)}
-              >
-                <Icon icon={Play} size={16} />
-              </Button>
-            )}
+            <Button
+              ref={playbackButton}
+              variant="icon"
+              title={playing ? 'Pause preview' : 'Play preview'}
+              aria-label={playing ? 'Pause preview' : 'Play preview'}
+              onClick={() =>
+                playing
+                  ? start(positionMs, false)
+                  : start(positionMs === end ? 0 : positionMs, true)
+              }
+            >
+              <Icon icon={playing ? Pause : Play} size={16} />
+            </Button>
             <Button
               variant="icon"
               title="Stop preview"

@@ -42,6 +42,7 @@ import {
   type MediaThumbnailLoader,
 } from './MediaThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
+import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
 import { useInputCheckSurface, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
@@ -189,6 +190,9 @@ const LIST_HEIGHT = 420;
 const INPUT_ROW = 116;
 const INPUT_GRID_HEIGHT = 520;
 const MEDIA_ROW = 88;
+const MEDIA_HEADING_HEIGHT = 28;
+const MEDIA_TILE_GAP = 10;
+
 /** A media page, and how near the end the next one is asked for. */
 export const MEDIA_PAGE = 50;
 const NEAR_END_ROWS = 10;
@@ -340,6 +344,7 @@ function PickerPanel({
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [inputView, setInputView] = useState<InputView>('grid');
+  const [mediaView, setMediaView] = useState<InputView>('grid');
   const tabChanged = useRef(false);
   const media = useMediaSearch();
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
@@ -423,6 +428,8 @@ function PickerPanel({
             focusSearch={tabChanged.current}
             onPick={onPick}
             loadThumbnail={loadThumbnail}
+            view={mediaView}
+            onViewChange={setMediaView}
           />
         )}
       </TabPanel>
@@ -758,14 +765,21 @@ interface MediaChoice {
   readonly unavailable?: boolean | undefined;
 }
 
+interface MediaPreviewSelection {
+  readonly key: string;
+  readonly item: MediaChoice;
+}
+
 function mediaRow(
   key: string,
   item: MediaChoice,
   value: string,
   loadThumbnail: MediaThumbnailLoader,
-  preview: MediaChoice | undefined,
-  setPreview: (item: MediaChoice) => void,
+  preview: MediaPreviewSelection | undefined,
+  setPreview: (selection: MediaPreviewSelection) => void,
   presence: SourcePresenceView | null,
+  grid: boolean,
+  previewChannel: number | undefined,
 ): VirtualRow {
   const selected = item.id === value;
   const name = sourceDisplayName(item.name, 'media');
@@ -775,28 +789,56 @@ function mediaRow(
       ? `${String(item.width)}×${String(item.height)}`
       : null,
   ].filter((f): f is string => f !== null);
+  const previewing = preview?.key === key;
+  const poster = (
+    <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
+  );
+  const canPlay = previewChannel !== undefined && (item.durationMs ?? 0) > 1;
+  const previewButton = item.unavailable !== true && (!grid || canPlay) && (
+    <Button
+      variant={grid ? 'icon' : 'neutral'}
+      className="cg-picker-preview-button"
+      aria-label={`Preview · ${name}`}
+      aria-pressed={previewing}
+      title={grid ? 'Play preview' : undefined}
+      data-picker-preview={item.id}
+      onClick={() => setPreview({ key, item })}
+    >
+      <Icon icon={Play} size={14} />
+      {!grid && <span>Preview</span>}
+    </Button>
+  );
   return {
     kind: 'option',
     key,
     selected,
     ariaDescription: sourcePresenceDescription(presence, item.id),
     data: { 'data-picker-media': item.id },
-    trailing: item.unavailable !== true && (
-      <Button
-        variant="neutral"
-        className="cg-picker-preview-button"
-        aria-label={`Preview · ${name}`}
-        aria-pressed={preview?.id === item.id}
-        data-picker-preview={item.id}
-        onClick={() => setPreview(item)}
-      >
-        <Icon icon={Play} size={14} />
-        <span>Preview</span>
-      </Button>
+    trailing: grid ? (
+      <div className="cg-picker-media-tile-picture">
+        {previewing ? (
+          <SourceMediaPreview
+            key={item.id}
+            id={item.id}
+            name={name}
+            durationMs={item.durationMs}
+            channel={previewChannel}
+            loadThumbnail={loadThumbnail}
+            inline
+          />
+        ) : (
+          <>
+            {poster}
+            {previewButton}
+          </>
+        )}
+      </div>
+    ) : (
+      previewButton
     ),
     content: (
       <span className="cg-picker-media">
-        <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
+        {!grid && poster}
         <span className="cg-picker-media__text">
           <span className="cg-picker-row">
             <Icon icon={Film} size={14} />
@@ -834,6 +876,8 @@ function MediaTab({
   focusSearch,
   onPick,
   loadThumbnail,
+  view,
+  onViewChange,
 }: {
   listId: string;
   value: string;
@@ -842,10 +886,18 @@ function MediaTab({
   focusSearch: boolean;
   onPick: (value: string) => void;
   loadThumbnail: MediaThumbnailLoader;
+  view: InputView;
+  onViewChange: (view: InputView) => void;
 }): JSX.Element {
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<MediaChoice>();
+  const [preview, setPreview] = useState<MediaPreviewSelection>();
+  const grid = view === 'grid';
+  const { ref: resultsRef, width } = useElementWidth<HTMLDivElement>();
+  const resultsWidth = width ?? 1100;
+  const columns = resultsWidth < 560 ? 1 : resultsWidth < 880 ? 2 : 3;
+  const tileWidth = (resultsWidth - 16 - (columns - 1) * MEDIA_TILE_GAP) / columns;
+  const tileHeight = Math.max(132, Math.round((tileWidth * 9) / 16 + 54));
   const catalog = currentSourceCatalog();
 
   // On initial open the modal's trap records and restores the launcher before moving focus.
@@ -872,12 +924,24 @@ function MediaTab({
     ...(isMediaId(value) ? [value] : []),
   ]);
 
-  const { rows, mediaById } = useMemo(() => {
+  const { rows, mediaByKey } = useMemo(() => {
     const out: VirtualRow[] = [];
-    const mediaById = new Map<string, MediaChoice>();
+    const mediaByKey = new Map<string, MediaChoice>();
     const addMedia = (key: string, item: MediaChoice): void => {
-      mediaById.set(item.id, item);
-      out.push(mediaRow(key, item, value, loadThumbnail, preview, setPreview, presence));
+      mediaByKey.set(key, item);
+      out.push(
+        mediaRow(
+          key,
+          item,
+          value,
+          loadThumbnail,
+          preview,
+          setPreview,
+          presence,
+          grid,
+          previewChannel,
+        ),
+      );
     };
     const inResults = new Map(media.items.map((item) => [item.id, item]));
     const shownIds = new Set([...inResults.keys(), ...recent.map((r) => r.id)]);
@@ -917,26 +981,28 @@ function MediaTab({
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
     for (const item of media.items) addMedia(`all:${item.id}`, item);
-    return { rows: out, mediaById };
-  }, [media.items, bound, recent, value, loadThumbnail, preview, presence]);
+    return { rows: out, mediaByKey };
+  }, [media.items, bound, recent, value, loadThumbnail, preview, presence, grid, previewChannel]);
 
-  const idOf = (index: number): string | null => {
-    const key = rows[index]?.key;
-    return key === undefined ? null : key.slice(key.indexOf(':') + 1);
-  };
   const chooseMedia = (index: number): void => {
-    const picked = idOf(index);
-    if (picked === null) return;
-    onPick(picked);
-    const item = mediaById.get(picked);
-    setPreview(item?.unavailable === true ? undefined : item);
+    const key = rows[index]?.key;
+    const item = key === undefined ? undefined : mediaByKey.get(key);
+    if (key === undefined || item === undefined) return;
+    onPick(item.id);
+    if (!grid) setPreview(item.unavailable === true ? undefined : { key, item });
   };
-  const keys = useListKeys(rows, list, chooseMedia);
+  const keys = useListKeys(rows, list, chooseMedia, grid);
 
   const empty = !media.loading && media.failed === null && media.items.length === 0;
   return (
-    <div className="cg-picker-tab cg-picker-tab--media" data-picker-tab="media">
-      <div className="cg-picker-media-results">
+    <div
+      className={
+        grid ? 'cg-picker-tab cg-picker-tab--media-grid' : 'cg-picker-tab cg-picker-tab--media'
+      }
+      data-picker-tab="media"
+      data-media-view={view}
+    >
+      <div className="cg-picker-media-results" ref={resultsRef}>
         <div className="cg-picker-controls">
           <TextInput
             ref={search}
@@ -963,6 +1029,15 @@ function MediaTab({
               </Button>
             ))}
           </div>
+          <InputViewSwitch
+            ariaLabel="Media view"
+            view={view}
+            onChange={(next) => {
+              if (next === view) return;
+              setPreview(undefined);
+              onViewChange(next);
+            }}
+          />
         </div>
         {media.loading && (
           <div
@@ -985,17 +1060,20 @@ function MediaTab({
           </p>
         ) : (
           <VirtualList
+            key={view}
             ref={list}
             id={listId}
             aria-label="Media"
             rows={rows}
-            rowHeight={MEDIA_ROW}
+            rowHeight={grid ? tileHeight : MEDIA_ROW}
+            {...(grid && { columns, gap: MEDIA_TILE_GAP })}
+            headingHeight={MEDIA_HEADING_HEIGHT}
             height={LIST_HEIGHT}
             activeIndex={keys.active}
             onActiveChange={keys.setActive}
             onPick={chooseMedia}
             onKeyDown={(e) => {
-              if (e.target instanceof Element && e.target.closest('button') !== null) return;
+              if (e.target instanceof Element && e.target.closest('button, input') !== null) return;
               // Typing in the list goes to the search field.
               if (e.key !== ' ' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 search.current?.focus();
@@ -1010,22 +1088,25 @@ function MediaTab({
           />
         )}
       </div>
-      <section className="cg-picker-player" aria-label="Media preview">
-        {preview === undefined ? (
-          <div className="cg-picker-player__empty" data-picker-preview-empty="">
-            <Icon icon={Film} size={28} />
-            <p>Use Preview on a media item to watch it here.</p>
-          </div>
-        ) : (
-          <SourceMediaPreview
-            key={preview.id}
-            id={preview.id}
-            name={sourceDisplayName(preview.name, 'media')}
-            durationMs={preview.durationMs}
-            channel={previewChannel}
-          />
-        )}
-      </section>
+      {!grid && (
+        <section className="cg-picker-player" aria-label="Media preview">
+          {preview === undefined ? (
+            <div className="cg-picker-player__empty" data-picker-preview-empty="">
+              <Icon icon={Film} size={28} />
+              <p>Use Preview on a media item to watch it here.</p>
+            </div>
+          ) : (
+            <SourceMediaPreview
+              key={preview.key}
+              id={preview.item.id}
+              name={sourceDisplayName(preview.item.name, 'media')}
+              durationMs={preview.item.durationMs}
+              channel={previewChannel}
+              loadThumbnail={loadThumbnail}
+            />
+          )}
+        </section>
+      )}
     </div>
   );
 }

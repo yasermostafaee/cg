@@ -434,3 +434,28 @@ setup the same live check SHALL stay in the existing tile.
 - **AND WHEN** the operator enables preview audio **THEN** it plays locally without changing programme audio
 - **AND WHEN** the operator presses Select **THEN** the picker closes, preview audio stops, and the field displays the chosen source
 - **AND WHEN** the operator closes another staged choice without Select **THEN** the confirmed binding is preserved
+
+### Requirement: The media picker SHALL offer an inline preview in its Grid view
+
+The Media tab SHALL offer Grid and List views. The selected grid item's preview controls SHALL
+operate inside its card. Playing, pausing, seeking, or stopping a preview SHALL leave the calling
+control's binding unchanged until Select.
+
+#### Scenario: Preview a video in the media grid
+
+- **WHEN** the operator opens a video preview in Grid **THEN** its picture and transport are in the same card
+- **AND WHEN** they pause, seek or stop **THEN** the preview changes while the binding stays as before
+- **AND WHEN** they press Select on a staged choice **THEN** the binding changes to the confirmed media
+
+### Requirement: Covered source pickers SHALL pause optional preview demand
+
+Only a foreground source dialog's visible tiles SHALL request passive thumbnails and optional input
+meters. A covered dialog SHALL release its interactive input check and retain its last passive
+picture until the dialog is revealed and has a bounded opportunity to refresh. Persistent monitor
+transport SHALL follow its existing lifecycle independently.
+
+#### Scenario: Open and close a nested input picker
+
+- **WHEN** a source picker covers a source dialog **THEN** covered tiles stop requesting snapshots
+- **AND WHEN** the picker closes **THEN** the underlying dialog resumes its requests without reopening
+- **AND WHEN** the first resumed request is delayed **THEN** the prior snapshot remains during the refresh window

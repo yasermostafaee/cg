@@ -365,7 +365,11 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   const panel = picker(page);
   expect(await readState()).toEqual({ reads: [], inputChecks: 0 });
   await panel.getByRole('tab', { name: /^Media/ }).click();
-  const tile = (id: string) => panel.locator(`[data-picker-media="${id}"] [data-media-thumbnail]`);
+  await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
+  const tile = (id: string) =>
+    panel
+      .locator('.cg-vlist-action-row', { has: panel.locator(`[data-picker-media="${id}"]`) })
+      .locator('[data-media-thumbnail]');
   const red = tile('md-m-clip-001').locator('img');
   const blue = tile('md-m-clip-002').locator('img');
   const missing = tile('md-m-clip-003');
@@ -392,7 +396,7 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   await expect.poll(async () => (await readState()).reads).toContain('md-m-clip-003');
   expect((await readState()).reads).not.toContain('md-m-clip-009');
   await expect(field).toHaveAttribute('data-picker-value', '');
-  await missing.click();
+  await panel.locator('[data-picker-media="md-m-clip-003"]').click();
   await expect(panel).toBeVisible();
   await expect(field).toHaveAttribute('data-picker-value', '');
   await panel.getByRole('button', { name: 'Select', exact: true }).click();
@@ -436,6 +440,8 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   await field.click();
   const panel = picker(page);
   await panel.getByRole('tab', { name: /^Media/ }).click();
+  await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
+  await panel.getByRole('button', { name: 'List view', exact: true }).click();
   await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
   await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
   const play = panel.getByRole('button', { name: 'Play preview' });
@@ -462,6 +468,29 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   await expect.poll(async () => (await positions()).at(-1)).toBeGreaterThan(max / 2);
   await stop.click();
   await expect(seek).toHaveValue('0');
+  await expect(field).toHaveAttribute('data-picker-value', '');
+
+  await panel
+    .getByRole('group', { name: 'Media view' })
+    .getByRole('button', { name: 'Grid view' })
+    .click();
+  await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
+  await expect(panel.locator('.cg-picker-player')).toHaveCount(0);
+  const tile = panel.locator('.cg-vlist-action-row', {
+    has: page.locator('[data-picker-media]').filter({ hasText: 'Studio 1' }),
+  });
+  await tile.getByRole('button', { name: 'Preview · Studio 1' }).click();
+  const inline = tile.getByRole('region', { name: 'Media preview' });
+  await expect(inline.getByRole('button', { name: 'Pause preview' })).toBeVisible();
+  await expect(inline.locator('img')).toBeVisible();
+  await inline.getByRole('button', { name: 'Pause preview' }).click();
+  await inline.getByRole('slider', { name: 'Preview position' }).press('End');
+  await expect(inline.getByRole('button', { name: 'Play preview' })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Select', exact: true })).toBeDisabled();
+  const choice = tile.locator('[data-picker-media]');
+  await choice.click();
+  await expect(choice).toHaveAttribute('aria-selected', 'true');
+  await expect(panel.getByRole('button', { name: 'Select', exact: true })).toBeEnabled();
   await expect(field).toHaveAttribute('data-picker-value', '');
 
   await page.keyboard.press('Escape');

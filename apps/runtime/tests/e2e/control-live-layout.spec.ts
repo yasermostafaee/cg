@@ -567,6 +567,19 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const authoredBorder = thirdShot.locator('.cg-live-layout-shot-border');
     await expect(authoredBorder).toHaveCSS('border-top-color', 'rgb(254, 195, 82)');
     await expect(authoredBorder).toHaveCSS('border-top-left-radius', '0px');
+    const borderInPreset = plateAppearance.getByLabel('Show border in preset', { exact: true });
+    const borderInFocus = plateAppearance.getByLabel('Show border in Focus', { exact: true });
+    await expect(borderInPreset).toBeChecked();
+    await expect(borderInFocus).toBeChecked();
+    await borderInPreset.uncheck();
+    await expect(authoredBorder).toHaveCount(0);
+    await borderInPreset.check();
+    await borderInFocus.uncheck();
+    await thirdShot.getByRole('button', { name: /^Focus plate 3/ }).click();
+    await expect(authoredBorder).toHaveCount(0);
+    await editor.getByRole('button', { name: /^Return to / }).click();
+    await expect(authoredBorder).toBeVisible();
+    await borderInFocus.check();
     await expect(thirdShot).toHaveCSS('outline-offset', '2px');
     await expect(thirdShot).toHaveCSS('outline-style', 'solid');
     const pictureClip = thirdShot.locator('.cg-live-layout-shot-source');
@@ -588,10 +601,20 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       operatorPermissions.getByRole('button', { name: 'Locked', exact: true }),
     ).toHaveAttribute('aria-pressed', 'true');
     await operatorPermissions.getByRole('button', { name: 'Keep aspect', exact: true }).click();
-    const move = operatorPermissions.getByRole('checkbox', { name: 'Allow move', exact: true });
+    const move = operatorPermissions.getByRole('checkbox', { name: 'Move plate', exact: true });
+    const operatorCrop = operatorPermissions.getByRole('checkbox', {
+      name: 'Crop input',
+      exact: true,
+    });
     await expect(move).not.toBeChecked();
+    await expect(operatorCrop).toBeChecked();
+    await operatorCrop.uncheck();
+    await expect(pictureWindows).toHaveCount(1);
+    await operatorCrop.check();
     await move.check();
     await editor.getByRole('button', { name: 'Add mask window', exact: true }).click();
+    await expect(operatorCrop).toBeDisabled();
+    await expect(editor.getByRole('region', { name: 'Plate crop', exact: true })).toHaveCount(0);
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([50, 50]);
     const maskEdit = editor.getByRole('button', { name: 'Edit mask in preview', exact: true });
     await maskEdit.click();
@@ -1088,8 +1111,32 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(croppedLeft).toBeGreaterThan(0);
     expect(croppedRight).toBeGreaterThan(0);
     expect(croppedLeft).toBeCloseTo(croppedRight, 1);
-    await copy.getByRole('button', { name: 'Edit plate 2', exact: true }).click();
+    const defaultCropX = copy.getByLabel('Default crop X (%)', { exact: true });
+    await expect(defaultCropX).toHaveValue('50');
+    await defaultCropX.fill('25');
+    await expect
+      .poll(async () => {
+        const [left, right] = await imageOverflow(portraitImage);
+        return left / (left + right);
+      })
+      .toBeCloseTo(0.25, 2);
+    await copy.getByRole('button', { name: 'Edit plate 1', exact: true }).click();
     await copy.getByText('Advanced plate controls', { exact: true }).click();
+    const editCrop = copy.getByRole('button', { name: 'Edit crop in preview', exact: true });
+    await editCrop.click();
+    const cropDrag = copiedPlate(1).getByRole('button', { name: /^Adjust crop for / });
+    await dragMask(cropDrag, -16, 0);
+    const plateCropX = copy.getByLabel('Crop X (%)', { exact: true });
+    await expect.poll(async () => Number(await plateCropX.inputValue())).toBeGreaterThan(25);
+    await plateCropX.fill('75');
+    await expect
+      .poll(async () => {
+        const [left, right] = await imageOverflow(portraitImage);
+        return left / (left + right);
+      })
+      .toBeCloseTo(0.75, 2);
+    await editCrop.click();
+    await copy.getByRole('button', { name: 'Edit plate 2', exact: true }).click();
     await copy.getByLabel('Plate aspect ratio', { exact: true }).selectOption({ label: '4:3' });
     await copy.getByLabel('Plate input fit', { exact: true }).selectOption('contain');
     await expect.poll(() => aspect(copiedPlate(2))).toBeCloseTo(4 / 3, 2);
@@ -1148,7 +1195,11 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(thirdUp).toMatchObject({
       plateAspectRatio: 0.75,
       plateFitMode: 'cover',
-      plateOverrides: { [nextLayout.frames[1]!.id]: { aspectRatio: 4 / 3, fitMode: 'contain' } },
+      plateCropFocus: { x: 0.25, y: 0.5 },
+      plateOverrides: {
+        [nextLayout.frames[0]!.id]: { cropFocus: { x: 0.75, y: 0.5 } },
+        [nextLayout.frames[1]!.id]: { aspectRatio: 4 / 3, fitMode: 'contain' },
+      },
     });
     expect(nextLayout.presets.find(({ name }) => name === 'Studio solo')).toMatchObject({
       plateAspectRatio: 16 / 9,

@@ -74,6 +74,9 @@ const NOT_SHOWABLE_CODE = 'source-not-showable';
 /** `ROUTE-PLATES-01` rule 5 — a Playout route whose epoch could not be confirmed stays empty. */
 const ROUTE_WAITING_CODE = 'route-epoch-waiting';
 
+/** `ROUTE-PLATES-01` C4 — the Playout's local holder is on engine A. */
+const ROUTE_ENGINE_UNSUPPORTED_CODE = 'route-engine-unsupported';
+
 /**
  * 🔴 `CHANNEL-SOURCES-01` decision 3 — the take found no live source layer band declared. One short
  * line on the row, in the words of Station setup's `Live source layer band` card; no plate is named,
@@ -153,10 +156,13 @@ export function takeRefusalLine(
       text: `${rowName}: ${NO_BAND_CLAUSE}`,
     };
   }
-  if (refusal.code === ROUTE_WAITING_CODE) {
+  if (refusal.code === ROUTE_WAITING_CODE || refusal.code === ROUTE_ENGINE_UNSUPPORTED_CODE) {
     const plate = context.plateLabel ?? null;
     const who = plate === null ? rowName : `${rowName} · ${plate}`;
-    const clause = "waiting for the Playout's input list.";
+    const clause =
+      refusal.code === ROUTE_ENGINE_UNSUPPORTED_CODE
+        ? 'this Playout input cannot be routed to backup engine B.'
+        : "waiting for the Playout's input list.";
     return { row: rowName, source: null, input: null, clause, text: `${who}: ${clause}`, plate };
   }
   if (UNSEATABLE_CODES.has(refusal.code)) {

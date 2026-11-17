@@ -7,12 +7,14 @@ export type InputView = 'grid' | 'list';
 export function InputViewSwitch({
   view,
   onChange,
+  ariaLabel = 'Input view',
 }: {
   view: InputView;
   onChange: (view: InputView) => void;
+  ariaLabel?: string;
 }): JSX.Element {
   return (
-    <div className="cg-picker-input-view" role="group" aria-label="Input view">
+    <div className="cg-picker-input-view" role="group" aria-label={ariaLabel}>
       <Button
         aria-label="Grid view"
         aria-pressed={view === 'grid'}

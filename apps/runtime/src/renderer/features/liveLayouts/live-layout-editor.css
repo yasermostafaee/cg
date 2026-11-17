@@ -298,6 +298,24 @@
   initial-value: 1;
 }
 
+@property --cg-shot-crop-x {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+@property --cg-shot-crop-y {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+@property --cg-shot-crop-zoom {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
 .cg-live-layout-shot-source {
   position: absolute;
   inset: 0;
@@ -326,7 +344,9 @@
 
 /* Fit against the animated plate dimensions. Blend the two fits without changing source aspect. */
 .cg-live-layout-shot-picture[data-fit-to-shot] {
-  --cg-cover-width: max(100cqw, calc(100cqh * var(--cg-shot-source-aspect)));
+  --cg-cover-width: calc(
+    max(100cqw, 100cqh * var(--cg-shot-source-aspect)) * clamp(1, var(--cg-shot-crop-zoom), 8)
+  );
   --cg-contain-width: min(100cqw, calc(100cqh * var(--cg-shot-source-aspect)));
   --cg-fit-weight: clamp(0, var(--cg-shot-contain), 1);
   --cg-fit-width: calc(
@@ -334,8 +354,14 @@
       var(--cg-fit-weight)
   );
   --cg-fit-height: calc(var(--cg-fit-width) / var(--cg-shot-source-aspect));
-  --cg-fit-x: calc((100cqw - var(--cg-fit-width)) / 2);
-  --cg-fit-y: calc((100cqh - var(--cg-fit-height)) / 2);
+  --cg-focus-x: calc(
+    var(--cg-fit-weight) / 2 + (1 - var(--cg-fit-weight)) * clamp(0, var(--cg-shot-crop-x), 1)
+  );
+  --cg-focus-y: calc(
+    var(--cg-fit-weight) / 2 + (1 - var(--cg-fit-weight)) * clamp(0, var(--cg-shot-crop-y), 1)
+  );
+  --cg-fit-x: calc((100cqw - var(--cg-fit-width)) * var(--cg-focus-x));
+  --cg-fit-y: calc((100cqh - var(--cg-fit-height)) * var(--cg-focus-y));
   left: max(0px, var(--cg-fit-x));
   top: max(0px, var(--cg-fit-y));
   width: min(100cqw, var(--cg-fit-width));
@@ -382,6 +408,26 @@
   position: absolute;
   inset: 0;
   box-sizing: border-box;
+}
+
+.cg-live-layout-crop-drag {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.cg-live-layout-crop-drag:active {
+  cursor: grabbing;
+}
+
+.cg-live-layout-crop-drag:focus-visible {
+  outline: 2px solid var(--r-accent);
+  outline-offset: -3px;
 }
 
 .cg-live-layout-shot-title {

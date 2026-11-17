@@ -5,6 +5,7 @@ import { useActionRowFit } from '@cg/gesture';
 import { colors, cssVars } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
 import { useFocusTrap } from './focusTrap.js';
+import { ModalLayerContext } from './modalForeground.js';
 import { Icon } from './Icon.js';
 import { Notice, type NoticeRole } from './Notice.js';
 
@@ -929,7 +930,7 @@ export function Modal({
     };
   }, [busy, onClose, layer]);
 
-  return createPortal(
+  const content = createPortal(
     <div
       style={
         layerLevel === 'sub'
@@ -1124,4 +1125,5 @@ export function Modal({
     </div>,
     document.body,
   );
+  return <ModalLayerContext.Provider value={layer}>{content}</ModalLayerContext.Provider>;
 }

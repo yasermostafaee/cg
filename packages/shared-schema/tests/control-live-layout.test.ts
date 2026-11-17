@@ -4,9 +4,11 @@ import {
   CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH,
   ControlLiveLayoutSchema,
   controlLiveLayoutAttachments,
+  controlLiveLayoutBorderHidden,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutMovePresetFrame,
   controlLiveLayoutPlateAspect,
+  controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
@@ -91,6 +93,25 @@ describe('live layout preset and plate shape', () => {
     expect(controlLiveLayoutPlateFit(mixed, guest)).toBe('contain');
     expect(controlLiveLayoutPlateFit(preset, guest)).toBe('cover');
     expect(controlLiveLayoutPlateFit(preset, { id: 'host' })).toBe('contain');
+  });
+
+  it('keeps preset and Focus borders independent and resolves authored crop from the most specific scope', () => {
+    const authored: ControlLiveLayoutPreset = {
+      ...mixed,
+      frameIds: ['host'],
+      hiddenBorders: ['host'],
+      hiddenFocusBorders: ['guest-c'],
+      plateCropFocus: { x: 0.1, y: 0.9, zoom: 2 },
+      plateOverrides: { host: { cropFocus: { x: 0.85, y: 0.25 } } },
+    };
+    expect(controlLiveLayoutBorderHidden(authored, 'host', false)).toBe(true);
+    expect(controlLiveLayoutBorderHidden(authored, 'host', true)).toBe(false);
+    expect(controlLiveLayoutBorderHidden(authored, 'guest-c', false)).toBe(false);
+    expect(controlLiveLayoutBorderHidden(authored, 'guest-c', true)).toBe(true);
+    expect(controlLiveLayoutBorderHidden(preset, 'host', false)).toBe(false);
+    expect(controlLiveLayoutPlateCropFocus(preset, 'host')).toBeUndefined();
+    expect(controlLiveLayoutPlateCropFocus(authored, 'host')).toEqual({ x: 0.85, y: 0.25 });
+    expect(controlLiveLayoutPlateCropFocus(authored, 'guest-c')).toEqual(authored.plateCropFocus);
   });
 
   it('centres a solo portrait plate and keeps a legacy solo plate full frame', () => {

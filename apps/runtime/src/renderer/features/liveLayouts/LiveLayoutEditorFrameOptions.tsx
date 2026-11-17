@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { Move, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Info, Move, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX,
   DEFAULT_LIVE_FIT_MODE,
@@ -7,6 +7,7 @@ import {
   LiveRevealRectSchema,
   type ControlLiveLayoutFrame,
   type ControlLiveLayoutPlateOverride,
+  type LiveCropFocus,
   type LiveRevealRect,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
@@ -14,6 +15,7 @@ import { Checkbox } from '../../ui/Checkbox.js';
 import { ColorInput } from '../../ui/ColorInput.js';
 import { Icon } from '../../ui/Icon.js';
 import { liveLayoutArtwork } from '../../theme.js';
+import { LiveLayoutEditorCropControls } from './LiveLayoutEditorCropControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import { LiveLayoutEditorPlatePresentation } from './LiveLayoutEditorPlatePresentation.js';
 import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
@@ -31,6 +33,7 @@ const RESIZE_CHOICES = [
 ] as const;
 
 const DEFAULT_BORDER = { color: liveLayoutArtwork.plateBorder, width: 0 };
+const DEFAULT_FIT_HELP = 'Applies in Focus and when the preset inherits this plate’s fit.';
 
 const MASK_FIELDS = [
   { key: 'x', limit: 'width', label: 'Mask X (%)', min: 0 },
@@ -42,6 +45,8 @@ const MASK_FIELDS = [
 export function LiveLayoutEditorFrameOptions({
   frame,
   presetOverrides,
+  borderVisibility,
+  crop,
   activeIndex,
   canEditMask,
   editingMask,
@@ -57,6 +62,26 @@ export function LiveLayoutEditorFrameOptions({
         inheritedAspect: number;
         inheritedFit: ControlLiveLayoutFrame['fitMode'];
         onChange: (patch: ControlLiveLayoutPlateOverride) => void;
+      }
+    | undefined;
+  borderVisibility?:
+    | {
+        showInPreset: boolean;
+        showInFocus: boolean;
+        belongsToPreset: boolean;
+        onPresetChange: (show: boolean) => void;
+        onFocusChange: (show: boolean) => void;
+      }
+    | undefined;
+  crop?:
+    | {
+        value: LiveCropFocus;
+        editing: boolean;
+        canEditPreview: boolean;
+        canReset: boolean;
+        onChange: (focus: LiveCropFocus) => void;
+        onEditChange: (editing: boolean) => void;
+        onReset: () => void;
       }
     | undefined;
   activeIndex: number;
@@ -110,7 +135,9 @@ export function LiveLayoutEditorFrameOptions({
     <details
       className="cg-live-layout-frame-options"
       onToggle={(event) => {
-        if (!event.currentTarget.open && editingMask) onMaskEditingChange(false);
+        if (event.currentTarget.open) return;
+        if (editingMask) onMaskEditingChange(false);
+        if (crop?.editing === true) crop.onEditChange(false);
       }}
     >
       <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced plate controls" />
@@ -131,7 +158,7 @@ export function LiveLayoutEditorFrameOptions({
               inheritedFit={`Inherit · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
               onChange={presetOverrides.onChange}
             />
-            <p>Crop edges fills the plate. Eligible plates also get Crop input in PVW.</p>
+            {crop !== undefined && <LiveLayoutEditorCropControls scope="plate" {...crop} />}
           </div>
         )}
         <div
@@ -139,20 +166,30 @@ export function LiveLayoutEditorFrameOptions({
           role="group"
           aria-label="Plate input fit across presets"
         >
-          <span>Default input fit</span>
+          <div className="cg-live-layout-fit-label">
+            <span>Default plate fit</span>
+            <button
+              type="button"
+              className="cg-live-layout-fit-info"
+              aria-label={DEFAULT_FIT_HELP}
+              title={DEFAULT_FIT_HELP}
+            >
+              <Icon icon={Info} size={14} />
+            </button>
+          </div>
           <div className="cg-live-layout-frame-option-buttons">
             {FIT_CHOICES.map(([fitMode, label]) => (
               <Button
                 key={fitMode}
                 active={fit === fitMode}
                 aria-pressed={fit === fitMode}
+                title={DEFAULT_FIT_HELP}
                 onClick={() => onChange({ fitMode })}
               >
                 {label}
               </Button>
             ))}
           </div>
-          <p>Used in Focus and when the current preset inherits the plate’s fit.</p>
         </div>
         <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
           <span>Border</span>
@@ -174,6 +211,27 @@ export function LiveLayoutEditorFrameOptions({
               onChange={(width) => onChange({ border: { ...border, width } })}
             />
           </div>
+          {borderVisibility !== undefined && (
+            <div className="cg-live-layout-border-visibility">
+              <label className="cg-live-layout-frame-option-check" htmlFor={id + '-border-preset'}>
+                <Checkbox
+                  id={id + '-border-preset'}
+                  checked={borderVisibility.showInPreset}
+                  disabled={!borderVisibility.belongsToPreset}
+                  onChange={borderVisibility.onPresetChange}
+                />
+                Show border in preset
+              </label>
+              <label className="cg-live-layout-frame-option-check" htmlFor={id + '-border-focus'}>
+                <Checkbox
+                  id={id + '-border-focus'}
+                  checked={borderVisibility.showInFocus}
+                  onChange={borderVisibility.onFocusChange}
+                />
+                Show border in Focus
+              </label>
+            </div>
+          )}
         </section>
         <section className="cg-live-layout-frame-mask" aria-label="Plate mask">
           <div className="cg-live-layout-frame-option-buttons">
@@ -275,8 +333,16 @@ export function LiveLayoutEditorFrameOptions({
         <h4 id={id + '-operator'}>
           <Icon icon={ShieldCheck} size={14} /> Operator permissions in CG Control
         </h4>
-        <div className="cg-live-layout-frame-option-group" role="group" aria-label="Resize mode">
-          <span>Resize mode</span>
+        <label htmlFor={id + '-move'} className="cg-live-layout-frame-option-check">
+          <Checkbox
+            id={id + '-move'}
+            checked={frame.operatorMove ?? true}
+            onChange={(operatorMove) => onChange({ operatorMove })}
+          />
+          Move plate
+        </label>
+        <div className="cg-live-layout-frame-option-group" role="group" aria-label="Resize plate">
+          <span>Resize plate</span>
           <div className="cg-live-layout-frame-option-buttons">
             {RESIZE_CHOICES.map(([operatorPlacement, label]) => (
               <Button
@@ -290,13 +356,19 @@ export function LiveLayoutEditorFrameOptions({
             ))}
           </div>
         </div>
-        <label htmlFor={id + '-move'} className="cg-live-layout-frame-option-check">
+        <label
+          htmlFor={id + '-crop'}
+          className="cg-live-layout-frame-option-check"
+          aria-label="Crop input"
+          title="Available for unmasked plates using Crop edges"
+        >
           <Checkbox
-            id={id + '-move'}
-            checked={frame.operatorMove ?? true}
-            onChange={(operatorMove) => onChange({ operatorMove })}
+            id={id + '-crop'}
+            checked={mask === undefined && (frame.operatorCrop ?? true)}
+            disabled={mask !== undefined}
+            onChange={(operatorCrop) => onChange({ operatorCrop })}
           />
-          Allow move
+          Crop input
         </label>
         {mask !== undefined && (
           <label htmlFor={id + '-mask-edit'} className="cg-live-layout-frame-option-check">

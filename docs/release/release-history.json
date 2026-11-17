@@ -24,8 +24,16 @@
           "en": "Set a rectangular plate border's color and width. The border follows the plate during Focus transitions."
         },
         {
-          "fa": "در پنجرهٔ انتخاب منبع، تصویر و صدای ورودی را در همان قاب بررسی کنید و با Select انتخاب را تأیید کنید. پیش‌نمایش مدیا دکمه‌های Play، Pause و Stop و نوار زمان قابل‌کشیدن دارد و فریم‌های نمونه‌برداری‌شدهٔ بی‌صدا را نشان می‌دهد.",
-          "en": "Preview and listen to live inputs in the picker tile and confirm the binding with Select. Media preview offers Play, Pause, Stop, and a draggable timeline with silent sampled frames."
+          "fa": "در هر پریست نمایش کادر قاب را در پریست و Focus جداگانه تنظیم کنید. در حالت Crop edges می‌توانید کراپ پیش‌فرض پریست را تنظیم کنید یا تصویر هر قاب را مستقیماً در پیش‌نمایش جابجا کنید.",
+          "en": "Set border visibility separately in each preset and Focus. With Crop edges, set the preset's default crop or position a plate's picture directly in the editor preview."
+        },
+        {
+          "fa": "جابجایی قاب، تغییر اندازه و کراپ ورودی سه دسترسی مستقل اپراتورند. غیرفعال‌کردن دسترسی کراپ، برش ذخیره‌شده در پریست را تغییر نمی‌دهد.",
+          "en": "Move plate, Resize plate, and Crop input are independent operator permissions. Disabling Crop input keeps the crop authored in the preset."
+        },
+        {
+          "fa": "در پنجرهٔ انتخاب منبع، تصویر و صدای ورودی را در همان قاب بررسی کنید و با Select انتخاب را تأیید کنید. مدیا نمای Grid و List دارد. در Grid، Play، Pause، Stop و نوار زمانِ پیش‌نمایشِ بی‌صدا در خود کارت در دسترس‌اند.",
+          "en": "Preview and listen to live inputs in the picker tile and confirm the binding with Select. Media offers Grid and List views, with Play, Pause, Stop, and a draggable timeline inside each grid preview."
         },
         {
           "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید همراه Fade را جداگانه انتخاب کنید. چیدمان زندهٔ ذخیره‌شده را هم می‌توان از Templates به‌صورت VCG صادر و دوباره وارد کرد.",
@@ -42,6 +50,14 @@
           "en": "PVW and New live layout can show a current input snapshot or media poster during a preview interruption. The Plates column fills the height of the New live layout editor."
         },
         {
+          "fa": "پیش‌نمایش منابعِ پشت مودال متوقف و پس از بستن مودال دوباره فعال می‌شود. آخرین تصویر تا دریافت نمونهٔ تازه در یک بازهٔ کوتاه حفظ می‌شود.",
+          "en": "Optional previews pause behind a modal and resume when it closes. The previous snapshot is retained briefly while a fresh picture arrives."
+        },
+        {
+          "fa": "اندازهٔ تصویر در PVW با همان مرحلهٔ حرکت کادر به‌روز می‌شود. زمان‌بندی کادر و تصویر در گذار پریست روی خروجی 1080i50 نیز تنظیم شده است.",
+          "en": "PVW reframes the picture from the border's current position during motion. Preset border timing is also calibrated for 1080i50 output."
+        },
+        {
           "fa": "CG Bridge مدیای واجد شرایط را پیش از پخش روی هر دو موتور آماده می‌کند و افکت‌های پریست و Focus را برای رزرو تأییدشده هم اجرا می‌کند.",
           "en": "CG Bridge prepares eligible media on both engines before playback and applies preset and Focus transitions on a confirmed reserve."
         },
@@ -54,8 +70,8 @@
           "en": "Station setup offers larger source previews in Grid and List views. Apply servers sits in Advanced, Bridge and Control version differences appear in amber, and Version history opens in a larger window."
         },
         {
-          "fa": "نوار وضعیت سرورها را با Server A و Server B نشان می‌دهد و مشخص می‌کند کدام سرور فرمان‌های گرافیک را دریافت می‌کند. در PGM و پنجرهٔ ورود Bridge، آدرس سرور Playout برای اپراتور نمایش داده می‌شود.",
-          "en": "The status bar identifies Server A and Server B and shows which server controls CG graphics. PGM and Bridge sign-in display the operator's Playout server address."
+          "fa": "نوار وضعیت سرورها را با Server A و Server B نشان می‌دهد و مشخص می‌کند کدام سرور فرمان‌های گرافیک را دریافت می‌کند. CG Failover دستی فقط برای اتصال مستقیم به CasparCG نمایش داده می‌شود. در PGM و پنجرهٔ ورود Bridge، آدرس سرور Playout برای اپراتور نمایش داده می‌شود.",
+          "en": "The status bar identifies Server A and Server B and shows which server controls CG graphics. Manual CG Failover is shown only for direct CasparCG connections. PGM and Bridge sign-in show the operator's Playout server address."
         },
         {
           "fa": "کانال رزرو از فهرست کانال‌های سازگار سرور B انتخاب می‌شود. فهرست ورودی‌ها آدرس Playout و پیش‌نمایش‌های هم‌تراز دارد. Live plates نام قاب را نشان می‌دهد و Station layers وضعیت لایه‌ها را خلاصه می‌کند.",

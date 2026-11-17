@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { lookPlateFits } from '@cg/shared-ipc';
+import { lookOperatorCropAllowed, lookPlateFits, lookPlateFocuses } from '@cg/shared-ipc';
 import {
   aggregateBoundCompositionFields,
   ControlLiveLayoutSchema,
@@ -127,11 +127,60 @@ describe('CG Control authored live layouts', () => {
     );
   });
 
+  it('carries preset crop defaults and plate overrides to the placed image and keeps Focus centered', async () => {
+    const layout = layoutFixture();
+    const [panel, pair] = layout.presets;
+    if (panel === undefined || pair === undefined) throw new Error('Fixture has no presets');
+    const sharedCrop = { x: 0.25, y: 0.65, zoom: 1.5 };
+    const individualCrop = { x: 0.85, y: 0.75, zoom: 2 };
+    layout.frames[1]!.operatorCrop = false;
+    layout.frames[2]!.operatorCrop = true;
+    panel.plateFitMode = 'cover';
+    panel.plateCropFocus = sharedCrop;
+    panel.plateOverrides = { 'frame-left': { cropFocus: individualCrop } };
+    pair.plateFitMode = 'contain';
+    pair.plateCropFocus = sharedCrop;
+    pair.plateOverrides = { 'frame-right': { fitMode: 'cover' } };
+    layout.frames[2]!.liveMask = {
+      mode: 'inside',
+      rects: [{ x: 0.1, y: 0.1, width: 0.8, height: 0.8 }],
+    };
+
+    const bytes = await compileControlLiveLayout(layout);
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+    const { scene, manifest } = await unpack(bytes);
+    expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.11');
+    expect(
+      scene.lookGroups?.[0]?.looks.find(({ id }) => id === panel.id)?.plateCropFocuses,
+    ).toEqual({ 'frame-anchor': sharedCrop, 'frame-left': individualCrop });
+    const { template } = await produceTemplateDelivery(bytes);
+    const carrier = template.liveSources!;
+    expect(lookPlateFocuses(carrier, panel.id)).toEqual({
+      'frame-anchor': sharedCrop,
+      'frame-left': individualCrop,
+    });
+    expect(lookPlateFocuses(carrier, pair.id)).toEqual({});
+    const focus = controlLiveLayoutFocusLookId(panel.id, 'frame-left');
+    expect(lookOperatorCropAllowed(carrier, panel.id, 'frame-left')).toBe(false);
+    expect(lookOperatorCropAllowed(carrier, pair.id, 'frame-left')).toBe(false);
+    expect(lookOperatorCropAllowed(carrier, focus, 'frame-left')).toBe(false);
+    expect(lookOperatorCropAllowed(carrier, panel.id, 'frame-anchor')).toBe(true);
+    expect(lookOperatorCropAllowed(carrier, panel.id, 'frame-right')).toBe(true);
+    expect(lookPlateFocuses(carrier, controlLiveLayoutFocusLookId(panel.id, 'frame-left'))).toEqual(
+      {},
+    );
+  });
+
   it('ships a saved plate border in the shared artwork used by presets and Focus', async () => {
     const layout = layoutFixture();
     const plate = layout.frames[1]!;
     const border = { color: '#fec352', width: 18, radius: 36 };
     plate.border = border;
+    const [panel, pair] = layout.presets;
+    if (panel === undefined || pair === undefined) throw new Error('Fixture has no presets');
+    panel.hiddenBorders = [plate.id];
+    pair.frameIds = [plate.id];
+    pair.hiddenFocusBorders = [plate.id];
     const bytes = await compileControlLiveLayout(layout);
     const reopened = await readControlLiveLayout(bytes);
     expect(reopened.layout.frames[1]?.border).toEqual({ color: border.color, width: border.width });
@@ -155,6 +204,17 @@ describe('CG Control authored live layouts', () => {
       ({ id }) => id === controlLiveLayoutFocusLookId(layout.defaultPresetId, plate.id),
     );
     expect(focus?.transitionFrames?.[plate.id]?.artworkId).toBe(art);
+    const borderIn = (id: string) =>
+      flattenElements(scene).find(
+        ({ key, element }) =>
+          key.startsWith('layout-look-' + id + '/') && element.id === plate.id + '-border',
+      );
+    expect(borderIn(panel.id)).toBeUndefined();
+    expect(borderIn(controlLiveLayoutFocusLookId(panel.id, plate.id))).toBeDefined();
+    expect(borderIn(pair.id)).toBeDefined();
+    expect(borderIn(controlLiveLayoutFocusLookId(pair.id, plate.id))).toBeUndefined();
+    expect(reopened.layout.presets[0]?.hiddenBorders).toEqual([plate.id]);
+    expect(reopened.layout.presets[1]?.hiddenFocusBorders).toEqual([plate.id]);
   });
 
   it('packages ordered preset graphics and one masked input without duplicating the native seat', async () => {

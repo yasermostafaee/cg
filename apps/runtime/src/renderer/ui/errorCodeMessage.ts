@@ -157,6 +157,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'cg-unlicensed':
     'The Playout’s license does not allow CG Control on this channel — nothing was sent.',
   'route-epoch-waiting': 'Waiting for the Playout’s input list — nothing was sent.',
+  'route-engine-unsupported':
+    'This Playout input cannot be routed to backup engine B — nothing was sent.',
   'route-epoch-stale': 'The Playout’s input list changed — nothing was sent. Take again.',
   'route-window-missed': 'The Playout input did not start in time — nothing was shown. Take again.',
   // `ROUTE-PLATES-01` §1.E — the send seam's guard. Each refuses before anything is sent.

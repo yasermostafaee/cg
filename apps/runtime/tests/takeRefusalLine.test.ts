@@ -135,6 +135,27 @@ describe('`ROUTE-PLATES-01` — contract v1.3’s two lines', () => {
       "Bed 59: waiting for the Playout's input list.",
     );
   });
+
+  it('names the backup engine restriction separately from a pending input list', () => {
+    const line = takeRefusalLine(
+      'Live layer 59',
+      {
+        code: 'route-engine-unsupported',
+        plateId: 'guest-1',
+        sourceName: 'Playlist channel 2',
+        sourceOrigin: 'input',
+      },
+      { plateLabel: 'Plate 1' },
+    );
+    expect(line.text).toBe(
+      'Live layer 59 · Plate 1: this Playout input cannot be routed to backup engine B.',
+    );
+    expect(line.plate).toBe('Plate 1');
+    expect(line.source).toBeNull();
+    expect(takeRefusalLine('Live layer 59', { code: 'route-engine-unsupported' }).text).toBe(
+      'Live layer 59: this Playout input cannot be routed to backup engine B.',
+    );
+  });
 });
 
 describe('`CHANNEL-SOURCES-01` decision 3 — no plate band', () => {

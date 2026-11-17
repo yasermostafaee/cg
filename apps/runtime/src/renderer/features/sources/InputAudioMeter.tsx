@@ -9,6 +9,7 @@ import {
 import { isPlaylistOutput, type SourceAudioReading, type SourceDefinition } from '@cg/shared-ipc';
 import { meterPercent } from '../monitors/meterScale.js';
 import { subscribeInputAudio } from './inputAudioDemand.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from './sourceStore.js';
 import './input-audio-meter.css';
 
@@ -43,6 +44,7 @@ export function InputAudioMeter({
   edge?: boolean;
   style?: CSSProperties;
 }): JSX.Element | null {
+  const foreground = useModalForeground();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const source = inputAudioSource(sourceId);
   const meterChannel =
@@ -52,6 +54,7 @@ export function InputAudioMeter({
   useEffect(() => {
     const element = ref.current;
     if (
+      !foreground ||
       meterChannel === undefined ||
       element === null ||
       typeof IntersectionObserver === 'undefined'
@@ -95,7 +98,7 @@ export function InputAudioMeter({
       stop?.();
       publish(undefined);
     };
-  }, [meterChannel, sourceId]);
+  }, [foreground, meterChannel, sourceId]);
   if (source === undefined) return null;
   const current =
     snapshot?.channel === meterChannel && snapshot?.sourceId === sourceId ? snapshot : undefined;
