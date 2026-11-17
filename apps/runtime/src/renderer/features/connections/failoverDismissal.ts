@@ -25,6 +25,7 @@ export function useFailoverDismissal(
   config: ConnectionConfig | null,
   auth: AuthSessionState,
   signInUrl: string | null,
+  bridgeAddress: string | null,
 ): { ready: boolean; dismissed: boolean; dismiss: () => void } {
   const [dismissals, setDismissals] = useState(read);
   useEffect(() => {
@@ -41,7 +42,13 @@ export function useFailoverDismissal(
   const scope =
     config === null || actor === null
       ? null
-      : JSON.stringify([signInUrl, endpoint(config.servers.A), endpoint(config.servers.B), actor]);
+      : JSON.stringify([
+          bridgeAddress,
+          signInUrl,
+          endpoint(config.servers.A),
+          endpoint(config.servers.B),
+          actor,
+        ]);
   const identity =
     event === undefined ? null : JSON.stringify([event.at, event.from, event.to, event.reason]);
   return {

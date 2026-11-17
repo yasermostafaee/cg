@@ -1,6 +1,6 @@
 ## Decision
 
-Keep an acknowledgement in browser storage, keyed by the configured server endpoints, authentication origin and stable operator ID. The event identity includes timestamp, endpoints and reason. Retain at most 64 scopes. If browser storage is unavailable, acknowledgement lasts for the current window.
+Keep an acknowledgement in browser storage, keyed by the configured Bridge address, server endpoints, authentication origin and stable operator ID. Two remote Bridges that both advertise a loopback Caspar endpoint remain separate scopes. The event identity includes timestamp, endpoints and reason. Retain at most 64 scopes. If browser storage is unavailable, acknowledgement lasts for the current window.
 
 The Bridge already distinguishes Playout stations through `playoutLinked`. Apply that same fact to both redundancy-adapter constructors, so a stored enabled legacy flag cannot select another CG primary. The UI reads the existing authentication mode and suppresses completed legacy events there. Connection alarms remain visible and use server wording without legacy strategy chips on Playout stations.
 

@@ -60,7 +60,7 @@ afterEach(async () => {
 async function mount(
   health: ConnectionHealth | null,
   link: 'live' | 'offline-mock' | 'disconnected' = 'live',
-  options: { mode?: 'off' | 'playout'; station?: string; user?: string } = {},
+  options: { mode?: 'off' | 'playout'; station?: string; user?: string; bridge?: string } = {},
 ): Promise<{ el: HTMLElement; rerender: (next: ConnectionHealth | null) => Promise<void> }> {
   const stub = {
     auth: {
@@ -95,6 +95,7 @@ async function mount(
       onConfigChanged: () => () => undefined,
     },
     link: {
+      bridgeAddress: () => options.bridge ?? '192.0.2.32:5280',
       status: () => link,
       onStatusChanged: () => () => undefined,
       resyncing: () => false,
@@ -292,6 +293,26 @@ describe('guard item 9 — the failover banner renders under its conditions, and
     expect(
       strip((await mount(event, 'live', { station: '192.0.2.32', user: 'two' })).el),
     ).not.toBeNull();
+  });
+
+  it('distinguishes remote Bridges even when both advertise the same loopback Caspar endpoint', async () => {
+    const event: ConnectionHealth = {
+      ...healthy('B'),
+      lastFailover: { at: AT, reason: 'manual', from: 'A', to: 'B' },
+    };
+    const first = await mount(event, 'live', { station: '127.0.0.1', bridge: '192.0.2.32:5280' });
+    await act(async () =>
+      first.el.querySelector<HTMLButtonElement>('[aria-label="Dismiss failover banner"]')?.click(),
+    );
+    await unmount();
+    const second = await mount(event, 'live', { station: '127.0.0.1', bridge: '192.0.2.43:5280' });
+    expect(strip(second.el)).not.toBeNull();
+    await unmount();
+    const original = await mount(event, 'live', {
+      station: '127.0.0.1',
+      bridge: '192.0.2.32:5280',
+    });
+    expect(strip(original.el)).toBeNull();
   });
 
   it('suppresses old CG failover events in Playout mode while retaining real connection alarms', async () => {

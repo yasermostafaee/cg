@@ -136,6 +136,7 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
     config,
     auth,
     capabilities?.signInUrl ?? null,
+    window.cg.link.bridgeAddress?.() ?? null,
   );
 
   if (link === 'offline-mock') return null;
