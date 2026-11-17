@@ -155,13 +155,13 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     }
   }, [scrollTop, height, rowHeight, rows.length, nearEndRows, onNearEnd]);
 
-  const pickFrom = (target: EventTarget | null): number | null => {
-    if (!(target instanceof Element) || (tiled && target.closest('button') !== null)) return null;
+  const optionAt = (target: EventTarget | null, includeActionRow: boolean): number | null => {
+    if (!(target instanceof Element)) return null;
     const el = target.closest<HTMLElement>(
-      tiled ? '[data-vlist-index], [data-vlist-tile-index]' : '[data-vlist-index]',
+      includeActionRow ? '[data-vlist-index], [data-vlist-action-index]' : '[data-vlist-index]',
     );
     if (el === null) return null;
-    const index = Number(el.dataset['vlistIndex'] ?? el.dataset['vlistTileIndex']);
+    const index = Number(el.dataset['vlistIndex'] ?? el.dataset['vlistActionIndex']);
     const row = rows[index];
     if (row === undefined || row.kind !== 'option' || row.disabled === true) return null;
     return index;
@@ -181,11 +181,12 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       onScroll={tiled ? undefined : (e) => setScrollTop(e.currentTarget.scrollTop)}
       onKeyDown={onKeyDown}
       onPointerMove={(e) => {
-        const index = pickFrom(e.target);
+        const index = optionAt(e.target, true);
         if (index !== null && index !== activeIndex) onActiveChange(index);
       }}
       onClick={(e) => {
-        const index = pickFrom(e.target);
+        if (e.target instanceof Element && e.target.closest('button') !== null) return;
+        const index = optionAt(e.target, tiled);
         if (index !== null) onPick(index);
       }}
     >
@@ -234,6 +235,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
               key={`o:${row.key}`}
               role={withActions ? 'row' : 'presentation'}
               className="cg-vlist-action-row"
+              data-vlist-action-index={index}
               data-vlist-tile-index={tiled ? index : undefined}
               style={style}
             >

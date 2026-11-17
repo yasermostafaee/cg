@@ -9,12 +9,15 @@ import {
   type ConsoleMediaItem,
   type SourceCatalog,
 } from '@cg/shared-ipc';
+import { saveStationAddress } from '../src/platform/stationAddress.js';
 import { SourcePicker, type SourceChoice } from '../src/renderer/features/sources/SourcePicker.js';
 import {
   __resetSourcesForTest,
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
+import { authStub } from './support/authStub.js';
 import { clearPortals } from './support/dialog.js';
+import { installMemoryStorage } from './support/localStorage.js';
 import { choosePickerOption, closePicker, openPicker, pickerTab } from './support/sourcePicker.js';
 
 /**
@@ -143,6 +146,7 @@ let searchDown = false;
 
 function installBridge(catalog = CATALOG, library = LIBRARY): void {
   const bridge = {
+    auth: authStub(),
     sources: {
       config: () => Promise.resolve(catalog),
       assignments: () => Promise.resolve({ assignments: [] }),
@@ -177,6 +181,7 @@ function installBridge(catalog = CATALOG, library = LIBRARY): void {
 }
 
 beforeEach(async () => {
+  installMemoryStorage();
   searches.length = 0;
   searchDown = false;
   __resetSourcesForTest();
@@ -347,6 +352,28 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     expect(panel.textContent).not.toMatch(/NDI|Stream|rtsp|STUDIO-PC/);
     const tabs = [...panel.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
     expect(tabs).toEqual(['Inputs 9', `Media ${String(LIBRARY.length)}`]);
+  });
+
+  it.each([
+    ['127.0.0.1:8080', 'playout.example.test:8443'],
+    ['[::1]:8080', 'playout.example.test:8443'],
+    ['192.0.2.43:8080', '192.0.2.43:8080'],
+    [undefined, undefined],
+  ])('displays the input snapshot server %s from the console (shows %s)', async (server, shown) => {
+    expect(
+      saveStationAddress({
+        playoutAddress: 'https://playout.example.test:8443',
+        bridgeAddress: 'bridge.example.test:5280',
+      }),
+    ).toBe(true);
+    await act(async () => {
+      installBridge({ ...CATALOG, inputsServer: server });
+    });
+    const panel = await openPicker(await render({}));
+    const provenance = panel.querySelector('[data-inputs-server]');
+    expect(provenance?.textContent).toBe(
+      shown === undefined ? 'Input server unavailable' : `Input server · ${shown}`,
+    );
   });
 
   it('opens on the tab of the current binding — Media for a media item, Inputs otherwise', async () => {

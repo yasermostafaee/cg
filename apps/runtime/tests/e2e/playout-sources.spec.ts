@@ -553,10 +553,9 @@ test.describe('source audio meters', () => {
     await field.click();
     const panel = picker(page);
     const controls = '[data-source-audio-meter]';
-    const meter = (id: string) =>
-      panel
-        .locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-input="${id}"]`) })
-        .locator(controls);
+    const inputRow = (id: string) =>
+      panel.locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-input="${id}"]`) });
+    const meter = (id: string) => inputRow(id).locator(controls);
     const peak = meter('in-studio-1');
     const rails = peak.locator('[data-input-meter-channel]');
     const expectAttached = async (locator: typeof peak): Promise<void> => {
@@ -648,6 +647,35 @@ test.describe('source audio meters', () => {
     });
     await expect(peak).toHaveAttribute('title', 'Audio peak -9 dBFS');
 
+    // Stereo and multi-channel meters share a reserved area at the right of the List view.
+    await panel.getByRole('button', { name: 'List view' }).click();
+    const peakRow = inputRow('in-studio-1');
+    const silentPickerMeter = meter('in-studio-2');
+    const silentPickerRow = inputRow('in-studio-2');
+    const pictureBox = (row: Locator) => row.locator('[data-input-thumbnail]').boundingBox();
+    const expectPictureEdgesAligned = async (left: Locator, right: Locator) => {
+      const [a, b] = await Promise.all([pictureBox(left), pictureBox(right)]);
+      expect(a).not.toBeNull();
+      expect(b).not.toBeNull();
+      expect(a!.x).toBeCloseTo(b!.x, 1);
+      expect(a!.x + a!.width).toBeCloseTo(b!.x + b!.width, 1);
+    };
+    await expectPictureEdgesAligned(peakRow, silentPickerRow);
+    await expectAttached(peak);
+    await expectAttached(silentPickerMeter);
+
+    const normal = await silentPickerRow.evaluate((row) => getComputedStyle(row).backgroundColor);
+    await silentPickerRow.locator('[data-picker-input]').hover();
+    const highlighted = await silentPickerRow.evaluate(
+      (row) => getComputedStyle(row).backgroundColor,
+    );
+    expect(highlighted).not.toBe(normal);
+    await peakRow.locator('[data-input-thumbnail]').hover();
+    await expect(peakRow).toHaveCSS('background-color', highlighted);
+    await expect(silentPickerRow).toHaveCSS('background-color', normal);
+    await expect(field).toHaveAttribute('data-picker-value', '');
+    expect((await readState()).checked).toEqual([]);
+
     await panel.locator('[data-picker-input="in-studio-1"]').click();
     const fieldMeter = field.locator(controls);
     await expect(fieldMeter).toHaveAttribute('data-input-meter-orientation', 'vertical');
@@ -700,6 +728,15 @@ test.describe('source audio meters', () => {
     await expect(silent).toBeVisible();
     const neutralBorder = await silent.evaluate((el) => getComputedStyle(el).borderTopColor);
     await expect(withoutLevel).toHaveCSS('border-top-color', neutralBorder);
+    await page.getByRole('button', { name: 'List view' }).click();
+    const setupRow = (meterName: string) =>
+      sources.locator('[data-source-input]', { has: page.getByRole('img', { name: meterName }) });
+    await expectPictureEdgesAligned(
+      setupRow('Studio 1 · Audio peak -9 dBFS'),
+      setupRow('Studio 2 · No audio stream'),
+    );
+    await expectAttached(setupMeter);
+    await expectAttached(silent);
     expect((await readState()).checked).toEqual([]);
   });
 });

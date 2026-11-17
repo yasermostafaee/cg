@@ -3,7 +3,6 @@
 }
 
 .cg-setup-source-catalogue .cg-resource {
-  grid-template-columns: var(--r-setup-resource-icon-box) minmax(0, 1fr) clamp(6rem, 34cqi, 14rem);
   grid-template-areas: 'icon caption picture';
 }
 
@@ -28,6 +27,24 @@
   flex: 1 1 0;
   inline-size: auto;
   min-inline-size: 0;
+}
+
+.cg-setup-source-catalogue[data-input-view='list'] .cg-resource {
+  --cg-setup-picture-width: clamp(6rem, 34cqi, 14rem);
+  --cg-setup-picture-and-meter-width: calc(
+    var(--cg-setup-picture-width) + var(--cg-input-meter-max-width, 6rem)
+  );
+  grid-template-columns: var(--r-setup-resource-icon-box) minmax(0, 1fr) var(
+      --cg-setup-picture-and-meter-width
+    );
+}
+
+.cg-setup-source-catalogue[data-input-view='list'] .cg-input-thumbnail {
+  flex: 0 0 var(--cg-setup-picture-width);
+}
+
+.cg-setup-source-catalogue[data-input-view='list'] .cg-resource:focus-within {
+  background: var(--r-setup-row-hover);
 }
 
 .cg-setup-source-catalogue[data-input-view='grid'] {
@@ -55,7 +72,8 @@
 
 @container (max-width: 28rem) {
   .cg-setup-source-catalogue[data-input-view='list'] .cg-resource {
-    grid-template-columns: minmax(0, 1fr) clamp(6rem, 38cqi, 10rem);
+    --cg-setup-picture-width: clamp(5rem, 34cqi, 10rem);
+    grid-template-columns: minmax(0, 1fr) var(--cg-setup-picture-and-meter-width);
     grid-template-areas: 'caption picture';
   }
 

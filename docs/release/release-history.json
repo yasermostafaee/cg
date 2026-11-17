@@ -58,8 +58,8 @@
           "en": "The status bar identifies Server A and Server B and shows which server controls CG graphics. PGM and Bridge sign-in display the operator's Playout server address."
         },
         {
-          "fa": "کانال رزرو از فهرست کانال‌های سازگار سرور B انتخاب می‌شود. نام قاب و ورودی در پیش‌نمایش و Live plates خواناتر است و Station layers فقط وضعیت لایه‌ها را خلاصه می‌کند.",
-          "en": "Backup channels are selected from compatible channels on Server B. Preview and Live plates use readable plate and source names, and Station layers summarises layer status."
+          "fa": "کانال رزرو از فهرست کانال‌های سازگار سرور B انتخاب می‌شود. فهرست ورودی‌ها آدرس Playout و پیش‌نمایش‌های هم‌تراز دارد. Live plates نام قاب را نشان می‌دهد و Station layers وضعیت لایه‌ها را خلاصه می‌کند.",
+          "en": "Backup channels are selected from compatible channels on Server B. Input lists show their Playout address and align previews. Live plates uses readable plate names, and Station layers summarises layer status."
         },
         {
           "fa": "نصاب شمارهٔ نسخه و پیشرفت عملیات را در تمام مراحل نشان می‌دهد. آیکون‌های Designer و Control با رنگ‌های متمایز به‌روز شده‌اند.",

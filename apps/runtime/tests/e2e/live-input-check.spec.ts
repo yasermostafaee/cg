@@ -142,7 +142,23 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(passiveTile).toBeVisible();
     await expect(passiveTile).toHaveText('No signal');
     await expect(passiveTile).not.toHaveRole('button');
+    await options.getByRole('button', { name: 'List view', exact: true }).click();
+    const studioRow = options.getByRole('row').filter({
+      has: page.locator('[data-picker-input="in-li-studio1"]'),
+    });
+    const initialBackground = await studioRow.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    await studioTile.hover();
+    const activeBackground = await studioRow.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(activeBackground).not.toBe(initialBackground);
+    await studioTile.focus();
+    await options.getByRole('button', { name: 'List view', exact: true }).hover();
+    await expect(studioRow).toHaveCSS('background-color', activeBackground);
     await studioTile.click();
+    await expect(field).toHaveAttribute('data-picker-value', '');
     const card = defaults.getByRole('region', { name: 'PVW input check' });
     await expect(card).toContainText('PVW INPUT · CH 1 · Studio 1');
     await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'ready');

@@ -9416,8 +9416,22 @@ input[type='checkbox']:disabled:checked {
 .cg-picker-player__empty p {
   margin: 0;
 }
-.cg-picker [data-picker-tab='inputs'] .cg-vlist-action-row .cg-input-thumbnail {
-  inline-size: clamp(6.5rem, 14vw, 11rem);
+.cg-picker [data-picker-tab='inputs'][data-input-view='list'] {
+  --cg-picker-input-picture-width: clamp(6.5rem, 14vw, 11rem);
+}
+.cg-picker [data-picker-tab='inputs'][data-input-view='list'] .cg-input-picture-meter {
+  inline-size: calc(var(--cg-picker-input-picture-width) + var(--cg-input-meter-max-width, 6rem));
+}
+.cg-picker [data-picker-tab='inputs'][data-input-view='list'] .cg-input-thumbnail {
+  inline-size: var(--cg-picker-input-picture-width);
+}
+.cg-picker
+  [data-picker-tab='inputs'][data-input-view='list']
+  .cg-vlist-action-row:is(:hover, :focus-within, :has(> .cg-vlist-option.is-active)) {
+  background: var(--r-menu-hover-fill);
+}
+.cg-picker [data-picker-tab='inputs'][data-input-view='list'] .cg-vlist-option.is-active {
+  background: transparent;
 }
 .cg-picker .cg-picker-media .cg-media-thumbnail {
   inline-size: clamp(4.25rem, 10vw, 8rem);

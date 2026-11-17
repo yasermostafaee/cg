@@ -8,6 +8,7 @@ import {
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
+import { authStub } from './support/authStub.js';
 import { openPicker, pickerTab } from './support/sourcePicker.js';
 
 it('reads only visible media posters, reuses reads, and keeps poster clicks as selection', async () => {
@@ -23,6 +24,7 @@ it('reads only visible media posters, reuses reads, and keeps poster clicks as s
       Promise.resolve(id === 'md-clip-b' ? { ok: false } : { ok: true, dataUrl: jpeg }),
     );
   const bridge = {
+    auth: authStub(),
     sources: {
       config: () =>
         Promise.resolve({
