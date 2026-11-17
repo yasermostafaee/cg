@@ -458,7 +458,7 @@ it('the mock implements every backing method + emitter the bridge routes (B-070)
   expect(BACKING_EMITTERS.filter((name) => !hasEmitter(mock, name))).toEqual([]);
 });
 
-it('the mock bridge exposes the same RuntimeBridge method tree as the live one', () => {
+it('both bridges expose the required RuntimeBridge methods and the live one can query source presence', () => {
   live = new WebSocketRuntime('ws://127.0.0.1:1/parity-never-connects', {
     createWebSocket: () => inertSocket(),
   });
@@ -470,12 +470,13 @@ it('the mock bridge exposes the same RuntimeBridge method tree as the live one',
     expect(hasMethod(mock, name)).toBe(true);
   }
 
-  // Every group the SPA can reach, method for method: an intent implemented on one
-  // backend but missing on the other is a UX built against a phantom contract.
+  // Source presence is a negotiated network read. The offline bridge has no
+  // independent engine catalogues and does not advertise this capability.
   for (const group of GROUP_NAMES) {
     const declared = [...(BRIDGE_SURFACE.groups[group] as readonly string[])].sort();
+    const liveDeclared = group === 'sources' ? [...declared, 'presence'].sort() : declared;
     expect({ group, methods: methodKeys(mock[group]) }).toEqual({ group, methods: declared });
-    expect({ group, methods: methodKeys(real[group]) }).toEqual({ group, methods: declared });
+    expect({ group, methods: methodKeys(real[group]) }).toEqual({ group, methods: liveDeclared });
   }
 });
 
