@@ -19,7 +19,7 @@ import type { PreviewEngine, PreviewOriginChanged } from '../sources/usePreviewO
 const PICTURE_TIMEOUT_MS = 2_500;
 const CAPTIONS = {
   connecting: 'Connecting',
-  ready: 'Live',
+  ready: 'Picture received',
   stalled: 'Stalled',
   unavailable: 'Unavailable',
   conflict: 'In use',
@@ -42,15 +42,24 @@ export function LiveInputCheckTile({
   const { channel, previewId } = view;
   const canvas = useRef<HTMLCanvasElement>(null);
   const ready = view.state === 'ready';
-  const [decoded, setDecoded] = useState(false);
-  const [decodedOrigin, setDecodedOrigin] = useState<PreviewEngine>();
+  const [decoded, setDecoded] = useState<{
+    channel: number;
+    previewId: string;
+    engine: PreviewEngine | undefined;
+  }>();
   const [busCount, setBusCount] = useState(2);
   const measuredBuses = view.dbFs?.length ?? 0;
-  const pictureLive = ready && decoded;
+  const pictureLive =
+    ready &&
+    decoded?.channel === channel &&
+    decoded.previewId === previewId &&
+    decoded.engine === view.engine;
 
   useEffect(() => {
-    onPreviewEngineChange?.(pictureLive ? decodedOrigin : undefined);
-  }, [pictureLive, decodedOrigin, onPreviewEngineChange]);
+    onPreviewEngineChange?.(pictureLive ? decoded?.engine : undefined);
+  }, [pictureLive, decoded?.engine, onPreviewEngineChange]);
+
+  useLayoutEffect(() => setDecoded(undefined), [channel, previewId, ready, view.engine]);
 
   useLayoutEffect(() => {
     if (measuredBuses > 0) setBusCount(Math.max(2, measuredBuses));
@@ -58,14 +67,13 @@ export function LiveInputCheckTile({
 
   useEffect(() => {
     if (!ready) return undefined;
-    setDecoded(false);
     const drawing = canvas.current;
     const context = drawing?.getContext('2d');
     const abort = new AbortController();
     const failed = (): void => {
       if (abort.signal.aborted) return;
       abort.abort();
-      setDecoded(false);
+      setDecoded(undefined);
       onStall(previewId);
     };
     let deadline = setTimeout(failed, PICTURE_TIMEOUT_MS);
@@ -89,8 +97,13 @@ export function LiveInputCheckTile({
           if (drawing.width !== bitmap.width) drawing.width = bitmap.width;
           if (drawing.height !== bitmap.height) drawing.height = bitmap.height;
           context.drawImage(bitmap, 0, 0);
-          setDecodedOrigin(view.engine);
-          setDecoded(true);
+          setDecoded((previous) =>
+            previous?.channel === channel &&
+            previous.previewId === previewId &&
+            previous.engine === view.engine
+              ? previous
+              : { channel, previewId, engine: view.engine },
+          );
           clearTimeout(deadline);
           deadline = setTimeout(failed, PICTURE_TIMEOUT_MS);
         } finally {
@@ -161,12 +174,14 @@ export function LiveInputCheckTile({
   };
 
   const audible = audio === 'connecting' || audio === 'playing';
-  const state = view.state === 'ready' && !decoded ? 'connecting' : view.state;
+  const state = view.state === 'ready' && !pictureLive ? 'connecting' : view.state;
+  const peer = view.engine === undefined ? undefined : `Server ${view.engine}`;
+  const caption = [CAPTIONS[state], peer].filter(Boolean).join(' · ');
   const handleButtonKey = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
   };
   const message = [
-    CAPTIONS[state],
+    caption,
     view.message,
     audio === 'unavailable' ? 'Input sound unavailable' : undefined,
   ]
@@ -191,7 +206,13 @@ export function LiveInputCheckTile({
         />
         {!pictureLive && (
           <span className="cg-input-check-tile__placeholder">
-            {state === 'connecting' ? 'Waiting for picture' : 'No current picture'}
+            {state === 'forbidden' ? (
+              <span data-input-check-detail="">{view.message || 'Access denied'}</span>
+            ) : state === 'connecting' ? (
+              'Waiting for picture'
+            ) : (
+              'No current picture'
+            )}
           </span>
         )}
         <span className="cg-input-check-tile__top">
@@ -202,7 +223,7 @@ export function LiveInputCheckTile({
             aria-label={message}
             title={message}
           >
-            {CAPTIONS[state]}
+            {caption}
           </span>
           <span className="cg-input-check-tile__actions">
             <Button

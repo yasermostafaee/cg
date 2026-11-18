@@ -136,12 +136,34 @@ SHALL release demand as rows become hidden or inaccessible.
 
 ### Requirement: A live-input check SHALL be honest about its lifecycle and SHALL never leave a frozen picture
 
-The card SHALL distinguish `connecting`, `live`, `stalled`, `unavailable`, `conflict`, `replaced`, `expired` and
+The card SHALL distinguish `connecting`, `ready`, `stalled`, `unavailable`, `conflict`, `replaced`, `expired` and
 `forbidden`. It SHALL show picture only for the active preview generation in `live`. On stall, stop, replacement,
 expiry, loss of permission or air-priority conflict it SHALL remove the last picture and name the state; it SHALL NOT
 leave a last frame that can be mistaken for a current feed.
 The card SHALL show an empty frame when it has no current picture and reserve a source signal label for
 authoritative source-signal evidence.
+
+The decoded-picture caption SHALL say `Picture received`, with the known server, rather than imply that
+physical input signal has been independently confirmed. A successfully decoded black picture SHALL
+remain a received picture. A denied check SHALL visibly show `Access denied`, the known server and the
+Bridge's reason inside the existing tile, independently of catalog availability badges. It SHALL NOT
+retry under another credential or change the binding to conceal the denial.
+
+#### Scenario: A decoded picture does not prove physical source signal
+
+- **WHEN** the preview lease is ready but no JPEG has decoded
+- **THEN** the card shows `Connecting` and leaves listening disabled
+- **WHEN** a current JPEG decodes, including a black picture
+- **THEN** the card shows `Picture received` with its known server
+- **AND** it does not infer signal presence or absence from pixel colour
+
+#### Scenario: Preview authorization differs from catalog presence
+
+- **GIVEN** an input is listed as available on both servers
+- **WHEN** its explicit check is refused by the target server
+- **THEN** the existing tile shows `Access denied`, the known target server and the provided reason
+- **AND** it hides any old picture, removes the decoded-provider emphasis and disables listening
+- **AND** availability, selection, bindings, rehearsal and PGM remain unchanged
 
 #### Scenario: Another check replaces this one
 

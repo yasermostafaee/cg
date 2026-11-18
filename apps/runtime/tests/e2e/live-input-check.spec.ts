@@ -45,7 +45,17 @@ test('C-023 · inspect input picture from source controls without changing a bin
   test.setTimeout(75_000);
   const preview = new FakeLivePreview();
   preview.meterLevels = [-21, -18, -27, -30, -32, -34, -36, -38];
-  const playout = await startFakePlayout({ livePreview: preview.handle });
+  let denyPreview = false;
+  const playout = await startFakePlayout({
+    livePreview: async (request, response) => {
+      if (denyPreview) {
+        response.writeHead(403, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: 'access.denied' }));
+        return;
+      }
+      await preview.handle(request, response);
+    },
+  });
   const programme = await startFakePgmFeed({ port: 0 });
   const oscPort = await freeUdpPort();
   const engine = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10 });
@@ -180,6 +190,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(options.getByRole('button', { name: 'Select', exact: true })).toBeEnabled();
     await expect(defaults.locator('[data-input-check]')).toHaveCount(0);
     await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'ready');
+    await expect(card.locator(state)).toHaveText('Picture received · Server A');
     await expect(card.locator(picture)).toBeVisible();
     const checkedPicture = (await card.locator('[data-input-thumbnail="active"]').boundingBox())!;
     const checkedCard = (await studioRow.boundingBox())!;
@@ -230,6 +241,22 @@ test('C-023 · inspect input picture from source controls without changing a bin
     preview.staleMeter = false;
     preview.stalledVideo = false;
     expect(preview.starts).toHaveLength(1);
+
+    denyPreview = true;
+    await studioTile.click();
+    await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'forbidden');
+    await expect(card.locator(state)).toHaveText('Access denied · Server A');
+    await expect(card.locator('[data-input-check-detail]')).toHaveText(
+      'Playout refused access to this input preview.',
+    );
+    await expect(card.locator(picture)).toBeHidden();
+    await expect(sound).toBeDisabled();
+    await expect(field).toHaveAttribute('data-picker-value', '');
+    await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
+    expect(preview.starts).toHaveLength(1);
+    await card.getByRole('button', { name: 'Close input check' }).click();
+    denyPreview = false;
+
     await studio1.click();
     await expect(studio1).toHaveAttribute('aria-selected', 'true');
     await expect(field).toHaveAttribute('data-picker-value', '');

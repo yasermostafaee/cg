@@ -34,7 +34,7 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
   disconnect, timeout and restart.
 - Require generation/owner-safe stop semantics so a stale dialog or socket cannot delete a newer client's preview.
   The Playout programme channel, programme layers and PGM relay are never mutated by this feature.
-- Surface `connecting`, `live`, `stalled`, `unavailable`, `conflict`, `replaced` and `expired` honestly; never leave a
+- Surface `connecting`, `ready`, `stalled`, `unavailable`, `conflict`, `replaced`, `expired` and `forbidden` honestly; never leave a
   frozen frame looking live.
 - Reserve a thumbnail slot on each input row and give Station setup a larger 16:9 slot. Show `Preview unavailable` for an unknown input state and
   `No signal` for confirmed absence, and open the existing one-input check when the operator activates an eligible slot.
