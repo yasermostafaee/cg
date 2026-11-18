@@ -9,8 +9,6 @@ import {
   withListLimits,
   defaultNestedValues,
   hasNextStep,
-  outputLetterbox,
-  outputScale,
   outputTranslate,
   resolveDefaultPosition,
   resolveProjectOutputRaster,
@@ -614,9 +612,7 @@ export function PreviewModal({
     stageSize.w > 0 && stageSize.h > 0
       ? Math.min(stageSize.w / outputRaster.width, stageSize.h / outputRaster.height)
       : 0;
-  const compositionScale = outputScale(outputRaster);
-  const pad = outputLetterbox(outputRaster);
-  const translation = outputTranslate(scene, resolveDefaultPosition(scene));
+  const translation = outputTranslate(scene, resolveDefaultPosition(scene), outputRaster);
 
   return (
     <Modal
@@ -658,9 +654,8 @@ export function PreviewModal({
                   style={{
                     width: resW,
                     height: resH,
-                    left: pad.x + translation.x * compositionScale,
-                    top: pad.y + translation.y * compositionScale,
-                    transform: `scale(${String(compositionScale)})`,
+                    left: translation.x,
+                    top: translation.y,
                   }}
                 />
               )}

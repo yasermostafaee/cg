@@ -5,8 +5,6 @@ import type { ExportIssue } from '@cg/shared-ipc';
 import type { Element, Scene } from '@cg/shared-schema';
 import {
   lookGroupOf,
-  outputLetterbox,
-  outputScale,
   outputTranslate,
   resolveDefaultPosition,
   resolveProjectOutputRaster,
@@ -327,17 +325,15 @@ export function CanvasArea({
     resolveProjectOutputRaster(state.scene ?? {}),
   );
   const outputPosition = resolveDefaultPosition(scene ?? {});
-  const rasterScale = outputScale(outputRaster);
-  const rasterPad = outputLetterbox(outputRaster);
   const outputTranslation =
-    scene === null ? { x: 0, y: 0 } : outputTranslate(scene, outputPosition);
-  // Keep editing in composition pixels. The output raster is the inverse of the same
-  // reference translation, uniform raster scale and letterbox pad used by the output page.
+    scene === null ? { x: 0, y: 0 } : outputTranslate(scene, outputPosition, outputRaster);
+  // Both authored composition coordinates and project coordinates are native pixels.
+  // Only the viewport zoom scales this editor overlay.
   const projectFrame = {
-    x: -outputTranslation.x - rasterPad.x / rasterScale,
-    y: -outputTranslation.y - rasterPad.y / rasterScale,
-    width: outputRaster.width / rasterScale,
-    height: outputRaster.height / rasterScale,
+    x: -outputTranslation.x,
+    y: -outputTranslation.y,
+    width: outputRaster.width,
+    height: outputRaster.height,
   };
   // B-042 — what the ruler needs to snap its tick MARKS onto the same physical device pixel
   // as the grid strokes (dpr + the overlay's per-axis fractional device offset). Captured in
@@ -1512,12 +1508,12 @@ export function CanvasArea({
               profile={guideProfile}
               width={outputRaster.width}
               height={outputRaster.height}
-              scale={zoom / rasterScale}
+              scale={zoom}
               compositionFrame={{
-                x: rasterPad.x + outputTranslation.x * rasterScale,
-                y: rasterPad.y + outputTranslation.y * rasterScale,
-                width: scene.resolution.width * rasterScale,
-                height: scene.resolution.height * rasterScale,
+                x: outputTranslation.x,
+                y: outputTranslation.y,
+                width: scene.resolution.width,
+                height: scene.resolution.height,
               }}
               style={{
                 left: rulerOrigin.x + projectFrame.x * zoom,
