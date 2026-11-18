@@ -29,8 +29,10 @@
 - [x] Keep the non-provider badge border transparent while preserving its size and availability
       color; verify computed borders for no picture, unknown availability and identical-image
       A/B/A handoff in a fresh browser. The previous 38% base border fails this regression.
-- [ ] Integrate with the release fixes, pass the full local gate and push normally.
-- [ ] Record the carrying commit's actual completed green Linux E2E URL and build installers.
+- [x] Integrate with the release fixes, pass the full local gate and push normally: 103/103
+      tasks, Runtime 2760, Designer 2026, Bridge 2286 and 220 strict OpenSpec checks on `261b57c8`.
+- [x] Record the carrying commit's actual completed green [Linux E2E job](https://github.com/yasermostafaee/cg/actions/runs/44222510030/job/134528154034)
+      on `261b57c8ae1840e96a3d10d6540c3094ad529239`; verify the three native 1.2.11 installers.
 - [ ] Verify the updated Bridge/Control previews on the target A/B station.
 
 ## Linux integration evidence
@@ -51,3 +53,30 @@ seconds; failed/interrupted attempts took 46.5 seconds. The healthy rate over th
 global ceiling is therefore 26 minutes, Designer stays at 17, and the outer job becomes
 49 minutes, preserving its six-minute setup/build margin. Per-test assertions, retries
 and coverage are unchanged. This failed run does not discharge the final Linux E2E debt.
+
+Final carrying source `261b57c8ae1840e96a3d10d6540c3094ad529239` completed its actual
+Linux E2E job successfully on 2026-11-18, alongside the heavy gate, Docs and required
+checks. Runtime passed 486 with 2 skipped; Designer passed 460 plus 1 flaky case that
+passed its configured retry, with 15 skipped; pack E2E passed 2. The flaky Designer
+case was B-381 Middle-clock hit-test selection in `loop-range.spec.ts`; it is recorded
+rather than described as a first-attempt pass. The actual E2E step ran from 02:23:31Z
+to 02:55:05Z. The complete log is retained as `cg-ci-261b57c8-e2e.log` in the local
+evidence directory.
+
+The earlier `b27463da` run also failed the same three obsolete contracts before these
+repairs: <https://github.com/yasermostafaee/cg/actions/runs/44215001997/job/134507400173>.
+Its Runtime result was 384 passed, 3 failed, 2 skipped and 99 unrun at the global
+deadline; Designer passed 461 with 15 skipped and pack passed 2. Its failure log is
+retained. The superseded `77dcba4a` run was cancelled only after the final carrying run
+was safely queued; that cancelled run is not Linux proof.
+
+At the user's request, all three installers were built before Linux completion from
+`77dcba4a4c608a7b38e90f880a57cc77df9eba27`, under `installers/1.2.11/77dcba4a`.
+They passed version, packaged blob, icon, guide and SHA-256 checks and were copied to
+the authorized Share with their manifest verified again. The later carrying commit
+changes only the B-443 E2E fixture: all tracked product/configuration/assets are byte
+identical to the native source. The unchanged packages therefore carry the verified
+product, without a test-only rebuild. Control installation was verified byte-for-byte
+apart from Tauri's expected three-byte `UNK` to `NSS` bundle marker. Updated Bridge
+installation and Master/Slave preview recovery on the target station remain pending;
+neither Linux nor local fixtures establish station clock or output-audio equality.
