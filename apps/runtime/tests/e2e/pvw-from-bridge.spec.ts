@@ -4863,7 +4863,7 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await expect(toggle.locator('.cg-pvw-tool-label')).toBeVisible();
   expect(await toggle.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
   await configure.click();
-  await expect(settings.getByRole('radio')).toHaveText(['Auto', '16:9', '4:3']);
+  await expect(settings.getByRole('radio')).toHaveText(['Auto', '16:9', '4:3', 'Custom']);
   await expect(guides).toHaveCount(0);
   await settings.getByRole('radio', { name: '4:3', exact: true }).click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');

@@ -2,11 +2,52 @@
 import { act, createElement, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { FittedSafeAreaGuides } from '../src/renderer/features/monitors/SafeAreaGuides.js';
+import { DEFAULT_BROADCAST_GUIDE_PROFILE, type BroadcastGuideProfile } from '@cg/ui';
+import {
+  FittedSafeAreaGuides,
+  SafeAreaGuides,
+} from '../src/renderer/features/monitors/SafeAreaGuides.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('draws custom portrait standards and percentage lines in the unchanged active raster', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const profile: BroadcastGuideProfile = {
+    ...DEFAULT_BROADCAST_GUIDE_PROFILE,
+    aspect: 'custom',
+    customAspect: { width: 3, height: 4 },
+    lines: [{ id: 'h', axis: 'y', position: 75, visible: true, name: 'عنوان' }],
+  };
+  try {
+    await act(async () =>
+      root.render(
+        createElement(SafeAreaGuides, { width: 1920, height: 1080, scale: 0.25, profile }),
+      ),
+    );
+    const svg = container.querySelector('[data-safe-area-guides]');
+    const reference = container.querySelector('[data-guide-reference="custom"]');
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 1920 1080');
+    expect(svg?.getAttribute('width')).toBe('480');
+    expect(svg?.getAttribute('height')).toBe('270');
+    expect(reference?.getAttribute('x')).toBe('555');
+    expect(reference?.getAttribute('width')).toBe('810');
+    expect(reference?.getAttribute('height')).toBe('1080');
+    expect(container.querySelector('[data-safe-area="graphics"]')?.getAttribute('width')).toBe(
+      '729',
+    );
+    expect(container.querySelector('[data-custom-guide="h"]')?.getAttribute('x1')).toBe('555');
+    expect(container.querySelector('[data-custom-guide="h"]')?.getAttribute('x2')).toBe('1365');
+    expect(container.querySelector('[data-custom-guide="h"]')?.getAttribute('y1')).toBe('810');
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
 });
 
 it('reattaches guides after their ancestor picture remounts while visible and observes subsequent resize', async () => {

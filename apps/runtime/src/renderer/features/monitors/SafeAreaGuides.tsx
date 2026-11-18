@@ -61,7 +61,7 @@ export function SafeAreaGuides({
   style?: CSSProperties;
   profile?: BroadcastGuideProfile | undefined;
 }): JSX.Element {
-  const frame = broadcastGuideFrame(width, height, profile.aspect);
+  const frame = broadcastGuideFrame(width, height, profile.aspect, profile.customAspect);
   const custom = broadcastCustomGuideLines(width, height, profile);
   return (
     <svg
@@ -83,43 +83,44 @@ export function SafeAreaGuides({
           vectorEffect="non-scaling-stroke"
         />
       )}
-      {(profile.standardVisible ? broadcastSafeAreas(width, height, profile.aspect) : []).map(
-        (area) => (
-          <g key={area.kind}>
-            <rect
-              {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
-              fill="none"
-              stroke={previewGuideColors.halo}
-              strokeWidth="3"
-              vectorEffect="non-scaling-stroke"
-              opacity="0.7"
-            />
-            <rect
-              data-safe-area={area.kind}
-              {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
-              fill="none"
-              stroke={profile.color}
-              strokeWidth="1"
-              strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
-              vectorEffect="non-scaling-stroke"
-            />
-            <text
-              x={width / 2}
-              y={area.kind === 'action' ? area.y + 12 / scale : area.y + area.height - 4 / scale}
-              textAnchor="middle"
-              fontSize={10 / scale}
-              fontFamily="sans-serif"
-              fill={profile.color}
-              stroke={previewGuideColors.halo}
-              strokeWidth={3 / scale}
-              paintOrder="stroke"
-              strokeLinejoin="round"
-            >
-              {area.label}
-            </text>
-          </g>
-        ),
-      )}
+      {(profile.standardVisible
+        ? broadcastSafeAreas(width, height, profile.aspect, profile.customAspect)
+        : []
+      ).map((area) => (
+        <g key={area.kind}>
+          <rect
+            {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
+            fill="none"
+            stroke={previewGuideColors.halo}
+            strokeWidth="3"
+            vectorEffect="non-scaling-stroke"
+            opacity="0.7"
+          />
+          <rect
+            data-safe-area={area.kind}
+            {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
+            fill="none"
+            stroke={profile.color}
+            strokeWidth="1"
+            strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
+            vectorEffect="non-scaling-stroke"
+          />
+          <text
+            x={width / 2}
+            y={area.kind === 'action' ? area.y + 12 / scale : area.y + area.height - 4 / scale}
+            textAnchor="middle"
+            fontSize={10 / scale}
+            fontFamily="sans-serif"
+            fill={profile.color}
+            stroke={previewGuideColors.halo}
+            strokeWidth={3 / scale}
+            paintOrder="stroke"
+            strokeLinejoin="round"
+          >
+            {area.label}
+          </text>
+        </g>
+      ))}
       {custom.map((line) => (
         <g key={line.id}>
           <line

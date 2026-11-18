@@ -41,12 +41,44 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     await act(async () => button('Configure safe guides').click());
     expect(
       [...document.querySelectorAll('[role="radio"]')].map((node) => node.textContent),
-    ).toEqual(['Auto', '16:9', '4:3']);
+    ).toEqual(['Auto', '16:9', '4:3', 'Custom']);
     await act(async () => button('4:3').click());
     expect(saved.aspect).toBe('4:3');
     await act(async () => Simulate.keyDown(button('4:3'), { key: 'ArrowLeft' }));
     expect(saved.aspect).toBe('16:9');
     expect(document.activeElement).toBe(button('16:9'));
+    await act(async () => Simulate.keyDown(button('16:9'), { key: 'End' }));
+    expect(saved.aspect).toBe('custom');
+    expect(document.activeElement).toBe(button('Custom'));
+    expect(saved.customAspect).toEqual({ width: 3, height: 4 });
+    await act(async () => {
+      const width = input('Custom aspect width');
+      width.value = '۹';
+      Simulate.change(width);
+    });
+    await act(async () => Simulate.blur(input('Custom aspect width')));
+    await act(async () => {
+      const height = input('Custom aspect height');
+      height.value = '16';
+      Simulate.change(height);
+    });
+    await act(async () => Simulate.keyDown(input('Custom aspect height'), { key: 'Enter' }));
+    expect(saved.customAspect).toEqual({ width: 9, height: 16 });
+    await act(async () => {
+      const width = input('Custom aspect width');
+      width.value = '0';
+      Simulate.change(width);
+    });
+    expect(input('Custom aspect width').getAttribute('aria-invalid')).toBe('true');
+    expect(saved.customAspect).toEqual({ width: 9, height: 16 });
+    await act(async () => Simulate.blur(input('Custom aspect width')));
+    expect(input('Custom aspect width').value).toBe('9');
+    await act(async () => button('4:3').click());
+    expect(saved.customAspect).toEqual({ width: 9, height: 16 });
+    await act(async () => button('Custom').click());
+    expect(saved.aspect).toBe('custom');
+    expect(input('Custom aspect width').value).toBe('9');
+    expect(input('Custom aspect height').value).toBe('16');
     await act(async () => button('Add horizontal guide').click());
     await act(async () => button('Add vertical guide').click());
     expect(saved.lines.map((line) => [line.axis, line.position, line.visible])).toEqual([

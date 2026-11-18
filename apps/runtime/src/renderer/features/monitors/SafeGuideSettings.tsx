@@ -2,8 +2,13 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { MoveHorizontal, MoveVertical, Plus, RotateCcw, Settings2, Trash2, X } from 'lucide-react';
 import {
   BROADCAST_GUIDE_ASPECTS,
+  DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
+  MAX_BROADCAST_GUIDE_ASPECT_PART,
   MAX_BROADCAST_GUIDE_LINES,
   broadcastGuideColor,
+  normalizeBroadcastGuideCustomAspect,
+  type BroadcastGuideAspect,
+  type BroadcastGuideCustomAspect,
   type BroadcastGuideLine,
   type BroadcastGuideProfile,
 } from '@cg/ui';
@@ -28,6 +33,14 @@ export function SafeGuideSettings({
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const id = useId();
+  const selectAspect = (aspect: BroadcastGuideAspect): void =>
+    onChange({
+      ...profile,
+      aspect,
+      ...(aspect === 'custom'
+        ? { customAspect: profile.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT }
+        : {}),
+    });
   const changeLine = (lineId: string, patch: Partial<BroadcastGuideLine>): void =>
     onChange({
       ...profile,
@@ -100,7 +113,7 @@ export function SafeGuideSettings({
                 event.preventDefault();
                 const aspect = BROADCAST_GUIDE_ASPECTS[next];
                 if (aspect === undefined) return;
-                onChange({ ...profile, aspect });
+                selectAspect(aspect);
                 event.currentTarget
                   .querySelector<HTMLButtonElement>(`[data-guide-aspect="${aspect}"]`)
                   ?.focus();
@@ -115,12 +128,18 @@ export function SafeGuideSettings({
                   active={profile.aspect === aspect}
                   data-guide-aspect={aspect}
                   tabIndex={profile.aspect === aspect ? 0 : -1}
-                  onClick={() => onChange({ ...profile, aspect })}
+                  onClick={() => selectAspect(aspect)}
                 >
-                  {aspect === 'auto' ? 'Auto' : aspect}
+                  {aspect === 'auto' ? 'Auto' : aspect === 'custom' ? 'Custom' : aspect}
                 </Button>
               ))}
             </div>
+            {profile.aspect === 'custom' && (
+              <CustomAspectFields
+                value={profile.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT}
+                onChange={(customAspect) => onChange({ ...profile, customAspect })}
+              />
+            )}
             <div className="cg-safe-guide-settings__heading">
               <span>Guide color</span>
               <ColorInput
@@ -201,6 +220,71 @@ export function SafeGuideSettings({
         </Popover>
       )}
     </>
+  );
+}
+
+function CustomAspectFields({
+  value,
+  onChange,
+}: {
+  value: BroadcastGuideCustomAspect;
+  onChange: (value: BroadcastGuideCustomAspect) => void;
+}): JSX.Element {
+  const id = useId();
+  const [width, setWidth] = useState(String(value.width));
+  const [height, setHeight] = useState(String(value.height));
+  useEffect(() => setWidth(String(value.width)), [value.width]);
+  useEffect(() => setHeight(String(value.height)), [value.height]);
+  const parts = { width: parseLocalizedNumber(width), height: parseLocalizedNumber(height) };
+  const next = normalizeBroadcastGuideCustomAspect(parts);
+  const widthValid =
+    normalizeBroadcastGuideCustomAspect({ width: parts.width, height: 1 }) !== null;
+  const heightValid =
+    normalizeBroadcastGuideCustomAspect({ width: 1, height: parts.height }) !== null;
+  const commit = (): void => {
+    if (next !== null) onChange(next);
+    else {
+      setWidth(String(value.width));
+      setHeight(String(value.height));
+    }
+  };
+  return (
+    <div className="cg-safe-guide-settings__ratio" role="group" aria-label="Custom reference ratio">
+      <label htmlFor={`${id}-width`}>
+        <span className="cg-safe-guide-settings__label">Width</span>
+        <NumericInput
+          id={`${id}-width`}
+          aria-label="Custom aspect width"
+          value={width}
+          min={1}
+          max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+          maxLength={6}
+          aria-invalid={!widthValid}
+          onValueChange={setWidth}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit();
+          }}
+        />
+      </label>
+      <label htmlFor={`${id}-height`}>
+        <span className="cg-safe-guide-settings__label">Height</span>
+        <NumericInput
+          id={`${id}-height`}
+          aria-label="Custom aspect height"
+          value={height}
+          min={1}
+          max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+          maxLength={6}
+          aria-invalid={!heightValid}
+          onValueChange={setHeight}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit();
+          }}
+        />
+      </label>
+    </div>
   );
 }
 

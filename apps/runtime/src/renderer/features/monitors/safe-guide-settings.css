@@ -38,6 +38,24 @@
   gap: 0.4rem;
 }
 
+.cg-safe-guide-settings__ratio {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.cg-safe-guide-settings__ratio label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.cg-safe-guide-settings__ratio input {
+  width: 100%;
+  min-width: 0;
+}
+
 .cg-safe-guide-settings__line {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) 4.5rem auto auto;

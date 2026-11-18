@@ -235,6 +235,64 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expect(settings.getByLabel('Guide color', { exact: true })).toHaveValue('#99dd44');
     await expect(settings.getByLabel('Guide 2 color', { exact: true })).toHaveValue('#cc55aa');
     await page.screenshot({ path: testInfo.outputPath('new-layout-guide-colors.png') });
+
+    await settings.getByRole('radio', { name: 'Custom', exact: true }).click();
+    const ratioWidth = settings.getByRole('textbox', { name: 'Custom aspect width', exact: true });
+    const ratioHeight = settings.getByRole('textbox', {
+      name: 'Custom aspect height',
+      exact: true,
+    });
+    await expect(ratioWidth).toHaveValue('3');
+    await expect(ratioHeight).toHaveValue('4');
+    const portrait = stage.locator('[data-guide-reference="custom"]');
+    await expect(portrait).toHaveAttribute('x', '555');
+    await expect(portrait).toHaveAttribute('width', '810');
+    await expect(portrait).toHaveAttribute('height', '1080');
+    await expect(stage.locator('[data-safe-area="graphics"]')).toHaveAttribute('width', '729');
+    await expect(stage.locator('[data-guide-axis="x"]')).toHaveAttribute('x1', '1162.5');
+    await ratioWidth.fill('0');
+    await expect(ratioWidth).toHaveAttribute('aria-invalid', 'true');
+    await expect(portrait).toHaveAttribute('width', '810');
+    await ratioWidth.press('Tab');
+    await expect(ratioWidth).toHaveValue('3');
+    await ratioWidth.fill('9');
+    await ratioWidth.press('Tab');
+    await ratioHeight.fill('16');
+    await ratioHeight.press('Enter');
+    await expect(portrait).toHaveAttribute('x', '656.25');
+    await expect(portrait).toHaveAttribute('width', '607.5');
+    await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+    await settings.getByRole('radio', { name: 'Custom', exact: true }).click();
+    await expect(ratioWidth).toHaveValue('9');
+    await expect(ratioHeight).toHaveValue('16');
+    await page.screenshot({ path: testInfo.outputPath('new-layout-custom-portrait-guides.png') });
+    await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
+    await expectAligned(stage);
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    if (await showMonitors.isVisible()) await showMonitors.click();
+    if ((await pvwToggle.getAttribute('aria-pressed')) !== 'true') await pvwToggle.click();
+    await expect(pvw.locator('[data-guide-reference="custom"]')).toHaveAttribute('width', '607.5');
+    await expect(pvw.locator('[data-guide-axis="x"]')).toHaveAttribute('x1', '1111.875');
+    const portraitProfile = await page.evaluate(() =>
+      localStorage.getItem('cg.runtime.safe-guides.v1'),
+    );
+    expect(JSON.parse(portraitProfile ?? '{}')).toMatchObject({
+      version: 1,
+      aspect: 'custom',
+      customAspect: { width: 9, height: 16 },
+    });
+    await page.reload();
+    await expect(layers).toBeVisible();
+    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await toggle.click();
+    await expect(portrait).toHaveAttribute('width', '607.5');
+    await editor.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
+    await expect(settings.getByRole('radio', { name: 'Custom', exact: true })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(ratioWidth).toHaveValue('9');
+    await expect(ratioHeight).toHaveValue('16');
     await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     expect(runtime.templatePage(saved.templateId, 1)).toEqual(served);
