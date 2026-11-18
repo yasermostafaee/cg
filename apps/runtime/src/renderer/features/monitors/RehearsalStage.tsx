@@ -19,6 +19,7 @@ import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   liveMaskPlacementKey,
   outputScale,
+  resolveOutputReference,
 } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
@@ -812,6 +813,7 @@ export function RehearsalStage({
             zIndex={frameZIndex(index)}
             fields={subject.fields}
             position={subject.position}
+            outputReference={subject.outputReference}
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
             animatePresetChanges={subject.animatePresetChanges}
@@ -904,7 +906,7 @@ export function RehearsalStage({
                   itemId={plate.itemId}
                   plate={plate}
                   frame={plate.frameEdit}
-                  pixelsPerScenePixel={fit * outputScale(raster)}
+                  pixelsPerScenePixel={fit * outputScale(raster, resolveOutputReference(subject))}
                   preserveAspect={preserveFrameAspect}
                   onSelect={() => onSelectItem?.(plate.itemId)}
                 />,

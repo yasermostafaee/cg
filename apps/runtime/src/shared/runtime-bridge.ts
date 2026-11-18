@@ -226,6 +226,7 @@ export interface AuthCapabilities {
   readonly previewResizeMode?: true;
   readonly previewMaskPlacement?: true;
   readonly livePlatePaintOrder?: true;
+  readonly authoredOutputReference?: true;
   readonly controlLiveLayouts?: true;
   readonly sourcePresence?: true;
   readonly sharedTemplateFolder?: true;

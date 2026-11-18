@@ -118,6 +118,41 @@ function expected(
 }
 
 describe('R-049 — plate placement across rasters', () => {
+  it('uses an authored HD reference for a cropped bottom-centre composition without shrinking it', () => {
+    const live = liveSources({
+      outputReference: { width: 1280, height: 720 },
+      resolution: { width: 1280, height: 100 },
+      defaultPosition: { anchor: 'bottom-center', offset: { x: 0, y: 0 } },
+    });
+    expect(only({ width: 1280, height: 720 }, live)).toMatchObject({
+      x: 100,
+      y: 680,
+      width: 320,
+      height: 180,
+    });
+    expect(only({ width: 1920, height: 1080 }, live)).toMatchObject({
+      x: 150,
+      y: 1020,
+      width: 480,
+      height: 270,
+    });
+  });
+
+  it('letterboxes a native PAL project and respects operator offsets in native reference pixels', () => {
+    const live = liveSources({
+      outputReference: { width: 720, height: 576 },
+      resolution: { width: 100, height: 100 },
+    });
+    const position: Position = { anchor: 'top-right', offset: { x: -10, y: 20 } };
+    // Native PAL on FHD: scale1.875, horizontal pad285; top-right translate610,20.
+    expect(only({ width: 1920, height: 1080 }, live, position)).toMatchObject({
+      x: 1616.25,
+      y: 150,
+      width: 600,
+      height: 337.5,
+    });
+  });
+
   it('1440×1080 (pads on Y) reproduces design.md §6 exactly', () => {
     const p = only({ width: 1440, height: 1080 });
     // The number the design worked out by hand. If this moves, the overlay and

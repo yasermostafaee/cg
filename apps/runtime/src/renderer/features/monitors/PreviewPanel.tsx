@@ -361,6 +361,7 @@ export function PreviewPanel({
             previewCropPending: item.pending || item.status === 'exiting',
             book: rehearsalBookOf(info, item, fields) ?? undefined,
             liveSources: live,
+            outputReference: live?.outputReference,
             controlLiveLayout,
             activeLookId,
             // An applied on-air switch has already run its effect. Do not replay it after PGM.

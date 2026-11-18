@@ -12,6 +12,61 @@ function setRect(doc: Document, selector: string, x: number, y: number, w: numbe
 }
 
 describe('PVW template bounds', () => {
+  it('reapplies a native reference arriving after frame load without replacing the raw composition', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const applyOutputPosition = vi.fn();
+    const html = '<!doctype html><html><body></body></html>';
+    const render = (outputReference?: { width: number; height: number }) =>
+      act(async () => {
+        root.render(
+          createElement(RehearsalFrame, {
+            itemId: 'native-row',
+            html,
+            raster: { width: 1920, height: 1080 },
+            fit: 0.5,
+            zIndex: 1,
+            fields: {},
+            position: { anchor: 'top-left', offset: { x: 10, y: 20 } },
+            outputReference,
+            rowName: 'Native graphic',
+            activeLookId: undefined,
+            timing: undefined,
+            livePlates: [],
+            sourceFrames: new Map(),
+          }),
+        );
+      });
+    try {
+      await render();
+      const frame = container.querySelector('iframe')!;
+      const doc = frame.contentDocument!;
+      doc.body.innerHTML = '<div class="cg-stage" style="width:1280px;height:100px"></div>';
+      Object.assign(frame.contentWindow!, { CG: { applyOutputPosition } });
+      await act(async () => {
+        frame.dispatchEvent(new Event('load'));
+      });
+      applyOutputPosition.mockClear();
+      await render({ width: 1280, height: 720 });
+      expect(applyOutputPosition).toHaveBeenCalledTimes(1);
+      expect(applyOutputPosition).toHaveBeenLastCalledWith(
+        { resolution: { width: 1280, height: 100 }, outputReference: { width: 1280, height: 720 } },
+        { search: '?pos=top-left&dx=10&dy=20' },
+      );
+      await render({ width: 1280, height: 720 });
+      expect(applyOutputPosition).toHaveBeenCalledTimes(1);
+      await render({ width: 720, height: 576 });
+      expect(applyOutputPosition).toHaveBeenCalledTimes(2);
+      expect(doc.querySelector<HTMLElement>('.cg-stage')?.style.width).toBe('1280px');
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('uses the union of visual boxes inside the stage and the nested composition clip', () => {
     const doc = document.implementation.createHTMLDocument();
     doc.body.className = 'cg-pending';

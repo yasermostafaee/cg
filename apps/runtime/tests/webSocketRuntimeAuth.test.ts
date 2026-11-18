@@ -445,6 +445,50 @@ it.each([false, true])(
   },
 );
 
+it.each([
+  { capable: false, reference: undefined, allowed: true },
+  { capable: false, reference: { width: 1920, height: 1080 }, allowed: true },
+  { capable: false, reference: { width: 1280, height: 720 }, allowed: false },
+  { capable: true, reference: { width: 1280, height: 720 }, allowed: true },
+])(
+  'checks authored output reference support without refusing legacy templates: %j',
+  async ({ capable, reference, allowed }) => {
+    const bridge = new FakeBridge();
+    bridge.capabilities = {
+      channels: ipc.runtimeRequestChannelNames(ipc),
+      ...(capable && { authoredOutputReference: true as const }),
+    };
+    const templateId = 'native-project-reference';
+    bridge.succeed.set(ipc.TemplatesImportChannel.name, { registered: true, templateId });
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+    const request = runtime.templates.import({
+      template: {
+        templateId,
+        templateType: 'custom',
+        fields: [],
+        liveSources: {
+          resolution: { width: 1280, height: 100 },
+          defaultPosition: { anchor: 'bottom-center', offset: { x: 0, y: 0 } },
+          sources: [],
+          ...(reference !== undefined && { outputReference: reference }),
+        },
+      },
+      html: '<html></html>',
+    });
+    if (allowed) {
+      await expect(request).resolves.toMatchObject({ registered: true, templateId });
+      expect(wireOf(bridge)).toContain(ipc.TemplatesImportChannel.name);
+    } else {
+      await expect(request).rejects.toThrow(
+        "This template uses its project's output size. Update CG Bridge to import it.",
+      );
+      expect(wireOf(bridge)).not.toContain(ipc.TemplatesImportChannel.name);
+    }
+  },
+);
+
 // ── 1 + 3 — the frame, its place in the queue, and the console that has no token ─────────────
 
 describe('R-066 — the `auth` frame is the FIRST thing on a connected socket', () => {

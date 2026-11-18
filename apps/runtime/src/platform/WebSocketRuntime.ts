@@ -1,4 +1,5 @@
 import type { AuditEntry, RetainedAirState, StackItemState } from '@cg/shared-schema';
+import { REFERENCE_FRAME } from '@cg/shared-schema';
 import {
   AuditCountChannel,
   AuditHealthChannel,
@@ -1138,6 +1139,7 @@ export class WebSocketRuntime implements RuntimeBridge {
             previewMaskPlacement: true,
           }),
         ...(caps.livePlatePaintOrder === true && { livePlatePaintOrder: true }),
+        ...(caps.authoredOutputReference === true && { authoredOutputReference: true }),
         ...(caps.controlLiveLayouts === true && { controlLiveLayouts: true }),
         ...(routed.has(ipcChannels.PlayoutSourcePresenceChannel.name) && { sourcePresence: true }),
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
@@ -2571,6 +2573,16 @@ export class WebSocketRuntime implements RuntimeBridge {
       throw new Error('Update CG Bridge to use layouts created in CG Control.');
     }
     const live = template.liveSources;
+    const reference = live?.outputReference;
+    if (
+      reference !== undefined &&
+      (reference.width !== REFERENCE_FRAME.width || reference.height !== REFERENCE_FRAME.height) &&
+      this.#authCaps?.authoredOutputReference !== true
+    ) {
+      throw new Error(
+        "This template uses its project's output size. Update CG Bridge to import it.",
+      );
+    }
     if (ipcChannels.usesLivePlatePaintOrder(live) && this.#authCaps?.livePlatePaintOrder !== true) {
       throw new Error('This template uses overlapping Live plates. Update CG Bridge to import it.');
     }

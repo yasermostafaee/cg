@@ -5,6 +5,7 @@ import {
   outputLetterbox,
   outputScale,
   outputTranslate,
+  resolveOutputReference,
   type FitRect,
   type Position,
 } from '@cg/shared-schema';
@@ -82,12 +83,14 @@ function startPosition(subject: RehearsalSubject, stage: FitRect, raster: Channe
   if (subject.position !== undefined) return subject.position;
   // The retained HTML may have an authored default that this browser never imported.
   // Reconstruct the current translation before the first drag so the graphic does not jump.
-  const scale = outputScale(raster);
-  const pad = outputLetterbox(raster);
+  const reference = resolveOutputReference(subject);
+  const scale = outputScale(raster, reference);
+  const pad = outputLetterbox(raster, reference);
   const anchor = subject.positionAnchor ?? 'center';
   const atAnchor = outputTranslate(
     { resolution: { width: stage.width / scale, height: stage.height / scale } },
     { anchor, offset: { x: 0, y: 0 } },
+    reference,
   );
   const round = (n: number): number => Math.round(n * 1000) / 1000;
   return {
@@ -179,7 +182,7 @@ function TemplateOutline({
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
-            pixelsPerOffset: fit * outputScale(raster),
+            pixelsPerOffset: fit * outputScale(raster, resolveOutputReference(subject)),
             seed,
             prior: positionDraftOf(itemId),
             last: undefined,

@@ -25,7 +25,12 @@ import {
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
-import { liveMaskPlacementKey, liveRevealRects, sameLiveMaskRect } from '@cg/shared-schema';
+import {
+  liveMaskPlacementKey,
+  liveRevealRects,
+  resolveOutputReference,
+  sameLiveMaskRect,
+} from '@cg/shared-schema';
 import type {
   LiveCropFocus,
   LiveFramePlacement,
@@ -250,9 +255,14 @@ export function platePlacements(
   maskPlacements?: readonly LiveMaskPlacement[],
   appliedMaskPlacements?: readonly LiveMaskPlacement[],
 ): PlatePlacement[] {
-  const s = outputScale(raster);
-  const pad = outputLetterbox(raster);
-  const t = outputTranslate({ resolution: live.resolution }, position ?? live.defaultPosition);
+  const reference = resolveOutputReference(live);
+  const s = outputScale(raster, reference);
+  const pad = outputLetterbox(raster, reference);
+  const t = outputTranslate(
+    { resolution: live.resolution },
+    position ?? live.defaultPosition,
+    reference,
+  );
   /*
     🔴 `B-151` — THE ACTIVE LOOK'S RECTS, RESOLVED BY THE CARRIER'S OWN FUNCTION.
 

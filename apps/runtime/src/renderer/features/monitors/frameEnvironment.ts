@@ -1,4 +1,4 @@
-import type { Position } from '@cg/shared-schema';
+import type { Position, Raster } from '@cg/shared-schema';
 import { positionQuery } from '@cg/shared-schema';
 
 /**
@@ -40,7 +40,7 @@ import { positionQuery } from '@cg/shared-schema';
 export interface PageRuntimeWindow {
   CG?: {
     applyOutputPosition?: (
-      scene: { resolution: { width: number; height: number } },
+      scene: { resolution: { width: number; height: number }; outputReference?: Raster },
       options: { search?: string },
     ) => void;
     /** `D-165` — the page's own sound switch (`audio-graph.ts`). Absent on a pre-`D-165` page. */
@@ -140,11 +140,15 @@ export function applyOperatorPosition(
   win: PageRuntimeWindow | null,
   doc: Document | null,
   position: Position | undefined,
+  outputReference?: Raster,
 ): boolean {
   if (position === undefined) return false;
   const target = operatorPositionTarget(win, doc);
   if (target === null) return false;
-  target.apply({ resolution: target.resolution }, { search: `?${positionQuery(position)}` });
+  target.apply(
+    { resolution: target.resolution, ...(outputReference !== undefined && { outputReference }) },
+    { search: `?${positionQuery(position)}` },
+  );
   return true;
 }
 

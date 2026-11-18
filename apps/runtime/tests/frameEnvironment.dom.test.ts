@@ -84,6 +84,18 @@ describe('applyOperatorPosition — the override reaches the frame at last', () 
     expect(scene.resolution).toEqual({ width: 800, height: 240 });
   });
 
+  it('retains the native project reference when applying an override to a cropped page', () => {
+    const { win, applyOutputPosition } = pageWindow();
+    const doc = pageDocument({ resolution: '1280x100' });
+    const before = doc.documentElement.outerHTML;
+    expect(applyOperatorPosition(win, doc, OVERRIDE, { width: 1280, height: 720 })).toBe(true);
+    expect(applyOutputPosition).toHaveBeenCalledWith(
+      { resolution: { width: 1280, height: 100 }, outputReference: { width: 1280, height: 720 } },
+      { search: `?${positionQuery(OVERRIDE)}` },
+    );
+    expect(doc.documentElement.outerHTML).toBe(before);
+  });
+
   /**
    * NO `cw`/`ch`. The frame IS sized to the channel raster, so the page's own
    * R-030 chain falls through to `window.innerWidth`/`innerHeight` and reads

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import type { CSSProperties, Ref } from 'react';
-import type { CgPage, FieldValues, FitRect, Position } from '@cg/shared-schema';
+import type { CgPage, FieldValues, FitRect, Position, Raster } from '@cg/shared-schema';
 import {
   controlLiveLayoutFocusTarget,
   controlLiveLayoutSoloTarget,
@@ -181,6 +181,7 @@ interface Props {
   fields: FieldValues;
   /** The operator's applied placement override (R-011), when the item has one. */
   position: Position | undefined;
+  outputReference?: Raster | undefined;
   /** Row label, for the accessible name. */
   rowName: string;
   /**
@@ -241,6 +242,7 @@ export function RehearsalFrame({
   zIndex,
   fields,
   position,
+  outputReference,
   rowName,
   activeLookId,
   animatePresetChanges = true,
@@ -868,6 +870,8 @@ export function RehearsalFrame({
   // applying a position to the selected row leaves every other frame's document
   // untouched — the composite does not re-place graphics nobody edited.
   const placementKey = position === undefined ? null : positionQuery(position);
+  const referenceWidth = outputReference?.width;
+  const referenceHeight = outputReference?.height;
   useEffect(() => {
     if (!ready || loadedHtml.current !== html) return;
     const frame = frameRef.current;
@@ -887,11 +891,14 @@ export function RehearsalFrame({
       // Re-derived from the key rather than closed over, so the value the effect
       // applies is the one its dependency describes — they cannot drift.
       position,
+      referenceWidth === undefined || referenceHeight === undefined
+        ? undefined
+        : { width: referenceWidth, height: referenceHeight },
     );
     if (applied && authored !== null) authored.overridden = true;
     // `position` is deliberately absent from the deps: `placementKey` is its
     // value, and adding the object back would restore the identity churn above.
-  }, [ready, html, placementKey]);
+  }, [ready, html, placementKey, referenceWidth, referenceHeight]);
 
   useEffect(() => {
     return () => onBoundsChange?.(itemId, null);
@@ -941,6 +948,8 @@ export function RehearsalFrame({
     html,
     itemId,
     placementKey,
+    referenceWidth,
+    referenceHeight,
     payload,
     raster.width,
     raster.height,

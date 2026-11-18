@@ -11,6 +11,7 @@ import type {
   FieldValues,
   Position,
   PositionAnchor,
+  Raster,
   StackItemState,
 } from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
@@ -30,6 +31,8 @@ export interface RehearsalSubject {
   rowName: string;
   /** The operator's applied placement override, when the item has one (R-011). */
   position: Position | undefined;
+  /** Authored project raster, including metadata-only templates without Live plates. */
+  outputReference?: Raster | undefined;
   /** Preferred anchor when the page is still showing its authored position. */
   positionAnchor?: PositionAnchor;
   canEditPosition?: boolean;
