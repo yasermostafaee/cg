@@ -115,8 +115,8 @@ export function SafeGuideSettings({
       <Button
         ref={anchor}
         variant="icon"
-        aria-label="Configure safe guides"
-        title="Configure safe guides"
+        aria-label="Safe area settings"
+        title="Safe area settings"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
@@ -128,15 +128,19 @@ export function SafeGuideSettings({
         <Popover
           anchor={anchor}
           id={id}
-          aria-label="Safe guides"
+          aria-label="Safe area settings"
           minWidth={400}
           maxHeight={560}
           onClose={() => setOpen(false)}
         >
           <div className="cg-safe-guide-settings">
             <header className="cg-safe-guide-settings__heading">
-              <strong>Safe guides</strong>
-              <Button variant="icon" aria-label="Close safe guides" onClick={() => setOpen(false)}>
+              <strong>Safe area settings</strong>
+              <Button
+                variant="icon"
+                aria-label="Close safe area settings"
+                onClick={() => setOpen(false)}
+              >
                 <Icon icon={X} size={14} />
               </Button>
             </header>

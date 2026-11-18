@@ -4866,8 +4866,8 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await showMonitors(page);
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
   const toggle = pvw.getByRole('button', { name: 'Safe areas in Preview', exact: true });
-  const configure = pvw.getByRole('button', { name: 'Configure safe guides', exact: true });
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const configure = pvw.getByRole('button', { name: 'Safe area settings', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   const guides = pvw.locator('[data-safe-area-guides]');
   const reference = guides.locator('[data-guide-reference="4:3"]');
   const horizontal = guides.locator('[data-custom-guide][data-guide-axis="y"]');
@@ -4907,7 +4907,7 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await settings.getByRole('checkbox', { name: 'Show 93% Action', exact: true }).uncheck();
   await settings.getByRole('checkbox', { name: 'Show 90% Graphics', exact: true }).uncheck();
   await expect(guides.locator('[data-safe-area]')).toHaveCount(0);
-  await settings.getByRole('button', { name: 'Close safe guides' }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings' }).click();
   await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(
     pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage'),
@@ -4950,7 +4950,7 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
     'زیرنویس · A',
   );
-  await settings.getByRole('button', { name: 'Close safe guides' }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings' }).click();
   await page.reload();
   await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
   await showMonitors(page);
@@ -4969,7 +4969,7 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await page.screenshot({ path: testInfo.outputPath('runtime-safe-guides-settings.png') });
   await settings.getByRole('button', { name: 'Remove guide 2' }).click();
   await expect(settings.locator('[data-custom-guide-row]')).toHaveCount(1);
-  await settings.getByRole('button', { name: 'Close safe guides' }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings' }).click();
   await expect(reference).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('runtime-custom-safe-guides.png') });
   await expect(

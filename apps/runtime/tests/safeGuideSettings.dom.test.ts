@@ -38,7 +38,7 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
   };
   try {
     await act(async () => root.render(createElement(Host)));
-    await act(async () => button('Configure safe guides').click());
+    await act(async () => button('Safe area settings').click());
     expect(
       [...document.querySelectorAll('[role="radio"]')].map((node) =>
         node.getAttribute('aria-label'),
@@ -128,7 +128,7 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     await act(async () => button('Remove guide 1').click());
     expect(saved.lines).toHaveLength(1);
     expect(saved.lines[0]?.axis).toBe('x');
-    await act(async () => button('Close safe guides').click());
+    await act(async () => button('Close safe area settings').click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   } finally {
     act(() => root.unmount());
@@ -173,7 +173,7 @@ it('keeps multiple custom frames independent with inherited and overridden borde
   };
   try {
     await act(async () => root.render(createElement(Host)));
-    await act(async () => button('Configure safe guides').click());
+    await act(async () => button('Safe area settings').click());
     await act(async () => button('4:3').click());
     // Editing another ratio never hides the already-visible Auto frame.
     expect(saved.frames?.find((frame) => frame.id === 'auto')?.visible).toBe(true);
