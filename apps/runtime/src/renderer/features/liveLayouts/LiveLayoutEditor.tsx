@@ -931,9 +931,8 @@ export function LiveLayoutEditor({
                   aria-label="Layout safe guides"
                 >
                   <Button
-                    variant="neutral"
+                    variant={showSafeGuides ? 'accent' : 'neutral'}
                     aria-pressed={showSafeGuides}
-                    active={showSafeGuides}
                     title={showSafeGuides ? 'Hide safe guides' : 'Show safe guides'}
                     onClick={() => setShowSafeGuides((visible) => !visible)}
                   >

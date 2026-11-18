@@ -635,8 +635,7 @@ export function PreviewPanel({
             <span className="cg-pvw-tool-label">Move template</span>
           </Button>
           <Button
-            variant="ghost"
-            active={safeAreasVisible}
+            variant={safeAreasVisible ? 'accent' : 'ghost'}
             aria-label="Safe areas in Preview"
             aria-pressed={safeAreasVisible}
             data-monitor-safe-areas=""

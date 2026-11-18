@@ -179,11 +179,10 @@ export function SafeGuideSettings({
                 return (
                   <Button
                     key={frame.id}
-                    variant="neutral"
+                    variant={editing?.id === frame.id ? 'accent' : 'neutral'}
                     role="radio"
                     aria-label={label}
                     aria-checked={editing?.id === frame.id}
-                    active={editing?.id === frame.id}
                     data-guide-aspect={frame.aspect}
                     data-guide-frame-id={frame.id}
                     data-frame-visible={frame.visible}
@@ -248,7 +247,7 @@ export function SafeGuideSettings({
                     Frame color
                     <ColorInput
                       aria-label="Frame color"
-                      className="cg-safe-guide-settings__color"
+                      className="cg-field cg-safe-guide-settings__color"
                       value={editing.color}
                       onChange={(color) => changeFrame({ color })}
                     />
@@ -272,7 +271,7 @@ export function SafeGuideSettings({
                       <div className="cg-safe-guide-settings__colors">
                         <ColorInput
                           aria-label={`${GUIDE_BORDER_LABELS[border.percent]} color`}
-                          className="cg-safe-guide-settings__color"
+                          className="cg-field cg-safe-guide-settings__color"
                           value={border.color ?? editing.color}
                           onChange={(color) => changeBorder(border.percent, { color })}
                         />
@@ -315,7 +314,7 @@ export function SafeGuideSettings({
               Named guide color
               <ColorInput
                 aria-label="Guide color"
-                className="cg-safe-guide-settings__color"
+                className="cg-field cg-safe-guide-settings__color"
                 value={profile.color}
                 onChange={(color) => onChange({ ...profile, color })}
               />
@@ -404,6 +403,7 @@ function CustomAspectFields({
       <label htmlFor={`${id}-width`}>
         <span className="cg-safe-guide-settings__label">Width</span>
         <NumericInput
+          className="cg-field"
           id={`${id}-width`}
           aria-label="Custom aspect width"
           value={width}
@@ -421,6 +421,7 @@ function CustomAspectFields({
       <label htmlFor={`${id}-height`}>
         <span className="cg-safe-guide-settings__label">Height</span>
         <NumericInput
+          className="cg-field"
           id={`${id}-height`}
           aria-label="Custom aspect height"
           value={height}
@@ -485,6 +486,7 @@ function GuideRow({
       />
       <div className="cg-safe-guide-settings__position">
         <NumericInput
+          className="cg-field"
           aria-label={`${label} position percent`}
           value={position}
           decimal
@@ -501,7 +503,7 @@ function GuideRow({
       <div className="cg-safe-guide-settings__colors">
         <ColorInput
           aria-label={`${label} color`}
-          className="cg-safe-guide-settings__color"
+          className="cg-field cg-safe-guide-settings__color"
           value={color}
           onChange={(color) => onChange({ color })}
         />
