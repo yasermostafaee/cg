@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Info, Plus, RotateCcw, Settings2, Trash2, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowDownLeft,
+  ArrowDownRight,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpLeft,
+  ArrowUpRight,
+  CircleDot,
+  Info,
+  Plus,
+  RotateCcw,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {
   PositionAnchorSchema,
-  outputLetterbox,
-  outputScale,
   outputTranslate,
   type Position,
   type PositionAnchor,
@@ -25,7 +39,6 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Popover } from '../../ui/Popover.js';
-import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { designerGuideStore } from './broadcastGuideStore.js';
@@ -259,6 +272,18 @@ const ANCHOR_LABELS: Record<PositionAnchor, string> = {
   'bottom-right': 'Bottom right',
 };
 
+const ANCHOR_ICONS = {
+  'top-left': ArrowUpLeft,
+  'top-center': ArrowUp,
+  'top-right': ArrowUpRight,
+  'mid-left': ArrowLeft,
+  center: CircleDot,
+  'mid-right': ArrowRight,
+  'bottom-left': ArrowDownLeft,
+  'bottom-center': ArrowDown,
+  'bottom-right': ArrowDownRight,
+} satisfies Record<PositionAnchor, typeof ArrowUp>;
+
 function ProjectOutputControls({
   raster,
   position,
@@ -270,11 +295,7 @@ function ProjectOutputControls({
   compositionResolution: Resolution;
   onEdit(): void;
 }): JSX.Element {
-  const scale = outputScale(raster);
-  const pad = outputLetterbox(raster);
-  const topLeft = outputTranslate({ resolution: compositionResolution }, position);
-  const outputX = pad.x + topLeft.x * scale;
-  const outputY = pad.y + topLeft.y * scale;
+  const origin = outputTranslate({ resolution: compositionResolution }, position, raster);
   const changePosition = (next: Position): void => {
     designerStore.setCompositionOutputPosition(next);
     onEdit();
@@ -284,10 +305,9 @@ function ProjectOutputControls({
     onEdit();
   };
   const changeOrigin = (axis: 'x' | 'y', value: number): void => {
-    const output = axis === 'x' ? outputX : outputY;
     changePosition({
       ...position,
-      offset: { ...position.offset, [axis]: position.offset[axis] + (value - output) / scale },
+      offset: { ...position.offset, [axis]: position.offset[axis] + value - origin[axis] },
     });
   };
   return (
@@ -322,49 +342,50 @@ function ProjectOutputControls({
         </label>
       </div>
       <strong>Composition position on output</strong>
-      <label className={s.outputField}>
-        <span>Anchor</span>
-        <Select
-          aria-label="Composition output anchor"
-          value={position.anchor}
-          onChange={(event) => {
-            const anchor = PositionAnchorSchema.parse(event.target.value);
-            changePosition({ ...position, anchor });
-            designerStore.markHistoryBoundary();
-          }}
-        >
+      <div className={s.placementControls}>
+        <div className={s.anchorGrid} role="group" aria-label="Composition output anchor">
           {PositionAnchorSchema.options.map((anchor) => (
-            <option key={anchor} value={anchor}>
-              {ANCHOR_LABELS[anchor]}
-            </option>
+            <Button
+              key={anchor}
+              size="sm"
+              className={s.anchorButton}
+              aria-label={ANCHOR_LABELS[anchor]}
+              title={ANCHOR_LABELS[anchor]}
+              aria-pressed={position.anchor === anchor}
+              selected={position.anchor === anchor}
+              onClick={() => {
+                changePosition({ anchor, offset: { x: 0, y: 0 } });
+                designerStore.markHistoryBoundary();
+              }}
+            >
+              <Icon icon={ANCHOR_ICONS[anchor]} size={13} />
+            </Button>
           ))}
-        </Select>
-      </label>
-      <div className={s.outputGrid}>
-        <label className={s.outputField}>
-          <span>X (px)</span>
-          <RealtimeNumberInput
-            className={s.input}
-            ariaLabel="Composition output X"
-            value={outputX}
-            scrub={false}
-            onCommit={(value) => changeOrigin('x', value)}
-            onCommitBoundary={designerStore.markHistoryBoundary}
-          />
-        </label>
-        <label className={s.outputField}>
-          <span>Y (px)</span>
-          <RealtimeNumberInput
-            className={s.input}
-            ariaLabel="Composition output Y"
-            value={outputY}
-            scrub={false}
-            onCommit={(value) => changeOrigin('y', value)}
-            onCommitBoundary={designerStore.markHistoryBoundary}
-          />
-        </label>
+        </div>
+        <div className={s.outputGrid}>
+          <label className={s.outputField}>
+            <span>X (px)</span>
+            <RealtimeNumberInput
+              className={s.input}
+              ariaLabel="Composition output X"
+              value={origin.x}
+              onCommit={(value) => changeOrigin('x', value)}
+              onCommitBoundary={designerStore.markHistoryBoundary}
+            />
+          </label>
+          <label className={s.outputField}>
+            <span>Y (px)</span>
+            <RealtimeNumberInput
+              className={s.input}
+              ariaLabel="Composition output Y"
+              value={origin.y}
+              onCommit={(value) => changeOrigin('y', value)}
+              onCommitBoundary={designerStore.markHistoryBoundary}
+            />
+          </label>
+        </div>
       </div>
-      <p className={s.hint}>X and Y mark the composition’s top-left corner in the project frame.</p>
+      <p className={s.hint}>Choose an anchor to reset the position. Drag X or Y to adjust it.</p>
     </section>
   );
 }

@@ -74,3 +74,19 @@ export const colorHex = style([
   input,
   { width: 68, height: 24, padding: '2px 3px', fontSize: 11, fontVariantNumeric: 'tabular-nums' },
 ]);
+export const placementControls = style({
+  display: 'grid',
+  gridTemplateColumns: 'auto minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 12,
+});
+export const anchorGrid = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, 28px)',
+  gap: 2,
+});
+export const anchorButton = style({
+  minInlineSize: 0,
+  paddingInline: 0,
+  justifyContent: 'center',
+});
