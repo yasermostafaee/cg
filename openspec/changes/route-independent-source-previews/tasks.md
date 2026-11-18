@@ -24,6 +24,9 @@
 - [x] Pass final Bridge and Runtime typechecks, scoped lint and 59 renderer DOM cases after freeze.
 - [x] Pass 2 fresh Windows Edge cases for decoded A/B provenance and native Range media playback,
       including local audio and transport controls. The existing badge border is the only emphasis.
+- [x] Keep the non-provider badge border transparent while preserving its size and availability
+      color; verify computed borders for no picture, unknown availability and identical-image
+      A/B/A handoff in a fresh browser. The previous 38% base border fails this regression.
 - [ ] Integrate with the release fixes, pass the full local gate and push normally.
 - [ ] Record the carrying commit's actual completed green Linux E2E URL and build installers.
 - [ ] Verify the updated Bridge/Control previews on the target A/B station.

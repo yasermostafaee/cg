@@ -12,7 +12,7 @@
   box-sizing: border-box;
   inline-size: 0.9rem;
   block-size: 0.85rem;
-  border: 1px solid color-mix(in srgb, currentColor 38%, transparent);
+  border: 1px solid transparent;
   border-radius: 3px;
   background: var(--r-surface-raised);
   color: var(--r-text-muted);

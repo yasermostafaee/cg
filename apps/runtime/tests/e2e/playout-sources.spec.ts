@@ -59,6 +59,7 @@ test('a received B picture emphasizes its existing B badge while A remains unava
   const b = row.locator('[data-source-presence-server="B"]');
   await expect(a).toHaveAttribute('data-source-presence-state', 'missing');
   await expect(a).not.toHaveAttribute('data-source-preview-provider', '');
+  await expect(a).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
   await expect(b).toHaveAttribute('data-source-preview-provider', '');
   await expect(b).toHaveAttribute('title', 'Server B: available. Preview from server B');
   expect(await b.evaluate((element) => getComputedStyle(element).borderTopColor)).toBe(
@@ -67,6 +68,101 @@ test('a received B picture emphasizes its existing B badge while A remains unava
   expect(
     await row.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth),
   ).toBe(64);
+  await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+});
+
+test('only the decoded picture provider is outlined through an identical-image A/B handoff', async ({
+  app,
+}) => {
+  const page = app.page;
+  const defaults = await openDefaults(app);
+  await page.evaluate(() => {
+    const capabilities = window.cg.auth.capabilities();
+    if (capabilities === null) throw new Error('Expected station capabilities');
+    window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+    window.cg.link.status = () => 'live';
+    window.cg.sources.presence = async ({ sourceIds }) => ({
+      engines: ['A', 'B'],
+      sources: Object.fromEntries(
+        sourceIds.map((id) => [
+          id,
+          id === 'in-studio-2' ? { A: 'unknown', B: 'unknown' } : { A: 'present', B: 'present' },
+        ]),
+      ),
+    });
+    window.cg.sourcePreviews.thumbnails = async () => ({ frames: [] });
+  });
+  await defaults.locator('[data-defaults-select="l-1"]').click();
+  const row = picker(page).locator('.cg-vlist-action-row', {
+    has: page.locator('[data-picker-input="in-studio-1"]'),
+  });
+  const a = row.locator('[data-source-presence-server="A"]');
+  const b = row.locator('[data-source-presence-server="B"]');
+  for (const badge of [a, b]) {
+    await expect(badge).toHaveAttribute('data-source-presence-state', 'present');
+    await expect(badge).not.toHaveAttribute('data-source-preview-provider', '');
+    await expect(badge).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  }
+  const unknown = picker(page)
+    .locator('.cg-vlist-action-row', {
+      has: page.locator('[data-picker-input="in-studio-2"]'),
+    })
+    .locator('[data-source-presence-server]');
+  await expect(unknown).toHaveCount(2);
+  for (const badge of await unknown.all()) {
+    await expect(badge).toHaveAttribute('data-source-presence-state', 'unknown');
+    await expect(badge).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  }
+  const initial = await a.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const { width, height } = element.getBoundingClientRect();
+    return { color: style.color, width, height };
+  });
+  for (const engine of ['A', 'B', 'A'] as const) {
+    await page.evaluate(
+      ({ engine, jpegBase64 }) => {
+        window.cg.sourcePreviews.thumbnails = async ({ sourceIds }) => ({
+          frames: sourceIds.map((sourceId) => ({
+            sourceId,
+            engine,
+            signal: 'present',
+            jpegBase64,
+            width: 64,
+            height: 64,
+          })),
+        });
+      },
+      { engine, jpegBase64: FRAME_B.toString('base64') },
+    );
+    const provider = engine === 'A' ? a : b;
+    const other = engine === 'A' ? b : a;
+    await expect(provider).toHaveAttribute('data-source-preview-provider', '');
+    await expect(other).not.toHaveAttribute('data-source-preview-provider', '');
+    await expect(provider).toHaveCSS('border-top-color', initial.color);
+    await expect(other).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    for (const badge of [a, b]) {
+      await expect(badge).toHaveCSS('color', initial.color);
+      expect(
+        await badge.evaluate((element) => {
+          const { width, height } = element.getBoundingClientRect();
+          return { width, height };
+        }),
+      ).toEqual({ width: initial.width, height: initial.height });
+    }
+    expect(
+      await row.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    ).toBe(64);
+  }
+  await page.evaluate(() => {
+    window.cg.sourcePreviews.thumbnails = async ({ sourceIds }) => ({
+      frames: sourceIds.map((sourceId) => ({ sourceId, signal: 'absent' })),
+    });
+  });
+  for (const badge of [a, b]) {
+    await expect(badge).not.toHaveAttribute('data-source-preview-provider', '');
+    await expect(badge).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    await expect(badge).toHaveCSS('color', initial.color);
+  }
   await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
 });
 
