@@ -203,6 +203,7 @@ export const overlay = style({
 export const centerWrap = style({
   margin: 'auto',
   position: 'relative',
+  boxSizing: 'content-box',
 });
 
 // Stage occupies the scaled footprint so layout reserves the right space and

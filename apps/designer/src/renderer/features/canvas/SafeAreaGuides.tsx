@@ -14,12 +14,14 @@ export function SafeAreaGuides({
   height,
   scale,
   style,
+  compositionFrame,
   profile = DEFAULT_BROADCAST_GUIDE_PROFILE,
 }: {
   width: number;
   height: number;
   scale: number;
   style?: CSSProperties;
+  compositionFrame?: { x: number; y: number; width: number; height: number };
   profile?: BroadcastGuideProfile;
 }): JSX.Element {
   const reference = broadcastGuideFrame(width, height, profile.aspect);
@@ -33,6 +35,32 @@ export function SafeAreaGuides({
       viewBox={`0 0 ${width} ${height}`}
       style={{ position: 'absolute', pointerEvents: 'none', overflow: 'hidden', ...style }}
     >
+      {compositionFrame !== undefined && (
+        <>
+          <rect
+            data-project-output-frame=""
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            fill="none"
+            stroke={commonColor}
+            strokeWidth="2"
+            opacity="0.45"
+            vectorEffect="non-scaling-stroke"
+          />
+          <rect
+            data-composition-output-frame=""
+            {...compositionFrame}
+            fill="none"
+            stroke={commonColor}
+            strokeWidth="1"
+            strokeDasharray="4 4"
+            opacity="0.7"
+            vectorEffect="non-scaling-stroke"
+          />
+        </>
+      )}
       {profile.aspect !== 'auto' && reference !== null && (
         <rect
           data-guide-reference={profile.aspect}

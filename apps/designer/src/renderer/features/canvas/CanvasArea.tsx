@@ -1,9 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { SquareDashed, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
+import { SquareDashed, Scan, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import { BROADCAST_SAFE_AREA_TITLE } from '@cg/ui';
 import type { ExportIssue } from '@cg/shared-ipc';
 import type { Element, Scene } from '@cg/shared-schema';
-import { lookGroupOf } from '@cg/shared-schema';
+import {
+  lookGroupOf,
+  outputLetterbox,
+  outputScale,
+  outputTranslate,
+  resolveDefaultPosition,
+  resolveProjectOutputRaster,
+} from '@cg/shared-schema';
 import { rootUsesAuthoredFrameClock } from '../fields/preview-elapsed.js';
 import { colors } from '../../theme.js';
 import { cx } from '../../cx.js';
@@ -316,6 +323,20 @@ export function CanvasArea({
   // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
   const guideProfile = useDesignerBroadcastGuides();
+  const outputRaster = resolveProjectOutputRaster(scene ?? {});
+  const outputPosition = resolveDefaultPosition(scene ?? {});
+  const rasterScale = outputScale(outputRaster);
+  const rasterPad = outputLetterbox(outputRaster);
+  const outputTranslation =
+    scene === null ? { x: 0, y: 0 } : outputTranslate(scene, outputPosition);
+  // Keep editing in composition pixels. The output raster is the inverse of the same
+  // reference translation, uniform raster scale and letterbox pad used by the output page.
+  const projectFrame = {
+    x: -outputTranslation.x - rasterPad.x / rasterScale,
+    y: -outputTranslation.y - rasterPad.y / rasterScale,
+    width: outputRaster.width / rasterScale,
+    height: outputRaster.height / rasterScale,
+  };
   // B-042 — what the ruler needs to snap its tick MARKS onto the same physical device pixel
   // as the grid strokes (dpr + the overlay's per-axis fractional device offset). Captured in
   // `measure()` alongside `rulerOrigin` so both update in one batch.
@@ -363,6 +384,38 @@ export function CanvasArea({
   // Latest (constant-per-resolution) offset for the deps-limited load + scene-replace effects.
   const frameOffsetRef = useRef(frameOffset);
   frameOffsetRef.current = frameOffset;
+  const projectFitZoom = fitZoom(
+    viewport.w,
+    viewport.h,
+    projectFrame.width,
+    projectFrame.height,
+    16,
+  );
+  // Only the surrounding scroll space grows, never the composition or its authoring iframe
+  // origin. Half a viewport on either side makes even an off-frame output center reachable.
+  const projectScrollPadding =
+    safeAreasVisible && projectFitZoom !== null
+      ? {
+          left: Math.max(0, viewport.w / (2 * projectFitZoom) - frameOffset.x - projectFrame.x),
+          right: Math.max(
+            0,
+            frameOffset.x +
+              projectFrame.x +
+              projectFrame.width +
+              viewport.w / (2 * projectFitZoom) -
+              extent.width,
+          ),
+          top: Math.max(0, viewport.h / (2 * projectFitZoom) - frameOffset.y - projectFrame.y),
+          bottom: Math.max(
+            0,
+            frameOffset.y +
+              projectFrame.y +
+              projectFrame.height +
+              viewport.h / (2 * projectFitZoom) -
+              extent.height,
+          ),
+        }
+      : { left: 0, right: 0, top: 0, bottom: 0 };
 
   // B-027 — the DYNAMIC minimum zoom: the cover-fit of the pasteboard over the current
   // viewport (the MAX of the two axis ratios), so a full zoom-out always leaves the
@@ -373,10 +426,13 @@ export function CanvasArea({
   // EVERY zoom path (buttons, Ctrl+wheel, Fit) is bounded by it — Fit can only be clamped
   // UP to it, never below (fitting the frame is always more zoomed-in than covering the much
   // larger pasteboard, so in normal cases there is no conflict).
-  const dynamicZoomMin = useMemo(
-    () => Math.max(ZOOM_HARD_MIN, coverZoom(viewport.w, viewport.h, extent.width, extent.height)),
-    [viewport.w, viewport.h, extent.width, extent.height],
-  );
+  const dynamicZoomMin = useMemo(() => {
+    const normal = Math.max(
+      ZOOM_HARD_MIN,
+      coverZoom(viewport.w, viewport.h, extent.width, extent.height),
+    );
+    return safeAreasVisible && projectFitZoom !== null ? Math.min(normal, projectFitZoom) : normal;
+  }, [viewport.w, viewport.h, extent.width, extent.height, safeAreasVisible, projectFitZoom]);
   const clampZoom = (z: number): number => clampZoomPure(z, dynamicZoomMin, ZOOM_MAX, ZOOM_DEFAULT);
   useEffect(() => {
     const current = latestSceneRef.current;
@@ -1001,7 +1057,13 @@ export function CanvasArea({
   // composition switch — keying on it would miss a same-resolution comp switch (and
   // the bug shows on child comps too). `activeCompositionId` changes on BOTH a project
   // switch and a comp switch, so it is the right fit identity.
-  const fitKey = activeCompositionId ?? sceneId;
+  const compositionFitKey = activeCompositionId ?? sceneId;
+  const fitKey =
+    compositionFitKey === null
+      ? null
+      : safeAreasVisible
+        ? `${compositionFitKey}:project:${String(scene?.resolution.width)}:${String(scene?.resolution.height)}:${String(outputRaster.width)}:${String(outputRaster.height)}:${outputPosition.anchor}:${String(outputPosition.offset.x)}:${String(outputPosition.offset.y)}`
+        : compositionFitKey;
   // Marked fitted only AFTER centering actually applies (in the centering layout-effect
   // below), so a zoom that succeeds but whose center hasn't run does NOT consume the
   // one fit (B-035 Bug A). Comparing to `fitKey` resets on a switch and blocks double-fit.
@@ -1010,30 +1072,30 @@ export function CanvasArea({
   // ALWAYS runs after the zoom commit + layout — even when the zoom value is unchanged
   // (manual Fit at the current zoom).
   const [centerNonce, setCenterNonce] = useState(0);
+  const fitTarget = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   // The fit zoom for the current viewport + scene, or null when the viewport isn't
   // measured yet (`fitZoom` → null on a zero-size viewport) so the caller retries.
-  function computeFitZoom(): number | null {
+  function computeFitZoom(target: { width: number; height: number }): number | null {
     const el = outerRef.current;
     const s = latestSceneRef.current;
     if (el === null || s === null) return null;
     const margin = 16;
-    const z = fitZoom(
-      el.clientWidth,
-      el.clientHeight,
-      s.resolution.width,
-      s.resolution.height,
-      margin,
-    );
+    const z = fitZoom(el.clientWidth, el.clientHeight, target.width, target.height, margin);
     return z === null ? null : clampZoom(z);
   }
 
   // Apply the fit zoom + request a (re)center. Does NOT mark the gate — the centering
   // effect does, once it applies — so an unmeasured viewport (null) is retried by the
   // cold effect and a center that hasn't run can't be skipped.
-  function applyFit(): void {
-    const cz = computeFitZoom();
+  function applyFit(project = false): void {
+    const current = latestSceneRef.current;
+    if (current === null) return;
+    const target = project ? projectFrame : { x: 0, y: 0, ...current.resolution };
+    const cz = computeFitZoom(target);
     if (cz === null) return;
+    pendingZoomAnchorRef.current = null;
+    fitTarget.current = target;
     setZoom(cz);
     setCenterNonce((n) => n + 1);
   }
@@ -1041,7 +1103,7 @@ export function CanvasArea({
   // Fit-on-open: fire once per composition (the warm + cold paths share the gate).
   function fitOnOpenIfReady(): void {
     if (!needsFit(fitGateRef.current, fitKey)) return;
-    applyFit();
+    applyFit(safeAreasVisible);
   }
 
   // Manual Fit (header button): always re-fit + re-center, even if already fitted and
@@ -1082,8 +1144,21 @@ export function CanvasArea({
     const cs = getComputedStyle(el);
     const padX = Number.parseFloat(cs.paddingLeft) || 0;
     const padY = Number.parseFloat(cs.paddingTop) || 0;
-    el.scrollLeft = frameCenterScroll(padX, frame.x, sc.resolution.width, zoom, el.clientWidth);
-    el.scrollTop = frameCenterScroll(padY, frame.y, sc.resolution.height, zoom, el.clientHeight);
+    const target = fitTarget.current ?? { x: 0, y: 0, ...sc.resolution };
+    el.scrollLeft = frameCenterScroll(
+      padX + projectScrollPadding.left * zoom,
+      frame.x + target.x,
+      target.width,
+      zoom,
+      el.clientWidth,
+    );
+    el.scrollTop = frameCenterScroll(
+      padY + projectScrollPadding.top * zoom,
+      frame.y + target.y,
+      target.height,
+      zoom,
+      el.clientHeight,
+    );
     markFitted(fitGateRef.current, fitKey);
     // Keyed on `centerNonce` only: it is bumped in the same batch as `setZoom`, so this
     // render's `zoom` / `fitKey` are fresh when the effect runs after the commit.
@@ -1142,7 +1217,15 @@ export function CanvasArea({
       window.removeEventListener('resize', measure);
     };
     // Q5 — re-measure when the content-aware offset shifts, not only on scroll/zoom.
-  }, [zoom, sceneId, html, frameOffset.x, frameOffset.y]);
+  }, [
+    zoom,
+    sceneId,
+    html,
+    frameOffset.x,
+    frameOffset.y,
+    projectScrollPadding.left,
+    projectScrollPadding.top,
+  ]);
 
   // D-120 — (re)paint the pixel grid whenever the ruler origin (scroll), zoom, or viewport size
   // changes. The canvas only exists at high zoom (gated in the JSX), so a null ref / hidden grid
@@ -1271,11 +1354,25 @@ export function CanvasArea({
         </Control>
         <SafeGuideSettings
           profile={guideProfile}
+          outputRaster={outputRaster}
+          outputPosition={outputPosition}
+          compositionResolution={scene.resolution}
           buttonClassName={s.headerButton}
           onEdit={() => {
             if (!safeAreasVisible) designerStore.toggleSafeAreas();
           }}
         />
+        {safeAreasVisible && (
+          <Control
+            variant="bare"
+            className={s.headerButton}
+            onClick={() => applyFit(true)}
+            aria-label="Fit project frame"
+            title="Fit project frame"
+          >
+            <Icon icon={Scan} size={16} />
+          </Control>
+        )}
         <span className={s.zoomReadout} data-testid="zoom-readout">
           {zoomPct}%
         </span>
@@ -1338,7 +1435,15 @@ export function CanvasArea({
           data-testid="canvas-viewport"
         >
           {html !== null && (
-            <div className={s.centerWrap}>
+            <div
+              className={s.centerWrap}
+              style={{
+                paddingLeft: projectScrollPadding.left * zoom,
+                paddingRight: projectScrollPadding.right * zoom,
+                paddingTop: projectScrollPadding.top * zoom,
+                paddingBottom: projectScrollPadding.bottom * zoom,
+              }}
+            >
               <div
                 ref={stageRef}
                 className={s.stage}
@@ -1391,15 +1496,6 @@ export function CanvasArea({
                   onPan={applyPan}
                   issues={issues}
                 />
-                {safeAreasVisible && (
-                  <SafeAreaGuides
-                    profile={guideProfile}
-                    width={scene.resolution.width}
-                    height={scene.resolution.height}
-                    scale={zoom}
-                    style={{ left: frameOffset.x * zoom, top: frameOffset.y * zoom, zIndex: 5 }}
-                  />
-                )}
               </div>
             </div>
           )}
@@ -1408,6 +1504,24 @@ export function CanvasArea({
             stay pinned to the visible area while `rulerOrigin` tracks the
             scrolling stage (so they no longer slide away on zoom + scroll). */}
         <div className={s.overlay}>
+          {safeAreasVisible && rulerOrigin !== null && html !== null && (
+            <SafeAreaGuides
+              profile={guideProfile}
+              width={outputRaster.width}
+              height={outputRaster.height}
+              scale={zoom / rasterScale}
+              compositionFrame={{
+                x: rasterPad.x + outputTranslation.x * rasterScale,
+                y: rasterPad.y + outputTranslation.y * rasterScale,
+                width: scene.resolution.width * rasterScale,
+                height: scene.resolution.height * rasterScale,
+              }}
+              style={{
+                left: rulerOrigin.x + projectFrame.x * zoom,
+                top: rulerOrigin.y + projectFrame.y * zoom,
+              }}
+            />
+          )}
           {/* D-120 — the pixel grid: a viewport-sized, non-scrolling <canvas> that tracks the
               stage via `rulerOrigin` (same as the rulers), shown only at high zoom. It is the
               BOTTOM layer of this overlay (so rulers + guides paint over it) and sits above the
