@@ -1,0 +1,56 @@
+.cg-safe-guide-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.cg-safe-guide-settings__heading,
+.cg-safe-guide-settings__check,
+.cg-safe-guide-settings__position {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cg-safe-guide-settings__heading {
+  justify-content: space-between;
+}
+
+.cg-safe-guide-settings__label,
+.cg-safe-guide-settings__axis {
+  color: var(--r-text-muted);
+  font-size: 0.75rem;
+}
+
+.cg-safe-guide-settings__aspects,
+.cg-safe-guide-settings__add {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.cg-safe-guide-settings__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cg-safe-guide-settings__line {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) 5rem auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cg-safe-guide-settings__position {
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.cg-safe-guide-settings__line .cg-field,
+.cg-safe-guide-settings__position input {
+  min-width: 0;
+  width: 100%;
+}

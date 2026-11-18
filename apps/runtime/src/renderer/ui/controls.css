@@ -361,7 +361,13 @@
   border-radius: var(--r-monitor-head-btn-radius);
 }
 .cg-panel-header.cg-panel-header--monitor
-  .cg-btn:is([data-monitor-pan], [data-monitor-move], [data-monitor-frames], [data-monitor-masks]) {
+  .cg-btn:is(
+    [data-monitor-pan],
+    [data-monitor-move],
+    [data-monitor-frames],
+    [data-monitor-masks],
+    [data-monitor-safe-areas]
+  ) {
   width: auto;
   padding-inline: var(--r-space-2);
   white-space: nowrap;
@@ -395,7 +401,8 @@
       [data-monitor-pan],
       [data-monitor-move],
       [data-monitor-frames],
-      [data-monitor-masks]
+      [data-monitor-masks],
+      [data-monitor-safe-areas]
     ) {
     width: var(--r-monitor-head-btn);
     padding-inline: var(--r-monitor-head-btn-pad);

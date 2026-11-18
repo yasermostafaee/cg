@@ -4818,3 +4818,160 @@ test('R-108 — a reloaded package refreshes the already-bound row in PVW', asyn
   await expect(stage).toHaveAttribute('data-mark', 'reloaded-v2');
   await expect(row(page)).toHaveAttribute('data-item-id', itemId);
 });
+
+test('custom safe guides persist across channels and reload, fit the active picture and leave output unchanged', async ({
+  page,
+}, testInfo) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Missing test engine');
+  expect(handle.runtime.setFixedLayerBanks([BANK, { ...BANK, channel: 2 }])).toMatchObject({
+    ok: true,
+  });
+  await handle.runtime.whenServerHealthy(15_000);
+  const last = fixedBankSlots({ ...BANK, channel: 2 }).at(-1);
+  if (last === undefined) throw new Error('Missing second channel bank');
+  await expect
+    .poll(() =>
+      engine
+        .receivedCommands()
+        .some(({ line }) => line === `MIXER ${last.channel}-${last.layer} VOLUME 1`),
+    )
+    .toBe(true);
+  handle.runtime.templateImport(TEMPLATE, HTML, 1);
+  expect(
+    await handle.runtime.loadFixed(
+      { channel: 1, layer: ROW },
+      'custom-guide-item',
+      TEMPLATE.templateId,
+      {},
+    ),
+  ).toMatchObject({ accepted: true });
+  const servedBefore = handle.runtime.templatePage(TEMPLATE.templateId, 1);
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const toggle = pvw.getByRole('button', { name: 'Safe areas in Preview', exact: true });
+  const configure = pvw.getByRole('button', { name: 'Configure safe guides', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const guides = pvw.locator('[data-safe-area-guides]');
+  const reference = guides.locator('[data-guide-reference="4:3"]');
+  const horizontal = guides.locator('[data-custom-guide][data-guide-axis="y"]');
+  const vertical = guides.locator('[data-custom-guide][data-guide-axis="x"]');
+  const baseline = engine.receivedCommands().length;
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(toggle.locator('.cg-pvw-tool-label')).toBeVisible();
+  expect(await toggle.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
+  await configure.click();
+  await expect(settings.getByRole('radio')).toHaveText(['Auto', '16:9', '4:3']);
+  await expect(guides).toHaveCount(0);
+  await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(pvw.getByText('No layers on preview', { exact: true })).toBeVisible();
+  await expect(reference).toHaveAttribute('x', '240');
+  await expect(reference).toHaveAttribute('width', '1440');
+  await settings.getByRole('radio', { name: '16:9', exact: true }).click();
+  await expect(guides.locator('[data-guide-reference="16:9"]')).toHaveAttribute('width', '1920');
+  await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+  await settings.getByRole('button', { name: 'Add horizontal guide' }).click();
+  await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('زیرنویس · A');
+  await settings.getByRole('textbox', { name: 'Guide 1 position percent' }).fill('۲۵');
+  await settings.getByRole('textbox', { name: 'Guide 1 position percent' }).press('Enter');
+  await expect(horizontal).toHaveAttribute('y1', '270');
+  await settings.getByRole('button', { name: 'Add vertical guide' }).click();
+  await settings.getByRole('textbox', { name: 'Guide 2 position percent' }).fill('75');
+  await settings.getByRole('textbox', { name: 'Guide 2 position percent' }).press('Enter');
+  await expect(vertical).toHaveAttribute('x1', '1320');
+  await settings.getByRole('checkbox', { name: 'Show guide 2' }).uncheck();
+  await expect(vertical).toHaveCount(0);
+  await settings.getByRole('checkbox', { name: 'Show guide 2' }).check();
+  await settings.getByRole('checkbox', { name: 'Broadcast safe areas', exact: true }).uncheck();
+  await expect(guides.locator('[data-safe-area]')).toHaveCount(0);
+  await settings.getByRole('button', { name: 'Close safe guides' }).click();
+  await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await expect(
+    pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage'),
+  ).toHaveAttribute('data-mark', MARK);
+  const compare = async (): Promise<void> => {
+    const [image, frame, h, v] = await Promise.all([
+      pvw.locator('[data-rehearsal-checker]').boundingBox(),
+      reference.evaluate((node) => node.getBoundingClientRect().toJSON()),
+      horizontal.evaluate((node) => node.getBoundingClientRect().toJSON()),
+      vertical.evaluate((node) => node.getBoundingClientRect().toJSON()),
+    ]);
+    if (image === null || frame === null || h === null || v === null)
+      throw new Error('Missing guide geometry');
+    expect(frame.width / frame.height).toBeCloseTo(4 / 3, 2);
+    expect(frame.x + frame.width / 2).toBeCloseTo(image.x + image.width / 2, 0);
+    expect(frame.y).toBeCloseTo(image.y, 0);
+    expect(frame.height).toBeCloseTo(image.height, 0);
+    expect(h.y).toBeCloseTo(frame.y + frame.height * 0.25, 0);
+    expect(v.x).toBeCloseTo(frame.x + frame.width * 0.75, 0);
+  };
+  await compare();
+  await expect(guides).toHaveCSS('pointer-events', 'none');
+  await expect(
+    pvw.frameLocator('iframe[data-rehearsal-frame]').locator('[data-safe-area-guides]'),
+  ).toHaveCount(0);
+  await toggle.click();
+  await expect(guides).toHaveCount(0);
+  await toggle.click();
+  await expect(horizontal).toHaveCount(1);
+  await expect(vertical).toHaveCount(1);
+  await page
+    .getByRole('tablist', { name: 'Channels' })
+    .getByRole('tab', { name: /^CHANNEL 2/ })
+    .click();
+  await configure.click();
+  await expect(settings.getByRole('radio', { name: '4:3', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
+    'زیرنویس · A',
+  );
+  await settings.getByRole('button', { name: 'Close safe guides' }).click();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
+  await showMonitors(page);
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await configure.click();
+  await expect(settings.getByRole('radio', { name: '4:3', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(settings.getByRole('textbox', { name: 'Guide 1 position percent' })).toHaveValue(
+    '25',
+  );
+  await expect(settings.getByRole('textbox', { name: 'Guide 2 position percent' })).toHaveValue(
+    '75',
+  );
+  await page.screenshot({ path: testInfo.outputPath('runtime-safe-guides-settings.png') });
+  await settings.getByRole('button', { name: 'Remove guide 2' }).click();
+  await expect(settings.locator('[data-custom-guide-row]')).toHaveCount(1);
+  await settings.getByRole('button', { name: 'Close safe guides' }).click();
+  await expect(reference).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('runtime-custom-safe-guides.png') });
+  await expect(
+    page.getByRole('region', { name: 'PROGRAM (PGM)' }).locator('[data-safe-area-guides]'),
+  ).toHaveCount(0);
+  await expect(
+    pvw.frameLocator('iframe[data-rehearsal-frame]').locator('[data-safe-area-guides]'),
+  ).toHaveCount(0);
+  expect(handle.runtime.templatePage(TEMPLATE.templateId, 1)).toEqual(servedBefore);
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('cg.runtime.safe-guides.v1') ?? 'null'),
+  );
+  expect(stored).toMatchObject({
+    version: 1,
+    aspect: '4:3',
+    standardVisible: false,
+    lines: [{ axis: 'y', name: 'زیرنویس · A', position: 25, visible: true }],
+  });
+  expect(
+    engine
+      .receivedCommands()
+      .slice(baseline)
+      .filter(({ line }) => /^(CG|PLAY|LOADBG|CLEAR|MIXER) /.test(line)),
+  ).toEqual([]);
+});

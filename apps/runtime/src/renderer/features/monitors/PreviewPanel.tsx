@@ -63,6 +63,8 @@ import {
 } from '../sources/sourceStore.js';
 import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
 import { FittedSafeAreaGuides } from './SafeAreaGuides.js';
+import { SafeGuideSettings } from './SafeGuideSettings.js';
+import { useSafeGuidePreferences } from './useSafeGuidePreferences.js';
 import { sourceDisplayName, templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
@@ -178,6 +180,7 @@ export function PreviewPanel({
   const frameEffect = useFrameTransitionPreference();
   const [panSession, setPanSession] = useState(0);
   const [safeAreasVisible, setSafeAreasVisible] = useState(false);
+  const safeGuides = useSafeGuidePreferences();
   const stageRef = useRef<HTMLDivElement>(null);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
@@ -635,12 +638,20 @@ export function PreviewPanel({
             active={safeAreasVisible}
             aria-label="Safe areas in Preview"
             aria-pressed={safeAreasVisible}
+            data-monitor-safe-areas=""
             title={BROADCAST_SAFE_AREA_TITLE}
             onClick={() => setSafeAreasVisible((shown) => !shown)}
           >
             <Icon icon={SquareDashed} size={13} />
             <span className="cg-pvw-tool-label">Safe areas</span>
           </Button>
+          <SafeGuideSettings
+            profile={safeGuides.profile}
+            onChange={(profile) => {
+              safeGuides.setProfile(profile);
+              setSafeAreasVisible(true);
+            }}
+          />
           {panVisible && (
             <Button
               variant="ghost"
@@ -811,7 +822,12 @@ export function PreviewPanel({
           />
         )}
         {safeAreasVisible && (
-          <FittedSafeAreaGuides width={raster.width} height={raster.height} stage={stageRef} />
+          <FittedSafeAreaGuides
+            width={raster.width}
+            height={raster.height}
+            stage={stageRef}
+            profile={safeGuides.profile}
+          />
         )}
       </div>
     </Panel>

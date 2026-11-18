@@ -171,6 +171,9 @@ const BEFORE_AND_AFTER = {
     // R-120: this console's authored-layout Input and Preset overrides keyed by stack item id.
     // An absent or unreadable override uses the layout defaults, with no migration.
     'cg.runtime.row-effects.v1',
+    // App-local preview guide profile; absent/invalid data uses Auto, standard guides, no lines.
+    // It is independent of station, channel, template and output state.
+    'cg.runtime.safe-guides.v1',
     // A per-console relative folder within the Bridge share. Absence opens the root.
     'cg.runtime.shared-template-folder.v1',
     'cg.runtime.shell-layout.v1',
