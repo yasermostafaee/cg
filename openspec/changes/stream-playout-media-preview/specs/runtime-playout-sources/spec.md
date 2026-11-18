@@ -5,6 +5,9 @@
 The Media tab SHALL offer Grid and List views. The selected grid item's preview
 controls SHALL operate inside its card. Playing, pausing, seeking, stopping and
 listening SHALL control the local preview. Select SHALL commit the staged binding.
+One explicit row Preview/Play action SHALL start or resume playback in either view,
+including when media preparation completes later. Selecting a row alone SHALL NOT
+start playback. Resuming an existing player SHALL retain its seek and listening state.
 
 When Playout offers a verified file or proxy preview, the player SHALL use native
 video playback through the authenticated Bridge relay. It SHALL start muted and
@@ -30,6 +33,20 @@ sampled player and identify its sampled playback.
 - **WHEN** the operator closes the picker while a file preview is open
 - **THEN** the player releases the preview session
 - **AND** preview actions issue no take or programme-update commands
+
+#### Scenario: One explicit Play survives slow preparation
+
+- **WHEN** the operator presses a media row's Preview action once in Grid or List
+- **AND** the media request first waits and then reports a preparing proxy
+- **THEN** the ready native video starts and its playback clock advances without another click
+- **AND** its initial sound is muted and the calling field's binding remains unchanged
+
+#### Scenario: Cancel a pending explicit preview
+
+- **WHEN** the operator pauses, stops, covers the picker, replaces its preview source or changes tabs before preparation completes
+- **THEN** the cancelled request does not start a late player
+- **AND** a released or superseded response closes its own lease
+- **AND** reopening the Media tab does not restore a cancelled audition
 
 #### Scenario: Preview against an older capability
 

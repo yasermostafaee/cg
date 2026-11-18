@@ -93,6 +93,7 @@ async function mount(
   mediaOpen: NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>,
   inline = false,
   onPreviewEngineChange?: (engine: 'A' | 'B' | undefined) => void,
+  playRequest?: number,
 ) {
   const previous = window.cg;
   const mediaClose = vi.fn(async () => ({ closed: true }));
@@ -106,7 +107,7 @@ async function mount(
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  const show = (covered = false, id = 'md-film') =>
+  const show = (covered = false, id = 'md-film', request = playRequest) =>
     act(async () =>
       root.render(
         createElement(
@@ -118,6 +119,7 @@ async function mount(
             durationMs: 10_000,
             channel: 1,
             inline,
+            playRequest: request,
             poster: 'data:image/jpeg;base64,original-poster',
             onPreviewEngineChange,
           }),
@@ -150,6 +152,136 @@ async function mount(
     },
   };
 }
+
+it('retains one explicit list Play request through a delayed proxy without another click', async () => {
+  const player = mockPlayer();
+  let resolveFirst!: (preview: MediaPlaybackPreview) => void;
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    )
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, false, undefined, 1);
+  try {
+    expect(view.button('Pause preview')).not.toBeNull();
+    await act(async () => resolveFirst({ ...ready(), state: 'preparing', videoUrl: undefined }));
+    expect(player.play).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(player.play).toHaveBeenCalledOnce();
+    expect(view.host.querySelector('video')?.hidden).toBe(false);
+    expect(view.take).not.toHaveBeenCalled();
+    expect(view.update).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it('an explicit row Play request resumes the same paused player without losing seek or listening', async () => {
+  const player = mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, false, undefined, 1);
+  try {
+    const video = view.host.querySelector('video')!;
+    await act(async () => {
+      video.currentTime = 2.5;
+      video.dispatchEvent(new Event('timeupdate'));
+    });
+    await act(async () => view.button('Listen to preview').click());
+    await act(async () => view.button('Pause preview').click());
+    player.play.mockClear();
+    await view.show(false, 'md-film', 2);
+    expect(player.play).toHaveBeenCalledOnce();
+    expect(view.host.querySelector('video')).toBe(video);
+    expect(video.currentTime).toBe(2.5);
+    expect(video.muted).toBe(false);
+    expect(mediaOpen).toHaveBeenCalledOnce();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(['Pause preview', 'Stop preview'] as const)(
+  '%s cancels a pending explicit Play request',
+  async (control) => {
+    const player = mockPlayer();
+    let resolveFirst!: (preview: MediaPlaybackPreview) => void;
+    const mediaOpen = vi
+      .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      );
+    const view = await mount(mediaOpen, false, undefined, 1);
+    try {
+      await act(async () => view.button(control).click());
+      await act(async () => resolveFirst(ready()));
+      expect(player.play).not.toHaveBeenCalled();
+      expect(view.button('Play preview')).not.toBeNull();
+      if (control === 'Stop preview')
+        expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
+      expect(view.take).not.toHaveBeenCalled();
+      expect(view.update).not.toHaveBeenCalled();
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it('carries the explicit Play request into the sampled fallback when native preview is unsupported', async () => {
+  mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue({ state: 'unsupported' });
+  const view = await mount(mediaOpen, false, undefined, 1);
+  try {
+    expect(view.host.querySelector('[data-media-file-preview]')).toBeNull();
+    expect(view.button('Pause preview')).not.toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(['cover', 'source', 'unmount'] as const)(
+  'closes the late initial Play lease after %s without restarting the cancelled player',
+  async (cancel) => {
+    const player = mockPlayer();
+    let resolveFirst!: (preview: MediaPlaybackPreview) => void;
+    const mediaOpen = vi
+      .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValue(ready(SECOND));
+    const view = await mount(mediaOpen, false, undefined, 1);
+    let closed = false;
+    try {
+      if (cancel === 'unmount') {
+        await view.close();
+        closed = true;
+      } else await view.show(cancel === 'cover', cancel === 'source' ? 'md-other' : 'md-film');
+      const plays = player.play.mock.calls.length;
+      await act(async () => resolveFirst(ready()));
+      expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
+      expect(player.play).toHaveBeenCalledTimes(plays);
+      expect(view.host.querySelector('video')?.getAttribute('src')).not.toBe(ready().videoUrl);
+      if (cancel === 'source')
+        expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(SECOND).videoUrl);
+    } finally {
+      if (!closed) await view.close();
+    }
+  },
+);
 
 function targetChanged(): MediaPlaybackPreview & { recovery: 'target-changed' } {
   return { state: 'unavailable', recovery: 'target-changed' };

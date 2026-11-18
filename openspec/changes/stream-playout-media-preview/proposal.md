@@ -15,6 +15,8 @@ position-aware snapshot player provides a fallback for older servers.
   grant. Forward byte-range semantics and cancellation through the streaming transport.
 - Use a native video player in the source picker's existing Grid and List preview
   surfaces, with local playback, seeking and optional listening.
+- Treat the row's explicit Preview/Play action as one playback request in either view,
+  including a delayed or preparing proxy; selecting a source remains independent.
 - Preserve the sampled player when the Bridge or Playout media API is unsupported.
 - Release previews when their owner closes, signs out, loses authorization, changes
   the source, or covers the dialog.

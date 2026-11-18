@@ -40,6 +40,15 @@ preview. A changed target or fingerprint closes the prior preview.
 
 ## Player behavior and compatibility
 
+Selecting a list row may show its paused player, while its explicit Preview action
+starts playback in one click. The picker carries a monotonically increasing local
+play-request token independently of selection. A newly mounted file or sampled
+player begins with that request; an existing paused player consumes a new request
+without remounting, resetting its seek position or changing listening intent.
+Preparation retains the request until media is ready. Pause, Stop, foreground loss,
+source replacement and tab removal retain their existing cancellation/lease fences.
+This token is renderer-local and adds no Bridge request or programme command.
+
 The native player keeps the library poster while preparing a proxy and after Stop.
 Stop resets the local position and closes the lease. A covered or closed dialog
 pauses the video and releases its lease. Returning to the dialog can acquire a fresh

@@ -828,8 +828,7 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   const pause = panel.getByRole('button', { name: 'Pause preview' });
   const stop = panel.getByRole('button', { name: 'Stop preview' });
   const seek = panel.getByRole('slider', { name: 'Preview position' });
-  await expect(play).toBeEnabled();
-  await play.click();
+  // The row's explicit Preview action starts playback; selection alone remains silent.
   await expect(pause).toBeEnabled();
   await expect.poll(async () => (await positions()).some((position) => position > 0)).toBe(true);
   await pause.click();
@@ -1563,6 +1562,178 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     await expect(field).toHaveAttribute('data-picker-value', '');
   } finally {
     server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test('one Play action survives delayed proxy preparation in grid and list without changing the binding', async ({
+  app,
+}) => {
+  const clip = await readFile(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url));
+  const server = createServer((request, response) => {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Cache-Control', 'no-store');
+    if (request.url?.startsWith('/poster')) {
+      response.setHeader('Content-Type', 'image/jpeg');
+      response.end(FRAME_A);
+      return;
+    }
+    response.setHeader('Content-Type', 'video/webm');
+    response.setHeader('Accept-Ranges', 'bytes');
+    const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range ?? '');
+    const start = Number(range?.[1] ?? 0);
+    const end = range?.[2] ? Math.min(Number(range[2]), clip.length - 1) : clip.length - 1;
+    if (start > end || start >= clip.length) {
+      response.writeHead(416, { 'Content-Range': `bytes */${clip.length}` });
+      response.end();
+      return;
+    }
+    response.writeHead(range === null ? 200 : 206, {
+      ...(range === null ? {} : { 'Content-Range': `bytes ${start}-${end}/${clip.length}` }),
+      'Content-Length': end - start + 1,
+    });
+    response.end(clip.subarray(start, end + 1));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('Missing preview server');
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    const defaults = await openDefaults(app);
+    const field = defaults.locator('[data-defaults-select="l-1"]');
+    const page = app.page;
+    await page.evaluate((origin) => {
+      const state = { opens: 0, closes: 0, writes: 0 };
+      Object.assign(window, { singlePlayProof: state });
+      window.cg.sourcePreviews.mediaOpen = async ({ previewId }) => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        if (previewId === undefined) {
+          state.opens++;
+          return {
+            state: 'preparing',
+            previewId: crypto.randomUUID(),
+            durationMs: 10_000,
+            posterUrl: `${origin}/poster`,
+            engine: 'B',
+          };
+        }
+        return {
+          state: 'ready',
+          previewId,
+          videoUrl: `${origin}/video?lease=${previewId}`,
+          posterUrl: `${origin}/poster`,
+          durationMs: 10_000,
+          engine: 'B',
+        };
+      };
+      window.cg.sourcePreviews.mediaClose = async () => {
+        state.closes++;
+        return { closed: true };
+      };
+      const take = window.cg.stack.take;
+      window.cg.stack.take = (request) => {
+        state.writes++;
+        return take(request);
+      };
+      const update = window.cg.stack.update;
+      window.cg.stack.update = (request) => {
+        state.writes++;
+        return update(request);
+      };
+    }, origin);
+    for (const view of ['grid', 'list'] as const) {
+      await field.click();
+      const panel = picker(page);
+      await panel.getByRole('tab', { name: /^Media/ }).click();
+      if (view === 'list')
+        await panel.getByRole('button', { name: 'Switch to list view', exact: true }).click();
+      await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
+      const rowPlay = panel.getByRole('button', { name: 'Preview · Studio 1', exact: true });
+      await rowPlay.click();
+      const preview = panel.locator('[data-media-file-preview]');
+      await expect(
+        preview.getByRole('button', { name: 'Pause preview', exact: true }),
+      ).toBeVisible();
+      await expect(preview.getByRole('status')).toHaveText('Preparing preview…');
+      const video = preview.locator('video');
+      await expect(video).toBeVisible();
+      await expect
+        .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+        .toBeGreaterThan(0);
+      await expect(video).toHaveJSProperty('videoWidth', 64);
+      await preview.getByRole('button', { name: 'Pause preview', exact: true }).click();
+      await video.evaluate((element) => {
+        (element as HTMLVideoElement).currentTime = 2.5;
+      });
+      await preview.getByRole('button', { name: 'Listen to preview', exact: true }).click();
+      await expect(video).toHaveJSProperty('muted', false);
+      if (view === 'list') await rowPlay.click();
+      else await preview.getByRole('button', { name: 'Play preview', exact: true }).click();
+      await expect(video).toHaveJSProperty('paused', false);
+      await expect
+        .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+        .toBeGreaterThanOrEqual(2.5);
+      await expect(video).toHaveJSProperty('muted', false);
+      await preview.getByRole('button', { name: 'Stop preview', exact: true }).click();
+      await expect(
+        preview.getByRole('slider', { name: 'Preview position', exact: true }),
+      ).toHaveValue('0');
+      await expect(field).toHaveAttribute('data-picker-value', '');
+      await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    }
+    // Changing tabs while the initial proxy response is pending cancels that audition.
+    await page.evaluate((origin) => {
+      const state = (window as unknown as { singlePlayProof: { opens: number } }).singlePlayProof;
+      window.cg.sourcePreviews.mediaOpen = () =>
+        new Promise((resolve) => {
+          state.opens++;
+          Object.assign(window, {
+            releaseLatePreview: () =>
+              resolve({
+                state: 'ready',
+                previewId: '10000000-0000-4000-8000-000000000099',
+                videoUrl: `${origin}/video?late`,
+                posterUrl: `${origin}/poster`,
+                durationMs: 10_000,
+                engine: 'B',
+              }),
+          });
+        });
+    }, origin);
+    await field.click();
+    const panel = picker(page);
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
+    await panel.getByRole('button', { name: 'Preview · Studio 1', exact: true }).click();
+    await expect(panel.locator('[data-media-file-preview]')).toContainText('Loading preview…');
+    await panel.getByRole('tab', { name: /^Inputs/ }).click();
+    await page.evaluate(() =>
+      (window as unknown as { releaseLatePreview: () => void }).releaseLatePreview(),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as unknown as { singlePlayProof: { closes: number } }).singlePlayProof.closes,
+        ),
+      )
+      .toBe(3);
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    await expect(panel.locator('[data-media-file-preview]')).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              singlePlayProof: { opens: number; closes: number; writes: number };
+            }
+          ).singlePlayProof,
+      ),
+    ).toEqual({ opens: 3, closes: 3, writes: 0 });
+  } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );

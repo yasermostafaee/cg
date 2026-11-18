@@ -1,5 +1,8 @@
 # Tasks
 
+- [x] Separate explicit row Play from selection; retain one request through preparation and resume the existing player without resetting seek/listening.
+- [x] Verify pending Pause/Stop/foreground/source/tab cancellation and native one-click Grid/List playback alongside the existing transport and binding guards: 78 focused tests, Runtime typecheck/scoped lint/build, and 4 fresh Edge cases passed, including actual advancing Range video in both views after delayed proxy preparation.
+
 ## Implementation
 
 - [x] Add typed media-open and media-close IPC and the optional Runtime Bridge methods.
