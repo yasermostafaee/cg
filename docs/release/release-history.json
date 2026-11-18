@@ -26,6 +26,10 @@
         {
           "fa": "خطوط افقی و عمودی سفارشی با موقعیت درصدی بین پروژه‌ها و بعد از بستن برنامه ذخیره می‌شوند. PVW و New live layout تنظیمات مشترک دارند و Designer تنظیمات خودش را دارد.",
           "en": "Custom horizontal and vertical guides use percent positions and persist across projects and restarts. PVW and New live layout share settings. Designer has its own guide settings."
+        },
+        {
+          "fa": "رنگ پیش‌فرض راهنماها سفید است. می‌توانید رنگ مشترک را تغییر دهید و برای هر خط سفارشی رنگ جداگانه ذخیره کنید.",
+          "en": "Guides default to white. Change the shared color or save a separate color for any custom guide."
         }
       ],
       "fixes": []
