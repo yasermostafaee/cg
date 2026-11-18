@@ -179,8 +179,8 @@ export function PreviewPanel({
   const preserveFrameAspect = usePreserveFrameAspect();
   const frameEffect = useFrameTransitionPreference();
   const [panSession, setPanSession] = useState(0);
-  const [safeAreasVisible, setSafeAreasVisible] = useState(false);
   const safeGuides = useSafeGuidePreferences();
+  const safeAreasVisible = safeGuides.visible;
   const stageRef = useRef<HTMLDivElement>(null);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
@@ -640,7 +640,7 @@ export function PreviewPanel({
             aria-pressed={safeAreasVisible}
             data-monitor-safe-areas=""
             title={BROADCAST_SAFE_AREA_TITLE}
-            onClick={() => setSafeAreasVisible((shown) => !shown)}
+            onClick={() => safeGuides.setVisible(!safeAreasVisible)}
           >
             <Icon icon={SquareDashed} size={13} />
             <span className="cg-pvw-tool-label">Safe areas</span>
@@ -649,7 +649,6 @@ export function PreviewPanel({
             profile={safeGuides.profile}
             onChange={(profile) => {
               safeGuides.setProfile(profile);
-              setSafeAreasVisible(true);
             }}
           />
           {panVisible && (

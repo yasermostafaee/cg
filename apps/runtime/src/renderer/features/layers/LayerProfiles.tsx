@@ -19,6 +19,12 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { saveFile } from '../../ui/saveFile.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
+import { useSafeGuidePreferences } from '../monitors/useSafeGuidePreferences.js';
+import {
+  parseRuntimeSafeGuides,
+  portableRuntimeSafeGuides,
+  type RuntimeSafeGuidePreferences,
+} from '../monitors/safeGuidePreferences.js';
 
 const refusalCopy = {
   'on-air': 'Stop the graphics on this channel before loading a profile.',
@@ -78,12 +84,17 @@ export function LayerProfiles({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState<{ name: string; profile: LayerProfile } | null>(null);
+  const [selected, setSelected] = useState<{
+    name: string;
+    profile: LayerProfile;
+    safeGuides: RuntimeSafeGuidePreferences | null;
+  } | null>(null);
   const [result, setResult] = useState<StackLoadProfileResult | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const { channel } = bank;
+  const safeGuides = useSafeGuidePreferences();
 
   const save = async (): Promise<void> => {
     if (busy) return;
@@ -121,7 +132,16 @@ export function LayerProfiles({
         items,
       });
       const outcome = await saveFile(
-        new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }),
+        new Blob(
+          [
+            JSON.stringify(
+              { ...profile, safeGuides: portableRuntimeSafeGuides(safeGuides) },
+              null,
+              2,
+            ),
+          ],
+          { type: 'application/json' },
+        ),
         `CG-CH${String(channel)}-profile.json`,
         'APASAI CG layer profile',
         '.json',
@@ -151,7 +171,15 @@ export function LayerProfiles({
       }
       setSelected(null);
       const contents: unknown = JSON.parse(await file.text());
-      setSelected({ name: file.name, profile: LayerProfileSchema.parse(contents) });
+      const guides =
+        contents !== null && typeof contents === 'object' && 'safeGuides' in contents
+          ? parseRuntimeSafeGuides(contents.safeGuides)
+          : null;
+      setSelected({
+        name: file.name,
+        profile: LayerProfileSchema.parse(contents),
+        safeGuides: guides,
+      });
     } catch {
       setProblem(
         file === null
@@ -175,6 +203,7 @@ export function LayerProfiles({
         setResult(response);
         return;
       }
+      if (selected.safeGuides !== null) safeGuides.restore(selected.safeGuides);
       reportLoadedProfile(response, selected.profile.layerShortcuts !== undefined);
       setOpen(false);
     } catch (error) {
@@ -247,6 +276,7 @@ export function LayerProfiles({
               {selected.profile.layerShortcuts !== undefined && (
                 <p>This profile includes keyboard shortcuts.</p>
               )}
+              {selected.safeGuides !== null && <p>This profile includes safe guides.</p>}
             </>
           )}
           {result !== null && result.issues.length > 0 && (

@@ -192,8 +192,12 @@ export function LiveLayoutEditor({
   });
   const [focusId, setFocusId] = useState<string>();
   const [showPreviewMeters, setShowPreviewMeters] = useState(false);
-  const [showSafeGuides, setShowSafeGuides] = useState(false);
-  const { profile: safeGuideProfile, setProfile: setSafeGuideProfile } = useSafeGuidePreferences();
+  const {
+    profile: safeGuideProfile,
+    setProfile: setSafeGuideProfile,
+    visible: showSafeGuides,
+    setVisible: setShowSafeGuides,
+  } = useSafeGuidePreferences();
   const emptyPreview = useRef<HTMLDivElement>(null);
   const [maskSelection, setMaskSelection] = useState<{ frameId: string; index: number }>();
   const [maskEditFrameId, setMaskEditFrameId] = useState<string>();
@@ -934,7 +938,7 @@ export function LiveLayoutEditor({
                     variant={showSafeGuides ? 'accent' : 'neutral'}
                     aria-pressed={showSafeGuides}
                     title={showSafeGuides ? 'Hide safe guides' : 'Show safe guides'}
-                    onClick={() => setShowSafeGuides((visible) => !visible)}
+                    onClick={() => setShowSafeGuides(!showSafeGuides)}
                   >
                     <Icon icon={SquareDashed} size={15} /> Safe areas
                   </Button>
@@ -942,7 +946,6 @@ export function LiveLayoutEditor({
                     profile={safeGuideProfile}
                     onChange={(profile) => {
                       setSafeGuideProfile(profile);
-                      setShowSafeGuides(true);
                     }}
                   />
                 </div>
