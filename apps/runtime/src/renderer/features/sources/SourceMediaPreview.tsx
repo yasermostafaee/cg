@@ -336,7 +336,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   useEffect(() => {
     if (playRequest === undefined || playRequest === consumedPlayRequest.current) return;
     consumedPlayRequest.current = playRequest;
-    startPlayback();
+    if (!unsupported.current) startPlayback();
   }, [playRequest, startPlayback]);
 
   const setPlayback = (): void => {

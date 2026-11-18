@@ -244,6 +244,10 @@ it('carries the explicit Play request into the sampled fallback when native prev
   try {
     expect(view.host.querySelector('[data-media-file-preview]')).toBeNull();
     expect(view.button('Pause preview')).not.toBeNull();
+    await act(async () => view.button('Pause preview').click());
+    await view.show(false, 'md-film', 2);
+    expect(view.button('Pause preview')).not.toBeNull();
+    expect(mediaOpen).toHaveBeenCalledOnce();
   } finally {
     await view.close();
   }
