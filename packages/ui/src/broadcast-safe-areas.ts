@@ -90,6 +90,8 @@ export function broadcastGuideFrame(
 }
 
 export interface BroadcastGuideRectangle extends BroadcastGuideFrame {
+  frameId: string;
+  customAspect?: BroadcastGuideCustomAspect;
   aspect: BroadcastGuideAspect;
   percent: BroadcastGuidePercent;
   stroke: string;
@@ -100,33 +102,37 @@ export function broadcastGuideRectangles(
   height: number,
   profile: BroadcastGuideProfile,
 ): readonly BroadcastGuideRectangle[] {
-  return broadcastGuideFrameSettings(profile).flatMap(({ aspect, visible, color, borders }) => {
-    if (!visible) return [];
-    const frame = broadcastGuideFrame(width, height, aspect, profile.customAspect);
-    if (frame === null || (aspect === 'custom' && profile.customAspect === undefined)) return [];
-    return borders.flatMap((border) => {
-      if (!border.visible) return [];
-      const frameWidth = Math.min(
-        frame.width,
-        Math.max(1, Math.round((frame.width * border.percent) / 100)),
-      );
-      const frameHeight = Math.min(
-        frame.height,
-        Math.max(1, Math.round((frame.height * border.percent) / 100)),
-      );
-      return [
-        {
-          aspect,
-          percent: border.percent,
-          stroke: border.color ?? color,
-          width: border.percent === 100 ? frame.width : frameWidth,
-          height: border.percent === 100 ? frame.height : frameHeight,
-          x: frame.x + (border.percent === 100 ? 0 : (frame.width - frameWidth) / 2),
-          y: frame.y + (border.percent === 100 ? 0 : (frame.height - frameHeight) / 2),
-        },
-      ];
-    });
-  });
+  return broadcastGuideFrameSettings(profile).flatMap(
+    ({ id, aspect, customAspect, visible, color, borders }) => {
+      if (!visible) return [];
+      const frame = broadcastGuideFrame(width, height, aspect, customAspect);
+      if (frame === null || (aspect === 'custom' && customAspect === undefined)) return [];
+      return borders.flatMap((border) => {
+        if (!border.visible) return [];
+        const frameWidth = Math.min(
+          frame.width,
+          Math.max(1, Math.round((frame.width * border.percent) / 100)),
+        );
+        const frameHeight = Math.min(
+          frame.height,
+          Math.max(1, Math.round((frame.height * border.percent) / 100)),
+        );
+        return [
+          {
+            frameId: id,
+            aspect,
+            ...(customAspect === undefined ? {} : { customAspect }),
+            percent: border.percent,
+            stroke: border.color ?? color,
+            width: border.percent === 100 ? frame.width : frameWidth,
+            height: border.percent === 100 ? frame.height : frameHeight,
+            x: frame.x + (border.percent === 100 ? 0 : (frame.width - frameWidth) / 2),
+            y: frame.y + (border.percent === 100 ? 0 : (frame.height - frameHeight) / 2),
+          },
+        ];
+      });
+    },
+  );
 }
 
 export interface BroadcastCustomGuideLine extends BroadcastGuideLine {

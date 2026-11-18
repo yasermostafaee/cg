@@ -1,6 +1,7 @@
 export const BROADCAST_GUIDE_ASPECTS = ['auto', '16:9', '4:3', 'custom'] as const;
 export type BroadcastGuideAspect = (typeof BROADCAST_GUIDE_ASPECTS)[number];
 export const MAX_BROADCAST_GUIDE_LINES = 64;
+export const MAX_BROADCAST_GUIDE_FRAMES = 32;
 export const DEFAULT_BROADCAST_GUIDE_COLOR = '#ffffff';
 export const MAX_BROADCAST_GUIDE_ASPECT_PART = 16_384;
 
@@ -51,7 +52,9 @@ export interface BroadcastGuideBorder {
 }
 
 export interface BroadcastGuideFrameSetting {
+  readonly id: string;
   readonly aspect: BroadcastGuideAspect;
+  readonly customAspect?: BroadcastGuideCustomAspect;
   readonly visible: boolean;
   readonly color: string;
   readonly borders: readonly BroadcastGuideBorder[];
@@ -64,6 +67,7 @@ export interface BroadcastGuideProfile {
   readonly customAspect?: BroadcastGuideCustomAspect;
   readonly standardVisible: boolean;
   readonly frames?: readonly BroadcastGuideFrameSetting[];
+  readonly activeFrameId?: string;
   readonly color: string;
   readonly lines: readonly BroadcastGuideLine[];
 }
@@ -76,17 +80,40 @@ export const DEFAULT_BROADCAST_GUIDE_PROFILE: BroadcastGuideProfile = {
   lines: [],
 };
 
-function parseGuideFrameSettings(value: unknown): readonly BroadcastGuideFrameSetting[] | null {
-  if (!Array.isArray(value) || value.length !== BROADCAST_GUIDE_ASPECTS.length) return null;
+export function createBroadcastGuideFrame(
+  id: string,
+  customAspect: BroadcastGuideCustomAspect = DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
+): BroadcastGuideFrameSetting {
+  return {
+    id,
+    aspect: 'custom',
+    customAspect,
+    visible: true,
+    color: DEFAULT_BROADCAST_GUIDE_COLOR,
+    borders: BROADCAST_GUIDE_LEVELS.map((percent) => ({ percent, visible: percent !== 93 })),
+  };
+}
+
+function parseGuideFrameSettings(
+  value: unknown,
+  legacyAspect: BroadcastGuideCustomAspect | null,
+): readonly BroadcastGuideFrameSetting[] | null {
+  if (!Array.isArray(value) || value.length > MAX_BROADCAST_GUIDE_FRAMES) return null;
   const frames: BroadcastGuideFrameSetting[] = [];
-  for (const aspect of BROADCAST_GUIDE_ASPECTS) {
-    const frame = (value as unknown[]).find(
-      (entry): entry is Record<string, unknown> =>
-        entry !== null && typeof entry === 'object' && 'aspect' in entry && entry.aspect === aspect,
-    );
-    const color = normalizeBroadcastGuideColor(frame?.color);
+  const ids = new Set<string>();
+  for (const entry of value as unknown[]) {
+    if (entry === null || typeof entry !== 'object') return null;
+    const frame = entry as Record<string, unknown>;
+    const aspect = BROADCAST_GUIDE_ASPECTS.find((candidate) => candidate === frame.aspect);
+    const id = frame.id ?? aspect;
+    const color = normalizeBroadcastGuideColor(frame.color);
     if (
-      frame === undefined ||
+      aspect === undefined ||
+      typeof id !== 'string' ||
+      id.length === 0 ||
+      id.length > 80 ||
+      ids.has(id) ||
+      (aspect !== 'custom' && id !== aspect) ||
       typeof frame.visible !== 'boolean' ||
       color === null ||
       !Array.isArray(frame.borders) ||
@@ -96,11 +123,11 @@ function parseGuideFrameSettings(value: unknown): readonly BroadcastGuideFrameSe
     const borders: BroadcastGuideBorder[] = [];
     for (const percent of BROADCAST_GUIDE_LEVELS) {
       const border = (frame.borders as unknown[]).find(
-        (entry): entry is Record<string, unknown> =>
-          entry !== null &&
-          typeof entry === 'object' &&
-          'percent' in entry &&
-          entry.percent === percent,
+        (candidate): candidate is Record<string, unknown> =>
+          candidate !== null &&
+          typeof candidate === 'object' &&
+          'percent' in candidate &&
+          candidate.percent === percent,
       );
       if (border === undefined || typeof border.visible !== 'boolean') return null;
       const stroke =
@@ -112,8 +139,28 @@ function parseGuideFrameSettings(value: unknown): readonly BroadcastGuideFrameSe
         ...(stroke === undefined ? {} : { color: stroke }),
       });
     }
-    frames.push({ aspect, visible: frame.visible, color, borders });
+    const customAspect =
+      aspect === 'custom'
+        ? (normalizeBroadcastGuideCustomAspect(frame.customAspect) ??
+          legacyAspect ??
+          DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT)
+        : undefined;
+    frames.push({
+      id,
+      aspect,
+      ...(customAspect === undefined ? {} : { customAspect }),
+      visible: frame.visible,
+      color,
+      borders,
+    });
+    ids.add(id);
   }
+  if (
+    !(['auto', '16:9', '4:3'] as const).every((aspect) =>
+      frames.some((frame) => frame.aspect === aspect),
+    )
+  )
+    return null;
   return frames;
 }
 
@@ -125,7 +172,11 @@ export function broadcastGuideFrameSettings(
     BROADCAST_GUIDE_ASPECTS.map((aspect) => {
       const current = aspect === profile.aspect;
       return {
+        id: aspect,
         aspect,
+        ...(aspect === 'custom' && {
+          customAspect: profile.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
+        }),
         visible: current,
         color: current ? profile.color : DEFAULT_BROADCAST_GUIDE_COLOR,
         borders: BROADCAST_GUIDE_LEVELS.map((percent) => ({
@@ -140,12 +191,23 @@ export function broadcastGuideFrameSettings(
   );
 }
 
+export function broadcastGuideEditingFrame(
+  profile: BroadcastGuideProfile,
+  frames: readonly BroadcastGuideFrameSetting[],
+): BroadcastGuideFrameSetting | undefined {
+  return (
+    frames.find((frame) => frame.id === profile.activeFrameId) ??
+    frames.find((frame) => frame.aspect === profile.aspect) ??
+    frames[0]
+  );
+}
+
 /** Preferences contain only bounded display data. Invalid/future versions are not interpreted. */
 export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfile | null {
   if (value === null || typeof value !== 'object') return null;
   const profile = value as Record<string, unknown>;
   const customAspect = normalizeBroadcastGuideCustomAspect(profile['customAspect']);
-  const frames = parseGuideFrameSettings(profile['frames']);
+  const frames = parseGuideFrameSettings(profile['frames'], customAspect);
   const color =
     profile['color'] === undefined
       ? DEFAULT_BROADCAST_GUIDE_COLOR
@@ -202,6 +264,9 @@ export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfil
     ...(customAspect === null ? {} : { customAspect }),
     standardVisible: profile['standardVisible'],
     ...(frames === null ? {} : { frames }),
+    ...(frames?.some((frame) => frame.id === profile['activeFrameId']) === true
+      ? { activeFrameId: profile['activeFrameId'] as string }
+      : {}),
     color,
     lines,
   };

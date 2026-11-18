@@ -20,6 +20,9 @@ export {
 export {
   BROADCAST_GUIDE_ASPECTS,
   broadcastGuideFrameSettings,
+  broadcastGuideEditingFrame,
+  createBroadcastGuideFrame,
+  MAX_BROADCAST_GUIDE_FRAMES,
   type BroadcastGuideFrameSetting,
   type BroadcastGuideBorder,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
