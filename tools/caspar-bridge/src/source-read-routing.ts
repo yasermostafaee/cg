@@ -21,6 +21,16 @@ export function sourceReadEngine(
   return states[preferred] === 'missing' && states[other] === 'present' ? other : preferred;
 }
 
+/** Picture fallback requires a positively present alternate; unknown is never a join. */
+export function sourcePictureFallbackEngine(
+  preferred: PreviewEngine,
+  primary: SourcePresence,
+  backup: SourcePresence,
+): PreviewEngine | null {
+  const alternate = preferred === 'A' ? 'B' : 'A';
+  return (alternate === 'A' ? primary : backup) === 'present' ? alternate : null;
+}
+
 /** Resolve a reserve's own D10 identity. Names, producer URLs and A's physical IDs are not joins. */
 export function reservePreviewSelector(
   list: SourcePresenceInputs | null,

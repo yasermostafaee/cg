@@ -3,6 +3,7 @@ import { sourcePresenceInputsOf } from '../src/source-presence.js';
 import {
   reservePreviewSelector,
   sourceReadEngine,
+  sourcePictureFallbackEngine,
   sourceReadTarget,
 } from '../src/source-read-routing.js';
 
@@ -20,6 +21,14 @@ const ndi = {
 };
 
 describe('read-only source preview routing', () => {
+  it('requires positive alternate presence for picture fallback in either direction', () => {
+    expect(sourcePictureFallbackEngine('B', 'present', 'present')).toBe('A');
+    expect(sourcePictureFallbackEngine('A', 'present', 'present')).toBe('B');
+    expect(sourcePictureFallbackEngine('B', 'unknown', 'present')).toBeNull();
+    expect(sourcePictureFallbackEngine('B', 'missing', 'present')).toBeNull();
+    expect(sourcePictureFallbackEngine('A', 'present', 'unknown')).toBeNull();
+    expect(sourcePictureFallbackEngine('A', 'present', 'missing')).toBeNull();
+  });
   it('uses B when the preferred A source is missing and keeps A when both are present', () => {
     expect(sourceReadEngine('A', 'missing', 'present')).toBe('B');
     expect(sourceReadEngine('A', 'present', 'present')).toBe('A');

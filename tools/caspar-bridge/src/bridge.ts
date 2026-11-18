@@ -344,6 +344,7 @@ import type { SourcePreviewSelector } from './playout-source-previews.js';
 import { RoutedSourceReads } from './routed-source-reads.js';
 import {
   reservePreviewSelector,
+  sourcePictureFallbackEngine,
   sourceReadEngine,
   sourceReadTarget,
   type PreviewEngine,
@@ -3632,6 +3633,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     channel: number,
     sourceIds: readonly string[],
     stillCurrent: () => boolean = () => true,
+    fallbackFrom?: ReadonlyMap<string, PreviewEngine>,
   ): Promise<ReadonlyMap<string, PreviewEngine>> => {
     const empty = new Map<string, PreviewEngine>();
     if (!stillCurrent() || !previewPermitted(owner, channel) || sourceIds.length === 0)
@@ -3693,11 +3695,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         if (selector === null) sources.delete(sourceId);
         else sources.set(sourceId, selector);
         const observed = presence.sources[sourceId];
-        const choice = sourceReadEngine(
-          preferred,
-          observed?.A ?? 'unknown',
-          selector === null ? 'missing' : (observed?.B ?? 'unknown'),
-        );
+        const original = fallbackFrom?.get(sourceId);
+        const choice =
+          original === undefined
+            ? sourceReadEngine(
+                preferred,
+                observed?.A ?? 'unknown',
+                selector === null ? 'missing' : (observed?.B ?? 'unknown'),
+              )
+            : sourcePictureFallbackEngine(
+                original,
+                observed?.A ?? 'unknown',
+                selector === null ? 'missing' : (observed?.B ?? 'unknown'),
+              );
         if (
           choice !== null &&
           (choice === 'A'
@@ -3741,6 +3751,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       backupReadSelectors.set(owner, ownerSelectors);
     }
     ownerSelectors.set(channel, { signature, sources: merged });
+    // Reading a picture on the peer never changes audio, Listen or programme routing.
+    if (fallbackFrom !== undefined) return choices;
     let byChannel = selectedReadEngines.get(owner);
     if (byChannel === undefined) {
       byChannel = new Map();
@@ -3762,6 +3774,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   };
   const sourcePreviews = new RoutedSourceReads({
     prepare: prepareReadRoutes,
+    fallback: (owner, channel, from, stillCurrent) =>
+      prepareReadRoutes(owner, channel, [...from.keys()], stillCurrent, from),
     target: readTarget,
     selector: readSelector,
     mediaId: (engine, owner, channel, sourceId, atMs) => {
