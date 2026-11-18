@@ -4321,6 +4321,7 @@ test('B-443 shares one authored plate mask across its presets through PVW and Up
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
   const templateId = 'tpl-shared-mask';
   const itemId = 'shared-mask-item';
   const { scene: base } = await unpack(await buildPositionedVcg(templateId));
@@ -4466,10 +4467,26 @@ test('B-443 shares one authored plate mask across its presets through PVW and Up
     .frameLocator('iframe[data-rehearsal-frame]')
     .locator('[data-cg-live-source="plate-4"]:visible [data-cg-editable-mask] rect');
   const switchPreset = async (id: string) => {
+    const previewId = await inspector
+      .locator('[data-look-tab][aria-pressed="true"]')
+      .getAttribute('data-look-tab');
+    if (previewId === null) throw new Error('The Inspector must identify its PVW preset');
+    const previewMask = await rect(activeClip);
     const tab = row.locator('[data-look-id="' + id + '"]');
     await tab.click();
     await expect(tab).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(() => state()?.activeLookId).toBe(id);
+    await expect(inspector.locator(`[data-look-tab="${previewId}"]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect.poll(() => rect(activeClip)).toEqual(previewMask);
+    // PGM selection leaves the mask preview untouched until its own Inspector selection.
+    await inspector.locator(`[data-look-tab="${id}"]`).click();
+    await expect(inspector.locator(`[data-look-tab="${id}"]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expect(activeClip).toHaveCount(1);
   };
   const move = pvw.getByRole('button', { name: 'Move mask 1 for Studio' });
