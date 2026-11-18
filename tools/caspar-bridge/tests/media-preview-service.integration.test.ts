@@ -307,6 +307,116 @@ it('prefers verified active topology over stale legacy selection for read previe
   expect(mediaPreviewEngine('C', 'A')).toBeNull();
 });
 
+it('retains only a verified handoff hint after revoking a stream and all of its grants', async () => {
+  const f = await fixture();
+  const opened = await f.open();
+  f.target.engine = 'A';
+  expect((await fetch(f.url(opened.videoUrl))).status).toBe(403);
+  expect(f.tickets.size).toBe(0);
+  expect(await f.open(opened.previewId)).toEqual({
+    state: 'unavailable',
+    recovery: 'target-changed',
+  });
+  const recovered = await f.open();
+  expect(recovered).toMatchObject({ state: 'ready', engine: 'A' });
+  expect(recovered.previewId).not.toBe(opened.previewId);
+  expect(await f.open(opened.previewId)).toEqual({ state: 'unavailable' });
+});
+
+it('returns the same explicit handoff hint when renewal observes the changed node first', async () => {
+  const f = await fixture();
+  const opened = await f.open();
+  f.target.engine = 'A';
+  expect(await f.open(opened.previewId)).toEqual({
+    state: 'unavailable',
+    recovery: 'target-changed',
+  });
+  expect(f.tickets.size).toBe(0);
+  expect((await fetch(f.url(opened.posterUrl))).status).toBe(403);
+});
+
+it('keeps a recoverable hint when the periodic stream check closes playback before renewal', async () => {
+  const f = await fixture();
+  f.setSlow();
+  const opened = await f.open();
+  const response = await fetch(f.url(opened.videoUrl));
+  const interrupted = expect(response.arrayBuffer()).rejects.toThrow();
+  expect(f.streams()).toBe(1);
+  f.target.engine = 'A';
+  await interrupted;
+  await waitUntil(() => f.streams() === 0, 'handoff stream cancellation');
+  expect(await f.open(opened.previewId)).toEqual({
+    state: 'unavailable',
+    recovery: 'target-changed',
+  });
+  expect(f.tickets.size).toBe(0);
+});
+
+it.each(['different', 'missing'] as const)(
+  'never marks a %s fingerprint as a recoverable handoff',
+  async (fingerprint) => {
+    const f = await fixture();
+    const opened = await f.open();
+    f.target.engine = 'A';
+    if (fingerprint === 'different') f.target.fingerprint = 'b'.repeat(64);
+    else delete f.target.fingerprint;
+    expect((await fetch(f.url(opened.videoUrl))).status).toBe(403);
+    expect(await f.open(opened.previewId)).toEqual({ state: 'unavailable' });
+    expect(f.tickets.size).toBe(0);
+  },
+);
+
+it('scopes a revoked-lease hint to the socket, channel, source and short lifetime', async () => {
+  const f = await fixture();
+  const opened = await f.open();
+  f.target.engine = 'A';
+  await fetch(f.url(opened.videoUrl));
+  const request = { channel: 1, sourceId: 'md-primary-a', previewId: opened.previewId };
+  expect(await f.service.open(new AuthSession(), request)).toEqual({ state: 'unavailable' });
+  expect(await f.service.open(f.owner, { ...request, channel: 2 })).toEqual({
+    state: 'unavailable',
+  });
+  expect(await f.service.open(f.owner, { ...request, sourceId: 'md-next' })).toEqual({
+    state: 'unavailable',
+  });
+  expect(await f.open(opened.previewId)).toEqual({
+    state: 'unavailable',
+    recovery: 'target-changed',
+  });
+  f.advance(31_000);
+  expect(await f.open(opened.previewId)).toEqual({ state: 'unavailable' });
+});
+
+it.each(['close', 'drop'] as const)(
+  'does not return a late handoff hint after explicit %s',
+  async (cancel) => {
+    const f = await fixture();
+    const opened = await f.open();
+    f.target.engine = 'A';
+    await fetch(f.url(opened.videoUrl));
+    const release = f.delayTarget(true);
+    const probe = f.open(opened.previewId);
+    await waitUntil(() => f.targetWaits() === 1, 'pending handoff reauthorization');
+    if (cancel === 'close')
+      expect(f.service.close(f.owner, opened.previewId!)).toEqual({ closed: true });
+    else f.service.drop(f.owner);
+    release();
+    expect(await probe).toEqual({ state: 'unavailable' });
+    expect(f.tickets.size).toBe(0);
+  },
+);
+
+it('reauthorizes the destination before returning a saved handoff hint', async () => {
+  const f = await fixture();
+  const opened = await f.open();
+  f.target.engine = 'A';
+  await fetch(f.url(opened.videoUrl));
+  f.revokeAccess();
+  expect(await f.open(opened.previewId)).toEqual({ state: 'unavailable' });
+  f.restoreAccess();
+  expect(await f.open(opened.previewId)).toEqual({ state: 'unavailable' });
+});
+
 it('keeps a verified poster and owned lease when proxy capacity is exhausted and permits retry', async () => {
   const f = await fixture();
   f.setMode();

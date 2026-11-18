@@ -68,6 +68,15 @@ interface Preview {
   work: Promise<MediaPlaybackPreview> | null;
 }
 
+interface Handoff {
+  owner: AuthSession;
+  actor: string | undefined;
+  channel: number;
+  sourceId: string;
+  target: MediaPreviewTarget;
+  expiresAt: number;
+}
+
 export interface MediaPreviewOptions {
   targetFor: (
     owner: AuthSession,
@@ -87,6 +96,15 @@ function sameMedia(a: MediaPreviewTarget, b: MediaPreviewTarget): boolean {
     a.mediaId === b.mediaId &&
     a.engine === b.engine &&
     (a.fingerprint === undefined || b.fingerprint === undefined || a.fingerprint === b.fingerprint)
+  );
+}
+
+function verifiedHandoff(a: MediaPreviewTarget, b: MediaPreviewTarget): boolean {
+  return (
+    a.engine !== b.engine &&
+    a.fingerprint !== undefined &&
+    b.fingerprint !== undefined &&
+    a.fingerprint.toLowerCase() === b.fingerprint.toLowerCase()
   );
 }
 
@@ -124,6 +142,7 @@ function validManifest(target: MediaPreviewTarget, value: unknown): Manifest | n
 export class MediaPreviewService {
   readonly #options: MediaPreviewOptions;
   readonly #previews = new Map<string, Preview>();
+  readonly #handoffs = new Map<string, Handoff>();
   readonly #opening = new WeakMap<AuthSession, number>();
   readonly #now: () => number;
   readonly #timer: ReturnType<typeof setInterval>;
@@ -135,6 +154,9 @@ export class MediaPreviewService {
     this.#timer = setInterval(() => {
       for (const preview of this.#previews.values()) {
         if (this.#now() >= preview.expiresAt) this.#close(preview);
+      }
+      for (const [id, handoff] of this.#handoffs) {
+        if (this.#now() >= handoff.expiresAt) this.#handoffs.delete(id);
       }
     }, 1000);
     this.#timer.unref();
@@ -148,7 +170,8 @@ export class MediaPreviewService {
     let preview =
       request.previewId === undefined ? undefined : this.#previews.get(request.previewId);
     if (request.previewId !== undefined) {
-      if (preview?.owner !== owner) return { state: 'unavailable' };
+      if (preview === undefined) return this.#recovery(owner, request);
+      if (preview.owner !== owner) return { state: 'unavailable' };
       if (preview.channel !== request.channel || preview.sourceId !== request.sourceId) {
         this.#close(preview);
         return { state: 'unavailable', message: 'Open the preview for the selected media again.' };
@@ -163,7 +186,7 @@ export class MediaPreviewService {
       (this.#previews.get(preview.id) !== preview || this.#now() >= preview.expiresAt)
     ) {
       this.#close(preview);
-      return { state: 'unavailable' };
+      return this.#recovery(owner, request);
     }
     if (target === null || this.#disposed || owner.token?.principal.sub !== actor) {
       if (preview !== undefined) this.#close(preview);
@@ -173,8 +196,12 @@ export class MediaPreviewService {
       };
     }
     if (preview !== undefined && !sameMedia(preview.target, target)) {
+      if (verifiedHandoff(preview.target, target)) {
+        this.#rememberHandoff(preview, target);
+        return this.#recovery(owner, request);
+      }
       this.#close(preview);
-      preview = undefined;
+      return { state: 'unavailable', message: 'The media changed. Open its preview again.' };
     }
     if (preview === undefined) {
       this.#dropPreviews(owner);
@@ -223,7 +250,11 @@ export class MediaPreviewService {
 
   close(owner: AuthSession | null, previewId: string): { closed: boolean } {
     const preview = this.#previews.get(previewId);
-    if (preview === undefined || preview.owner !== owner) return { closed: false };
+    if (preview === undefined) {
+      if (this.#handoffs.get(previewId)?.owner !== owner) return { closed: false };
+      return { closed: this.#handoffs.delete(previewId) };
+    }
+    if (preview.owner !== owner) return { closed: false };
     this.#close(preview);
     return { closed: true };
   }
@@ -234,6 +265,9 @@ export class MediaPreviewService {
   }
 
   #dropPreviews(owner: AuthSession): void {
+    for (const [id, handoff] of this.#handoffs) {
+      if (handoff.owner === owner) this.#handoffs.delete(id);
+    }
     for (const preview of this.#previews.values()) {
       if (preview.owner === owner) this.#close(preview);
     }
@@ -242,6 +276,7 @@ export class MediaPreviewService {
   dispose(): void {
     this.#disposed = true;
     clearInterval(this.#timer);
+    this.#handoffs.clear();
     for (const preview of this.#previews.values()) this.#close(preview);
   }
 
@@ -347,11 +382,65 @@ export class MediaPreviewService {
     const current = await this.#options
       .targetFor(preview.owner, preview.channel, preview.sourceId)
       .catch(() => null);
-    if (!held() || current === null || !sameMedia(preview.target, current)) {
+    if (!held() || current === null) {
       this.#close(preview);
       return null;
     }
+    if (!sameMedia(preview.target, current)) {
+      if (verifiedHandoff(preview.target, current)) this.#rememberHandoff(preview, current);
+      else this.#close(preview);
+      return null;
+    }
     return current;
+  }
+
+  #rememberHandoff(preview: Preview, target: MediaPreviewTarget): void {
+    this.#close(preview);
+    this.#handoffs.set(preview.id, {
+      owner: preview.owner,
+      actor: preview.actor,
+      channel: preview.channel,
+      sourceId: preview.sourceId,
+      target,
+      expiresAt: this.#now() + HTTP_TICKET_TTL_MS,
+    });
+    while (this.#handoffs.size > 64) {
+      const oldest = this.#handoffs.keys().next().value;
+      if (oldest === undefined) break;
+      this.#handoffs.delete(oldest);
+    }
+  }
+
+  async #recovery(owner: AuthSession, request: OpenRequest): Promise<MediaPlaybackPreview> {
+    const id = request.previewId;
+    const handoff = id === undefined ? undefined : this.#handoffs.get(id);
+    const generation = this.#opening.get(owner);
+    const held = () =>
+      !this.#disposed &&
+      id !== undefined &&
+      this.#handoffs.get(id) === handoff &&
+      handoff !== undefined &&
+      handoff.owner === owner &&
+      handoff.actor === owner.token?.principal.sub &&
+      handoff.channel === request.channel &&
+      handoff.sourceId === request.sourceId &&
+      this.#now() < handoff.expiresAt &&
+      this.#opening.get(owner) === generation;
+    if (!held() || handoff === undefined) return { state: 'unavailable' };
+    const target = await this.#options
+      .targetFor(owner, request.channel, request.sourceId)
+      .catch(() => null);
+    if (
+      !held() ||
+      target === null ||
+      target.fingerprint === undefined ||
+      target.fingerprint.toLowerCase() !== handoff.target.fingerprint?.toLowerCase() ||
+      !sameMedia(handoff.target, target)
+    ) {
+      if (id !== undefined && this.#handoffs.get(id) === handoff) this.#handoffs.delete(id);
+      return { state: 'unavailable' };
+    }
+    return { state: 'unavailable', recovery: 'target-changed' };
   }
 
   #view(preview: Preview, state: MediaPlaybackPreview['state']): MediaPlaybackPreview {
@@ -402,7 +491,12 @@ export class MediaPreviewService {
         this.#close(preview);
         return { state: 'unavailable', message: 'The media changed. Open its preview again.' };
       }
-      if ((await this.#currentTarget(preview)) === null) return { state: 'unavailable' };
+      if ((await this.#currentTarget(preview)) === null)
+        return this.#recovery(preview.owner, {
+          channel: preview.channel,
+          sourceId: preview.sourceId,
+          previewId: preview.id,
+        });
       preview.manifest = manifest;
       if (manifest.browserMode === 'proxy' && manifest.proxy.state === 'notPrepared' && prepare) {
         const prepared = await fetch(new URL(manifest.prepareUrl, target.origin), {
@@ -412,7 +506,12 @@ export class MediaPreviewService {
           signal: signal(),
           maxResponseBytes: 128 * 1024,
         });
-        if ((await this.#currentTarget(preview)) === null) return { state: 'unavailable' };
+        if ((await this.#currentTarget(preview)) === null)
+          return this.#recovery(preview.owner, {
+            channel: preview.channel,
+            sourceId: preview.sourceId,
+            previewId: preview.id,
+          });
         if (prepared.status !== 200 && prepared.status !== 202)
           return {
             ...this.#view(preview, 'error'),
@@ -432,6 +531,12 @@ export class MediaPreviewService {
       };
     } catch {
       this.#close(preview);
+      if (this.#handoffs.has(preview.id))
+        return this.#recovery(preview.owner, {
+          channel: preview.channel,
+          sourceId: preview.sourceId,
+          previewId: preview.id,
+        });
       return {
         state: 'unavailable',
         message: 'The source server did not answer the media preview request.',

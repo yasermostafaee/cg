@@ -94,17 +94,21 @@ export const SourceAudioLevelsChannel = defineChannel(
   z.object({ readings: z.array(sourceAudioReading).max(MAX_SOURCE_AUDIO_BATCH) }),
 );
 
-const mediaPlayback = z.object({
-  state: z.enum(['unsupported', 'unavailable', 'preparing', 'ready', 'error']),
-  previewId: z.string().uuid().optional(),
-  expiresAtMs: z.number().nonnegative().optional(),
-  durationMs: z.number().nonnegative().optional(),
-  videoUrl: z.string().max(2048).optional(),
-  posterUrl: z.string().max(2048).optional(),
-  engine: z.enum(['A', 'B']).optional(),
-  host: z.string().max(256).optional(),
-  message: z.string().max(300).optional(),
-});
+const mediaPlayback = z
+  .object({
+    state: z.enum(['unsupported', 'unavailable', 'preparing', 'ready', 'error']),
+    previewId: z.string().uuid().optional(),
+    expiresAtMs: z.number().nonnegative().optional(),
+    durationMs: z.number().nonnegative().optional(),
+    videoUrl: z.string().max(2048).optional(),
+    posterUrl: z.string().max(2048).optional(),
+    engine: z.enum(['A', 'B']).optional(),
+    host: z.string().max(256).optional(),
+    message: z.string().max(300).optional(),
+    /** A verified A/B source handoff permits one bounded fresh preview acquisition. */
+    recovery: z.literal('target-changed').optional(),
+  })
+  .refine((value) => value.recovery === undefined || value.state === 'unavailable');
 export type MediaPlaybackPreview = z.infer<typeof mediaPlayback>;
 
 export const SourceMediaOpenChannel = defineChannel(
