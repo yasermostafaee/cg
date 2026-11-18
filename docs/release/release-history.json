@@ -54,6 +54,10 @@
       ],
       "fixes": [
         {
+          "fa": "وقتی پیش‌نمایش ویدئویی مدیا در PVW تصویر ندارد، پوستر معتبر همان فایل می‌تواند قاب را پر کند. با برگشت تصویر متحرک، همان تصویر دوباره اولویت دارد؛ این اصلاح روی قطع سیگنال ورودی زنده اثر ندارد.",
+          "en": "PVW can show the same file's verified poster when its passive media preview has no picture. A recovered moving frame takes priority again; live-input signal-loss handling is unchanged."
+        },
+        {
           "fa": "پس از جابه‌جایی بین سرورها، پیش‌نمایش همان مدیای تأییدشده می‌تواند خودکار برگردد و موقعیت پخش، حالت پخش یا مکث و تنظیم شنیدن صدا را حفظ کند.",
           "en": "After a verified handoff between servers, the same media preview can reopen automatically while preserving its position, Play or Pause intent and listening setting."
         },

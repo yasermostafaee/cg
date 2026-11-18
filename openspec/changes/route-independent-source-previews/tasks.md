@@ -87,3 +87,25 @@ product, without a test-only rebuild. Control installation was verified byte-for
 apart from Tauri's expected three-byte `UNK` to `NSS` bundle marker. Updated Bridge
 installation and Master/Slave preview recovery on the target station remain pending;
 neither Linux nor local fixtures establish station clock or output-audio equality.
+
+## Media poster follow-up, 2026-11-18
+
+The previous installation-pending note records the earlier proof cutoff. Both Bridges and
+Control from native build `77dcba4a` have since been installed. Actual Master PVW decoded
+three 640x360 pictures; native 4K media with decoded audio advanced from B and after the
+return to A. This does not establish that every passive preview is available.
+
+An Engine B application log at 04:02:36Z recorded HTTP 403 for `source-previews` using
+the signed-in `cg-bridge` service session; subsequent CG polls received no frames. Valid
+operator/administrator subjects can receive pictures. That missing upstream capability is
+distinct from occasional pending Playlist preview responses, media playback and PGM roles.
+The poster follow-up uses the existing authorized file-poster API and changes no permissions.
+
+- [x] Integrate the reviewed Control-only poster implementation from `bc33f0e2`.
+- [ ] Pass the integrated full local gate and normal push for this poster follow-up.
+- [ ] Record this follow-up's completed green carrying Linux E2E URL; the earlier `261b57c8`
+      success covers the previous product and is not proof for this new renderer behavior.
+- [ ] Verify a new immutable three-installer 1.2.11 bundle and unchanged Bridge payload;
+      only Control needs reinstall for the poster change after the prior full bundle.
+- [ ] Verify the poster in the installed Control's actual three-plate PVW, independently
+      of the upstream B service-preview permission correction.
