@@ -2,6 +2,10 @@ import { expect, it } from 'vitest';
 import {
   broadcastCustomGuideLines,
   broadcastGuideFrame,
+  broadcastGuideEditingFrame,
+  broadcastGuideFrameSettings,
+  broadcastGuideRectangles,
+  createBroadcastGuideFrame,
   broadcastSafeAreas,
   createBroadcastGuideStore,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
@@ -116,4 +120,43 @@ it('keeps extreme valid custom ratios finite and contained', () => {
       expect(area.height).toBeLessThanOrEqual(frame.height);
     }
   }
+});
+
+it('round-trips two custom references and keeps their colors and borders independent', () => {
+  const first = createBroadcastGuideFrame('portrait-a', { width: 3, height: 4 });
+  const second = createBroadcastGuideFrame('portrait-b', { width: 9, height: 16 });
+  const profile = parseBroadcastGuideProfile({
+    ...DEFAULT_BROADCAST_GUIDE_PROFILE,
+    activeFrameId: second.id,
+    frames: [
+      ...broadcastGuideFrameSettings(DEFAULT_BROADCAST_GUIDE_PROFILE),
+      { ...first, color: '#40ABC8' },
+      {
+        ...second,
+        borders: second.borders.map((border) =>
+          border.percent === 80 ? { ...border, color: '#EE7700' } : border,
+        ),
+      },
+    ],
+  });
+  if (profile === null) throw new Error('Cannot read the guide profile');
+  const frames = broadcastGuideFrameSettings(profile);
+  expect(broadcastGuideEditingFrame(profile, frames)?.id).toBe(second.id);
+  expect(broadcastGuideRectangles(1280, 720, profile)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ frameId: first.id, percent: 100, width: 540, stroke: '#40abc8' }),
+      expect.objectContaining({ frameId: second.id, percent: 100, width: 405, stroke: '#ffffff' }),
+      expect.objectContaining({ frameId: second.id, percent: 80, width: 324, stroke: '#ee7700' }),
+    ]),
+  );
+});
+
+it('keeps older settings when duplicate frame IDs make a newer frame list invalid', () => {
+  const frame = createBroadcastGuideFrame('identity');
+  const profile = parseBroadcastGuideProfile({
+    ...custom,
+    activeFrameId: frame.id,
+    frames: [...broadcastGuideFrameSettings(custom), frame, frame],
+  });
+  expect(profile).toEqual(custom);
 });

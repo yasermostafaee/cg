@@ -15,7 +15,7 @@ export const heading = style({
   alignItems: 'center',
   gap: 8,
 });
-export const choices = style({ display: 'flex', gap: 4 });
+export const choices = style({ display: 'flex', flexWrap: 'wrap', gap: 4 });
 export const outputSettings = style({
   display: 'grid',
   gap: 6,
@@ -75,4 +75,38 @@ export const anchorButton = style({
   minInlineSize: 0,
   paddingInline: 0,
   justifyContent: 'center',
+});
+
+export const frameOptions = style({
+  display: 'grid',
+  gap: 4,
+});
+export const borderRow = style({
+  paddingInlineStart: 16,
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto 24px',
+  alignItems: 'center',
+  gap: 5,
+});
+export const colorLabel = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+});
+export const help = style({
+  fontSize: 11,
+  color: colors.textMuted,
+});
+
+export const ratioControlRow = style({
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'center',
+  gap: 6,
+});
+export const visibleDot = style({
+  width: 6,
+  height: 6,
+  border: '1px solid currentColor',
+  borderRadius: '50%',
 });

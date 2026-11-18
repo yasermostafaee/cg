@@ -16,8 +16,9 @@
 - [x] Pass Designer typechecks, scoped lint, 13 dependency/build tasks and 2 fresh Edge
       cases covering normal edits, bounds, visibility/removal, ratio containment,
       new-project/reload persistence, unchanged Undo and clean template iframe.
-- [ ] Implement Runtime guide settings, persistent profile and exact key census.
-- [ ] Share CG Control's profile with the normal New live layout preview, with independent
+- [x] Implement Runtime guide settings, persistent profile and exact key census.
+- [x] Share CG Control's profile with the normal New live layout preview, with independent
       visibility and browser proof that guide edits do not change layout/output data.
 - [ ] Verify both normal UIs, project/reload persistence, containment and output isolation in browsers.
 - [ ] Run required integration checks for this persisted-preference Full-lane feature.
+- [x] Add a reusable Custom width-to-height ratio to Designer, CG Control PVW and New live layout.

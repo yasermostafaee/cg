@@ -1,89 +1,38 @@
 import { expect, test } from './fixtures/designer.js';
 
-test('custom safe guides use a saved landscape reference across projects and reloads', async ({
+test('safe guide reference and visibility settings persist, and ruler guides are separate', async ({
   app,
-}, testInfo) => {
+}) => {
   const page = app.page;
   await app.newProject('Guide profile first project');
   const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
   const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
   const guides = page.locator('[data-safe-area-guides]');
   await configure.click();
+  await expect(
+    settings.getByRole('button', { name: /Add (horizontal|vertical) guide/ }),
+  ).toHaveCount(0);
   await settings.getByRole('radio', { name: '4:3', exact: true }).click();
-  await settings.getByRole('button', { name: 'Add horizontal guide', exact: true }).click();
-  await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('زیرنویس');
-  const position = settings.getByRole('spinbutton', {
-    name: 'Guide 1 position percent',
-    exact: true,
-  });
-  await position.fill('75');
-  await settings.getByRole('button', { name: 'Add vertical guide', exact: true }).click();
-  await settings
-    .getByRole('spinbutton', { name: 'Guide 2 position percent', exact: true })
-    .fill('25');
+  await settings.getByRole('checkbox', { name: 'Show this frame', exact: true }).check();
   const reference = guides.locator('[data-guide-reference="4:3"]');
   await expect(reference).toHaveAttribute('x', '240');
   await expect(reference).toHaveAttribute('width', '1440');
-  await expect(guides.locator('[data-custom-guide][data-guide-axis="y"]')).toHaveAttribute(
-    'y1',
-    '810',
-  );
-  await expect(guides.locator('[data-custom-guide][data-guide-axis="x"]')).toHaveAttribute(
-    'x1',
-    '600',
-  );
-  await position.fill('101');
-  await expect(position).toHaveAttribute('aria-invalid', 'true');
-  await expect(guides.locator('[data-custom-guide][data-guide-axis="y"]')).toHaveAttribute(
-    'y1',
-    '810',
-  );
-  await position.blur();
-  await expect(position).toHaveValue('75');
-  await settings.getByRole('checkbox', { name: 'Show guide 2', exact: true }).uncheck();
-  await expect(guides.locator('[data-custom-guide]')).toHaveCount(1);
-  await settings.getByRole('checkbox', { name: 'Broadcast safe areas', exact: true }).uncheck();
-  await expect(guides.locator('[data-safe-area]')).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath('designer-custom-guides.png') });
+  await settings.getByRole('checkbox', { name: 'Show this frame', exact: true }).uncheck();
+  await expect(guides.locator('[data-guide-aspect="4:3"]')).toHaveCount(0);
+  await expect(guides.locator('[data-guide-aspect="auto"]')).toHaveCount(2);
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
-  await expect(
-    page.frameLocator('iframe[title="cgpreview"]').locator('[data-custom-guide]'),
-  ).toHaveCount(0);
-  const saved = await page.evaluate(() => localStorage.getItem('cg.designer.safe-guides.v1'));
-  expect(JSON.parse(saved ?? '{}')).toMatchObject({
-    version: 1,
-    aspect: '4:3',
-    standardVisible: false,
-    lines: [
-      { name: 'زیرنویس', position: 75 },
-      { position: 25, visible: false },
-    ],
-  });
   await app.goto();
   await app.newProject('Guide profile second project');
-  await expect(page.getByRole('button', { name: 'Safe areas', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'false',
-  );
   await configure.click();
   await expect(settings.getByRole('radio', { name: '4:3', exact: true })).toHaveAttribute(
     'aria-checked',
     'true',
   );
-  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
-    'زیرنویس',
-  );
   await expect(
-    settings.getByRole('spinbutton', { name: 'Guide 1 position percent', exact: true }),
-  ).toHaveValue('75');
-  await expect(
-    settings.getByRole('checkbox', { name: 'Broadcast safe areas', exact: true }),
+    settings.getByRole('checkbox', { name: 'Show this frame', exact: true }),
   ).not.toBeChecked();
-  await settings.getByRole('button', { name: 'Remove guide 1', exact: true }).click();
-  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
-    'Guide 2',
-  );
   await settings.getByRole('radio', { name: '16:9', exact: true }).click();
+  await settings.getByRole('checkbox', { name: 'Show this frame', exact: true }).check();
   await expect(guides.locator('[data-guide-reference="16:9"]')).toHaveAttribute('x', '0');
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -97,9 +46,10 @@ test('broadcast safe guides toggle without changing the document and stay on the
   const page = app.page;
   const toggle = page.getByRole('button', { name: 'Safe areas', exact: true });
   const guides = page.locator('[data-safe-area-guides]');
+  await expect(toggle).toHaveAttribute('aria-keyshortcuts', 'Shift+S');
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
   await expect(guides).toHaveCount(0);
-  await toggle.click();
+  await page.keyboard.press('Shift+S');
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await expect(guides).toBeVisible();
   await expect(guides).toHaveCSS('pointer-events', 'none');
@@ -137,18 +87,17 @@ test('broadcast safe guides toggle without changing the document and stay on the
   await page.getByRole('button', { name: 'Fit', exact: true }).click();
   await compare();
   await page.screenshot({ path: testInfo.outputPath('designer-safe-areas.png') });
-  await toggle.click();
+  await page.keyboard.press('Shift+S');
   await expect(guides).toHaveCount(0);
   // A view aid must never mark a new project as edited.
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: /^Undo/ })).toBeDisabled();
 });
 
-test('guide colors inherit white for old profiles and retain common and individual edits across projects', async ({
+test('safe area color defaults to white and persists independently of the project', async ({
   app,
 }, testInfo) => {
   const page = app.page;
-  // An existing v1 preference has no colour fields. Opening it must retain its guides.
   await page.evaluate(() => {
     localStorage.setItem(
       'cg.designer.safe-guides.v1',
@@ -167,43 +116,21 @@ test('guide colors inherit white for old profiles and retain common and individu
   const guides = page.locator('[data-safe-area-guides]');
   await page.getByRole('button', { name: 'Safe areas', exact: true }).click();
   const reference = guides.locator('[data-guide-reference="4:3"]');
-  const custom = guides.locator('[data-custom-guide="old-guide"]');
   const action = guides.locator('[data-safe-area="action"]');
   const graphics = guides.locator('[data-safe-area="graphics"]');
-  for (const outline of [reference, custom, action, graphics])
+  for (const outline of [reference, action, graphics])
     await expect(outline).toHaveAttribute('stroke', '#ffffff');
-  await expect(custom).toHaveAttribute('y1', '810');
-  await expect(guides.getByText('عنوان', { exact: true })).toHaveAttribute('fill', '#ffffff');
+  await expect(guides.locator('[data-custom-guide]')).toHaveCount(0);
   await configure.click();
-  const commonColor = settings.getByRole('textbox', { name: 'Guide color hex', exact: true });
-  const lineColor = settings.getByRole('textbox', { name: 'Guide 1 color hex', exact: true });
-  const inherit = settings.getByRole('button', {
-    name: 'Use guide color for guide 1',
-    exact: true,
-  });
+  const commonColor = settings.getByRole('textbox', { name: 'Frame color hex', exact: true });
   await expect(commonColor).toHaveValue('#ffffff');
-  await expect(inherit).toBeDisabled();
   await commonColor.fill('#1256AB');
   await commonColor.press('Enter');
-  for (const outline of [reference, custom, action, graphics])
+  for (const outline of [reference, action, graphics])
     await expect(outline).toHaveAttribute('stroke', '#1256ab');
-  await lineColor.fill('#ed5511');
-  await lineColor.press('Enter');
-  await expect(custom).toHaveAttribute('stroke', '#ed5511');
-  await expect(guides.getByText('عنوان', { exact: true })).toHaveAttribute('fill', '#ed5511');
-  await commonColor.fill('#42aa77');
-  await commonColor.press('Enter');
-  await expect(custom).toHaveAttribute('stroke', '#ed5511');
-  await expect(action).toHaveAttribute('stroke', '#42aa77');
-  await inherit.click();
-  await expect(custom).toHaveAttribute('stroke', '#42aa77');
-  await expect(inherit).toBeDisabled();
-  await lineColor.fill('#ffzz00');
-  await lineColor.blur();
-  await expect(lineColor).toHaveValue('#42aa77');
-  await expect(custom).toHaveAttribute('stroke', '#42aa77');
-  await lineColor.fill('#ed5511');
-  await lineColor.press('Enter');
+  await commonColor.fill('#ffzz00');
+  await commonColor.blur();
+  await expect(commonColor).toHaveValue('#1256ab');
   await page.screenshot({ path: testInfo.outputPath('designer-guide-colors.png') });
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
   await expect(
@@ -211,22 +138,90 @@ test('guide colors inherit white for old profiles and retain common and individu
   ).toHaveCount(0);
   await app.goto();
   await app.newProject('Guide colors second project');
-  await expect(page.getByRole('button', { name: 'Safe areas', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'false',
-  );
   await configure.click();
-  await expect(commonColor).toHaveValue('#42aa77');
-  await expect(lineColor).toHaveValue('#ed5511');
-  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
-    'عنوان',
-  );
+  await expect(commonColor).toHaveValue('#1256ab');
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
   await page.getByRole('button', { name: 'Safe areas', exact: true }).click();
-  await expect(reference).toHaveAttribute('stroke', '#42aa77');
-  await expect(action).toHaveAttribute('stroke', '#42aa77');
-  await expect(custom).toHaveAttribute('stroke', '#ed5511');
-  await expect(custom).toHaveAttribute('y1', '810');
-  await page.getByRole('button', { name: 'Edit', exact: true }).click();
-  await expect(page.getByRole('menuitem', { name: /^Undo/ })).toBeDisabled();
+  await expect(reference).toHaveAttribute('stroke', '#1256ab');
+  await expect(action).toHaveAttribute('stroke', '#1256ab');
+});
+
+test('multiple custom frames keep their own ratios, line colors and visibility', async ({
+  app,
+}, testInfo) => {
+  await app.newProject('Independent safe frames');
+  const { page } = app;
+  const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const show = settings.getByRole('checkbox', { name: 'Show this frame', exact: true });
+  const guide = page.locator('[data-safe-area-guides]');
+  const setValue = async (name: string, value: string): Promise<void> => {
+    const field = settings.getByLabel(name, { exact: true });
+    await field.fill(value);
+    await field.press('Enter');
+  };
+  await configure.click();
+  await settings.getByRole('radio', { name: '3:4', exact: true }).click();
+  await show.check();
+  await setValue('Frame color hex', '#46c2e3');
+  await setValue('90% color hex', '#edab42');
+  await settings.getByRole('button', { name: 'Add custom frame', exact: true }).click();
+  await setValue('Custom guide ratio width', '9');
+  await setValue('Custom guide ratio height', '16');
+  await setValue('80% color hex', '#d6a2ff');
+  await settings.getByRole('radio', { name: 'Auto', exact: true }).click();
+  await show.uncheck();
+  await settings.getByRole('radio', { name: '16:9', exact: true }).click();
+  await show.check();
+  await settings.getByRole('checkbox', { name: '93% Action Safe', exact: true }).check();
+  await setValue('Frame color hex', '#75cd94');
+  await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+  await show.check();
+  await expect(guide.locator('[data-guide-aspect="custom"][data-guide-percent="100"]')).toHaveCount(
+    2,
+  );
+  await expect(guide.locator('[data-guide-aspect="4:3"][data-guide-percent="100"]')).toHaveCount(1);
+  await expect(
+    guide.locator('[data-guide-frame="custom"][data-guide-percent="100"]'),
+  ).toHaveAttribute('width', '810');
+  await expect(
+    guide.locator('[data-guide-frame="custom"][data-guide-percent="90"]'),
+  ).toHaveAttribute('stroke', '#edab42');
+  await expect(
+    guide.locator('[data-guide-frame="custom"][data-guide-percent="80"]'),
+  ).toHaveAttribute('stroke', '#46c2e3');
+  await expect(guide.locator('[data-guide-percent="80"][stroke="#d6a2ff"]')).toHaveCount(1);
+  await expect(guide.getByText('9:16 · 80%', { exact: true })).toBeVisible();
+  await expect(
+    guide.locator('g:last-child[data-safe-guide-labels]').getByText('16:9 · 93%', { exact: true }),
+  ).toBeVisible();
+  const captions = await Promise.all(
+    ['3:4 · 100%', '9:16 · 100%'].map((label) =>
+      guide.getByText(label, { exact: true }).boundingBox(),
+    ),
+  );
+  expect(captions[0]).not.toBeNull();
+  expect(captions[1]).not.toBeNull();
+  if (captions[0] === null || captions[1] === null) throw new Error('Guide captions missing');
+  expect(Math.abs(captions[0].y - captions[1].y)).toBeGreaterThanOrEqual(
+    Math.min(captions[0].height, captions[1].height),
+  );
+  await settings.getByText('About safe areas · EBU R 95', { exact: true }).click();
+  await expect(settings.getByText(/EBU R 95 defines Action Safe and Graphics Safe/)).toBeVisible();
+  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('multiple-custom-safe-frames.png') });
+
+  await app.goto();
+  await app.newProject('Same saved safe frames');
+  await page.keyboard.press('Shift+S');
+  await expect(guide.locator('[data-guide-aspect="custom"][data-guide-percent="100"]')).toHaveCount(
+    2,
+  );
+  await configure.click();
+  await settings.getByRole('radio', { name: '9:16', exact: true }).click();
+  await settings.getByRole('button', { name: 'Remove custom frame', exact: true }).click();
+  await expect(guide.locator('[data-guide-aspect="custom"][data-guide-percent="100"]')).toHaveCount(
+    1,
+  );
+  await expect(guide.getByText('3:4 · 80%', { exact: true })).toBeVisible();
 });

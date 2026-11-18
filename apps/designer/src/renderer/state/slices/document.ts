@@ -1,8 +1,7 @@
-import type { Lifecycle, Playout, Position, Resolution, Scene } from '@cg/shared-schema';
+import type { Lifecycle, Playout, Position, Scene } from '@cg/shared-schema';
 import {
   activeRangeOf,
   PositionSchema,
-  ResolutionSchema,
   migrateScene,
   playoutOf,
   pruneDanglingLiveRevealMasks,
@@ -275,16 +274,6 @@ export const documentSlice = {
     }
     if (Object.keys(rootPatch).length > 0) scene = { ...scene, ...rootPatch };
     set({ scene });
-  },
-
-  /** Output reference for authoring guides only; composition dimensions stay unchanged. */
-  setProjectOutputRaster(resolution: Resolution): void {
-    if (current.scene === null) return;
-    const parsed = ResolutionSchema.safeParse(resolution);
-    if (!parsed.success) return;
-    const prior = current.scene.outputRaster;
-    if (prior?.width === parsed.data.width && prior.height === parsed.data.height) return;
-    set({ scene: { ...current.scene, outputRaster: parsed.data } });
   },
 
   /** Commit this composition's existing manifest placement, independently of nested instances. */

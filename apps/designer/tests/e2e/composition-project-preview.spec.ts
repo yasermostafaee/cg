@@ -117,20 +117,15 @@ test('Composition Preview fits one project checkerboard and places the lower-thi
   app,
   page,
 }, testInfo) => {
-  await app.newProject('Lower-third output preview');
+  await app.newProject('Lower-third output preview', 'hd');
   await app.addTextElement({ x: 100, y: 40 });
   await app.setDataKey('headline');
   const resolution = { width: 1280, height: 190 };
   await resizeComposition(app, resolution);
   await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
-  // The preview-scoped export strips this metadata: the Host must read the root project.
+  // The preview uses the root project dimensions after the composition is cropped.
   const raster = { width: 1280, height: 720 };
-  await setNumber(settings.getByRole('spinbutton', { name: 'Project output width' }), raster.width);
-  await setNumber(
-    settings.getByRole('spinbutton', { name: 'Project output height' }),
-    raster.height,
-  );
   await settings.getByRole('button', { name: 'Bottom center', exact: true }).click();
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
   await app.openPreviewModal();
@@ -152,20 +147,6 @@ test('Composition Preview fits one project checkerboard and places the lower-thi
   await app.stop();
   await expect(app.previewFrame.locator('body')).toHaveClass(/cg-pending/);
   await expectOutputPicture(app, raster, resolution, position);
-  await app.previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
-  const squarePixelRaster = { width: 1440, height: 1080 };
-  await setNumber(
-    settings.getByRole('spinbutton', { name: 'Project output width' }),
-    squarePixelRaster.width,
-  );
-  await setNumber(
-    settings.getByRole('spinbutton', { name: 'Project output height' }),
-    squarePixelRaster.height,
-  );
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
-  await app.openPreviewModal();
-  await expectOutputPicture(app, squarePixelRaster, resolution, position);
 });
 
 test('a legacy cropped project defaults to full-HD Preview and keeps tiny centered or authored placements', async ({
@@ -240,16 +221,11 @@ test('equal1280×720 project and composition share native pixels in Canvas guide
   app,
   page,
 }, testInfo) => {
-  await app.newProject('Native HD output');
+  await app.newProject('Native HD output', 'hd');
   const raster = { width: 1280, height: 720 };
   await resizeComposition(app, raster);
   await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
-  await setNumber(settings.getByRole('spinbutton', { name: 'Project output width' }), raster.width);
-  await setNumber(
-    settings.getByRole('spinbutton', { name: 'Project output height' }),
-    raster.height,
-  );
   await settings.getByRole('button', { name: 'Center', exact: true }).click();
   await expect(settings.getByRole('spinbutton', { name: 'Composition output X' })).toHaveValue('0');
   await expect(settings.getByRole('spinbutton', { name: 'Composition output Y' })).toHaveValue('0');

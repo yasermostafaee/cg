@@ -5,7 +5,7 @@ import {
   type Position,
   type Raster,
 } from '@cg/shared-schema';
-import { broadcastSafeAreas, type BroadcastGuideProfile } from '@cg/ui';
+import { broadcastGuideRectangles, type BroadcastGuideProfile } from '@cg/ui';
 import { designerStore, editSceneOf } from '../../state/store.js';
 import { designerGuideStore } from './broadcastGuideStore.js';
 
@@ -17,14 +17,9 @@ export function safeAreaSnapTargets(input: {
   profile: BroadcastGuideProfile;
   visible: boolean;
 }): { x: number[]; y: number[] } {
-  if (!input.visible || !input.profile.standardVisible) return { x: [], y: [] };
+  if (!input.visible) return { x: [], y: [] };
   const origin = outputTranslate({ resolution: input.resolution }, input.position, input.raster);
-  const areas = broadcastSafeAreas(
-    input.raster.width,
-    input.raster.height,
-    input.profile.aspect,
-    input.profile.customAspect,
-  );
+  const areas = broadcastGuideRectangles(input.raster.width, input.raster.height, input.profile);
   return {
     x: [...new Set(areas.flatMap((area) => [area.x - origin.x, area.x + area.width - origin.x]))],
     y: [...new Set(areas.flatMap((area) => [area.y - origin.y, area.y + area.height - origin.y]))],

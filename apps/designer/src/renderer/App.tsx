@@ -366,7 +366,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const rulers = e.code === 'KeyR' && !e.shiftKey;
+      const rulers = e.code === 'KeyR';
       const safeAreas = e.code === 'KeyS' && e.shiftKey;
       if (!rulers && !safeAreas) return;
       const t = e.target;

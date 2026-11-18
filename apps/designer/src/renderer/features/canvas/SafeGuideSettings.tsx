@@ -9,7 +9,9 @@ import {
   ArrowUpLeft,
   ArrowUpRight,
   CircleDot,
-  Info,
+  Plus,
+  Trash2,
+  RotateCcw,
   Settings2,
   X,
 } from 'lucide-react';
@@ -21,13 +23,18 @@ import {
   type Resolution,
 } from '@cg/shared-schema';
 import {
-  BROADCAST_GUIDE_ASPECTS,
   DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
   MAX_BROADCAST_GUIDE_ASPECT_PART,
+  MAX_BROADCAST_GUIDE_FRAMES,
+  broadcastGuideEditingFrame,
+  createBroadcastGuideFrame,
+  broadcastGuideFrameSettings,
   normalizeBroadcastGuideColor,
   normalizeBroadcastGuideCustomAspect,
   type BroadcastGuideCustomAspect,
   type BroadcastGuideProfile,
+  type BroadcastGuideFrameSetting,
+  type BroadcastGuideBorder,
 } from '@cg/ui';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -61,10 +68,45 @@ export function SafeGuideSettings({
     designerGuideStore.set(next);
     onEdit();
   };
-  const customAspect = profile.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT;
+  const frames = broadcastGuideFrameSettings(profile);
+  const activeFrame = broadcastGuideEditingFrame(profile, frames);
+  const selectFrame = (frame: BroadcastGuideFrameSetting, nextFrames = frames): void =>
+    update({
+      ...profile,
+      frames: nextFrames,
+      aspect: frame.aspect,
+      activeFrameId: frame.id,
+      ...(frame.customAspect === undefined ? {} : { customAspect: frame.customAspect }),
+    });
+  const updateFrame = (next: BroadcastGuideFrameSetting): void =>
+    selectFrame(
+      next,
+      frames.map((frame) => (frame.id === next.id ? next : frame)),
+    );
+  const updateBorder = (next: BroadcastGuideBorder): void => {
+    if (activeFrame === undefined) return;
+    updateFrame({
+      ...activeFrame,
+      borders: activeFrame.borders.map((border) =>
+        border.percent === next.percent ? next : border,
+      ),
+    });
+  };
+  const customAspect = activeFrame?.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT;
   const changeCustomAspect = (axis: keyof BroadcastGuideCustomAspect, value: number): void => {
     const ratio = normalizeBroadcastGuideCustomAspect({ ...customAspect, [axis]: value });
-    if (ratio !== null) update({ ...profile, customAspect: ratio });
+    if (ratio !== null && activeFrame?.aspect === 'custom')
+      updateFrame({ ...activeFrame, customAspect: ratio });
+  };
+  const addCustom = (): void => {
+    const frame = createBroadcastGuideFrame(crypto.randomUUID());
+    selectFrame(frame, [...frames, frame]);
+  };
+  const removeCustom = (): void => {
+    if (activeFrame?.aspect !== 'custom') return;
+    const nextFrames = frames.filter((frame) => frame.id !== activeFrame.id);
+    const next = nextFrames.find((frame) => frame.aspect === 'custom') ?? nextFrames[0];
+    if (next !== undefined) selectFrame(next, nextFrames);
   };
   return (
     <>
@@ -101,74 +143,150 @@ export function SafeGuideSettings({
               onEdit={onEdit}
             />
             <div className={s.heading}>
-              <span>Guide aspect ratio</span>
-              <span title="EBU R95 defines the 16:9 broadcast guides. Other ratios use proportional guides inside the project output.">
-                <Icon icon={Info} size={13} />
-              </span>
+              <span>Reference frames</span>
+              <Button
+                size="sm"
+                onClick={addCustom}
+                disabled={frames.length >= MAX_BROADCAST_GUIDE_FRAMES}
+              >
+                <Icon icon={Plus} size={13} />
+                Add custom frame
+              </Button>
             </div>
             <div className={s.choices} role="radiogroup" aria-label="Guide aspect ratio">
-              {BROADCAST_GUIDE_ASPECTS.map((aspect) => (
-                <Button
-                  key={aspect}
-                  size="sm"
-                  role="radio"
-                  aria-checked={profile.aspect === aspect}
-                  selected={profile.aspect === aspect}
-                  onClick={() =>
-                    update({ ...profile, aspect, ...(aspect === 'custom' && { customAspect }) })
-                  }
-                >
-                  {aspect === 'auto' ? 'Auto' : aspect === 'custom' ? 'Custom' : aspect}
-                </Button>
-              ))}
+              {frames.map((frame) => {
+                const label =
+                  frame.customAspect === undefined
+                    ? frame.aspect === 'auto'
+                      ? 'Auto'
+                      : frame.aspect
+                    : `${frame.customAspect.width}:${frame.customAspect.height}`;
+                const current = activeFrame?.id === frame.id;
+                return (
+                  <Button
+                    key={frame.id}
+                    size="sm"
+                    role="radio"
+                    title={frame.visible ? 'Visible on canvas' : 'Hidden on canvas'}
+                    aria-checked={current}
+                    selected={current}
+                    onClick={() => selectFrame(frame)}
+                  >
+                    {frame.visible && (
+                      <span className={s.visibleDot} style={{ backgroundColor: frame.color }} />
+                    )}
+                    {label}
+                  </Button>
+                );
+              })}
             </div>
-            {profile.aspect === 'custom' && (
-              <div className={s.outputGrid} role="group" aria-label="Custom guide ratio">
-                <label className={s.outputField}>
-                  <span>Ratio width</span>
-                  <RealtimeNumberInput
-                    className={s.input}
-                    ariaLabel="Custom guide ratio width"
-                    value={customAspect.width}
-                    min={1}
-                    max={MAX_BROADCAST_GUIDE_ASPECT_PART}
-                    step={1}
-                    scrub={false}
-                    onCommit={(value) => changeCustomAspect('width', value)}
-                  />
-                </label>
-                <label className={s.outputField}>
-                  <span>Ratio height</span>
-                  <RealtimeNumberInput
-                    className={s.input}
-                    ariaLabel="Custom guide ratio height"
-                    value={customAspect.height}
-                    min={1}
-                    max={MAX_BROADCAST_GUIDE_ASPECT_PART}
-                    step={1}
-                    scrub={false}
-                    onCommit={(value) => changeCustomAspect('height', value)}
-                  />
-                </label>
+            {activeFrame?.aspect === 'custom' && (
+              <div className={s.ratioControlRow}>
+                <div className={s.outputGrid} role="group" aria-label="Custom guide ratio">
+                  <label className={s.outputField}>
+                    <span>Ratio width</span>
+                    <RealtimeNumberInput
+                      className={s.input}
+                      ariaLabel="Custom guide ratio width"
+                      value={customAspect.width}
+                      min={1}
+                      max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+                      step={1}
+                      scrub={false}
+                      onCommit={(value) => changeCustomAspect('width', value)}
+                    />
+                  </label>
+                  <label className={s.outputField}>
+                    <span>Ratio height</span>
+                    <RealtimeNumberInput
+                      className={s.input}
+                      ariaLabel="Custom guide ratio height"
+                      value={customAspect.height}
+                      min={1}
+                      max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+                      step={1}
+                      scrub={false}
+                      onCommit={(value) => changeCustomAspect('height', value)}
+                    />
+                  </label>
+                </div>
+                <Control
+                  variant="bare"
+                  aria-label="Remove custom frame"
+                  title="Remove custom frame"
+                  onClick={removeCustom}
+                >
+                  <Icon icon={Trash2} size={14} />
+                </Control>
               </div>
             )}
-            <label className={s.check}>
-              <input
-                className={s.checkbox}
-                type="checkbox"
-                checked={profile.standardVisible}
-                onChange={(event) => update({ ...profile, standardVisible: event.target.checked })}
-              />
-              Broadcast safe areas
-            </label>
-            <div className={s.heading}>
-              <span>Guide color</span>
-              <GuideColorControl
-                label="Guide color"
-                value={profile.color}
-                onChange={(color) => update({ ...profile, color })}
-              />
-            </div>
+            {activeFrame !== undefined && (
+              <section className={s.frameOptions} aria-label="Selected safe frame settings">
+                <div className={s.heading}>
+                  <label className={s.check}>
+                    <input
+                      className={s.checkbox}
+                      type="checkbox"
+                      checked={activeFrame.visible}
+                      onChange={(event) =>
+                        updateFrame({ ...activeFrame, visible: event.target.checked })
+                      }
+                    />
+                    Show this frame
+                  </label>
+                  <div className={s.colorLabel}>
+                    Frame color
+                    <GuideColorControl
+                      label="Frame color"
+                      value={activeFrame.color}
+                      onChange={(color) => updateFrame({ ...activeFrame, color })}
+                    />
+                  </div>
+                </div>
+                {activeFrame.borders.map((border) => (
+                  <div className={s.borderRow} key={border.percent}>
+                    <label className={s.check}>
+                      <input
+                        className={s.checkbox}
+                        type="checkbox"
+                        checked={border.visible}
+                        onChange={(event) =>
+                          updateBorder({ ...border, visible: event.target.checked })
+                        }
+                      />
+                      {border.percent}% {BORDER_LABELS[border.percent]}
+                    </label>
+                    <GuideColorControl
+                      label={`${border.percent}% color`}
+                      value={border.color ?? activeFrame.color}
+                      onChange={(color) => updateBorder({ ...border, color })}
+                    />
+                    <Control
+                      variant="bare"
+                      aria-label={`Use frame color for ${border.percent}%`}
+                      title="Use frame color"
+                      disabled={border.color === undefined}
+                      onClick={() =>
+                        updateBorder({ percent: border.percent, visible: border.visible })
+                      }
+                    >
+                      <Icon icon={RotateCcw} size={13} />
+                    </Control>
+                  </div>
+                ))}
+              </section>
+            )}
+            <details className={s.help}>
+              <summary>About safe areas · EBU R 95</summary>
+              <p>
+                100% is the full reference frame. Action Safe (93%) leaves 3.5% at each edge for
+                important action. Graphics Safe (90%) leaves 5% for text and graphics.
+              </p>
+              <p>
+                EBU R 95 defines Action Safe and Graphics Safe for 16:9 television. Other ratios use
+                proportional guides. 80% is an additional guide with a 10% inset on each side.
+              </p>
+            </details>
             <p className={s.hint}>Guide settings are shared across projects in this app.</p>
           </div>
         </Popover>
@@ -176,6 +294,13 @@ export function SafeGuideSettings({
     </>
   );
 }
+
+const BORDER_LABELS = {
+  100: 'Frame',
+  93: 'Action Safe',
+  90: 'Graphics Safe',
+  80: 'Inset',
+} as const;
 
 const ANCHOR_LABELS: Record<PositionAnchor, string> = {
   'top-left': 'Top left',
@@ -212,51 +337,33 @@ function ProjectOutputControls({
   compositionResolution: Resolution;
   onEdit(): void;
 }): JSX.Element {
-  const origin = outputTranslate({ resolution: compositionResolution }, position, raster);
+  const anchorOrigin = outputTranslate(
+    { resolution: compositionResolution },
+    { anchor: position.anchor, offset: { x: 0, y: 0 } },
+    raster,
+  );
+  const origin = {
+    x: anchorOrigin.x + position.offset.x,
+    y: anchorOrigin.y + position.offset.y,
+  };
+  const atAnchor = position.offset.x === 0 && position.offset.y === 0;
   const changePosition = (next: Position): void => {
     designerStore.setCompositionOutputPosition(next);
-    onEdit();
-  };
-  const changeRaster = (axis: keyof Resolution, value: number): void => {
-    designerStore.setProjectOutputRaster({ ...raster, [axis]: Math.round(value) });
     onEdit();
   };
   const changeOrigin = (axis: 'x' | 'y', value: number): void => {
     changePosition({
       ...position,
-      offset: { ...position.offset, [axis]: position.offset[axis] + value - origin[axis] },
+      offset: { ...position.offset, [axis]: value - anchorOrigin[axis] },
     });
   };
   return (
     <section className={s.outputSettings} aria-label="Project output and composition placement">
-      <strong>Project output frame</strong>
-      <div className={s.outputGrid}>
-        <label className={s.outputField}>
-          <span>Width</span>
-          <RealtimeNumberInput
-            className={s.input}
-            ariaLabel="Project output width"
-            value={raster.width}
-            min={1}
-            step={1}
-            scrub={false}
-            onCommit={(value) => changeRaster('width', value)}
-            onCommitBoundary={designerStore.markHistoryBoundary}
-          />
-        </label>
-        <label className={s.outputField}>
-          <span>Height</span>
-          <RealtimeNumberInput
-            className={s.input}
-            ariaLabel="Project output height"
-            value={raster.height}
-            min={1}
-            step={1}
-            scrub={false}
-            onCommit={(value) => changeRaster('height', value)}
-            onCommitBoundary={designerStore.markHistoryBoundary}
-          />
-        </label>
+      <div className={s.heading}>
+        <strong>Project output frame</strong>
+        <span aria-label="Project output resolution">
+          {raster.width}×{raster.height}
+        </span>
       </div>
       <strong>Composition position on output</strong>
       <div className={s.placementControls}>
@@ -268,8 +375,8 @@ function ProjectOutputControls({
               className={s.anchorButton}
               aria-label={ANCHOR_LABELS[anchor]}
               title={ANCHOR_LABELS[anchor]}
-              aria-pressed={position.anchor === anchor}
-              selected={position.anchor === anchor}
+              aria-pressed={atAnchor && position.anchor === anchor}
+              selected={atAnchor && position.anchor === anchor}
               onClick={() => {
                 changePosition({ anchor, offset: { x: 0, y: 0 } });
                 designerStore.markHistoryBoundary();

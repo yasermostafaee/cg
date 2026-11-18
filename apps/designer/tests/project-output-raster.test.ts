@@ -44,11 +44,10 @@ describe('project output raster and independent composition placement', () => {
     expect(resolveProjectOutputRaster(scene())).toEqual({ width: 1920, height: 1080 });
     expect(resolveDefaultPosition(active())).toEqual({ anchor: 'center', offset: { x: 0, y: 0 } });
     expect(outputTranslate(active(), resolveDefaultPosition(active()))).toEqual({ x: 560, y: 440 });
-    designerStore.setProjectOutputRaster({ width: 1280, height: 720 });
     designerStore.addComposition();
     expect(active().resolution).toEqual({ width: 800, height: 200 });
     expect(scene().resolution).toEqual({ width: 800, height: 200 });
-    expect(resolveProjectOutputRaster(active())).toEqual({ width: 1280, height: 720 });
+    expect(resolveProjectOutputRaster(active())).toEqual({ width: 1920, height: 1080 });
   });
 
   it('retains the original legacy HD project raster while resizing or opening compositions', () => {
@@ -61,10 +60,6 @@ describe('project output raster and independent composition placement', () => {
     designerStore.updateScene({ resolution: { width: 1920, height: 190 } });
     expect(resolveProjectOutputRaster(active())).toEqual({ width: 1280, height: 720 });
     expect(scene().resolution).toEqual({ width: 1280, height: 720 });
-    designerStore.setProjectOutputRaster({ width: 1920, height: 1080 });
-    expect(active().outputRaster).toEqual({ width: 1920, height: 1080 });
-    designerStore.undo();
-    expect(active().outputRaster).toEqual({ width: 1280, height: 720 });
     designerStore.undo();
     expect(active().resolution).toEqual({ width: 800, height: 200 });
   });
@@ -112,25 +107,22 @@ describe('project output raster and independent composition placement', () => {
     expect(compiled?.defaultPosition).toEqual({ anchor: 'bottom-center', offset: { x: 0, y: 0 } });
   });
 
-  it('writes the root raster and active placement independently, with dirty tracking and one undo per commit', () => {
+  it('tracks dirty state and undoes composition placement independently of the project raster', () => {
     const id = fresh();
+    const outputRaster = { width: 1280, height: 720 };
+    designerStore.setScene({ ...scene(), outputRaster }, null);
     const originalLayers = scene().compositions?.[0]?.layers;
     designerStore.markSaved();
-    designerStore.setProjectOutputRaster({ width: 1280, height: 720 });
+    designerStore.setCompositionOutputPosition(position);
     designerStore.markHistoryBoundary();
     expect(designerStore.get().dirty).toBe(true);
     expect(scene().compositions?.[0]?.layers).toBe(originalLayers);
-    designerStore.setCompositionOutputPosition(position);
     expect(scene().defaultPosition).toBeUndefined();
     expect(scene().compositions?.find((c) => c.id === id)?.defaultPosition).toEqual(position);
-    expect(active().defaultPosition).toEqual(position);
     expect(active().resolution).toEqual({ width: 800, height: 200 });
     designerStore.undo();
     expect(active().defaultPosition).toBeUndefined();
-    expect(scene().outputRaster).toEqual({ width: 1280, height: 720 });
-    designerStore.undo();
-    expect(scene().outputRaster).toBeUndefined();
-    designerStore.redo();
+    expect(scene().outputRaster).toEqual(outputRaster);
     designerStore.redo();
     expect(active().defaultPosition).toEqual(position);
   });
@@ -174,7 +166,7 @@ describe('project output raster and independent composition placement', () => {
 
   it('preserves authored raster and placement in project save/reopen and copied project identity', async () => {
     const id = fresh();
-    designerStore.setProjectOutputRaster({ width: 3840, height: 2160 });
+    designerStore.setScene({ ...scene(), outputRaster: { width: 3840, height: 2160 } }, null);
     designerStore.setCompositionOutputPosition(position);
     const bytes = await packProject({
       scene: scene(),
@@ -198,15 +190,11 @@ describe('project output raster and independent composition placement', () => {
 
   it('rejects invalid and unchanged writes without creating history, including no active composition', () => {
     fresh();
-    designerStore.setProjectOutputRaster({ width: 1280, height: 720 });
     designerStore.setCompositionOutputPosition(position);
     designerStore.markSaved();
     designerStore.markHistoryBoundary();
     const before = scene();
-    designerStore.setProjectOutputRaster({ width: 1280, height: 720 });
     designerStore.setCompositionOutputPosition(position);
-    designerStore.setProjectOutputRaster({ width: 0, height: 720 });
-    designerStore.setProjectOutputRaster({ width: Number.POSITIVE_INFINITY, height: 720 });
     designerStore.setCompositionOutputPosition({ ...position, offset: { x: Number.NaN, y: 0 } });
     designerStore.setCompositionOutputPosition({
       ...position,

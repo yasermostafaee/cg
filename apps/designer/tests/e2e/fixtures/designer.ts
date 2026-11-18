@@ -49,10 +49,14 @@ export class DesignerApp {
    * From the landing screen: create a fresh project (which opens one composition).
    * Leaves the studio ready with `comp1` open.
    */
-  async newProject(name = 'E2E'): Promise<void> {
+  async newProject(name = 'E2E', resolutionPreset?: 'hd' | 'fhd' | 'square-fhd'): Promise<void> {
     await this.page.getByRole('button', { name: 'New project' }).click();
     const dialog = this.page.getByRole('dialog', { name: 'New project' });
     await dialog.getByLabel('Project name').fill(name);
+    if (resolutionPreset !== undefined)
+      await dialog
+        .getByRole('combobox', { name: 'Resolution preset' })
+        .selectOption(resolutionPreset);
     await dialog.getByRole('button', { name: 'Create' }).click();
     await this.expectStudio();
   }

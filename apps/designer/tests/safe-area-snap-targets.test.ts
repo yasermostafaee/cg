@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_BROADCAST_GUIDE_PROFILE } from '@cg/ui';
+import {
+  broadcastGuideFrameSettings,
+  createBroadcastGuideFrame,
+  DEFAULT_BROADCAST_GUIDE_PROFILE,
+} from '@cg/ui';
 import { safeAreaSnapTargets } from '../src/renderer/features/canvas/safe-area-snap-targets.js';
 
 const input = {
@@ -45,9 +49,21 @@ describe('visible broadcast safe-area snap edges', () => {
         profile: { ...input.profile, aspect: 'custom', customAspect: { width: 3, height: 2 } },
       }),
     ).toEqual({
-      x: [206.5, 1713.5, 231, 1689],
-      y: [38, 1042, 54, 1026],
+      x: [150, 1770, 206.5, 1713.5, 231, 1689],
+      y: [0, 1080, 38, 1042, 54, 1026],
     });
+  });
+  it('includes an independently enabled custom border and omits hidden frame borders', () => {
+    const frames = [
+      ...broadcastGuideFrameSettings(input.profile),
+      createBroadcastGuideFrame('extra', { width: 9, height: 16 }),
+    ];
+    const targets = safeAreaSnapTargets({
+      ...input,
+      profile: { ...input.profile, frames },
+    });
+    expect(targets.x).toEqual(expect.arrayContaining([67, 1853, 656.25, 1263.75, 717, 1203]));
+    expect(targets.x).not.toContain(240); // the 4:3 frame is still disabled
   });
   it('does not attract elements to hidden Safe Areas or disabled broadcast rectangles', () => {
     expect(safeAreaSnapTargets({ ...input, visible: false })).toEqual({ x: [], y: [] });

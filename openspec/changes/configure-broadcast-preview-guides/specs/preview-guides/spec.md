@@ -4,7 +4,7 @@
 
 Designer canvas and CG Control PVW SHALL offer Auto, 16:9, landscape 4:3 and Custom
 reference frames, contained and centred inside the active picture. Each app SHALL
-let users add, hide, rename, reposition and remove horizontal/vertical guides by
+let users edit the frame profile. CG Control SHALL let users add, hide, rename, reposition and remove horizontal/vertical guides by
 percentage of the chosen reference. The ratio, broadcast-box choice and custom set
 SHALL persist for that app across projects and restarts. The two apps SHALL keep
 independent local settings. The master display toggle SHALL remain default-off
@@ -18,7 +18,7 @@ white without discarding existing guide definitions or changing storage keys.
 
 Users SHALL be able to enter the width and height of a custom aspect ratio. The
 reference SHALL remain centered inside the project output or active picture.
-The custom ratio SHALL persist in the same app-local profile and remain available
+Each custom ratio SHALL persist in the same app-local profile and remain available
 after temporarily selecting another reference. Standard boxes and percentage
 guides SHALL use the selected reference.
 
@@ -68,3 +68,21 @@ guides SHALL use the selected reference.
 - **THEN** that preview can display the same reference frame and custom lines
 - **AND** its visibility switch is independent from PVW's switch
 - **AND** changing guides does not edit layout data or output graphics
+
+#### Scenario: Multiple safe frames are visible at once
+
+- **GIVEN** the user enables a standard aspect and two custom aspects
+- **WHEN** they enable and color individual 100%, 93%, 90% and 80% borders
+- **THEN** each visible border is drawn in its own color or inherits its frame color
+- **AND** its label identifies the ratio and percentage
+- **AND** help identifies Action 93% and Graphics 90% as the EBU R 95 recommendations for 16:9
+- **AND** choosing a frame to edit leaves the other visible frames on the canvas
+
+#### Scenario: Designer snaps to visible safe area borders
+
+- **GIVEN** Safe Areas and the existing Snap control are enabled
+- **WHEN** the user moves or resizes an element near a visible border
+- **THEN** the existing Snap gesture can align to that border
+- **AND** hiding the border or using the existing temporary Snap bypass removes its attraction
+- **AND** Designer continues to edit horizontal and vertical ruler guides through the existing rulers
+- **AND** Shift+S toggles Safe Areas when focus is outside an editable field
