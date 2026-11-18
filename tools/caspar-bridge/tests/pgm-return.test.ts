@@ -1,9 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import {
   parseWsFrame,
@@ -346,24 +347,58 @@ describe('the relay — a well-behaved client', () => {
     const f = await feed();
     f.closeOnAccept(true);
     const relay = relayOn(f.port, { backoffBaseMs: 100, backoffMaxMs: 800 });
-    relay.attach(1, collector());
-    await waitFor(() => f.connections.length >= 6, 6000, 'six attempts');
-    const at = f.connections.map((c) => c.openedAt);
-    const gaps = at.slice(1).map((t, i) => t - (at[i] as number));
-    // 100, 200, 400, 800, 800 — measured, with scheduling slack.
-    expect(gaps[0]).toBeGreaterThanOrEqual(90);
-    for (let i = 1; i <= 3; i++) {
-      expect(gaps[i], `gap ${String(i)} grows (${gaps.join(', ')})`).toBeGreaterThan(
-        (gaps[i - 1] as number) * 1.5,
-      );
-    }
-    expect(gaps[4]).toBeGreaterThanOrEqual(720);
-    expect(gaps[4]).toBeLessThan(1200);
-    expect(stateOf(relay, 1)).toBe('connecting');
+    const relayWork = new AsyncLocalStorage<boolean>();
+    const scheduled: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    let deliveredLate = false;
+    const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (relayWork.getStore() === true) {
+        scheduled.push(delay ?? 0);
+        // A loaded scheduler can deliver a correct retry late. Keep real TCP and native timers,
+        // but reproduce that once so a neighboring wall-clock ratio cannot pass by good luck.
+        if (!deliveredLate && delay === 200) {
+          deliveredLate = true;
+          return realSetTimeout(callback, delay + 100, ...args);
+        }
+      }
+      return realSetTimeout(callback, delay, ...args);
+    }) as unknown as typeof setTimeout);
+    const viewer = collector();
+    try {
+      relayWork.run(true, () => relay.attach(1, viewer));
+      await waitFor(() => f.connections.length >= 6, 6000, 'six attempts');
+      const at = f.connections.map((c) => c.openedAt);
+      const gaps = at.slice(1).map((t, i) => t - (at[i] as number));
+      // Assert the relay's requested policy directly. Real callback delivery can be late, so
+      // neighboring elapsed gaps do not have a fixed ratio, and lateness does not raise the cap.
+      const delays = [100, 200, 400, 800, 800];
+      expect(scheduled.slice(0, delays.length)).toEqual(delays);
+      expect(deliveredLate, 'the late-delivery control actually ran').toBe(true);
+      for (const [i, delay] of delays.entries()) {
+        expect(
+          gaps[i],
+          `attempt ${String(i + 1)} waits its backoff (${gaps.join(', ')})`,
+        ).toBeGreaterThanOrEqual(delay * 0.9);
+      }
+      expect(stateOf(relay, 1)).toBe('connecting');
 
-    // The positive control: when the feed accepts again, the relay goes live.
-    f.closeOnAccept(false);
-    await waitFor(() => stateOf(relay, 1) === 'live', 3000, 'live after the outage');
+      // The positive control: when the feed accepts again, the relay goes live.
+      f.closeOnAccept(false);
+      await waitFor(
+        () => stateOf(relay, 1) === 'live' && viewer.frames.length > 0,
+        3000,
+        'a live picture after the outage',
+      );
+      expect(viewer.frames[0]).toEqual(FRAME_A);
+      expect(f.openCount()).toBe(1);
+    } finally {
+      timer.mockRestore();
+      relayWork.disable();
+    }
   });
 
   it('reconnects after a core restart closes a live connection', async () => {
