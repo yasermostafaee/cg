@@ -185,8 +185,8 @@ it('draws multiple custom ratios with independent border colors before all contr
         .querySelector('[data-guide-frame-id="square"][data-guide-percent="80"]')
         ?.getAttribute('stroke'),
     ).toBe('#99dd44');
-    expect(container.textContent).toContain('Custom 9:16');
-    expect(container.textContent).toContain('Custom 1:1');
+    expect(container.textContent).toContain('9:16 · 100%');
+    expect(container.textContent).toContain('1:1 · 100%');
     const lastOutline = [...container.querySelectorAll('rect,line')].at(-1);
     expect(lastOutline).toBeDefined();
     for (const label of container.querySelectorAll('svg text'))

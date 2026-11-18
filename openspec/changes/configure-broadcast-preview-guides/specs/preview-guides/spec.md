@@ -7,8 +7,7 @@ reference frames, contained and centred inside the active picture. Each app SHAL
 let users edit the frame profile. CG Control SHALL let users add, hide, rename, reposition and remove horizontal/vertical guides by
 percentage of the chosen reference. The ratio, broadcast-box choice and custom set
 SHALL persist for that app across projects and restarts. The two apps SHALL keep
-independent local settings. The master display toggle SHALL remain default-off
-session state. Guide settings SHALL NOT alter projects, exported pages, PGM or
+independent local settings. Designer's master display toggle SHALL remain default-off session state. CG Control SHALL share and persist the master display toggle for PVW and New live layout; it SHALL default to hidden if no visibility was saved. Guide settings SHALL NOT alter projects, exported pages, PGM or
 programme commands.
 
 The common guide colour SHALL default to white and SHALL apply to reference,
@@ -66,8 +65,15 @@ guides SHALL use the selected reference.
 - **GIVEN** a guide profile is configured in CG Control
 - **WHEN** the operator opens the normal New live layout preview
 - **THEN** that preview can display the same reference frame and custom lines
-- **AND** its visibility switch is independent from PVW's switch
+- **AND** both previews share a single display setting; toggling either updates both
 - **AND** changing guides does not edit layout data or output graphics
+
+#### Scenario: A layer profile restores CG Control Safe Areas
+
+- **GIVEN** a CG Control layer profile is saved with the current guide preferences and visibility
+- **WHEN** that layer profile is successfully loaded
+- **THEN** PVW and New live layout use those same saved guide preferences and visibility
+- **AND** older profiles without guide preferences keep the console's current settings
 
 #### Scenario: Multiple safe frames are visible at once
 

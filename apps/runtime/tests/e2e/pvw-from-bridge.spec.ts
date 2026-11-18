@@ -4954,7 +4954,7 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await page.reload();
   await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
   await showMonitors(page);
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await configure.click();
   await expect(settings.getByRole('radio', { name: '4:3', exact: true })).toHaveAttribute(
     'aria-checked',

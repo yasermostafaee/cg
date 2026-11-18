@@ -200,8 +200,7 @@ test('New live layout safe guides fit its active picture and share only view pre
 
     const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
     const pvwToggle = pvw.getByRole('button', { name: 'Safe areas in Preview', exact: true });
-    await expect(pvwToggle).toHaveAttribute('aria-pressed', 'false');
-    await pvwToggle.click();
+    await expect(pvwToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(pvw.locator('[data-guide-reference="4:3"]')).toBeVisible();
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveAttribute('data-guide-position', '25');
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(34, 170, 238)');
@@ -224,6 +223,8 @@ test('New live layout safe guides fit its active picture and share only view pre
     await showOnlyGuideFrame(settings, '16:9');
     await settings.getByLabel('Frame color', { exact: true }).fill('#99dd44');
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
+    await pvwToggle.click();
+    await expect(pvw.locator('[data-safe-area-guides]')).toHaveCount(0);
     await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await expect(stage.locator('[data-safe-area-guides]')).toHaveCount(0);
@@ -243,8 +244,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await page.reload();
     await expect(layers).toBeVisible();
     await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
-    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(stage.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(153, 221, 68)');
     await expect(stage.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(204, 85, 170)');
     await editor.getByRole('button', { name: 'Safe area settings', exact: true }).click();
@@ -286,7 +286,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expectAligned(stage);
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     if (await showMonitors.isVisible()) await showMonitors.click();
-    if ((await pvwToggle.getAttribute('aria-pressed')) !== 'true') await pvwToggle.click();
+    await expect(pvwToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(pvw.locator('[data-guide-reference="custom"]')).toHaveAttribute('width', '607.5');
     await expect(pvw.locator('[data-guide-axis="x"]')).toHaveAttribute('x1', '1111.875');
     const portraitProfile = await page.evaluate(() =>
@@ -300,7 +300,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await page.reload();
     await expect(layers).toBeVisible();
     await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
-    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(portrait).toHaveAttribute('width', '607.5');
     await editor.getByRole('button', { name: 'Safe area settings', exact: true }).click();
     await expect(settings.locator('[role="radio"][data-guide-frame-id="custom"]')).toHaveAttribute(
@@ -336,12 +336,12 @@ test('New live layout safe guides fit its active picture and share only view pre
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     if (await showMonitors.isVisible()) await showMonitors.click();
-    if ((await pvwToggle.getAttribute('aria-pressed')) !== 'true') await pvwToggle.click();
+    await expect(pvwToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(pvw.locator('[data-guide-reference="custom"]')).toHaveCount(2);
     await page.reload();
     await expect(layers).toBeVisible();
     await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
-    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(stage.locator('[data-guide-reference="custom"]')).toHaveCount(2);
     await expect(
       stage.locator('[data-guide-frame-id="custom"][data-guide-percent="90"]'),

@@ -10,11 +10,11 @@ ratio choice or reusable custom lines.
 
 - Add Auto, 16:9, landscape 4:3 and a custom aspect reference frame contained inside the active picture.
 - Add a compact guide-settings popover beside each app's existing Safe areas toggle.
-- Reuse CG Control's profile on the normal New live layout preview, with an independent
-  view-only visibility switch for that surface.
+- Reuse CG Control's profile on the normal New live layout preview, with a
+  shared display setting.
 - Save the ratio, broadcast-box choice and one bounded named H/V guide set per app
   across project switches and restarts. Percentages refer to the selected frame.
-- Keep the master visibility toggle session-only and keep all guides preview-only.
+- Keep Designer's visibility toggle session-only. Save CG Control's guide settings and shared visibility with layer profiles.
 
 ## Impact
 

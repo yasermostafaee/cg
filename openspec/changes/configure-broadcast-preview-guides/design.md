@@ -28,18 +28,20 @@ unrelated to a project, channel, station output or bridge configuration. Storage
 bounded before JSON parsing. No old key is renamed or removed, and malformed data
 is overwritten only by a later explicit valid user edit.
 
-Each app uses existing dark controls and popover mechanics. The current Safe areas
-button remains the default-off session master switch. Settings expose a ratio,
-broadcast-box checkbox and compact custom rows with visibility, name, percentage
-and remove controls. Add horizontal/vertical actions create a 50% line. Editing a
-profile enables its local preview so the adjustment is immediately visible.
+Each app uses existing dark controls and popover mechanics. Designer keeps its
+session-only master switch. CG Control shares one persisted toggle between PVW
+and New live layout, with hidden as the default for older saved preferences.
+Editing settings makes the guides visible. Both overlays use the same settings for
+visible frames, borders and colors. CG Control can additionally edit its named
+horizontal and vertical percentage guides.
 
 Both overlays stay outside all template iframes and output/export paths. A reference
 outline makes an explicit alternate ratio visible; custom labels remain screen-sized
 while line positions follow active-picture fitting, zoom and pan.
 
-The normal New live layout preview also reads the same CG Control profile as PVW;
-it does not create another preset/project setting or storage key. Visibility belongs
-to each preview surface independently. Its aspect/line settings remain app-wide,
-and neither a guide edit nor a visibility toggle changes a layout's stored data,
-on-air graphics, exported package or programme commands.
+CG Control saves the guide profile and its master visibility as optional
+safeGuides view preferences in the existing layer-profile JSON file. Only the
+validated layer intent is sent to the Bridge. After the Bridge accepts the load,
+the console applies the saved guide preferences. Profiles without valid guide
+preferences leave the current guide settings in place. A guide edit belongs to
+the view and leaves the saved layout, on-air graphics and exported templates intact.
