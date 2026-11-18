@@ -3778,7 +3778,7 @@ function seedFixedBank(): FixedLayerBank | null {
       // `B-224` — the LONGEST real row name (a plant alias, from the owner's screenshot),
       // seeded so the E2E can hold the NAME column to it at the narrower panel width.
       [seedRow(3)]: 'میانبرنامه روی انتن',
-      [seedRow(16)]: 'TICKER',
+      [seedRow(16)]: 'CRAWL',
       [seedRow(17)]: 'LOGO BUG',
       [seedRow(18)]: 'STUDIO FEED',
       [seedRow(19)]: 'DEBATE',

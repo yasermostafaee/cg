@@ -31,7 +31,7 @@ export function bindingTargetHint(field: Pick<DynamicField, 'type'>): string {
     case 'number':
       return 'Any visible element';
     case 'list':
-      return 'Ticker · Sequence · Repeater';
+      return 'Crawl · Sequence · Repeater';
     case 'select':
       return 'No automatic canvas target';
   }
@@ -195,7 +195,7 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
     case 'lottie-override':
       return `lottie ${t.layer}.${t.prop} ${on(t.elementId)}`;
     case 'ticker-items':
-      return `ticker items ${on(t.elementId)}`;
+      return `crawl items ${on(t.elementId)}`;
     case 'sequence-items':
       return `sequence items ${on(t.elementId)}`;
     case 'sequence-item-text':

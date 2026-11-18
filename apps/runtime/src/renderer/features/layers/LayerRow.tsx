@@ -1,3 +1,4 @@
+import { templateTypeLabel } from '../library/templateName.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
@@ -520,7 +521,7 @@ export function LayerRow({
         ? (displayLabel({
             name: slot.binding.templateName,
             sourceFileName: slot.binding.sourceFileName,
-          }) ?? slot.binding.templateType)
+          }) ?? templateTypeLabel(slot.binding.templateType))
         : null;
 
   /**

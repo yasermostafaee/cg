@@ -53,7 +53,7 @@ const TOOLS: readonly ToolEntry[] = [
   // so it enters via Project Assets (import → allowlist-validated) and drag-drop onto
   // the canvas, not a toolbar button (which would be a redundant no-op needing an
   // imported asset first).
-  { id: 'ticker', label: 'Ticker', icon: MoveHorizontal },
+  { id: 'ticker', label: 'Crawl', icon: MoveHorizontal },
   { id: 'sequence', label: 'Sequence', icon: ArrowDownUp },
   { id: 'clock', label: 'Clock', icon: Clock },
   { id: 'repeater', label: 'Repeater', icon: Rows3 },

@@ -1,3 +1,4 @@
+import { typeLabel } from '../../ui/typeLabel.js';
 import { useEffect, useState } from 'react';
 import type { TemplateType } from '@cg/shared-schema';
 import type { StarterEntry } from '@cg/shared-ipc';
@@ -92,7 +93,7 @@ export function LibraryPanel(): JSX.Element {
       >
         {TEMPLATE_TYPES.map((t) => (
           <option key={t} value={t}>
-            {t}
+            {typeLabel(t)}
           </option>
         ))}
       </Select>

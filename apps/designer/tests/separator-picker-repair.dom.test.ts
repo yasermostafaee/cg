@@ -144,7 +144,7 @@ describe('B-128 — repaired on open', () => {
     expect(tickerNow()).toBeDefined();
     expect(tickerNow()?.separator).toBeUndefined();
     expect(designerStore.get().notice).toBe(
-      'Removed the separator from ticker "Headlines": it pointed at a font, and a separator can ' +
+      'Removed the separator from crawl "Headlines": it pointed at a font, and a separator can ' +
         'only be an image. Choose an image for it.',
     );
     // The repair is real: the project reads unsaved until the author saves it…

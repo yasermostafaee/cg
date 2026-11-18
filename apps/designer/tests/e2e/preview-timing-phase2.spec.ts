@@ -18,7 +18,7 @@ async function buildRowChild(app: Parameters<Parameters<typeof test>[2]>[0]['app
   await app.openComposition('comp1');
 }
 
-test.describe('Per-element preview timing — sequences, countdowns, repeater-stamped tickers (D-102 Phase 2)', () => {
+test.describe('Per-element preview timing — sequences, countdowns, repeater-stamped crawls (D-102 Phase 2)', () => {
   test('a sequence and a countdown each tune their OWN driver; the stored scene is unchanged', async ({
     app,
   }) => {
@@ -88,7 +88,7 @@ test.describe('Per-element preview timing — sequences, countdowns, repeater-st
 
     // The panel surfaces the repeater child's ticker — ONE row (it governs the authored template
     // ticker), not one per data row.
-    const seam = app.previewDialog.getByRole('combobox', { name: /ticker cycle boundary/ });
+    const seam = app.previewDialog.getByRole('combobox', { name: /crawl cycle boundary/ });
     await expect(seam).toHaveCount(1);
     await seam.selectOption('drain');
 

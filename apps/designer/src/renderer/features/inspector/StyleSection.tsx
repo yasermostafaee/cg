@@ -2573,7 +2573,7 @@ function TickerSections({
   const fileItems = useFileSourceItems(id);
   return (
     <>
-      <CollapseSection title="Ticker" pinned>
+      <CollapseSection title="Crawl" pinned>
         <SelectField
           label="direction"
           value={element.direction}
@@ -2655,7 +2655,7 @@ function TickerSections({
       {/* Style parity with text: family/weight/size, colour, band background. D-052 —
           colour / background / shadow are keyframe-able (the crawl stays time-driven;
           only the box STYLE animates on the timeline). */}
-      <CollapseSection title="Ticker Text" defaultExpanded>
+      <CollapseSection title="Crawl Text" defaultExpanded>
         <FontFamilySelect
           value={element.font.family}
           onCommit={(family) =>
@@ -2719,7 +2719,7 @@ function TickerSections({
         <CollapseSection title="Items" defaultExpanded>
           <ListItemsEditor
             items={element.items}
-            label={element.name || 'Ticker'}
+            label={element.name || 'Crawl'}
             digits={itemDigits}
             onChange={(items) => designerStore.setTickerItems(id, items)}
           />

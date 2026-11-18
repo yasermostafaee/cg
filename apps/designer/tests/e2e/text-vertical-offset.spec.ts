@@ -75,7 +75,7 @@ test('moves text within its fixed box and keeps the offset when sizing changes',
   await expect(offset).toHaveValue('36');
 });
 
-test('shows the same signed control for Ticker, Clock and Sequence text', async ({ app }) => {
+test('shows the same signed control for Crawl, Clock and Sequence text', async ({ app }) => {
   await app.newProject('Text offset controls');
   const offset = app.inspector.getByLabel('Text vertical offset', { exact: true });
 

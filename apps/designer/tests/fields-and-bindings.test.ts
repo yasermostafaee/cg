@@ -161,7 +161,7 @@ describe('D-193 — Bind mode names its compatible element families', () => {
     ['color', 'Shape · Text · Lottie shape'],
     ['boolean', 'Any visible element'],
     ['number', 'Any visible element'],
-    ['list', 'Ticker · Sequence · Repeater'],
+    ['list', 'Crawl · Sequence · Repeater'],
     ['select', 'No automatic canvas target'],
   ] as const)('%s', (type, expected) => {
     expect(bindingTargetHint({ type })).toBe(expected);

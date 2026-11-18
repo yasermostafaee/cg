@@ -13,7 +13,7 @@ Four regions plus a status bar:
 
 ## Starters
 
-The Library exposes six starters covering every Phase 3 §5 template type: **Persian Reference Render**, **Logo Bug**, **Lower Third (English)**, **Breaking Ticker**, **Breaking News**, **Fullscreen Title**. Clicking a starter clones its scene with a fresh id — your edits don't mutate the shared starter, and saving lands in a new file.
+The Library exposes six starters covering every Phase 3 §5 template type: **Persian Reference Render**, **Logo Bug**, **Lower Third (English)**, **Breaking Crawl**, **Breaking News**, **Fullscreen Title**. Clicking a starter clones its scene with a fresh id — your edits don't mutate the shared starter, and saving lands in a new file.
 
 ## Animation
 
@@ -22,10 +22,10 @@ Every element can declare an Entry / Loop / Exit preset. Swapping a preset's kin
 | Phase | Kinds                                           |
 | ----- | ----------------------------------------------- |
 | Entry | none, fade, slide, scale, blur                  |
-| Loop  | none, ticker, pulse, breathing                  |
+| Loop  | none, crawl, pulse, breathing                   |
 | Exit  | none, fade-out, slide-out, scale-down, blur-out |
 
-The bottom timeline dock visualizes entry/loop/exit blocks against a frames axis. The ticker loop has a runtime implementation (M8.1) — speed is in px/s; direction `ltr` makes the marquee scroll right-to-left, `rtl` left-to-right, both with seamless wrap.
+The bottom timeline dock visualizes entry/loop/exit blocks against a frames axis. The crawl loop has a runtime implementation (M8.1) — speed is in px/s; direction `ltr` makes the marquee scroll right-to-left, `rtl` left-to-right, both with seamless wrap.
 
 ## Fields & bindings
 

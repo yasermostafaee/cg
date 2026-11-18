@@ -110,7 +110,7 @@ export class DesignerApp {
     label:
       | 'Select'
       | 'Text'
-      | 'Ticker'
+      | 'Crawl'
       | 'Clock'
       | 'Sequence'
       | 'Repeater'
@@ -337,7 +337,7 @@ export class DesignerApp {
 
   /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
   async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
-    await this.selectTool('Ticker');
+    await this.selectTool('Crawl');
     await this.canvas.click({ position: pos });
   }
 

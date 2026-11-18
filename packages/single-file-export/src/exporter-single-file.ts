@@ -401,7 +401,7 @@ function preflight(scene: Scene): ExportIssue[] {
       issues.push({
         code: 'ticker-finite-with-timed-hold',
         severity: 'info',
-        message: `Ticker "${finiteTicker.name || finiteTicker.id}" runs ${String(finiteTicker.repeat)} pass(es) under a TIMED hold — after its passes the band sits empty until the timer ends the hold. Use a content-driven hold to exit when the crawl completes.`,
+        message: `Crawl "${finiteTicker.name || finiteTicker.id}" runs ${String(finiteTicker.repeat)} pass(es) under a TIMED hold — after its passes the band sits empty until the timer ends the hold. Use a content-driven hold to exit when the crawl completes.`,
         elementId: finiteTicker.id,
       });
     }

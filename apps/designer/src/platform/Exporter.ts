@@ -233,7 +233,7 @@ export class Exporter {
         issues.push({
           severity: 'error',
           code: 'missing-asset',
-          message: `Ticker separator references unknown asset ${el.separator.assetId}.`,
+          message: `Crawl separator references unknown asset ${el.separator.assetId}.`,
           elementId: el.id,
         });
       }
@@ -297,7 +297,7 @@ export class Exporter {
       issues.push({
         severity: 'warning',
         code: 'vcg-ticker-fonts-not-bundled',
-        message: `Ticker font "${family}" can't be bundled into the .vcg — a system/licensed face has no shippable bytes (and an imported font needs its asset in the project or Shared Library). On a machine without it the crawl measures fallback glyphs, so its content-driven duration will be wrong. Import the font into Project Assets or Shared Library so the package can ship it.`,
+        message: `Crawl font "${family}" can't be bundled into the .vcg — a system/licensed face has no shippable bytes (and an imported font needs its asset in the project or Shared Library). On a machine without it the crawl measures fallback glyphs, so its content-driven duration will be wrong. Import the font into Project Assets or Shared Library so the package can ship it.`,
         elementId,
       });
     }

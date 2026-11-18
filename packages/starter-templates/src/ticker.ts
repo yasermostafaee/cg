@@ -358,7 +358,7 @@ export const tickerScene: Scene = {
     createdAt: '2026-07-12T00:00:00.000Z',
     updatedAt: '2026-07-12T00:00:00.000Z',
     description:
-      'Persian news ticker: full-bleed strap, red «خبر فوری» plate flush against the navy bar, a content-driven RTL crawl (measured, never timed) that holds on air until the operator stops it, and a live dot that keeps blinking through the hold. Headlines are an editable list data key.',
+      'Persian news crawl: full-bleed strap, red «خبر فوری» plate flush against the navy bar, a content-driven RTL crawl (measured, never timed) that holds on air until the operator stops it, and a live dot that keeps blinking through the hold. Headlines are an editable list data key.',
     tags: ['starter', 'ticker', 'persian', 'rtl', 'content-driven', 'onair:comp-ticker-strap'],
   },
 };

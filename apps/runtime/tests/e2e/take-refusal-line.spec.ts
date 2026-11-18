@@ -18,7 +18,7 @@ const REFUSAL = {
   sourceId: 'src-studio1',
   sourceName: 'studio1',
 };
-const LINE = 'TICKER · studio1 (DeckLink 1): the server has no such input, or it is in use.';
+const LINE = 'CRAWL · studio1 (DeckLink 1): the server has no such input, or it is in use.';
 
 const strip = (page: Page) => page.getByRole('tablist', { name: 'Channels' });
 const markOn = (page: Page, channel: number) =>
@@ -111,7 +111,7 @@ test('🔴 a take refused for having no plate band says one short line on its ro
   });
   await row.getByRole('button', { name: 'PLAY' }).click();
 
-  const line = 'TICKER: no live source layer band is declared — nothing was sent.';
+  const line = 'CRAWL: no live source layer band is declared — nothing was sent.';
   await expect(row.locator('[data-take-refusal]')).toHaveText(line);
   await expect(page.locator('[data-refusal]')).toHaveCount(0);
   await app.selectLayerRow(96);

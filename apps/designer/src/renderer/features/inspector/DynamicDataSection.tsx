@@ -1,3 +1,4 @@
+import { typeLabel } from '../../ui/typeLabel.js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   fileSourceContentToFieldValue,
@@ -439,7 +440,7 @@ export function DynamicDataSection({
       ) : field === undefined ? (
         <p className={s.hint}>
           {isListElement
-            ? `Give this ${element.type} a Data key to drive its items from operator data.`
+            ? `Give this ${typeLabel(element.type).toLowerCase()} a Data key to drive its items from operator data.`
             : 'Give this text a Data key to drive it from operator data.'}
         </p>
       ) : (
@@ -619,7 +620,7 @@ function FieldMeta({
             <p className={s.hint}>
               {element.type === 'repeater'
                 ? 'Row files are managed in Rows and data file, or by the outer Sequence when it supplies pages.'
-                : `The field’s items are the ${element.type}’s Items section; operators edit them live in the preview’s data form.`}
+                : `The field’s items are the ${typeLabel(element.type).toLowerCase()}’s Items section; operators edit them live in the preview’s data form.`}
             </p>
           </>
         )}

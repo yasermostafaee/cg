@@ -30,7 +30,7 @@ const tools: { id: DesignerTool; label: string; icon: LucideIcon }[] = [
   // D-137 — a Live Source: the transparent hole CasparCG composites a live input
   // behind. A drawing tool (not asset-backed like Lottie), so it belongs here.
   { id: 'live-source', label: 'Plate', icon: Video },
-  { id: 'ticker', label: 'Ticker', icon: MoveHorizontal },
+  { id: 'ticker', label: 'Crawl', icon: MoveHorizontal },
   { id: 'sequence', label: 'Sequence', icon: ArrowDownUp },
   { id: 'clock', label: 'Clock', icon: Clock },
   { id: 'repeater', label: 'Repeater', icon: Rows3 },

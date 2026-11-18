@@ -226,14 +226,15 @@ describe('D-102 Phase 1 — per-element ticker enumeration', () => {
   });
 
   it('disambiguates DUPLICATE ticker names (no rename UI yet) but leaves unique names', () => {
-    // Two fresh tickers both default to "Ticker" — make the rows distinguishable.
-    expect(disambiguateNames(['Ticker', 'Ticker'])).toEqual(['Ticker (1)', 'Ticker (2)']);
-    expect(disambiguateNames(['Ticker', 'News', 'Ticker'])).toEqual([
-      'Ticker (1)',
+    // Two fresh crawls share the default name; legacy user-authored names remain unchanged.
+    expect(disambiguateNames(['Crawl', 'Crawl'])).toEqual(['Crawl (1)', 'Crawl (2)']);
+    expect(disambiguateNames(['Crawl', 'News', 'Crawl'])).toEqual([
+      'Crawl (1)',
       'News',
-      'Ticker (2)',
+      'Crawl (2)',
     ]);
     expect(disambiguateNames(['Crawl A', 'Crawl B'])).toEqual(['Crawl A', 'Crawl B']);
+    expect(disambiguateNames(['Ticker', 'Ticker'])).toEqual(['Ticker (1)', 'Ticker (2)']);
   });
 });
 

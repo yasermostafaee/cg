@@ -119,7 +119,7 @@ test('a playing video SURVIVES a preview rebuild — the driver follows the node
   // ---- THE REBUILD: the owner's exact gesture, mid-playback ----
   await app.openPreviewAdvanced();
   await app.previewDialog
-    .getByRole('combobox', { name: /ticker cycle boundary/ })
+    .getByRole('combobox', { name: /crawl cycle boundary/ })
     .first()
     .selectOption('drain');
 

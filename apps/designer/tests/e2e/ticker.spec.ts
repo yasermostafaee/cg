@@ -8,21 +8,38 @@ import { test, expect } from './fixtures/designer.js';
  * integrated path: tool → inspector items editor → data key → preview items
  * editor → live update → crawl runs.
  */
-test.describe('Ticker / crawler (D-028)', () => {
+test.describe('Crawl (D-028)', () => {
   test('author a ticker → edit items → data key → live preview update → crawl', async ({ app }) => {
-    await app.newProject('Ticker');
+    await app.newProject('Crawl');
+    const more = app.page.getByRole('button', { name: 'More canvas tools', exact: true });
+    if (await more.isVisible()) {
+      await more.click();
+      await expect(
+        app.page.getByRole('menuitemradio', { name: 'Crawl', exact: true }),
+      ).toBeVisible();
+      await expect(
+        app.page.getByRole('menuitemradio', { name: 'Ticker', exact: true }),
+      ).toHaveCount(0);
+      await app.page.keyboard.press('Escape');
+    } else {
+      await expect(app.page.getByRole('button', { name: 'Crawl', exact: true })).toBeVisible();
+      await expect(app.page.getByRole('button', { name: 'Ticker', exact: true })).toHaveCount(0);
+    }
     await app.addTicker({ x: 120, y: 260 });
 
     // The inspector shows the ticker config + its items editor (3 sample items).
     await expect(app.inspector.getByText('Time-driven', { exact: false })).toBeVisible();
-    await expect(app.tickerItemInput('Ticker', 3)).toBeVisible();
+    await expect(
+      app.inspector.getByRole('button', { name: 'Toggle Crawl Text', exact: true }),
+    ).toBeVisible();
+    await expect(app.tickerItemInput('Crawl', 3)).toBeVisible();
 
     // Edit an authored item — the canvas preview (static authoring row) shows it. `TEXT-DIGITS-01`
     // — a new ticker starts on Persian, so the item's one digit is written, and drawn, in Persian:
     // `سرخط نخست E2E` is `سرخط نخست E۲E` in the box, on the canvas and in the list it seeds.
-    await app.tickerItemInput('Ticker', 1).fill('سرخط نخست E2E');
+    await app.tickerItemInput('Crawl', 1).fill('سرخط نخست E2E');
     const drawn = 'سرخط نخست E۲E';
-    await expect(app.tickerItemInput('Ticker', 1)).toHaveValue(drawn);
+    await expect(app.tickerItemInput('Crawl', 1)).toHaveValue(drawn);
     const canvasFrame = app.page.frameLocator('iframe[title="cgpreview"]');
     await expect(canvasFrame.getByText(drawn)).toBeVisible();
 
@@ -136,6 +153,8 @@ test.describe('Ticker / crawler (D-028)', () => {
     await app.setDataKey('headlines');
     const { html } = await app.exportHtml();
     expect(html).toContain('"type":"ticker"');
+    expect(html).toContain('"name":"Crawl"');
+    expect(html).toContain('"kind":"ticker-items"');
     // GDD: the list field exports as a typed array property.
     const gdd = /<script name="graphics-data-definition"[^>]*>([\s\S]*?)<\/script>/.exec(html);
     expect(gdd?.[1] ?? '').toContain('"type":"array"');

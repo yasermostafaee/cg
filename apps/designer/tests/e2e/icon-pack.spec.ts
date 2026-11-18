@@ -70,7 +70,7 @@ test.describe('D-092 — shared vector Icon', () => {
       // procedural, so it carries no asset), which is why it sits with the drawing
       // group rather than with the dynamic/data-driven ones below.
       'Plate',
-      'Ticker',
+      'Crawl',
       'Sequence',
       'Clock',
       'Repeater',

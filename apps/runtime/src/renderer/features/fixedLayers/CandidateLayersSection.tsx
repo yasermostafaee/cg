@@ -1,3 +1,4 @@
+import { templateTypeLabel } from '../library/templateName.js';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, Lock, Search, Trash2 } from 'lucide-react';
@@ -662,7 +663,7 @@ function BankEditor({
         showBinding && bound !== null
           ? (displayLabel({ name: bound.templateName, sourceFileName: bound.sourceFileName }) ??
             bound.templateId ??
-            bound.templateType)
+            templateTypeLabel(bound.templateType))
           : null,
       /*
         🔴 OCCUPIED IS OUR OWN RECORD, never an inference from the wire. A bound item is the

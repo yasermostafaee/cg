@@ -120,7 +120,7 @@ describe('B-128 — withoutSeparators', () => {
 describe('B-128 — the sentence the author is told once', () => {
   it('one ticker: names it and what it pointed at', () => {
     expect(separatorRepairNotice([{ tickerId: 't', tickerName: 'Headlines', kind: 'font' }])).toBe(
-      'Removed the separator from ticker "Headlines": it pointed at a font, and a separator can ' +
+      'Removed the separator from crawl "Headlines": it pointed at a font, and a separator can ' +
         'only be an image. Choose an image for it.',
     );
   });
@@ -132,7 +132,7 @@ describe('B-128 — the sentence the author is told once', () => {
         { tickerId: 'b', tickerName: '', kind: 'video' },
       ]),
     ).toBe(
-      'Removed the separator from 2 tickers ("Headlines" and an unnamed ticker): each pointed at ' +
+      'Removed the separator from 2 crawls ("Headlines" and an unnamed crawl): each pointed at ' +
         'a font, a video or an animation, and a separator can only be an image. Choose an image ' +
         'for each.',
     );

@@ -1,3 +1,4 @@
+import { templateTypeLabel } from '../library/templateName.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   useCallback,
@@ -1711,7 +1712,9 @@ export function useTemplatePicker(
                         <dl className="cg-tpl-kv">
                           <dt>Type</dt>
                           <dd>
-                            {kindOf(selected) === 'bed' ? 'Live layout' : selected.templateType}
+                            {kindOf(selected) === 'bed'
+                              ? 'Live layout'
+                              : templateTypeLabel(selected.templateType)}
                           </dd>
                           <dt>Text fields</dt>
                           <dd>{String(operatorFieldCount(selected))}</dd>
@@ -1851,7 +1854,7 @@ function ImportDoor({ onImport, busy }: { onImport: () => void; busy: boolean })
 function matchesQuery(template: TemplateInfo, query: string): boolean {
   const q = query.trim().toLocaleLowerCase();
   if (q === '') return true;
-  return `${templateDisplayName(template)} ${template.templateType}`
+  return `${templateDisplayName(template)} ${templateTypeLabel(template.templateType)} ${template.templateType}`
     .toLocaleLowerCase()
     .includes(q);
 }
@@ -2053,7 +2056,9 @@ function PickerRow({
                   `<bdi>` carrying the class was blockified here and flushed Persian titles right. */}
           <IsolatedName className="cg-tpl-name">{label}</IsolatedName>
           <span className="cg-tpl-meta">
-            <span>{templateKind === 'bed' ? 'Live layout' : t.templateType}</span>
+            <span>
+              {templateKind === 'bed' ? 'Live layout' : templateTypeLabel(t.templateType)}
+            </span>
             <span aria-hidden="true">·</span>
             <span>{count(operatorFieldCount(t), 'field')}</span>
             {plates > 0 && (

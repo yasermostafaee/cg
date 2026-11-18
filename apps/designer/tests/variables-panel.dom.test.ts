@@ -212,7 +212,7 @@ describe('D-166 — composition Variables tab', () => {
   it('B-386 — exposes complete long titles and binding summaries as hover text', () => {
     const scene = setupVariablesScene();
     const longTitle = 'A very long operator-facing title that cannot fit the narrow Variables pane';
-    const longElementName = 'Ticker with a deliberately long descriptive canvas name';
+    const longElementName = 'Crawl with a deliberately long descriptive canvas name';
     const layers = scene.layers.map((entry) => ({
       ...entry,
       children: entry.children.map((element) =>

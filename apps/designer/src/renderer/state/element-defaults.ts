@@ -77,7 +77,7 @@ export function defaultText(id: string, x: number, y: number): TextElement {
 export function defaultTicker(id: string, x: number, y: number): TickerElement {
   return {
     id,
-    name: 'Ticker',
+    name: 'Crawl',
     type: 'ticker',
     visible: true,
     locked: false,

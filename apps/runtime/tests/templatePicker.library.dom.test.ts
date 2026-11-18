@@ -178,6 +178,25 @@ async function press(dialog: HTMLElement, selector: string): Promise<void> {
 }
 
 describe('§8 — the picker follows `01`: search, kind chips, the meta line and the footer sentence', () => {
+  it('shows and searches Crawl while preserving the legacy package type and authored name', async () => {
+    const crawl: TemplateInfo = {
+      ...PLAIN,
+      templateId: 'legacy-crawl',
+      name: 'Evening headlines',
+      templateType: 'ticker',
+    };
+    installBridge([crawl]);
+    const { dialog } = await openPicker();
+    expect(dialog.querySelector('.cg-tpl-meta')?.textContent).toContain('Crawl');
+    const search = dialog.querySelector<HTMLInputElement>('input[type="search"]');
+    await type(search as HTMLInputElement, 'crawl');
+    expect(rowsOf(dialog)).toEqual(['legacy-crawl']);
+    await type(search as HTMLInputElement, 'ticker');
+    expect(rowsOf(dialog)).toEqual(['legacy-crawl']);
+    expect(dialog.querySelector('.cg-tpl-name')?.textContent).toBe('Evening headlines');
+    expect(crawl.templateType).toBe('ticker');
+  });
+
   it('lists every template, newest first, and the search narrows by the name the operator sees', async () => {
     const { dialog } = await openPicker();
     expect(rowsOf(dialog)).toEqual(['tpl-bed', 'tpl-plain']);

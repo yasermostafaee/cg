@@ -1,3 +1,4 @@
+import { typeLabel } from '../../ui/typeLabel.js';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import {
@@ -255,7 +256,7 @@ export function LandingView(): JSX.Element {
                 <span>
                   <strong>{r.name}</strong>
                   {r.templateType !== undefined && (
-                    <span className={s.recentMeta}> · {r.templateType}</span>
+                    <span className={s.recentMeta}> · {typeLabel(r.templateType)}</span>
                   )}
                 </span>
                 <span className={s.recentMeta}>

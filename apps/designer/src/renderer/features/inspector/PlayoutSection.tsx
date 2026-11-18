@@ -1,3 +1,4 @@
+import { typeLabel } from '../../ui/typeLabel.js';
 import type { CSSProperties } from 'react';
 import {
   activeRangeOf,
@@ -417,7 +418,7 @@ function disambiguate(names: readonly string[]): string[] {
 }
 
 const TYPE_LABEL: Record<ContentKind, string> = {
-  ticker: 'ticker',
+  ticker: 'crawl',
   sequence: 'sequence',
   clock: 'countdown',
   video: 'video',
@@ -729,7 +730,7 @@ function HoldLoopChecklist({
                 onChange={(event) => toggle(item.id, event.target.checked)}
               />
               <span style={{ color: colors.text }}>{label}</span>
-              <span style={checkTypeStyle}>{item.type}</span>
+              <span style={checkTypeStyle}>{typeLabel(item.type)}</span>
             </label>
           );
         })}
@@ -1046,7 +1047,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           tip={
             <InfoTip title="No active hold driver">
               <p>
-                Content-driven remains saved as the template choice. Add or enable a visible ticker,
+                Content-driven remains saved as the template choice. Add or enable a visible crawl,
                 sequence, countdown, eligible nested content, or a Video/Lottie opted in as a hold
                 driver.
               </p>

@@ -286,7 +286,7 @@ export function PreviewTickerTimingRow({
               step={1}
               value={typeof repeat === 'number' ? repeat : 1}
               onCommit={(n) => onChange({ repeat: Math.max(1, Math.round(n)) })}
-              ariaLabel={`Preview ${name} ticker repeat count`}
+              ariaLabel={`Preview ${name} crawl repeat count`}
             />
           )}
           <label className={t.checkLabel}>
@@ -304,7 +304,7 @@ export function PreviewTickerTimingRow({
         <Select
           className={t.select}
           value={boundary}
-          aria-label={`Preview ${name} ticker cycle boundary`}
+          aria-label={`Preview ${name} crawl cycle boundary`}
           onChange={(e) => onChange({ cycleBoundary: e.target.value as 'seamless' | 'drain' })}
         >
           <option value="seamless">Seamless — first follows last</option>

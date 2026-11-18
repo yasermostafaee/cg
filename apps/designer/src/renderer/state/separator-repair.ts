@@ -100,18 +100,18 @@ const KIND_WORDS: Record<NonImageSeparator['kind'], string> = {
 /** The ONE sentence the author is told, once, when the repair ran. */
 export function separatorRepairNotice(found: readonly NonImageSeparator[]): string {
   const named = (f: NonImageSeparator): string =>
-    f.tickerName === '' ? 'an unnamed ticker' : `"${f.tickerName}"`;
+    f.tickerName === '' ? 'an unnamed crawl' : `"${f.tickerName}"`;
   const [only] = found;
   if (found.length === 1 && only !== undefined) {
     return (
-      `Removed the separator from ticker ${named(only)}: it pointed at ${KIND_WORDS[only.kind]}, ` +
+      `Removed the separator from crawl ${named(only)}: it pointed at ${KIND_WORDS[only.kind]}, ` +
       `and a separator can only be an image. Choose an image for it.`
     );
   }
   const names = found.map(named);
   const list = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] ?? ''}`;
   return (
-    `Removed the separator from ${String(found.length)} tickers (${list}): each pointed at a ` +
+    `Removed the separator from ${String(found.length)} crawls (${list}): each pointed at a ` +
     `font, a video or an animation, and a separator can only be an image. Choose an image for each.`
   );
 }

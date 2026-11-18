@@ -45,3 +45,7 @@ export function pickTemplateName(
 ): string | undefined {
   return usable(manifestName) ?? usable(sceneName);
 }
+/** Public template kind; existing packages retain the legacy `ticker` type. */
+export function templateTypeLabel(kind: string): string {
+  return kind === 'ticker' ? 'Crawl' : kind;
+}

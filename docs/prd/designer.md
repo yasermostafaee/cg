@@ -672,6 +672,10 @@ Requirements` on `designer-playout-lifecycle` (the content-completion
 
 ## [x] D-028 — Ticker / crawler ⟨priority: high⟩
 
+**Public naming update (2026-11-18):** The horizontal scrolling tool is now **Crawl** in Designer,
+CG Control, preview, help and diagnostics. Legacy `ticker`/`ticker-items` storage, package paths and
+user-authored names remain compatible. See `openspec/changes/rename-ticker-ui-to-crawl/`.
+
 **What:** A new `ticker` element type: a clipped horizontal band that scrolls a
 list of text items continuously (marquee/crawl). The scroll duration is
 content-driven — measured content width ÷ `speed` (px/s). The ticker owns its
