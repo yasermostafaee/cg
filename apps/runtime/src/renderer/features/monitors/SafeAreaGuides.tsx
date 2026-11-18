@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useState, type CSSProperties, type RefObject } from 'react';
 import {
   broadcastSafeAreas,
   broadcastGuideFrame,
@@ -20,7 +20,9 @@ export function FittedSafeAreaGuides({
   profile?: BroadcastGuideProfile;
 }): JSX.Element | null {
   const [scale, setScale] = useState(0);
-  useLayoutEffect(() => {
+  // This guide can mount inside the stage whose ref it consumes. Child layout effects run
+  // before an ancestor DOM ref attaches; observing after commit also covers stage remounts.
+  useEffect(() => {
     const node = stage.current;
     if (node === null) return;
     const measure = (): void => {
