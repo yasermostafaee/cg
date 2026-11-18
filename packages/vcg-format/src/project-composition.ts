@@ -1,6 +1,7 @@
 import {
   compositionClosure,
   discardMissingSceneElementBindings,
+  withoutEditorOutputRaster,
   type Scene,
 } from '@cg/shared-schema';
 import { compositionPackageId } from './package-id.js';
@@ -22,9 +23,10 @@ export function projectCompositionForExport(
 
   const closure = compositionClosure(scene, compositionId);
   const projected: Scene = {
-    ...scene,
+    ...withoutEditorOutputRaster(scene),
     name: composition.name,
     resolution: composition.resolution,
+    defaultPosition: composition.defaultPosition ?? scene.defaultPosition,
     frameRate: scene.frameRate,
     frameRange: composition.frameRange,
     activeRange: composition.activeRange,

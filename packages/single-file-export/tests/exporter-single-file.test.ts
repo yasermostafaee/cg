@@ -62,6 +62,23 @@ describe('ExporterSingleFile', () => {
     expect(html).not.toContain('"name":"پروژه خبر"');
   });
 
+  it('strips the authoring output reference from direct HTML without changing the composition raster or position', async () => {
+    const scene: Scene = {
+      ...makeScene(),
+      resolution: { width: 800, height: 200 },
+      outputRaster: { width: 3840, height: 2160 },
+      defaultPosition: { anchor: 'bottom-left', offset: { x: 60, y: -40 } },
+    };
+    const { html } = await makeExporter().produce(scene);
+    const literal = /var scene = (.*);/.exec(html)?.[1];
+    if (literal === undefined) throw new Error('Missing embedded scene');
+    const embedded = JSON.parse(literal) as Scene;
+    expect(embedded).not.toHaveProperty('outputRaster');
+    expect(embedded.resolution).toEqual(scene.resolution);
+    expect(embedded.defaultPosition).toEqual(scene.defaultPosition);
+    expect(scene.outputRaster).toEqual({ width: 3840, height: 2160 });
+  });
+
   it('produces one self-contained HTML with no external resource references', async () => {
     const { html, filename } = await makeExporter().produce(makeScene());
 

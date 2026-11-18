@@ -93,6 +93,25 @@ describe('projectCompositionForExport', () => {
     expect(source.entryCompositionId).toBe('root');
   });
 
+  it('exports only the selected authored position and removes the editor output reference', () => {
+    const source = project();
+    source.outputRaster = { width: 3840, height: 2160 };
+    source.defaultPosition = { anchor: 'top-left', offset: { x: 10, y: 20 } };
+    const root = source.compositions?.find((candidate) => candidate.id === 'root');
+    if (root === undefined) throw new Error('Missing root');
+    root.defaultPosition = { anchor: 'bottom-right', offset: { x: -40, y: -30 } };
+    const projected = projectCompositionForExport(source, 'root');
+    expect(projected?.defaultPosition).toEqual(root.defaultPosition);
+    expect(projected?.resolution).toEqual(root.resolution);
+    expect(projected?.layers).toBe(root.layers);
+    expect(projected?.compositions?.[0]?.layers).toBe(source.compositions?.[1]?.layers);
+    expect(projected).not.toHaveProperty('outputRaster');
+    expect(projectCompositionForExport(source, 'nested')?.defaultPosition).toEqual(
+      source.defaultPosition,
+    );
+    expect(source.outputRaster).toEqual({ width: 3840, height: 2160 });
+  });
+
   it('projects Auto layout permission only from the composition being exported', () => {
     const original = project();
     const authored = SceneSchema.parse({

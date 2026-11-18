@@ -11,6 +11,7 @@ import {
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   playoutOf,
   withoutEditorBackdrop,
+  withoutEditorOutputRaster,
   type Element,
   type Scene,
   type TickerElement,
@@ -458,7 +459,9 @@ function buildSingleFileHtml(parts: HtmlParts): string {
   // B-129 — same rule as the `.vcg` exporter, same ONE helper: the embedded scene
   // carries no editor backdrop, so the artifact cannot paint one even if a renderer
   // forgot the mode check.
-  const sceneLiteral = JSON.stringify(withoutEditorBackdrop(scene)).replace(/</g, '\\u003c');
+  const sceneLiteral = JSON.stringify(
+    withoutEditorBackdrop(withoutEditorOutputRaster(scene)),
+  ).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
   const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');
   const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');

@@ -69,6 +69,28 @@ describe('pack → unpack round-trip', () => {
     expect(scene).toEqual(fixtureScene);
   });
 
+  it('strips the authoring output reference from direct compiled packages without resizing them', async () => {
+    const authored: Scene = {
+      ...fixtureScene,
+      resolution: { width: 800, height: 200 },
+      outputRaster: { width: 3840, height: 2160 },
+      defaultPosition: { anchor: 'bottom-left', offset: { x: 60, y: -40 } },
+    };
+    const bytes = await pack({
+      scene: authored,
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    const result = await unpack(bytes);
+    expect(result.scene).not.toHaveProperty('outputRaster');
+    expect(result.scene.resolution).toEqual(authored.resolution);
+    expect(result.manifest.resolution).toEqual(authored.resolution);
+    expect(result.scene.defaultPosition).toEqual(authored.defaultPosition);
+    expect(authored.outputRaster).toEqual({ width: 3840, height: 2160 });
+  });
+
   it('preserves per-preset Auto layout permissions and removes the global grant from a scoped VCG', async () => {
     const baseLayer = fixtureScene.layers[0];
     if (baseLayer === undefined) throw new Error('fixture missing layer 0');

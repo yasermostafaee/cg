@@ -11,6 +11,7 @@ import type {
   Layer,
   Lifecycle,
   Playout,
+  Position,
   Resolution,
   Scene,
 } from '@cg/shared-schema';
@@ -38,6 +39,7 @@ import { dropFullyOffFrameForExport } from './off-frame.js';
 
 export interface EditDocFields {
   resolution: Resolution;
+  defaultPosition?: Position | undefined;
   // D-026 — fps is project-level (`Scene.frameRate`), shared by every composition;
   // it is NOT a per-document field, so it is not edited through the active doc.
   frameRange: FrameRange;
@@ -261,6 +263,7 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     ...scene,
     name: c.name,
     resolution: c.resolution,
+    defaultPosition: c.defaultPosition ?? scene.defaultPosition,
     // D-026 — fps is project-level; the projected scene keeps the project fps.
     frameRate: scene.frameRate,
     frameRange: c.frameRange,

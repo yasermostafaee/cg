@@ -1,6 +1,8 @@
-import type { Lifecycle, Playout, Scene } from '@cg/shared-schema';
+import type { Lifecycle, Playout, Position, Resolution, Scene } from '@cg/shared-schema';
 import {
   activeRangeOf,
+  PositionSchema,
+  ResolutionSchema,
   migrateScene,
   playoutOf,
   pruneDanglingLiveRevealMasks,
@@ -236,6 +238,7 @@ export const documentSlice = {
     // was a rename leaving a dead string behind, and that is what this catches.)
     const DOC_KEYS = [
       'resolution',
+      'defaultPosition',
       'frameRange',
       'activeRange',
       'lifecycle',
@@ -272,6 +275,39 @@ export const documentSlice = {
     }
     if (Object.keys(rootPatch).length > 0) scene = { ...scene, ...rootPatch };
     set({ scene });
+  },
+
+  /** Output reference for authoring guides only; composition dimensions stay unchanged. */
+  setProjectOutputRaster(resolution: Resolution): void {
+    if (current.scene === null) return;
+    const parsed = ResolutionSchema.safeParse(resolution);
+    if (!parsed.success) return;
+    const prior = current.scene.outputRaster;
+    if (prior?.width === parsed.data.width && prior.height === parsed.data.height) return;
+    set({ scene: { ...current.scene, outputRaster: parsed.data } });
+  },
+
+  /** Commit this composition's existing manifest placement, independently of nested instances. */
+  setCompositionOutputPosition(position: Position): void {
+    if (current.scene === null) return;
+    const id = activeCompId();
+    const composition = current.scene.compositions?.find((candidate) => candidate.id === id);
+    if (composition === undefined) return;
+    const parsed = PositionSchema.safeParse(position);
+    if (
+      !parsed.success ||
+      !Number.isFinite(parsed.data.offset.x) ||
+      !Number.isFinite(parsed.data.offset.y)
+    )
+      return;
+    const prior = composition.defaultPosition;
+    if (
+      prior?.anchor === parsed.data.anchor &&
+      prior.offset.x === parsed.data.offset.x &&
+      prior.offset.y === parsed.data.offset.y
+    )
+      return;
+    set({ scene: withActiveDoc(current.scene, { defaultPosition: parsed.data }) });
   },
 
   /**
