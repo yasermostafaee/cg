@@ -32,6 +32,8 @@ import { ARROW_CURSOR, BIND_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { LookPicker } from './LookPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { SafeAreaGuides } from './SafeAreaGuides.js';
+import { SafeGuideSettings } from './SafeGuideSettings.js';
+import { useDesignerBroadcastGuides } from './broadcastGuideStore.js';
 import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
 import { shownSequenceItem } from '../../state/slices/view.js';
 import { PreviewHost } from './PreviewHost.js';
@@ -313,6 +315,7 @@ export function CanvasArea({
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
+  const guideProfile = useDesignerBroadcastGuides();
   // B-042 — what the ruler needs to snap its tick MARKS onto the same physical device pixel
   // as the grid strokes (dpr + the overlay's per-axis fractional device offset). Captured in
   // `measure()` alongside `rulerOrigin` so both update in one batch.
@@ -1266,6 +1269,13 @@ export function CanvasArea({
         >
           <Icon icon={SquareDashed} size={16} />
         </Control>
+        <SafeGuideSettings
+          profile={guideProfile}
+          buttonClassName={s.headerButton}
+          onEdit={() => {
+            if (!safeAreasVisible) designerStore.toggleSafeAreas();
+          }}
+        />
         <span className={s.zoomReadout} data-testid="zoom-readout">
           {zoomPct}%
         </span>
@@ -1383,6 +1393,7 @@ export function CanvasArea({
                 />
                 {safeAreasVisible && (
                   <SafeAreaGuides
+                    profile={guideProfile}
                     width={scene.resolution.width}
                     height={scene.resolution.height}
                     scale={zoom}

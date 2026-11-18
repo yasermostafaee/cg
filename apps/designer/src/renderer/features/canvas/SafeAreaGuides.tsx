@@ -1,5 +1,11 @@
 import type { CSSProperties } from 'react';
-import { broadcastSafeAreas } from '@cg/ui';
+import {
+  broadcastSafeAreas,
+  broadcastGuideFrame,
+  broadcastCustomGuideLines,
+  DEFAULT_BROADCAST_GUIDE_PROFILE,
+  type BroadcastGuideProfile,
+} from '@cg/ui';
 
 /** Authoring chrome outside the template iframe: it cannot enter a preview/export page. */
 export function SafeAreaGuides({
@@ -7,12 +13,15 @@ export function SafeAreaGuides({
   height,
   scale,
   style,
+  profile = DEFAULT_BROADCAST_GUIDE_PROFILE,
 }: {
   width: number;
   height: number;
   scale: number;
   style?: CSSProperties;
+  profile?: BroadcastGuideProfile;
 }): JSX.Element {
+  const reference = broadcastGuideFrame(width, height, profile.aspect);
   return (
     <svg
       aria-hidden
@@ -22,39 +31,100 @@ export function SafeAreaGuides({
       viewBox={`0 0 ${width} ${height}`}
       style={{ position: 'absolute', pointerEvents: 'none', overflow: 'hidden', ...style }}
     >
-      {broadcastSafeAreas(width, height).map((area) => (
-        <g key={area.kind}>
-          <rect
-            {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
-            fill="none"
+      {profile.aspect !== 'auto' && reference !== null && (
+        <rect
+          data-guide-reference={profile.aspect}
+          {...reference}
+          fill="none"
+          stroke="#aeb4c7"
+          strokeWidth="1"
+          strokeDasharray="2 4"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+      {(profile.standardVisible ? broadcastSafeAreas(width, height, profile.aspect) : []).map(
+        (area) => (
+          <g key={area.kind}>
+            <rect
+              {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
+              fill="none"
+              stroke="#000"
+              strokeWidth="3"
+              vectorEffect="non-scaling-stroke"
+              opacity="0.7"
+            />
+            <rect
+              data-safe-area={area.kind}
+              {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
+              fill="none"
+              stroke={area.kind === 'action' ? '#f5c879' : '#fff'}
+              strokeWidth="1"
+              strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
+              vectorEffect="non-scaling-stroke"
+            />
+            <text
+              x={width / 2}
+              y={area.kind === 'action' ? area.y + 12 / scale : area.y + area.height - 4 / scale}
+              textAnchor="middle"
+              fontSize={10 / scale}
+              fontFamily="sans-serif"
+              fill={area.kind === 'action' ? '#f5c879' : '#fff'}
+              stroke="#000"
+              strokeWidth={3 / scale}
+              paintOrder="stroke"
+              strokeLinejoin="round"
+            >
+              {area.label}
+            </text>
+          </g>
+        ),
+      )}
+      {broadcastCustomGuideLines(width, height, profile).map((line) => (
+        <g key={line.id}>
+          <line
+            x1={line.x1}
+            y1={line.y1}
+            x2={line.x2}
+            y2={line.y2}
             stroke="#000"
             strokeWidth="3"
-            vectorEffect="non-scaling-stroke"
             opacity="0.7"
-          />
-          <rect
-            data-safe-area={area.kind}
-            {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
-            fill="none"
-            stroke={area.kind === 'action' ? '#f5c879' : '#fff'}
-            strokeWidth="1"
-            strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
             vectorEffect="non-scaling-stroke"
           />
-          <text
-            x={width / 2}
-            y={area.kind === 'action' ? area.y + 12 / scale : area.y + area.height - 4 / scale}
-            textAnchor="middle"
-            fontSize={10 / scale}
-            fontFamily="sans-serif"
-            fill={area.kind === 'action' ? '#f5c879' : '#fff'}
-            stroke="#000"
-            strokeWidth={3 / scale}
-            paintOrder="stroke"
-            strokeLinejoin="round"
-          >
-            {area.label}
-          </text>
+          <line
+            data-custom-guide={line.id}
+            data-guide-axis={line.axis}
+            data-guide-percent={line.position}
+            x1={line.x1}
+            y1={line.y1}
+            x2={line.x2}
+            y2={line.y2}
+            stroke="#c4b5fd"
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
+          {line.name !== '' && (
+            <text
+              x={line.x1 + (line.axis === 'x' && line.position > 50 ? -4 : 4) / scale}
+              textAnchor={line.axis === 'x' && line.position > 50 ? 'end' : 'start'}
+              y={
+                line.axis === 'y' &&
+                reference !== null &&
+                line.y1 + 12 / scale > reference.y + reference.height
+                  ? line.y1 - 4 / scale
+                  : line.y1 + 12 / scale
+              }
+              fontSize={10 / scale}
+              fontFamily="Vazirmatn, sans-serif"
+              fill="#e4dcff"
+              stroke="#000"
+              strokeWidth={3 / scale}
+              paintOrder="stroke"
+              strokeLinejoin="round"
+            >
+              {line.name}
+            </text>
+          )}
         </g>
       ))}
     </svg>

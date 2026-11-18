@@ -17,6 +17,10 @@ method bodies moved unchanged; only the file they live in differs.
 `safeAreasVisible` is session-only canvas chrome, toggled by `toggleSafeAreas`.
 Its EBU R95 93% Action / 90% Graphics guides do not read or replace authored
 `scene.safeAreas`, dirty the document, create history, or enter an export page.
+`broadcastGuideStore` separately keeps the app-wide reference ratio and named H/V
+percentage lines in `cg.designer.safe-guides.v1`. These view preferences survive
+project changes/restarts, use validated defaults for missing or invalid data, and
+remain independent from CG Control's preferences and all scene data.
 
 `timelinePlaybackMode` is session-only (`lifecycle`, `playhead` or `null`), paired with
 `timelinePlaying` by `setTimelinePlayback`. Ordinary Canvas Play and explicit authoring

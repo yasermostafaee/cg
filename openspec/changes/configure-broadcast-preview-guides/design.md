@@ -29,3 +29,9 @@ profile enables its local preview so the adjustment is immediately visible.
 Both overlays stay outside all template iframes and output/export paths. A reference
 outline makes an explicit alternate ratio visible; custom labels remain screen-sized
 while line positions follow active-picture fitting, zoom and pan.
+
+The normal New live layout preview also reads the same CG Control profile as PVW;
+it does not create another preset/project setting or storage key. Visibility belongs
+to each preview surface independently. Its aspect/line settings remain app-wide,
+and neither a guide edit nor a visibility toggle changes a layout's stored data,
+on-air graphics, exported package or programme commands.

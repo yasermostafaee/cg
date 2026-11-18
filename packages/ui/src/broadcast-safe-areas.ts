@@ -1,6 +1,6 @@
 /** EBU R95 v1.1 note 5; HD percentages also match SMPTE ST 2046-1:2009 §5. */
 export const BROADCAST_SAFE_AREA_TITLE =
-  'EBU R95 · Action 93% · Graphics 90% · Preview guides only';
+  'Action 93% · Graphics 90% · EBU R95 for 16:9; proportional guides for other ratios · Preview only';
 
 export interface BroadcastSafeArea {
   kind: 'action' | 'graphics';

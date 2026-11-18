@@ -33,3 +33,11 @@ programme commands.
 - **THEN** the reference remains contained in the active picture
 - **AND** guide percentages remain relative to that reference, excluding letterbox
 - **AND** no guide content enters template pages or programme output
+
+#### Scenario: New live layout shares CG Control's guide profile
+
+- **GIVEN** a guide profile is configured in CG Control
+- **WHEN** the operator opens the normal New live layout preview
+- **THEN** that preview can display the same reference frame and custom lines
+- **AND** its visibility switch is independent from PVW's switch
+- **AND** changing guides does not edit layout data or output graphics

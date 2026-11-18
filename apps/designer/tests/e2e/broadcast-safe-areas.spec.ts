@@ -1,5 +1,95 @@
 import { expect, test } from './fixtures/designer.js';
 
+test('custom safe guides use a saved landscape reference across projects and reloads', async ({
+  app,
+}, testInfo) => {
+  const page = app.page;
+  await app.newProject('Guide profile first project');
+  const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const guides = page.locator('[data-safe-area-guides]');
+  await configure.click();
+  await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+  await settings.getByRole('button', { name: 'Add horizontal guide', exact: true }).click();
+  await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('زیرنویس');
+  const position = settings.getByRole('spinbutton', {
+    name: 'Guide 1 position percent',
+    exact: true,
+  });
+  await position.fill('75');
+  await settings.getByRole('button', { name: 'Add vertical guide', exact: true }).click();
+  await settings
+    .getByRole('spinbutton', { name: 'Guide 2 position percent', exact: true })
+    .fill('25');
+  const reference = guides.locator('[data-guide-reference="4:3"]');
+  await expect(reference).toHaveAttribute('x', '240');
+  await expect(reference).toHaveAttribute('width', '1440');
+  await expect(guides.locator('[data-custom-guide][data-guide-axis="y"]')).toHaveAttribute(
+    'y1',
+    '810',
+  );
+  await expect(guides.locator('[data-custom-guide][data-guide-axis="x"]')).toHaveAttribute(
+    'x1',
+    '600',
+  );
+  await position.fill('101');
+  await expect(position).toHaveAttribute('aria-invalid', 'true');
+  await expect(guides.locator('[data-custom-guide][data-guide-axis="y"]')).toHaveAttribute(
+    'y1',
+    '810',
+  );
+  await position.blur();
+  await expect(position).toHaveValue('75');
+  await settings.getByRole('checkbox', { name: 'Show guide 2', exact: true }).uncheck();
+  await expect(guides.locator('[data-custom-guide]')).toHaveCount(1);
+  await settings.getByRole('checkbox', { name: 'Broadcast safe areas', exact: true }).uncheck();
+  await expect(guides.locator('[data-safe-area]')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('designer-custom-guides.png') });
+  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await expect(
+    page.frameLocator('iframe[title="cgpreview"]').locator('[data-custom-guide]'),
+  ).toHaveCount(0);
+  const saved = await page.evaluate(() => localStorage.getItem('cg.designer.safe-guides.v1'));
+  expect(JSON.parse(saved ?? '{}')).toMatchObject({
+    version: 1,
+    aspect: '4:3',
+    standardVisible: false,
+    lines: [
+      { name: 'زیرنویس', position: 75 },
+      { position: 25, visible: false },
+    ],
+  });
+  await app.goto();
+  await app.newProject('Guide profile second project');
+  await expect(page.getByRole('button', { name: 'Safe areas', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await configure.click();
+  await expect(settings.getByRole('radio', { name: '4:3', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
+    'زیرنویس',
+  );
+  await expect(
+    settings.getByRole('spinbutton', { name: 'Guide 1 position percent', exact: true }),
+  ).toHaveValue('75');
+  await expect(
+    settings.getByRole('checkbox', { name: 'Broadcast safe areas', exact: true }),
+  ).not.toBeChecked();
+  await settings.getByRole('button', { name: 'Remove guide 1', exact: true }).click();
+  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
+    'Guide 2',
+  );
+  await settings.getByRole('radio', { name: '16:9', exact: true }).click();
+  await expect(guides.locator('[data-guide-reference="16:9"]')).toHaveAttribute('x', '0');
+  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: /^Undo/ })).toBeDisabled();
+});
+
 test('broadcast safe guides toggle without changing the document and stay on the picture through zoom and pan', async ({
   app,
 }, testInfo) => {
