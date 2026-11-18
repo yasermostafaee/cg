@@ -3358,8 +3358,31 @@ it('cleans up only the fresh preset arrival fragment after its reveal commit los
   let revealedLayer: number | undefined;
   let disconnected = false;
   let opacityAtDisconnect: number | undefined;
-  mock!.setHandler('MIXER', (request, context, connection) => {
+  // Healthy/empty do not await the reconnect's deferred mixer reapply. Hold its
+  // final COMMIT so this fixture deterministically exercises that pending phase.
+  const reapplied = new Set<number>();
+  let recoveryCommitWaiting = false;
+  let recoveryCommitted = false;
+  let releaseRecoveryCommit!: () => void;
+  const recoveryCommitGate = new Promise<void>((resolve) => {
+    releaseRecoveryCommit = resolve;
+  });
+  mock!.setHandler('MIXER', async (request, context, connection) => {
+    const freshCleared =
+      disconnected &&
+      revealedLayer !== undefined &&
+      context.getLayer({ channel: 1, layer: revealedLayer }).producer === 'empty';
+    const reapply = /^MIXER 1-(\d+) OPACITY \S+ DEFER$/.exec(request.raw);
+    if (freshCleared && reapply !== null && layerIds.has(Number(reapply[1])))
+      reapplied.add(Number(reapply[1]));
+    const recoveryCommit =
+      freshCleared && reapplied.size === layerIds.size && request.raw === 'MIXER 1 COMMIT';
+    if (recoveryCommit) {
+      recoveryCommitWaiting = true;
+      await recoveryCommitGate;
+    }
     const replied = mixer(request, context, connection);
+    if (recoveryCommit) recoveryCommitted = true;
     const fade = /^MIXER 1-(\d+) OPACITY 1 [1-9]\d* linear DEFER$/.exec(request.raw);
     if (fade !== null) {
       const layer = Number(fade[1]);
@@ -3381,7 +3404,14 @@ it('cleans up only the fresh preset arrival fragment after its reveal commit los
   if (revealedLayer === undefined) throw new Error('The staged arrival fragment did not reveal');
   const slot = { channel: 1, layer: revealedLayer };
   await r.whenServerHealthy(HEALTH_MS);
-  await expect.poll(() => mock!.layerState(slot)?.producer, { timeout: HEALTH_MS }).toBe('empty');
+  try {
+    await expect.poll(() => mock!.layerState(slot)?.producer, { timeout: HEALTH_MS }).toBe('empty');
+    await expect.poll(() => recoveryCommitWaiting, { timeout: HEALTH_MS }).toBe(true);
+    expect(reapplied).toEqual(layerIds);
+  } finally {
+    releaseRecoveryCommit();
+  }
+  await expect.poll(() => recoveryCommitted, { timeout: HEALTH_MS }).toBe(true);
   const lines = (await recvLines()).slice(before);
   const reveal = lines.findIndex(
     (line) => line.startsWith(`MIXER 1-${slot.layer} OPACITY 1 `) && line.endsWith('linear DEFER'),
