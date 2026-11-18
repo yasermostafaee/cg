@@ -32,7 +32,12 @@
           "en": "Guides default to white. Change the shared color or save a separate color for any custom guide."
         }
       ],
-      "fixes": []
+      "fixes": [
+        {
+          "fa": "کمبوی مدیای انتخاب‌شده پوستر کوچک آن را نشان می‌دهد و فقط دور نشان سروری که پوسترش نمایش داده می‌شود کادر می‌کشد.",
+          "en": "A selected media field shows a small poster and outlines the server badge for the poster actually displayed."
+        }
+      ]
     },
     {
       "version": "1.2.11",
