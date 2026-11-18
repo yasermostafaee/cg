@@ -257,11 +257,39 @@ export type PlayoutTarget = z.infer<typeof PlayoutTargetSchema>;
  */
 const EditorBackdropSchema = z.union([z.literal('transparent'), HexColorSchema]);
 
+/**
+ * R-011 — a 9-point on-air position: the anchor aligns the graphic's
+ * matching handle to the OUTPUT frame's matching handle (corners are 4 of
+ * the 9), and the offset is a pixel nudge in output space (x→right,
+ * y→down). Authored/applied against the 1920×1080 reference output frame;
+ * non-1080 channels are documented future work.
+ */
+export const PositionAnchorSchema = z.enum([
+  'top-left',
+  'top-center',
+  'top-right',
+  'mid-left',
+  'center',
+  'mid-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+]);
+export type PositionAnchor = z.infer<typeof PositionAnchorSchema>;
+
+export const PositionSchema = z.object({
+  anchor: PositionAnchorSchema,
+  offset: z.object({ x: z.number(), y: z.number() }),
+});
+export type Position = z.infer<typeof PositionSchema>;
+
 const CompositionObjectSchema = z
   .object({
     id: IdSchema,
     name: z.string(),
     resolution: ResolutionSchema,
+    /** Default output placement when exported directly; nested instances keep their transforms. */
+    defaultPosition: PositionSchema.optional(),
     // D-026 — fps is a single PROJECT-level setting on `Scene.frameRate`, shared by
     // every composition (one CasparCG channel fps; keeps cascade timing comparable
     // across nested children). Compositions no longer carry their own `frameRate`;
@@ -366,32 +394,6 @@ const SceneMetadataSchema = z.object({
 });
 
 /**
- * R-011 — a 9-point on-air position: the anchor aligns the graphic's
- * matching handle to the OUTPUT frame's matching handle (corners are 4 of
- * the 9), and the offset is a pixel nudge in output space (x→right,
- * y→down). Authored/applied against the 1920×1080 reference output frame;
- * non-1080 channels are documented future work.
- */
-export const PositionAnchorSchema = z.enum([
-  'top-left',
-  'top-center',
-  'top-right',
-  'mid-left',
-  'center',
-  'mid-right',
-  'bottom-left',
-  'bottom-center',
-  'bottom-right',
-]);
-export type PositionAnchor = z.infer<typeof PositionAnchorSchema>;
-
-export const PositionSchema = z.object({
-  anchor: PositionAnchorSchema,
-  offset: z.object({ x: z.number(), y: z.number() }),
-});
-export type Position = z.infer<typeof PositionSchema>;
-
-/**
  * R-011 — THE serialisation of an operator override onto a page's query string:
  * `pos=<anchor>&dx=<x>&dy=<y>`, with no leading `?` (the caller joins it with
  * whatever else rides the same query).
@@ -489,6 +491,17 @@ export interface Raster {
  */
 export const REFERENCE_FRAME: Raster = { width: 1920, height: 1080 };
 
+/** Legacy projects use the established output reference, even when their root is cropped. */
+export function resolveProjectOutputRaster(scene: { outputRaster?: Raster | undefined }): Raster {
+  return scene.outputRaster ?? REFERENCE_FRAME;
+}
+
+/** Remove authoring-only output guides from a compiled template, preserving its own raster. */
+export function withoutEditorOutputRaster(scene: Scene): Scene {
+  const { outputRaster: _editorOnly, ...compiled } = scene;
+  return compiled;
+}
+
 /**
  * Anchor → fractional handle on both axes (0 = start, 0.5 = middle, 1 = end).
  *
@@ -575,6 +588,8 @@ const SceneObjectSchema = z
     name: z.string(),
     templateType: TemplateTypeSchema,
     resolution: ResolutionSchema,
+    /** Editor-only output reference, independent of each composition's raster. */
+    outputRaster: ResolutionSchema.optional(),
     frameRate: FrameRateSchema,
     safeAreas: z.object({
       title: z.number().min(0).max(50),

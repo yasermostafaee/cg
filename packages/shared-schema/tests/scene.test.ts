@@ -5,6 +5,9 @@ import {
   PlayoutSchema,
   playoutOf,
   SceneSchema,
+  resolveProjectOutputRaster,
+  resolveDefaultPosition,
+  withoutEditorOutputRaster,
 } from '../src/scene.js';
 
 const baseTransform = {
@@ -46,6 +49,63 @@ const minimalScene = {
 describe('Scene', () => {
   it('accepts a minimal empty scene', () => {
     expect(SceneSchema.parse(minimalScene).id).toBe('scene-1');
+  });
+
+  it('keeps legacy cropped projects on the established output reference without rewriting them', () => {
+    const scene = SceneSchema.parse({ ...minimalScene, resolution: { width: 800, height: 200 } });
+    expect(resolveProjectOutputRaster(scene)).toEqual({ width: 1920, height: 1080 });
+    expect(scene).not.toHaveProperty('outputRaster');
+    expect(resolveDefaultPosition(scene)).toEqual({ anchor: 'center', offset: { x: 0, y: 0 } });
+  });
+
+  it('persists an independent output raster and composition placement without changing nested geometry', () => {
+    const position = { anchor: 'bottom-right', offset: { x: -40, y: -30 } } as const;
+    const scene = SceneSchema.parse({
+      ...minimalScene,
+      outputRaster: { width: 1280, height: 720 },
+      compositions: [
+        {
+          id: 'lower-third',
+          name: 'Lower third',
+          resolution: { width: 800, height: 200 },
+          defaultPosition: position,
+          frameRange: { in: 0, out: 50 },
+          editorBackdrop: 'transparent',
+          layers: [],
+        },
+      ],
+    });
+    const reopened = SceneSchema.parse(JSON.parse(JSON.stringify(scene)));
+    expect(resolveProjectOutputRaster(reopened)).toEqual({ width: 1280, height: 720 });
+    expect(reopened.compositions?.[0]?.defaultPosition).toEqual(position);
+    expect(withoutEditorOutputRaster(reopened)).not.toHaveProperty('outputRaster');
+    expect(withoutEditorOutputRaster(reopened).resolution).toEqual(minimalScene.resolution);
+    expect(reopened).toHaveProperty('outputRaster');
+  });
+
+  it('rejects invalid output rasters and malformed composition positions', () => {
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, outputRaster: { width: 0, height: 1080 } }),
+    ).toThrow();
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, outputRaster: { width: 1920, height: 0.5 } }),
+    ).toThrow();
+    expect(() =>
+      SceneSchema.parse({
+        ...minimalScene,
+        compositions: [
+          {
+            id: 'comp',
+            name: 'comp',
+            resolution: { width: 800, height: 200 },
+            frameRange: { in: 0, out: 50 },
+            editorBackdrop: 'transparent',
+            layers: [],
+            defaultPosition: { anchor: 'unknown', offset: { x: 0, y: 0 } },
+          },
+        ],
+      }),
+    ).toThrow();
   });
 
   it('accepts a fully-populated lower-third', () => {
