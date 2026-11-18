@@ -446,13 +446,14 @@ it.each([false, true])(
 );
 
 it.each([
-  { capable: false, reference: undefined, allowed: true },
-  { capable: false, reference: { width: 1920, height: 1080 }, allowed: true },
-  { capable: false, reference: { width: 1280, height: 720 }, allowed: false },
-  { capable: true, reference: { width: 1280, height: 720 }, allowed: true },
+  { capable: false, reference: undefined, allowed: true, carrier: false },
+  { capable: false, reference: undefined, allowed: true, carrier: true },
+  { capable: false, reference: { width: 1920, height: 1080 }, allowed: true, carrier: true },
+  { capable: false, reference: { width: 1280, height: 720 }, allowed: false, carrier: true },
+  { capable: true, reference: { width: 1280, height: 720 }, allowed: true, carrier: true },
 ])(
   'checks authored output reference support without refusing legacy templates: %j',
-  async ({ capable, reference, allowed }) => {
+  async ({ capable, reference, allowed, carrier }) => {
     const bridge = new FakeBridge();
     bridge.capabilities = {
       channels: ipc.runtimeRequestChannelNames(ipc),
@@ -468,12 +469,14 @@ it.each([
         templateId,
         templateType: 'custom',
         fields: [],
-        liveSources: {
-          resolution: { width: 1280, height: 100 },
-          defaultPosition: { anchor: 'bottom-center', offset: { x: 0, y: 0 } },
-          sources: [],
-          ...(reference !== undefined && { outputReference: reference }),
-        },
+        ...(carrier && {
+          liveSources: {
+            resolution: { width: 1280, height: 100 },
+            defaultPosition: { anchor: 'bottom-center', offset: { x: 0, y: 0 } },
+            sources: [],
+            ...(reference !== undefined && { outputReference: reference }),
+          },
+        }),
       },
       html: '<html></html>',
     });
