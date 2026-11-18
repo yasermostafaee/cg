@@ -370,6 +370,7 @@ import {
   LIVE_PLATE_NO_RANGE,
   type LiveLayerOrder,
 } from './live-plate-seating.js';
+import { presetDepartureLayerOrder } from './preset-departure-layer-order.js';
 import {
   effectiveOverridesForLook,
   framesOfLook,
@@ -11178,11 +11179,32 @@ export class CasparRuntime {
       seated,
       extrasByPlate,
     });
+    // Existing or adopted producers keep their coordinates. This preference is only
+    // admitted before an item owns any live seat, and hard authored order always wins.
+    const softOrder =
+      (this.#liveLayers.get(itemId)?.length ?? 0) === 0
+        ? presetDepartureLayerOrder({
+            carrier,
+            bindings,
+            seated,
+            framePlacements,
+            extrasByPlate,
+            normalLookIds:
+              template.controlLiveLayout === undefined
+                ? undefined
+                : new Set(template.controlLiveLayout.presets.map(({ id }) => id)),
+          })
+        : [];
     let orderUnavailable = false;
     const allocate = (isAvailable: (layer: number) => boolean): number[] | null => {
       const input = { range, preferred, isAvailable };
       const ordinary = allocateLiveLayers(input);
-      if (ordinary === null || order.length === 0) return ordinary;
+      if (ordinary === null) return null;
+      if (softOrder.length > 0) {
+        const preferredDeparture = allocateOrderedLiveLayers(input, [...order, ...softOrder]);
+        if (preferredDeparture !== null) return preferredDeparture;
+      }
+      if (order.length === 0) return ordinary;
       const ordered = allocateOrderedLiveLayers(input, order);
       orderUnavailable = ordered === null;
       return ordered;

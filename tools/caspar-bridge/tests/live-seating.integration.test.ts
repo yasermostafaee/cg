@@ -785,8 +785,12 @@ it('dissolves Control Focus in both mixer layer orders on the active and reserve
 
 it('uses an explicit Focus input dissolve and Cut in place of authored motion', async () => {
   const r = await bootControlFocus(false, true);
-  const upper = r.liveLayers().get('item-1')!.at(-1)!;
-  const next = controlLiveLayoutFocusLookId(soloPreset, upper.sourceId);
+  const seats = r.liveLayers().get('item-1')!;
+  const nextSeat = seats.at(-1)!;
+  const currentSeat = seats.find(({ sourceId }) => sourceId === focusFrameIds[0])!;
+  const incomingIsAbove = nextSeat.slot.layer > currentSeat.slot.layer;
+  const faded = incomingIsAbove ? nextSeat : currentSeat;
+  const next = controlLiveLayoutFocusLookId(soloPreset, nextSeat.sourceId);
   const fadeStart = (await recvLines()).length;
   expect(
     await r.setActiveLook('item-1', next, focusMotion, undefined, {
@@ -795,7 +799,11 @@ it('uses an explicit Focus input dissolve and Cut in place of authored motion', 
     }),
   ).toEqual({ ok: true });
   expect((await recvLines()).slice(fadeStart)).toContain(
-    'MIXER 1-' + String(upper.slot.layer) + ' OPACITY 1 4 linear DEFER',
+    'MIXER 1-' +
+      String(faded.slot.layer) +
+      ' OPACITY ' +
+      (incomingIsAbove ? '1' : '0') +
+      ' 4 linear DEFER',
   );
 
   const cut = controlLiveLayoutFocusLookId(soloPreset, focusFrameIds[0]);
@@ -2777,6 +2785,213 @@ it('fades exiting and returning mask seats while keeping retained pictures opaqu
       ),
     });
   }
+});
+
+function threeToTwoDepartureTemplate(groups = true, overlap = false): TemplateInfo {
+  const rects = {
+    'guest-1': { x: 60, y: 40, width: 840, height: 450 },
+    'guest-2': { x: 1020, y: 40, width: 840, height: 450 },
+    'guest-3': { x: 540, y: 590, width: 840, height: 450 },
+  };
+  const base = template(
+    Object.entries(rects).map(([id, rect]) => ({ id, rect })),
+    true,
+  );
+  const makeLook = (id: string, rects: Record<string, typeof BOX>) => ({
+    id,
+    name: id,
+    entered: { mode: 'cut' as const },
+    rects,
+    platePaintOrder: ['guest-1', 'guest-2', 'guest-3'],
+    transitionFrames: Object.fromEntries(
+      Object.keys(rects).map((plate) => [
+        plate,
+        { frameKey: id + '/' + plate, elementId: plate, artworkId: plate },
+      ]),
+    ),
+    ...(groups && {
+      transitionDepartureGroups: Object.fromEntries(
+        Object.keys(rects).map((plate) => [id + '/' + plate, [plate]]),
+      ),
+    }),
+  });
+  return {
+    ...base,
+    liveSources: {
+      ...base.liveSources!,
+      defaultLookId: 'three',
+      looks: [
+        makeLook('three', { ...rects, ...(overlap && { 'guest-3': rects['guest-1'] }) }),
+        makeLook('two', {
+          'guest-1': { ...rects['guest-1'], y: 315 },
+          'guest-2': { ...rects['guest-2'], y: 315 },
+        }),
+      ],
+    },
+  };
+}
+
+it('slides a fresh three-up bottom plate behind both retained top plates without replay or spare producers', async () => {
+  const r = await boot({
+    template: threeToTwoDepartureTemplate(),
+    html: PRESET_RECOVERY_HTML,
+    mirrorChannel: 2,
+    catalog: catalog({
+      layerRange: { start: 30, end: 33 },
+      sources: ['src-a', 'src-b', 'src-c'].map((id) => ({
+        id,
+        name: id,
+        format: '1080i5000',
+        producer: { kind: 'ndi', source: id },
+      })),
+    }),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+      ['guest-3', 'src-c'],
+    ]),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
+  const seats = r.liveLayers().get('item-1')!;
+  const bottom = seats.find(({ sourceId }) => sourceId === 'guest-3')!;
+  const top = seats.filter(({ sourceId }) => sourceId !== 'guest-3');
+  expect(seats).toHaveLength(3);
+  expect(top.every(({ slot }) => bottom.slot.layer < slot.layer)).toBe(true);
+  const nativeSlots = seats.map(({ slot }) => slot);
+  const start = (await recvLines()).length;
+  const peerStart = backup!.receivedCommands().length;
+  const effect = {
+    ...PRESET_EFFECT,
+    fade: false,
+    exitDirection: 'up',
+    enterDirection: 'down',
+  } as const;
+  expect(await r.setActiveLook('item-1', 'two', effect)).toEqual({ ok: true });
+  const lines = (await recvLines()).slice(start);
+  const peerLines = backup!
+    .receivedCommands()
+    .slice(peerStart)
+    .map(({ line }) => line);
+  const moving = 'MIXER 1-' + String(bottom.slot.layer);
+  for (const property of ['FILL', 'CLIP']) {
+    const from = bottom[property === 'FILL' ? 'fill' : 'clip'];
+    const shifted = [from.x, from.y - 1, from.width, from.height]
+      .map((n) => Number(n.toFixed(6)))
+      .join(' ');
+    expect(peerLines).toContainEqual(
+      expect.stringMatching(
+        new RegExp(
+          '^MIXER 2-' +
+            String(bottom.slot.layer) +
+            ' ' +
+            property +
+            ' ' +
+            shifted.replaceAll('.', '\\.') +
+            ' [1-9]\\d* linear DEFER$',
+        ),
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        new RegExp(
+          '^' +
+            moving +
+            ' ' +
+            property +
+            ' ' +
+            shifted.replaceAll('.', '\\.') +
+            ' [1-9]\\d* linear DEFER$',
+        ),
+      ),
+    );
+  }
+  expect(lines).toContainEqual(
+    expect.stringMatching(new RegExp('^' + moving + ' OPACITY 0 [1-9]\\d* linear DEFER$')),
+  );
+  expect(lines.some((line) => /^(?:PLAY|LOADBG|CLEAR|SWAP) /.test(line))).toBe(false);
+  expect(
+    r
+      .liveLayers()
+      .get('item-1')
+      ?.map(({ slot }) => slot),
+  ).toEqual(nativeSlots);
+  expect(await r.setActiveLook('item-1', 'three', effect)).toEqual({ ok: true });
+  expect(
+    (await recvLines()).slice(start).some((line) => /^(?:PLAY|LOADBG|CLEAR|SWAP) /.test(line)),
+  ).toBe(false);
+  expect(
+    r
+      .liveLayers()
+      .get('item-1')
+      ?.map(({ slot }) => slot),
+  ).toEqual(nativeSlots);
+  expect(
+    backup!
+      .receivedCommands()
+      .slice(peerStart)
+      .some(({ line }) => /^(?:PLAY|LOADBG|CLEAR|SWAP) /.test(line)),
+  ).toBe(false);
+  for (const { slot } of seats)
+    expect(backup!.layerRenderedRect({ channel: 2, layer: slot.layer })).toEqual(
+      mock!.layerRenderedRect(slot),
+    );
+  expect(mock!.stagedMixerCount(1)).toBe(0);
+  expect(backup!.stagedMixerCount(2)).toBe(0);
+});
+
+it('keeps hard authored overlap order when the optional departure preference conflicts', async () => {
+  const r = await boot({
+    template: threeToTwoDepartureTemplate(true, true),
+    html: PRESET_RECOVERY_HTML,
+    catalog: catalog({ layerRange: { start: 30, end: 33 } }),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+      ['guest-3', 'src-c'],
+    ]),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const seats = r.liveLayers().get('item-1')!;
+  expect(seats.find(({ sourceId }) => sourceId === 'guest-3')!.slot.layer).toBeGreaterThan(
+    seats.find(({ sourceId }) => sourceId === 'guest-1')!.slot.layer,
+  );
+});
+
+it('keeps already-held legacy layers in place when a revised template adds departure support', async () => {
+  const legacy = threeToTwoDepartureTemplate(false);
+  const r = await boot({
+    template: legacy,
+    html: PRESET_RECOVERY_HTML,
+    catalog: catalog({ layerRange: { start: 30, end: 33 } }),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+      ['guest-3', 'src-c'],
+    ]),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const seats = r.liveLayers().get('item-1')!;
+  const bottom = seats.find(({ sourceId }) => sourceId === 'guest-3')!;
+  expect(bottom.slot.layer).toBeGreaterThan(
+    seats.find(({ sourceId }) => sourceId === 'guest-1')!.slot.layer,
+  );
+  expect(r.templateImport(threeToTwoDepartureTemplate(), PRESET_RECOVERY_HTML).registered).toBe(
+    true,
+  );
+  const start = (await recvLines()).length;
+  expect(
+    await r.setActiveLook('item-1', 'two', { ...PRESET_EFFECT, fade: false, exitDirection: 'up' }),
+  ).toEqual({ ok: true });
+  expect(
+    r
+      .liveLayers()
+      .get('item-1')
+      ?.map(({ slot }) => slot),
+  ).toEqual(seats.map(({ slot }) => slot));
+  expect(
+    (await recvLines()).slice(start).some((line) => /^(?:PLAY|LOADBG|CLEAR|SWAP) /.test(line)),
+  ).toBe(false);
 });
 
 it('slides picture, mask and artwork together with independent departure and arrival directions', async () => {
