@@ -106,14 +106,14 @@ async function mount(
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  const show = (covered = false) =>
+  const show = (covered = false, id = 'md-film') =>
     act(async () =>
       root.render(
         createElement(
           Modal,
           { title: 'Parent', footer: null, onClose: () => undefined },
           createElement(SourceMediaPreview, {
-            id: 'md-film',
+            id,
             name: 'Film',
             durationMs: 10_000,
             channel: 1,
@@ -150,6 +150,230 @@ async function mount(
     },
   };
 }
+
+function targetChanged(): MediaPlaybackPreview & { recovery: 'target-changed' } {
+  return { state: 'unavailable', recovery: 'target-changed' };
+}
+
+it.each(['A', 'B'] as const)(
+  'recovers a verified %s handoff through proxy preparation without losing playback, position or audio intent',
+  async (from) => {
+    const player = mockPlayer();
+    const to = from === 'A' ? 'B' : 'A';
+    const mediaOpen = vi
+      .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+      .mockResolvedValueOnce({ ...ready(), engine: from })
+      .mockResolvedValueOnce(targetChanged())
+      .mockResolvedValueOnce({
+        ...ready(SECOND),
+        state: 'preparing',
+        videoUrl: undefined,
+        engine: to,
+      })
+      .mockResolvedValue({ ...ready(SECOND), engine: to });
+    const view = await mount(mediaOpen, true);
+    try {
+      await act(async () => view.button('Listen to preview').click());
+      const old = view.host.querySelector('video')!;
+      await act(async () => {
+        old.currentTime = 4.25;
+        old.dispatchEvent(new Event('error'));
+      });
+      expect(mediaOpen).toHaveBeenCalledTimes(3);
+      expect(mediaOpen.mock.calls[1]?.[0].previewId).toBe(FIRST);
+      expect(mediaOpen.mock.calls[2]?.[0].previewId).toBeUndefined();
+      expect(view.button('Pause preview')).not.toBeNull();
+      expect(view.host.textContent).toContain('Preparing preview');
+      const plays = player.play.mock.calls.length;
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      const resumed = view.host.querySelector('video')!;
+      await act(async () => resumed.dispatchEvent(new Event('loadedmetadata')));
+      expect(resumed.getAttribute('src')).toBe(ready(SECOND).videoUrl);
+      expect(resumed.currentTime).toBe(4.25);
+      expect(resumed.muted).toBe(false);
+      expect(player.play.mock.calls.length).toBeGreaterThan(plays);
+      expect(view.button('Pause preview')).not.toBeNull();
+      expect(view.host.textContent).not.toContain('cannot play');
+      expect(view.take).not.toHaveBeenCalled();
+      expect(view.update).not.toHaveBeenCalled();
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it('keeps a manually paused preview paused when renewal discovers an authorized target handoff', async () => {
+  const player = mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), engine: 'A' })
+    .mockResolvedValueOnce(targetChanged())
+    .mockResolvedValue({ ...ready(SECOND), engine: 'B' });
+  const view = await mount(mediaOpen);
+  try {
+    view.host.querySelector('video')!.currentTime = 2.25;
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    const video = view.host.querySelector('video')!;
+    await act(async () => video.dispatchEvent(new Event('loadedmetadata')));
+    expect(mediaOpen).toHaveBeenCalledTimes(3);
+    expect(video.getAttribute('src')).toBe(ready(SECOND).videoUrl);
+    expect(video.currentTime).toBe(2.25);
+    expect(player.play).not.toHaveBeenCalled();
+    expect(view.button('Play preview')).not.toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(['stop', 'cover', 'select'] as const)(
+  'closes a delayed fresh handoff lease after %s without adopting or playing it',
+  async (cancel) => {
+    const player = mockPlayer();
+    let resolveFresh!: (value: MediaPlaybackPreview) => void;
+    const mediaOpen = vi
+      .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+      .mockResolvedValueOnce({ ...ready(), engine: 'A' })
+      .mockResolvedValueOnce(targetChanged())
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFresh = resolve)))
+      .mockResolvedValue(ready(THIRD));
+    const view = await mount(mediaOpen, true);
+    try {
+      await act(async () => view.host.querySelector('video')!.dispatchEvent(new Event('error')));
+      expect(mediaOpen).toHaveBeenCalledTimes(3);
+      if (cancel === 'stop') await act(async () => view.button('Stop preview').click());
+      else await view.show(cancel === 'cover', cancel === 'select' ? 'md-other' : 'md-film');
+      const plays = player.play.mock.calls.length;
+      await act(async () => resolveFresh({ ...ready(SECOND), engine: 'B' }));
+      expect(view.mediaClose).toHaveBeenCalledWith({ previewId: SECOND });
+      expect(view.host.querySelector('video')?.getAttribute('src')).not.toBe(
+        ready(SECOND).videoUrl,
+      );
+      expect(player.play).toHaveBeenCalledTimes(plays);
+    } finally {
+      await view.close();
+    }
+  },
+);
+
+it('does not retry a terminal unavailable reply after probing a failed stream', async () => {
+  mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce(ready())
+    .mockResolvedValue({ state: 'unavailable', message: 'No longer authorized.' });
+  const view = await mount(mediaOpen, true);
+  try {
+    await act(async () => view.host.querySelector('video')!.dispatchEvent(new Event('error')));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(mediaOpen).toHaveBeenCalledTimes(2);
+    expect(view.button('Play preview')).not.toBeNull();
+    expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
+  } finally {
+    await view.close();
+  }
+});
+
+it('keeps an unchanged-target codec decode failure terminal after its diagnostic probe', async () => {
+  mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, true);
+  try {
+    const video = view.host.querySelector('video')!;
+    Object.defineProperty(video, 'error', { configurable: true, value: { code: 3 } });
+    await act(async () => video.dispatchEvent(new Event('error')));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(mediaOpen).toHaveBeenCalledTimes(2);
+    expect(mediaOpen.mock.calls[1]?.[0].previewId).toBe(FIRST);
+    expect(view.button('Play preview')).not.toBeNull();
+    expect(view.host.textContent).toContain('Preview cannot play in this browser.');
+  } finally {
+    await view.close();
+  }
+});
+
+it('ignores a delayed handoff hint after Stop rather than starting another lease', async () => {
+  mockPlayer();
+  let resolveProbe!: (value: MediaPlaybackPreview) => void;
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce(ready())
+    .mockImplementationOnce(() => new Promise((resolve) => (resolveProbe = resolve)));
+  const view = await mount(mediaOpen, true);
+  try {
+    await act(async () => view.host.querySelector('video')!.dispatchEvent(new Event('error')));
+    await act(async () => view.button('Stop preview').click());
+    await act(async () => resolveProbe(targetChanged()));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(mediaOpen).toHaveBeenCalledTimes(2);
+    expect(view.button('Play preview')).not.toBeNull();
+    expect(view.host.querySelector('video')!.currentTime).toBe(0);
+  } finally {
+    await view.close();
+  }
+});
+
+it('recovers an aborted pending Play only after verifying the held lease changed target', async () => {
+  const player = mockPlayer();
+  player.play.mockRejectedValueOnce(new DOMException('Old source aborted.', 'AbortError'));
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), engine: 'A' })
+    .mockResolvedValueOnce(targetChanged())
+    .mockResolvedValue({ ...ready(SECOND), engine: 'B' });
+  const view = await mount(mediaOpen, true);
+  try {
+    expect(mediaOpen).toHaveBeenCalledTimes(3);
+    expect(mediaOpen.mock.calls[1]?.[0].previewId).toBe(FIRST);
+    expect(mediaOpen.mock.calls[2]?.[0].previewId).toBeUndefined();
+    expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(SECOND).videoUrl);
+    expect(view.button('Pause preview')).not.toBeNull();
+    expect(view.host.textContent).not.toContain('could not play');
+  } finally {
+    await view.close();
+  }
+});
+
+it('keeps an autoplay-policy refusal terminal without reacquiring a lease', async () => {
+  const player = mockPlayer();
+  player.play.mockRejectedValueOnce(new DOMException('A gesture is required.', 'NotAllowedError'));
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, true);
+  try {
+    expect(mediaOpen).toHaveBeenCalledTimes(1);
+    expect(view.button('Play preview')).not.toBeNull();
+    expect(view.host.textContent).toContain('Preview could not play. Try again.');
+  } finally {
+    await view.close();
+  }
+});
+
+it('discards the old handoff reply if Stop is followed by a new explicit Play', async () => {
+  mockPlayer();
+  let resolveFresh!: (value: MediaPlaybackPreview) => void;
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce(ready())
+    .mockResolvedValueOnce(targetChanged())
+    .mockImplementationOnce(() => new Promise((resolve) => (resolveFresh = resolve)))
+    .mockResolvedValue(ready(THIRD));
+  const view = await mount(mediaOpen, true);
+  try {
+    await act(async () => view.host.querySelector('video')!.dispatchEvent(new Event('error')));
+    await act(async () => view.button('Stop preview').click());
+    await act(async () => view.button('Play preview').click());
+    await act(async () => resolveFresh(ready(SECOND)));
+    expect(view.mediaClose).toHaveBeenCalledWith({ previewId: SECOND });
+    expect(mediaOpen).toHaveBeenCalledTimes(4);
+    expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(THIRD).videoUrl);
+    expect(view.button('Pause preview')).not.toBeNull();
+  } finally {
+    await view.close();
+  }
+});
 
 it('plays locally, releases Stop, retains the poster bitmap and opens a fresh lease on replay', async () => {
   const player = mockPlayer();
@@ -385,9 +609,11 @@ it('releases a failed player and retries through a fresh lease', async () => {
     await act(async () => view.host.querySelector('video')!.dispatchEvent(new Event('error')));
     expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
     expect(view.host.textContent).toContain('Preview cannot play in this browser.');
-    await act(async () => view.button('Play preview').click());
     expect(mediaOpen).toHaveBeenCalledTimes(2);
-    expect(mediaOpen.mock.calls[1]?.[0].previewId).toBeUndefined();
+    expect(mediaOpen.mock.calls[1]?.[0].previewId).toBe(FIRST);
+    await act(async () => view.button('Play preview').click());
+    expect(mediaOpen).toHaveBeenCalledTimes(3);
+    expect(mediaOpen.mock.calls[2]?.[0].previewId).toBeUndefined();
     expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(SECOND).videoUrl);
   } finally {
     await view.close();

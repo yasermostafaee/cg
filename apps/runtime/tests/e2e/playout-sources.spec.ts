@@ -1281,21 +1281,28 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
         closes: [] as string[],
         commands: 0,
         violations: [] as string[],
+        engine: 'B' as 'A' | 'B',
+        sessionEngines: {} as Record<string, 'A' | 'B'>,
       };
       Object.assign(window, { filePreviewTest: state });
       document.addEventListener('securitypolicyviolation', (event) => {
         state.violations.push(event.violatedDirective);
       });
       window.cg.sourcePreviews.mediaOpen = async ({ previewId }) => {
+        if (previewId !== undefined && state.sessionEngines[previewId] !== state.engine)
+          return { state: 'unavailable', recovery: 'target-changed' };
         const id = previewId ?? crypto.randomUUID();
-        if (previewId === undefined) state.sessions.push(id);
+        if (previewId === undefined) {
+          state.sessions.push(id);
+          state.sessionEngines[id] = state.engine;
+        }
         return {
           state: 'ready',
           previewId: id,
           videoUrl: `${origin}/video?ticket=${id}`,
           posterUrl: `${origin}/poster?ticket=${id}`,
           durationMs: 10_000,
-          engine: 'B',
+          engine: state.engine,
           host: '192.0.2.43',
         };
       };
@@ -1328,6 +1335,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
             }
           ).filePreviewTest,
       );
+    await page.clock.install();
     await field.click();
     const panel = picker(page);
     await panel.getByRole('tab', { name: /^Media/ }).click();
@@ -1379,6 +1387,33 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     await preview.getByRole('button', { name: 'Play preview' }).click();
     await expect.poll(() => state().then((value) => value.sessions.length)).toBe(2);
     await expect(video).toBeVisible();
+    await video.evaluate((element) => {
+      (element as HTMLVideoElement).currentTime = 2.5;
+    });
+    await expect
+      .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+      .toBeGreaterThanOrEqual(2.5);
+    for (const engine of ['A', 'B'] as const) {
+      const before = await state();
+      const position = await video.evaluate((element) => (element as HTMLVideoElement).currentTime);
+      await page.evaluate((engine) => {
+        const state = (window as unknown as { filePreviewTest: { engine: 'A' | 'B' } })
+          .filePreviewTest;
+        state.engine = engine;
+      }, engine);
+      await page.clock.fastForward(15_000);
+      await expect
+        .poll(() => state().then((value) => value.sessions.length))
+        .toBe(before.sessions.length + 1);
+      await expect(video).toBeVisible();
+      await expect(video).toHaveJSProperty('paused', false);
+      await expect(video).toHaveJSProperty('muted', false);
+      await expect(video).toHaveJSProperty('videoWidth', 64);
+      await expect
+        .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+        .toBeGreaterThanOrEqual(position);
+      expect((await state()).closes).toContain(before.sessions.at(-1));
+    }
     await expect(field).toHaveAttribute('data-picker-value', '');
     await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
     const final = await state();

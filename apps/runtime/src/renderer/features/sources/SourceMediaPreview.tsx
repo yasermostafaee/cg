@@ -87,6 +87,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const currentPreview = useRef<MediaPlaybackPreview | null>(null);
   const [positionMs, setPositionMs] = useState(0);
   const position = useRef(0);
+  const positionHeld = useRef(false);
   const [duration, setDuration] = useState(durationMs ?? 0);
   const [intent, setIntent] = useState<'playing' | 'paused' | 'stopped'>(
     inline ? 'playing' : 'paused',
@@ -99,6 +100,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const [buffering, setBuffering] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const refresh = useRef<(() => void) | null>(null);
+  const recover = useRef<(() => void) | null>(null);
   const release = useRef<(() => void) | null>(null);
   const unsupported = useRef(false);
 
@@ -110,6 +112,9 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     if (!foreground || channel === undefined || unsupported.current) return;
     let alive = true;
     let pending = false;
+    let generation = 0;
+    let queuedRead = false;
+    let queuedProbe: string | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let preparingSince: number | null = null;
     let pollDelay = 1_000;
@@ -120,26 +125,78 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       }
     };
     const stopLease = (): void => {
+      generation += 1;
+      queuedRead = false;
+      queuedProbe = undefined;
       clearTimeout(timer);
       close(currentPreview.current);
       currentPreview.current = null;
       preparingSince = null;
     };
-    const read = async (prepare = true): Promise<void> => {
-      if (pending || stopped()) return;
+    const failPlayer = (): void => {
+      video.current?.pause();
+      stopLease();
+      setVideoOrigin(undefined);
+      setVideoVisible(false);
+      setBuffering(false);
+      setPlayerError('Preview cannot play in this browser.');
+      currentIntent.current = 'paused';
+      setIntent('paused');
+    };
+    const holdPosition = (): void => {
+      const player = video.current;
+      if (player !== null) {
+        if (!positionHeld.current) {
+          position.current = Math.round(player.currentTime * 1_000);
+          setPositionMs(position.current);
+        }
+        positionHeld.current = true;
+        player.pause();
+      }
+      setVideoOrigin(undefined);
+      setVideoVisible(false);
+      setBuffering(true);
+    };
+    const read = async (probeId?: string): Promise<void> => {
+      if (stopped() || (probeId !== undefined && currentPreview.current?.previewId !== probeId))
+        return;
+      if (pending) {
+        if (probeId === undefined) queuedRead = true;
+        else queuedProbe = probeId;
+        return;
+      }
       clearTimeout(timer);
       pending = true;
+      const requestGeneration = generation;
+      const current = (): boolean => alive && !stopped() && requestGeneration === generation;
       try {
-        const result = await mediaOpen({
+        const held = currentPreview.current;
+        let result = await mediaOpen({
           channel,
           sourceId: id,
-          ...(currentPreview.current?.previewId === undefined
-            ? {}
-            : { previewId: currentPreview.current.previewId }),
-          prepare,
+          ...(held?.previewId === undefined ? {} : { previewId: held.previewId }),
+          prepare: true,
         });
-        if (!alive || stopped()) {
+        if (!current()) {
           close(result);
+          return;
+        }
+        if ('recovery' in result && result.recovery === 'target-changed' && held?.previewId) {
+          // Only the Bridge can prove the same media moved to another authenticated engine.
+          // One fresh acquisition is allowed for this verified handoff, never for a codec error.
+          holdPosition();
+          currentPreview.current = null;
+          close(held);
+          result = await mediaOpen({ channel, sourceId: id, prepare: true });
+          if (!current()) {
+            close(result);
+            return;
+          }
+          setPlayerError(null);
+        } else if (probeId !== undefined) {
+          // A valid unchanged lease or a terminal refusal does not authorize an automatic restart.
+          if (result.previewId !== held?.previewId) close(result);
+          failPlayer();
           return;
         }
         currentPreview.current = result;
@@ -174,7 +231,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           timer = setTimeout(() => void read(), MEDIA_LEASE_REFRESH_MS);
         }
       } catch {
-        if (alive && !stopped()) {
+        if (current()) {
           video.current?.pause();
           stopLease();
           setPlayerError('Preview unavailable. Try again.');
@@ -183,18 +240,37 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
         }
       } finally {
         pending = false;
+        const nextProbe = queuedProbe;
+        const nextRead = queuedRead;
+        queuedProbe = undefined;
+        queuedRead = false;
+        if (alive && !stopped()) {
+          if (nextProbe !== undefined && nextProbe === currentPreview.current?.previewId)
+            void read(nextProbe);
+          else if (nextRead) void read();
+        }
       }
     };
-    refresh.current = () => void read(true);
+    refresh.current = () => void read();
+    recover.current = () => {
+      const previewId = currentPreview.current?.previewId;
+      if (previewId === undefined) {
+        failPlayer();
+        return;
+      }
+      holdPosition();
+      void read(previewId);
+    };
     release.current = stopLease;
-    if (currentIntent.current !== 'stopped') void read(true);
+    if (currentIntent.current !== 'stopped') void read();
     return () => {
       alive = false;
       refresh.current = null;
+      recover.current = null;
       release.current = null;
       const player = video.current;
       if (player !== null) {
-        if (currentIntent.current !== 'stopped') {
+        if (currentIntent.current !== 'stopped' && !positionHeld.current) {
           position.current = Math.round(player.currentTime * 1_000);
         }
         player.pause();
@@ -213,7 +289,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     )
       return;
     const source = player.getAttribute('src');
-    void player.play().catch(() => {
+    void player.play().catch((error: unknown) => {
       if (
         currentIntent.current !== 'playing' ||
         video.current !== player ||
@@ -221,6 +297,15 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
         !matchesReadyPreview(player, currentPreview.current)
       )
         return;
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'name' in error &&
+        (error.name === 'AbortError' || error.name === 'NotSupportedError')
+      ) {
+        recover.current?.();
+        return;
+      }
       currentIntent.current = 'paused';
       setIntent('paused');
       setPlayerError('Preview could not play. Try again.');
@@ -258,6 +343,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       video.current.currentTime = 0;
     }
     position.current = 0;
+    positionHeld.current = false;
     setPositionMs(0);
     setVideoVisible(false);
     setBuffering(false);
@@ -326,10 +412,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             }}
             onLoadedMetadata={(event) => {
               const player = event.currentTarget;
+              if (!matchesReadyPreview(player, currentPreview.current)) return;
               if (Number.isFinite(player.duration) && player.duration > 0) {
                 setDuration(Math.round(player.duration * 1_000));
               }
               if (position.current > 0) player.currentTime = position.current / 1_000;
+              positionHeld.current = false;
               play();
             }}
             onPlay={(event) => {
@@ -352,6 +440,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
                 setVideoOrigin(currentPreview.current?.engine);
             }}
             onTimeUpdate={(event) => {
+              if (
+                positionHeld.current ||
+                currentIntent.current === 'stopped' ||
+                !matchesReadyPreview(event.currentTarget, currentPreview.current)
+              )
+                return;
               position.current = Math.round(event.currentTarget.currentTime * 1_000);
               setPositionMs(position.current);
             }}
@@ -369,10 +463,9 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
               )
                 return;
               setVideoOrigin(undefined);
-              release.current?.();
-              setPlayerError('Preview cannot play in this browser.');
-              currentIntent.current = 'paused';
-              setIntent('paused');
+              // Even a truncated old stream can report a decode error; only the Bridge's
+              // verified handoff hint can authorize a fresh lease after the diagnostic probe.
+              recover.current?.();
             }}
           />
         )}
