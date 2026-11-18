@@ -68,7 +68,43 @@ test('a received B picture emphasizes its existing B badge while A remains unava
   expect(
     await row.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth),
   ).toBe(64);
+  await row.locator('[data-picker-input="in-studio-1"]').click();
+  await picker(page).getByRole('button', { name: 'Select', exact: true }).click();
+  await defaults.locator('[data-defaults-save]').click();
+  const inherited = app.inspector.locator('[data-look-binding="two:l-1"]');
+  await expect(inherited.locator('img')).toBeVisible();
+  await expect(inherited.locator('[data-source-presence-server="B"]')).toHaveAttribute(
+    'data-source-preview-provider',
+    '',
+  );
+  await expect(inherited.locator('[data-source-presence-server="A"]')).not.toHaveAttribute(
+    'data-source-preview-provider',
+    '',
+  );
+  await expect(inherited.locator('[data-source-presence-server="A"]')).toHaveCSS(
+    'border-top-color',
+    'rgba(0, 0, 0, 0)',
+  );
+  expect(
+    await inherited
+      .locator('[data-source-presence-server="B"]')
+      .evaluate((element) => getComputedStyle(element).borderTopColor),
+  ).toBe(
+    await inherited
+      .locator('[data-source-presence-server="B"]')
+      .evaluate((element) => getComputedStyle(element).color),
+  );
+  await inherited.click();
+  const reopened = picker(page).locator('.cg-vlist-action-row', {
+    has: page.locator('[data-picker-input="in-studio-1"]'),
+  });
+  await expect(reopened.locator('[data-source-presence-server="B"]')).toHaveAttribute(
+    'data-source-preview-provider',
+    '',
+  );
+  await expect(reopened.locator('[data-source-preview-provider]')).toHaveCount(1);
   await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(inherited.locator('[data-source-preview-provider]')).toHaveCount(1);
 });
 
 test('only the decoded picture provider is outlined through an identical-image A/B handoff', async ({

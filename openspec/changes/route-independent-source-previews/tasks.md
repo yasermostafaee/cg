@@ -11,6 +11,8 @@
 - [x] Add fingerprint-verified native media and poster fallback without programme commands.
 - [x] Preserve legacy no-channel poster responses and channel-granted viewer reads on A/B.
 - [x] Preserve availability colors and emphasize only the decoded picture's existing A/B badge border.
+- [x] Forward compact inherited/default combo thumbnail provenance to its existing A/B badges,
+      matching direct bindings and the source-selection modal after decoding.
 
 ## Verification
 

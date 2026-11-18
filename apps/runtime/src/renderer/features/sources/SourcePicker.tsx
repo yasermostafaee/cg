@@ -135,6 +135,7 @@ export function ChoiceLabel({
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
 }): JSX.Element {
+  const { origins, publish } = usePreviewOrigins();
   if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
   if (choice.names === null) {
     return <span className="cg-choice-label">{`${choice.label} (none set)`}</span>;
@@ -153,12 +154,19 @@ export function ChoiceLabel({
         {')'}
       </span>
       {input !== undefined && (
-        <InputThumbnail source={input} channel={meterChannel} meterChannel={meterChannel} compact />
+        <InputThumbnail
+          source={input}
+          channel={meterChannel}
+          meterChannel={meterChannel}
+          compact
+          onPreviewEngineChange={(engine) => publish(input.id, engine)}
+        />
       )}
       <SourcePresenceBadges
         presence={presence}
         sourceId={choice.names}
         accessible={presenceAccessible}
+        previewEngine={origins.get(choice.names)}
       />
       {!offered && (
         <Tag
