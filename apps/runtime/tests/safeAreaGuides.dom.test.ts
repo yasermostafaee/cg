@@ -2,7 +2,12 @@
 import { act, createElement, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_BROADCAST_GUIDE_PROFILE, type BroadcastGuideProfile } from '@cg/ui';
+import {
+  broadcastGuideFrameSettings,
+  createBroadcastGuideFrame,
+  DEFAULT_BROADCAST_GUIDE_PROFILE,
+  type BroadcastGuideProfile,
+} from '@cg/ui';
 import {
   FittedSafeAreaGuides,
   SafeAreaGuides,
@@ -132,4 +137,64 @@ it('reattaches guides after their ancestor picture remounts while visible and ob
     container.remove();
   }
   expect(observers.every((entry) => entry.disconnected)).toBe(true);
+});
+
+it('draws multiple custom ratios with independent border colors before all contrast labels', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const first = createBroadcastGuideFrame('portrait', { width: 9, height: 16 });
+  const second = createBroadcastGuideFrame('square', { width: 1, height: 1 });
+  const profile: BroadcastGuideProfile = {
+    ...DEFAULT_BROADCAST_GUIDE_PROFILE,
+    frames: [
+      ...broadcastGuideFrameSettings(DEFAULT_BROADCAST_GUIDE_PROFILE),
+      {
+        ...first,
+        color: '#22aaee',
+        borders: first.borders.map((border) =>
+          border.percent === 90 ? { ...border, color: '#ff6600' } : border,
+        ),
+      },
+      { ...second, color: '#99dd44' },
+    ],
+    lines: [{ id: 'h', name: 'عنوان', axis: 'y', position: 40, visible: true }],
+  };
+  try {
+    await act(async () =>
+      root.render(
+        createElement(SafeAreaGuides, { width: 1920, height: 1080, scale: 0.25, profile }),
+      ),
+    );
+    const portrait = container.querySelector(
+      '[data-guide-frame-id="portrait"][data-guide-percent="100"]',
+    );
+    const square = container.querySelector(
+      '[data-guide-frame-id="square"][data-guide-percent="100"]',
+    );
+    expect(portrait?.getAttribute('width')).toBe('607.5');
+    expect(square?.getAttribute('width')).toBe('1080');
+    expect(
+      container
+        .querySelector('[data-guide-frame-id="portrait"][data-guide-percent="90"]')
+        ?.getAttribute('stroke'),
+    ).toBe('#ff6600');
+    expect(
+      container
+        .querySelector('[data-guide-frame-id="square"][data-guide-percent="80"]')
+        ?.getAttribute('stroke'),
+    ).toBe('#99dd44');
+    expect(container.textContent).toContain('Custom 9:16');
+    expect(container.textContent).toContain('Custom 1:1');
+    const lastOutline = [...container.querySelectorAll('rect,line')].at(-1);
+    expect(lastOutline).toBeDefined();
+    for (const label of container.querySelectorAll('svg text'))
+      expect(
+        (lastOutline?.compareDocumentPosition(label) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
 });

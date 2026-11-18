@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type RefObject } from 'react';
 import {
-  broadcastSafeAreas,
+  broadcastGuideRectangles,
   broadcastGuideFrame,
   broadcastCustomGuideLines,
   broadcastGuideColor,
@@ -8,6 +8,7 @@ import {
   type BroadcastGuideProfile,
 } from '@cg/ui';
 import { previewGuideColors } from '../../theme.js';
+import { GUIDE_BORDER_LABELS, guideFrameLabel } from './safeGuideLabels.js';
 
 /** One stage-sized view aid for empty, loading and rendered previews alike. */
 export function FittedSafeAreaGuides({
@@ -63,6 +64,7 @@ export function SafeAreaGuides({
 }): JSX.Element {
   const frame = broadcastGuideFrame(width, height, profile.aspect, profile.customAspect);
   const custom = broadcastCustomGuideLines(width, height, profile);
+  const rectangles = broadcastGuideRectangles(width, height, profile);
   return (
     <svg
       aria-hidden
@@ -72,22 +74,8 @@ export function SafeAreaGuides({
       viewBox={`0 0 ${width} ${height}`}
       style={{ position: 'absolute', pointerEvents: 'none', overflow: 'hidden', ...style }}
     >
-      {profile.aspect !== 'auto' && frame !== null && (
-        <rect
-          data-guide-reference={profile.aspect}
-          {...frame}
-          fill="none"
-          stroke={profile.color}
-          strokeWidth="1"
-          strokeDasharray="3 3"
-          vectorEffect="non-scaling-stroke"
-        />
-      )}
-      {(profile.standardVisible
-        ? broadcastSafeAreas(width, height, profile.aspect, profile.customAspect)
-        : []
-      ).map((area) => (
-        <g key={area.kind}>
+      {rectangles.map((area) => (
+        <g key={`${area.frameId}/${String(area.percent)}`}>
           <rect
             {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
             fill="none"
@@ -97,28 +85,33 @@ export function SafeAreaGuides({
             opacity="0.7"
           />
           <rect
-            data-safe-area={area.kind}
+            data-safe-area={
+              area.percent === 93
+                ? 'action'
+                : area.percent === 90
+                  ? 'graphics'
+                  : area.percent === 80
+                    ? 'additional'
+                    : undefined
+            }
+            data-guide-reference={area.percent === 100 ? area.aspect : undefined}
+            data-guide-frame-id={area.frameId}
+            data-guide-percent={area.percent}
             {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
             fill="none"
-            stroke={profile.color}
+            stroke={area.stroke}
             strokeWidth="1"
-            strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
+            strokeDasharray={
+              area.percent === 93
+                ? '6 4'
+                : area.percent === 100
+                  ? '3 3'
+                  : area.percent === 80
+                    ? '2 3'
+                    : undefined
+            }
             vectorEffect="non-scaling-stroke"
           />
-          <text
-            x={width / 2}
-            y={area.kind === 'action' ? area.y + 12 / scale : area.y + area.height - 4 / scale}
-            textAnchor="middle"
-            fontSize={10 / scale}
-            fontFamily="sans-serif"
-            fill={profile.color}
-            stroke={previewGuideColors.halo}
-            strokeWidth={3 / scale}
-            paintOrder="stroke"
-            strokeLinejoin="round"
-          >
-            {area.label}
-          </text>
         </g>
       ))}
       {custom.map((line) => (
@@ -145,28 +138,56 @@ export function SafeAreaGuides({
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
           />
-          {line.name !== '' && (
-            <text
-              x={line.x1 + (line.axis === 'x' && line.position > 50 ? -4 : 4) / scale}
-              textAnchor={line.axis === 'x' && line.position > 50 ? 'end' : 'start'}
-              y={
-                line.axis === 'y' && frame !== null && line.y1 + 12 / scale > frame.y + frame.height
-                  ? line.y1 - 4 / scale
-                  : line.y1 + 12 / scale
-              }
-              fontSize={10 / scale}
-              fontFamily="Vazirmatn, sans-serif"
-              fill={broadcastGuideColor(profile, line)}
-              stroke={previewGuideColors.halo}
-              strokeWidth={3 / scale}
-              paintOrder="stroke"
-              strokeLinejoin="round"
-            >
-              {line.name}
-            </text>
-          )}
         </g>
       ))}
+      {/* Paint every outline before any label, so adjacent borders cannot cover text. */}
+      {rectangles.map((area) => (
+        <text
+          key={`label-${area.frameId}/${String(area.percent)}`}
+          data-safe-area-label=""
+          x={
+            area.percent === 100
+              ? area.x + 6 / scale
+              : area.percent === 80
+                ? area.x + area.width - 6 / scale
+                : area.x + area.width / 2
+          }
+          y={area.percent === 90 ? area.y + area.height - 4 / scale : area.y + 12 / scale}
+          textAnchor={area.percent === 100 ? 'start' : area.percent === 80 ? 'end' : 'middle'}
+          fontSize={10 / scale}
+          fontFamily="sans-serif"
+          fill={area.stroke}
+          stroke={previewGuideColors.halo}
+          strokeWidth={3 / scale}
+          paintOrder="stroke"
+          strokeLinejoin="round"
+        >
+          {guideFrameLabel(area)} · {GUIDE_BORDER_LABELS[area.percent]}
+        </text>
+      ))}
+      {custom
+        .filter((line) => line.name !== '')
+        .map((line) => (
+          <text
+            key={`label-${line.id}`}
+            x={line.x1 + (line.axis === 'x' && line.position > 50 ? -4 : 4) / scale}
+            textAnchor={line.axis === 'x' && line.position > 50 ? 'end' : 'start'}
+            y={
+              line.axis === 'y' && frame !== null && line.y1 + 12 / scale > frame.y + frame.height
+                ? line.y1 - 4 / scale
+                : line.y1 + 12 / scale
+            }
+            fontSize={10 / scale}
+            fontFamily="Vazirmatn, sans-serif"
+            fill={broadcastGuideColor(profile, line)}
+            stroke={previewGuideColors.halo}
+            strokeWidth={3 / scale}
+            paintOrder="stroke"
+            strokeLinejoin="round"
+          >
+            {line.name}
+          </text>
+        ))}
     </svg>
   );
 }

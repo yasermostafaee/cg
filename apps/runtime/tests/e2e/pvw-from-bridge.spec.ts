@@ -4819,6 +4819,20 @@ test('R-108 — a reloaded package refreshes the already-bound row in PVW', asyn
   await expect(row(page)).toHaveAttribute('data-item-id', itemId);
 });
 
+async function showOnlyGuideFrame(settings: Locator, id: string): Promise<void> {
+  const choices = settings.getByRole('radio');
+  for (let index = 0; index < (await choices.count()); index++) {
+    await choices.nth(index).click();
+    if ((await choices.nth(index).getAttribute('data-guide-frame-id')) !== id)
+      await settings.getByRole('checkbox', { name: 'Show frame', exact: true }).uncheck();
+  }
+  await settings.locator(`[data-guide-frame-id="${id}"]`).click();
+  await settings.getByRole('checkbox', { name: 'Show frame', exact: true }).check();
+  for (const label of ['100% Full frame', '93% Action', '90% Graphics'])
+    await settings.getByRole('checkbox', { name: `Show ${label}`, exact: true }).check();
+  await settings.getByRole('checkbox', { name: 'Show 80% Additional', exact: true }).uncheck();
+}
+
 test('custom safe guides persist across channels and reload, fit the active picture and leave output unchanged', async ({
   page,
 }, testInfo) => {
@@ -4863,16 +4877,20 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await expect(toggle.locator('.cg-pvw-tool-label')).toBeVisible();
   expect(await toggle.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
   await configure.click();
-  await expect(settings.getByRole('radio')).toHaveText(['Auto', '16:9', '4:3', 'Custom']);
+  expect(
+    await settings
+      .getByRole('radio')
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label'))),
+  ).toEqual(['Auto', '16:9', '4:3', 'Custom 1 (3:4)']);
   await expect(guides).toHaveCount(0);
-  await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+  await showOnlyGuideFrame(settings, '4:3');
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await expect(pvw.getByText('No layers on preview', { exact: true })).toBeVisible();
   await expect(reference).toHaveAttribute('x', '240');
   await expect(reference).toHaveAttribute('width', '1440');
-  await settings.getByRole('radio', { name: '16:9', exact: true }).click();
+  await showOnlyGuideFrame(settings, '16:9');
   await expect(guides.locator('[data-guide-reference="16:9"]')).toHaveAttribute('width', '1920');
-  await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+  await showOnlyGuideFrame(settings, '4:3');
   await settings.getByRole('button', { name: 'Add horizontal guide' }).click();
   await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('زیرنویس · A');
   await settings.getByRole('textbox', { name: 'Guide 1 position percent' }).fill('۲۵');
@@ -4886,7 +4904,8 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await settings.getByRole('checkbox', { name: 'Show guide 2' }).uncheck();
   await expect(vertical).toHaveCount(0);
   await settings.getByRole('checkbox', { name: 'Show guide 2' }).check();
-  await settings.getByRole('checkbox', { name: 'Broadcast safe areas', exact: true }).uncheck();
+  await settings.getByRole('checkbox', { name: 'Show 93% Action', exact: true }).uncheck();
+  await settings.getByRole('checkbox', { name: 'Show 90% Graphics', exact: true }).uncheck();
   await expect(guides.locator('[data-safe-area]')).toHaveCount(0);
   await settings.getByRole('button', { name: 'Close safe guides' }).click();
   await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
@@ -4966,8 +4985,14 @@ test('custom safe guides persist across channels and reload, fit the active pict
   expect(stored).toMatchObject({
     version: 1,
     aspect: '4:3',
-    standardVisible: false,
     lines: [{ axis: 'y', name: 'زیرنویس · A', position: 25, visible: true }],
+  });
+  expect(stored.frames.find((frame: { id: string }) => frame.id === '4:3')).toMatchObject({
+    visible: true,
+    borders: expect.arrayContaining([
+      { percent: 93, visible: false },
+      { percent: 90, visible: false },
+    ]),
   });
   expect(
     engine

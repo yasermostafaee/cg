@@ -18,6 +18,20 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
+async function showOnlyGuideFrame(settings: Locator, id: string): Promise<void> {
+  const choices = settings.getByRole('radio');
+  for (let index = 0; index < (await choices.count()); index++) {
+    await choices.nth(index).click();
+    if ((await choices.nth(index).getAttribute('data-guide-frame-id')) !== id)
+      await settings.getByRole('checkbox', { name: 'Show frame', exact: true }).uncheck();
+  }
+  await settings.locator(`[data-guide-frame-id="${id}"]`).click();
+  await settings.getByRole('checkbox', { name: 'Show frame', exact: true }).check();
+  for (const label of ['100% Full frame', '93% Action', '90% Graphics'])
+    await settings.getByRole('checkbox', { name: `Show ${label}`, exact: true }).check();
+  await settings.getByRole('checkbox', { name: 'Show 80% Additional', exact: true }).uncheck();
+}
+
 async function expectAligned(stage: Locator): Promise<void> {
   await expect(async () => {
     const [picture, guides] = await Promise.all([
@@ -109,7 +123,8 @@ test('New live layout safe guides fit its active picture and share only view pre
     const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
     await expect(settings.getByLabel('Guide color', { exact: true })).toHaveValue('#ffffff');
     await settings.getByLabel('Guide color', { exact: true }).fill('#22aaee');
-    await settings.getByRole('radio', { name: '4:3', exact: true }).click();
+    await showOnlyGuideFrame(settings, '4:3');
+    await settings.getByLabel('Frame color', { exact: true }).fill('#22aaee');
     await settings.getByRole('button', { name: 'Add horizontal guide', exact: true }).click();
     await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('تیتر · 25%');
     await settings
@@ -206,7 +221,8 @@ test('New live layout safe guides fit its active picture and share only view pre
     await settings
       .getByRole('textbox', { name: 'Guide 1 name', exact: true })
       .fill('Shared view guide');
-    await settings.getByRole('radio', { name: '16:9', exact: true }).click();
+    await showOnlyGuideFrame(settings, '16:9');
+    await settings.getByLabel('Frame color', { exact: true }).fill('#99dd44');
     await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
     await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -236,7 +252,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expect(settings.getByLabel('Guide 2 color', { exact: true })).toHaveValue('#cc55aa');
     await page.screenshot({ path: testInfo.outputPath('new-layout-guide-colors.png') });
 
-    await settings.getByRole('radio', { name: 'Custom', exact: true }).click();
+    await showOnlyGuideFrame(settings, 'custom');
     const ratioWidth = settings.getByRole('textbox', { name: 'Custom aspect width', exact: true });
     const ratioHeight = settings.getByRole('textbox', {
       name: 'Custom aspect height',
@@ -262,7 +278,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expect(portrait).toHaveAttribute('x', '656.25');
     await expect(portrait).toHaveAttribute('width', '607.5');
     await settings.getByRole('radio', { name: '4:3', exact: true }).click();
-    await settings.getByRole('radio', { name: 'Custom', exact: true }).click();
+    await settings.locator('[role="radio"][data-guide-frame-id="custom"]').click();
     await expect(ratioWidth).toHaveValue('9');
     await expect(ratioHeight).toHaveValue('16');
     await page.screenshot({ path: testInfo.outputPath('new-layout-custom-portrait-guides.png') });
@@ -287,12 +303,53 @@ test('New live layout safe guides fit its active picture and share only view pre
     await toggle.click();
     await expect(portrait).toHaveAttribute('width', '607.5');
     await editor.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
-    await expect(settings.getByRole('radio', { name: 'Custom', exact: true })).toHaveAttribute(
+    await expect(settings.locator('[role="radio"][data-guide-frame-id="custom"]')).toHaveAttribute(
       'aria-checked',
       'true',
     );
     await expect(ratioWidth).toHaveValue('9');
     await expect(ratioHeight).toHaveValue('16');
+    await settings.getByLabel('Frame color', { exact: true }).fill('#3366ff');
+    await settings.getByLabel('90% Graphics color', { exact: true }).fill('#ff9900');
+    await settings.getByRole('checkbox', { name: 'Show 80% Additional', exact: true }).check();
+    await settings.getByRole('button', { name: 'Add custom safe area', exact: true }).click();
+    const addedId = await settings
+      .locator('[role="radio"][aria-checked="true"]')
+      .getAttribute('data-guide-frame-id');
+    expect(addedId).not.toBeNull();
+    await settings.getByLabel('Frame color', { exact: true }).fill('#55cc77');
+    await settings.getByLabel('100% Full frame color', { exact: true }).fill('#dd5599');
+    await expect(stage.locator('[data-guide-reference="custom"]')).toHaveCount(2);
+    await expect(
+      stage.locator('[data-guide-frame-id="custom"][data-guide-percent="90"]'),
+    ).toHaveCSS('stroke', 'rgb(255, 153, 0)');
+    await expect(
+      stage.locator(`[data-guide-frame-id="${addedId}"][data-guide-percent="90"]`),
+    ).toHaveCSS('stroke', 'rgb(85, 204, 119)');
+    await page.screenshot({ path: testInfo.outputPath('new-layout-two-custom-safe-areas.png') });
+    await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    if (await showMonitors.isVisible()) await showMonitors.click();
+    if ((await pvwToggle.getAttribute('aria-pressed')) !== 'true') await pvwToggle.click();
+    await expect(pvw.locator('[data-guide-reference="custom"]')).toHaveCount(2);
+    await page.reload();
+    await expect(layers).toBeVisible();
+    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await toggle.click();
+    await expect(stage.locator('[data-guide-reference="custom"]')).toHaveCount(2);
+    await expect(
+      stage.locator('[data-guide-frame-id="custom"][data-guide-percent="90"]'),
+    ).toHaveCSS('stroke', 'rgb(255, 153, 0)');
+    await expect(
+      stage.locator(`[data-guide-frame-id="${addedId}"][data-guide-percent="100"]`),
+    ).toHaveCSS('stroke', 'rgb(221, 85, 153)');
+    await editor.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
+    await expect(settings.locator('[role="radio"][aria-checked="true"]')).toHaveAttribute(
+      'data-guide-frame-id',
+      addedId ?? 'missing',
+    );
+    await settings.getByRole('button', { name: 'Remove custom safe area', exact: true }).click();
+    await expect(stage.locator('[data-guide-reference="custom"]')).toHaveCount(1);
     await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     expect(runtime.templatePage(saved.templateId, 1)).toEqual(served);

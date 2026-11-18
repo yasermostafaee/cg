@@ -40,8 +40,10 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     await act(async () => root.render(createElement(Host)));
     await act(async () => button('Configure safe guides').click());
     expect(
-      [...document.querySelectorAll('[role="radio"]')].map((node) => node.textContent),
-    ).toEqual(['Auto', '16:9', '4:3', 'Custom']);
+      [...document.querySelectorAll('[role="radio"]')].map((node) =>
+        node.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Auto', '16:9', '4:3', 'Custom 1 (3:4)']);
     await act(async () => button('4:3').click());
     expect(saved.aspect).toBe('4:3');
     await act(async () => Simulate.keyDown(button('4:3'), { key: 'ArrowLeft' }));
@@ -49,7 +51,7 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     expect(document.activeElement).toBe(button('16:9'));
     await act(async () => Simulate.keyDown(button('16:9'), { key: 'End' }));
     expect(saved.aspect).toBe('custom');
-    expect(document.activeElement).toBe(button('Custom'));
+    expect(document.activeElement).toBe(button('Custom 1 (3:4)'));
     expect(saved.customAspect).toEqual({ width: 3, height: 4 });
     await act(async () => {
       const width = input('Custom aspect width');
@@ -75,7 +77,7 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     expect(input('Custom aspect width').value).toBe('9');
     await act(async () => button('4:3').click());
     expect(saved.customAspect).toEqual({ width: 9, height: 16 });
-    await act(async () => button('Custom').click());
+    await act(async () => button('Custom 1 (9:16)').click());
     expect(saved.aspect).toBe('custom');
     expect(input('Custom aspect width').value).toBe('9');
     expect(input('Custom aspect height').value).toBe('16');
@@ -128,6 +130,104 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     expect(saved.lines[0]?.axis).toBe('x');
     await act(async () => button('Close safe guides').click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('keeps multiple custom frames independent with inherited and overridden border colors', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  let saved = DEFAULT_BROADCAST_GUIDE_PROFILE;
+  function Host(): JSX.Element {
+    const [profile, setProfile] = useState<BroadcastGuideProfile>(DEFAULT_BROADCAST_GUIDE_PROFILE);
+    return createElement(SafeGuideSettings, {
+      profile,
+      onChange: (next) => {
+        saved = next;
+        setProfile(next);
+      },
+    });
+  }
+  const button = (label: string): HTMLButtonElement => {
+    const node = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (entry) => entry.getAttribute('aria-label') === label,
+    );
+    if (node === undefined) throw new Error(`Missing ${label}`);
+    return node;
+  };
+  const input = (label: string): HTMLInputElement => {
+    const node = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+    if (node === null) throw new Error(`Missing ${label}`);
+    return node;
+  };
+  const color = async (label: string, value: string): Promise<void> => {
+    await act(async () => {
+      const field = input(label);
+      field.value = value;
+      Simulate.change(field);
+    });
+  };
+  try {
+    await act(async () => root.render(createElement(Host)));
+    await act(async () => button('Configure safe guides').click());
+    await act(async () => button('4:3').click());
+    // Editing another ratio never hides the already-visible Auto frame.
+    expect(saved.frames?.find((frame) => frame.id === 'auto')?.visible).toBe(true);
+    expect(saved.frames?.find((frame) => frame.id === '4:3')?.visible).toBe(false);
+    await act(async () => document.querySelector<HTMLInputElement>('input[id$="-frame"]')?.click());
+    await color('Frame color', '#22aaee');
+    await color('90% Graphics color', '#ff6600');
+    expect(saved.frames?.find((frame) => frame.id === '4:3')).toMatchObject({
+      visible: true,
+      color: '#22aaee',
+    });
+    expect(
+      saved.frames
+        ?.find((frame) => frame.id === '4:3')
+        ?.borders.find((border) => border.percent === 90)?.color,
+    ).toBe('#ff6600');
+    await act(async () => button('Use frame color for 90% Graphics').click());
+    expect(
+      saved.frames
+        ?.find((frame) => frame.id === '4:3')
+        ?.borders.find((border) => border.percent === 90),
+    ).not.toHaveProperty('color');
+    await act(async () => button('Add custom safe area').click());
+    const firstId = saved.activeFrameId;
+    expect(firstId).toBeDefined();
+    await color('Frame color', '#44dd66');
+    await act(async () => {
+      const field = input('Custom aspect width');
+      field.value = '9';
+      Simulate.change(field);
+    });
+    await act(async () => Simulate.blur(input('Custom aspect width')));
+    await act(async () => {
+      const field = input('Custom aspect height');
+      field.value = '16';
+      Simulate.change(field);
+    });
+    await act(async () => Simulate.blur(input('Custom aspect height')));
+    await act(async () => button('Add custom safe area').click());
+    const secondId = saved.activeFrameId;
+    expect(secondId).not.toBe(firstId);
+    expect(saved.frames?.find((frame) => frame.id === firstId)).toMatchObject({
+      visible: true,
+      color: '#44dd66',
+      customAspect: { width: 9, height: 16 },
+    });
+    expect(saved.frames?.find((frame) => frame.id === secondId)).toMatchObject({
+      visible: true,
+      customAspect: { width: 3, height: 4 },
+    });
+    await act(async () => button('Remove custom safe area').click());
+    expect(saved.frames?.some((frame) => frame.id === secondId)).toBe(false);
+    expect(saved.frames?.some((frame) => frame.id === firstId)).toBe(true);
+    expect(saved.aspect).toBe('auto');
   } finally {
     act(() => root.unmount());
     container.remove();
