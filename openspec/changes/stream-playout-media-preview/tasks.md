@@ -27,7 +27,15 @@
       changes only an E2E fixture; the complete product/configuration/assets tree is identical.
       Native versions, packaged content, icons, two-page guide and SHA-256 manifest passed,
       including a second manifest verification after the authorized Share copy.
-- [ ] Verify authenticated media previews on the target station with the updated Bridge and Control.
+- [x] Verify authenticated media previews in installed Control `b7d3cf1b` with updated Bridges:
+      the native 4K file player advanced 3840x2160 video/audio on A, B and A return. A ready
+      proxy independently advanced 640x360 video/audio through A/B/A with correct providers,
+      no decoder error and final role A. Evidence is retained in
+      `installers/1.2.11/evidence-b7d3cf1b/installed-acceptance.json` and
+      `ready-proxy-acceptance.json`, with actual UI PNGs. This is scoped acceptance: Mountains
+      proxy B returned upstream `mediaPreview.proxyTooLarge`, while A later returned
+      `mediaPreview.preparationTimedOut` at 04:44:21.965291Z;
+      B passive Playlist/NDI permissions and exact PGM clock equality are not accepted here.
 - [x] An isolated backend using the real authenticated A/B station APIs passed a continuous
       A/B/A ownership transfer with decoded 3840x2160 media and audio, retaining position and
       playback. Evidence: `real-api-continuous-role-report.json` (2026-11-18). This is a

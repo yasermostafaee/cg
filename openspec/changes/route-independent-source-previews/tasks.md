@@ -102,10 +102,32 @@ distinct from occasional pending Playlist preview responses, media playback and 
 The poster follow-up uses the existing authorized file-poster API and changes no permissions.
 
 - [x] Integrate the reviewed Control-only poster implementation from `bc33f0e2`.
-- [ ] Pass the integrated full local gate and normal push for this poster follow-up.
-- [ ] Record this follow-up's completed green carrying Linux E2E URL; the earlier `261b57c8`
-      success covers the previous product and is not proof for this new renderer behavior.
-- [ ] Verify a new immutable three-installer 1.2.11 bundle and unchanged Bridge payload;
-      only Control needs reinstall for the poster change after the prior full bundle.
-- [ ] Verify the poster in the installed Control's actual three-plate PVW, independently
-      of the upstream B service-preview permission correction.
+- [x] Pass the integrated full local gate and normal push for this poster follow-up on
+      `b7d3cf1ba0dfe78a27163ef904a728060479ddf2`: 103/103 tasks, Runtime 2773, Designer 2026,
+      Bridge 2286, formatting, 5260-file control-byte scan and 220 strict OpenSpec checks.
+- [x] Record this follow-up's actual completed green carrying [Linux E2E job](https://github.com/yasermostafaee/cg/actions/runs/44238425638/job/134580157090)
+      on `b7d3cf1ba0dfe78a27163ef904a728060479ddf2`: Runtime 487 passed/2 skipped,
+      Designer 461 passed/15 skipped, pack 2 passed and 26/26 E2E tasks successful, with
+      no failed or flaky summary. The heavy job, Docs and required checks also completed
+      successfully. The full log is retained as `cg-ci-b7d3cf1b-e2e.log`; the earlier
+      `261b57c8` result remains evidence for the previous product rather than this follow-up.
+- [x] Verify a new immutable three-installer 1.2.11 bundle under `installers/1.2.11/b7d3cf1b`,
+      including embedded engines, icons, two-page guide and SHA-256 manifest read-back after
+      the authorized Share copy. The Bridge MJS remains exactly
+      `4d4b47701ba2958ef876c59ec1ce84cc65a143e3c63382b1b3b8dcc138e4dfc4`, identical to build 77;
+      only Control needs reinstall for this poster change after the prior full bundle.
+- [x] Verify the poster in installed Control's actual three-plate PVW through A/B/A:
+      A and its return decoded three 640x360 native pictures; B decoded two official static
+      file posters at 160x90. The 716 poster is visible, while the Mountains official poster
+      is near-black (reference gray range 0..3). These are not moving B PVW video claims.
+      Evidence is retained in `installers/1.2.11/evidence-b7d3cf1b/installed-acceptance.json`
+      and the corresponding Master/Slave PNGs. The closed combo showed a picture with only
+      A's existing badge outlined. Playlist PVW and NDI Check on B still had upstream 403/forbidden.
+
+The actual installed native player separately advanced 3840x2160 video and decoded audio
+on A, B and return to A. The ready proxy for the tested Persian clip also advanced 640x360
+video/audio on all three roles; `ready-proxy-acceptance.json` and `slave-ready-proxy.png`
+retain that evidence. This does not establish every media preview: Mountains proxy B ended
+with upstream `mediaPreview.proxyTooLarge` at 04:35:57.5417511Z; A also reached terminal
+`mediaPreview.preparationTimedOut` at 04:44:21.965291Z, after about 20 minutes.
+The final role was A; no exact A/B content-clock equality or full-A-outage acceptance is claimed.
