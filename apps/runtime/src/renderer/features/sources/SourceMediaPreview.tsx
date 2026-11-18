@@ -25,6 +25,8 @@ interface SourceMediaPreviewProps {
   poster?: string | undefined;
   loadThumbnail?: MediaThumbnailLoader;
   inline?: boolean;
+  /** Each new explicit row Play request starts/resumes this player without remounting it. */
+  playRequest?: number | undefined;
   onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }
 
@@ -76,6 +78,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     durationMs,
     poster,
     inline = false,
+    playRequest,
     mediaOpen,
     mediaClose,
     onPreviewEngineChange,
@@ -90,7 +93,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const positionHeld = useRef(false);
   const [duration, setDuration] = useState(durationMs ?? 0);
   const [intent, setIntent] = useState<'playing' | 'paused' | 'stopped'>(
-    inline ? 'playing' : 'paused',
+    inline || playRequest !== undefined ? 'playing' : 'paused',
   );
   const currentIntent = useRef(intent);
   const [muted, setMuted] = useState(true);
@@ -316,14 +319,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     if (foreground && preview?.state === 'ready' && preview.videoUrl !== undefined) play();
   }, [foreground, play, preview?.state, preview?.videoUrl]);
 
-  const setPlayback = (): void => {
+  const startPlayback = useCallback((): void => {
     setPlayerError(null);
-    if (currentIntent.current === 'playing') {
-      currentIntent.current = 'paused';
-      setIntent('paused');
-      video.current?.pause();
-      return;
-    }
     currentIntent.current = 'playing';
     setIntent('playing');
     if (duration > 0 && position.current >= duration) {
@@ -333,6 +330,22 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     }
     if (currentPreview.current?.state === 'ready') play();
     else refresh.current?.();
+  }, [duration, play]);
+
+  const consumedPlayRequest = useRef(playRequest);
+  useEffect(() => {
+    if (playRequest === undefined || playRequest === consumedPlayRequest.current) return;
+    consumedPlayRequest.current = playRequest;
+    startPlayback();
+  }, [playRequest, startPlayback]);
+
+  const setPlayback = (): void => {
+    if (currentIntent.current === 'playing') {
+      setPlayerError(null);
+      currentIntent.current = 'paused';
+      setIntent('paused');
+      video.current?.pause();
+    } else startPlayback();
   };
 
   const stop = (): void => {
@@ -553,12 +566,13 @@ function SampledSourceMediaPreview({
   poster,
   loadThumbnail,
   inline = false,
+  playRequest,
   onPreviewEngineChange,
 }: SourceMediaPreviewProps): JSX.Element {
   const foreground = useModalForeground();
   const end = Math.min(Math.ceil(durationMs ?? 0) - 1, MAX_MEDIA_PREVIEW_POSITION_MS);
   const enabled = channel !== undefined && end > 0;
-  const autoPlay = inline && enabled;
+  const autoPlay = (inline || playRequest !== undefined) && enabled;
   const loadPoster = useMemo(
     () => loadThumbnail ?? createMediaThumbnailLoader(channel),
     [loadThumbnail, channel],
@@ -656,6 +670,18 @@ function SampledSourceMediaPreview({
     setStatus('loading');
     setRequest({ positionMs: nextPosition, startedAt: play ? performance.now() : null });
   };
+  const consumedPlayRequest = useRef(playRequest);
+  useEffect(() => {
+    if (playRequest === undefined || playRequest === consumedPlayRequest.current) return;
+    consumedPlayRequest.current = playRequest;
+    if (!enabled || playing) return;
+    setPositionMs(position.current === end ? 0 : position.current);
+    setStatus('loading');
+    setRequest({
+      positionMs: position.current === end ? 0 : position.current,
+      startedAt: performance.now(),
+    });
+  }, [playRequest, enabled, playing, end]);
   const stop = (): void => {
     setRequest(null);
     setPositionMs(0);

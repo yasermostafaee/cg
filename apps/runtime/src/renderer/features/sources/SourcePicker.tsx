@@ -827,6 +827,8 @@ interface MediaChoice {
 interface MediaPreviewSelection {
   readonly key: string;
   readonly item: MediaChoice;
+  /** An explicit row Play action, distinct from merely selecting a source. */
+  readonly playRequest?: number;
 }
 
 function mediaRow(
@@ -891,6 +893,7 @@ function mediaRow(
             channel={previewChannel}
             loadThumbnail={loadThumbnail}
             inline
+            playRequest={preview.playRequest}
             onPreviewEngineChange={onPreviewEngineChange}
           />
         ) : (
@@ -964,6 +967,10 @@ function MediaTab({
   const sortMenuId = useId();
   const [sortOpen, setSortOpen] = useState(false);
   const [preview, setPreview] = useState<MediaPreviewSelection>();
+  const playSequence = useRef(0);
+  const requestPreview = useCallback((selection: MediaPreviewSelection): void => {
+    setPreview({ ...selection, playRequest: ++playSequence.current });
+  }, []);
   const { origins, publish } = usePreviewOrigins();
   const grid = view === 'grid';
   const { ref: resultsRef, width } = useElementWidth<HTMLDivElement>();
@@ -999,7 +1006,7 @@ function MediaTab({
           value,
           loadThumbnail,
           preview,
-          setPreview,
+          requestPreview,
           presence,
           grid,
           previewChannel,
@@ -1032,6 +1039,7 @@ function MediaTab({
     value,
     loadThumbnail,
     preview,
+    requestPreview,
     presence,
     grid,
     previewChannel,
@@ -1206,6 +1214,7 @@ function MediaTab({
               durationMs={preview.item.durationMs}
               channel={previewChannel}
               loadThumbnail={loadThumbnail}
+              playRequest={preview.playRequest}
             />
           )}
         </section>
