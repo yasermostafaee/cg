@@ -7264,6 +7264,58 @@ export class CasparRuntime {
     this.#markDirty(itemId);
   }
 
+  #controlLayoutPage(itemId: string): CommandSlot | undefined {
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return undefined;
+    const held = this.#templates.heldVersion(itemId);
+    const item = this.#reconciler.get(itemId);
+    const template =
+      (held === undefined ? null : this.#templates.infoOf(held)) ??
+      (item === null ? null : this.#templateOfItem(itemId, item.templateId));
+    return template?.controlLiveLayout === undefined ? undefined : slot;
+  }
+
+  /** Hide a Control layout's complete native composition on one output tick before teardown. */
+  async #hideControlLiveOutput(itemId: string, page: CommandSlot | undefined): Promise<void> {
+    if (page === undefined) return;
+    const rendered = (this.#liveLayers.get(itemId) ?? []).some(
+      (record) => record.held !== true && !isParkedFit(record.fill),
+    );
+    if (!rendered) return;
+    this.#frameTransitionInterrupts.get(itemId)?.abort();
+    // Emergency Clear must not wait for another row's animation or commit an
+    // orphaned DEFER buffer. Fall back to the existing teardown on a busy channel.
+    if (this.#mixerBatchTails.has(page.channel) || this.#hasOrphanedMixer(page.channel)) return;
+    const batch: MixerBatch = {};
+    await this.#leaseMixerChannel(batch, page.channel);
+    try {
+      if (this.#slots.get(itemId) !== page) return;
+      const foreground = this.#foregroundPages.get(itemId);
+      // Stage native pictures first and the covering page LAST. A partial batch
+      // must never hide the cover while an unhidden native picture remains.
+      const slots = [
+        ...(this.#liveLayers.get(itemId) ?? []).map(({ slot }) => slot),
+        ...(foreground === undefined ? [] : [foreground]),
+        page,
+      ];
+      const layers = new Set<number>();
+      for (const slot of slots) {
+        if (slot.channel !== page.channel || layers.has(slot.layer)) continue;
+        layers.add(slot.layer);
+        const hidden = await this.#sendDeferredMixer(
+          batch,
+          page.channel,
+          this.#builder.mixerOpacity(slot, 0),
+        );
+        if (!hidden.ok || !hidden.onPrimary) break;
+      }
+    } finally {
+      // Drain even a partial/refused batch using the existing orphan-recovery rules.
+      // Stop/Clear remain escape hatches and continue the normal teardown on failure.
+      await this.#commitStagedMixer(batch);
+    }
+  }
+
   /** D-201 — hide, clear and release a synchronized foreground page owned by one item. */
   async #clearForegroundPage(
     itemId: string,
@@ -7984,12 +8036,23 @@ export class CasparRuntime {
     // left this process) and `amcp-404` (CasparCG refused it) are different facts
     // pointing at different machines, and flattening both to `amcp-error` told the
     // operator neither.
-    const { ok, onPrimary, errorCode, command } = await this.#send(
-      this.#builder.take(slot),
-      seq,
-      'normal',
-    );
+    // Stop leaves a Control page resident but hidden at the native mixer. Restore
+    // only after its pictures are seated, so even a previously refused Stop cannot
+    // expose an opaque background while the inputs are still being prepared.
+    const visibility =
+      this.#controlLayoutPage(itemId) === undefined
+        ? undefined
+        : await this.#send(this.#builder.mixerOpacity(slot, 1), this.#nextSeq(), 'urgent');
+    if (visibility !== undefined && !visibility.ok)
+      this.#reconciler.applyAck(seq, false, visibility.errorCode ?? 'amcp-error');
+    const { ok, onPrimary, errorCode, command } =
+      visibility !== undefined && !visibility.ok
+        ? visibility
+        : await this.#send(this.#builder.take(slot), seq, 'normal');
     if (!ok) {
+      // A restore/PLAY refusal can mean the command applied but its reply was lost.
+      // Re-hide the resident composition before removing any of its new pictures.
+      await this.#hideControlLiveOutput(itemId, this.#controlLayoutPage(itemId));
       /*
         🔴 `FIELD-FIXES-01-A` DECISION 1, THE OTHER HALF — the graphic's own `CG PLAY` failed
         AFTER its plates were seated, which left live pictures on air with no graphic around
@@ -8978,6 +9041,10 @@ export class CasparRuntime {
     // guest pictures would still be on the channel with nothing around them. See
     // `out()` for why the live layers go FIRST.
     try {
+      await this.#hideControlLiveOutput(
+        itemId,
+        template?.controlLiveLayout === undefined ? undefined : slot,
+      );
       await this.teardownLiveLayers(itemId);
       // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
       const { ok, onPrimary, errorCode, command } = await this.#send(
@@ -9585,6 +9652,7 @@ export class CasparRuntime {
     // R-006 — see #noServerReachable(). An out cannot reach a dead server either; claiming it
     // succeeded would be the mirror-image lie (an operator believing a graphic came OFF).
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    const controlPage = this.#controlLayoutPage(itemId);
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
@@ -9604,6 +9672,7 @@ export class CasparRuntime {
       layer (`teardownLiveLayers`), so one stuck send cannot strand the graphic
       behind it.
     */
+    await this.#hideControlLiveOutput(itemId, controlPage);
     await this.teardownLiveLayers(itemId);
     // D-201 — titles sit above the plates, so they come down after the pictures but before the
     // background page. Hiding is part of the helper, so even a refused CLEAR cannot strand text.
@@ -21392,6 +21461,7 @@ export class CasparRuntime {
       return { accepted: false, errorCode: refusal.errorCode, message: refusal.message };
     }
     const slot = this.#slots.get(itemId);
+    const controlPage = this.#controlLayoutPage(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
@@ -21439,6 +21509,7 @@ export class CasparRuntime {
     // CLEAR for `out()`'s reason. Unconditional on `slot`: the ledger is keyed by
     // itemId, so an item whose slot was already released can still own live
     // layers, and those are precisely the ones nothing else would ever reach.
+    await this.#hideControlLiveOutput(itemId, controlPage);
     await this.teardownLiveLayers(itemId);
     await this.#clearForegroundPage(itemId);
     if (slot !== undefined) {

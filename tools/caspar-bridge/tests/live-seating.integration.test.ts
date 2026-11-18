@@ -444,6 +444,7 @@ async function bootControlFocus(
   startsWithSolo = false,
   switchMode: ControlLiveLayout['effects']['switch']['mode'] = 'motion',
   bordered = false,
+  promoteBeforeTake = false,
 ) {
   const cameras = {
     'guest-1': 'src-a',
@@ -535,6 +536,7 @@ async function bootControlFocus(
     html: PRESET_TITLE_HOLD_HTML + CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
     ...(paired && { mirrorChannel: 2 }),
   });
+  if (promoteBeforeTake) expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
   expect(await loadAndTake(r)).toMatchObject({ accepted: true });
   await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
   return r;
@@ -688,6 +690,295 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
   expect(r.stackSnapshot()[0]?.lookSourceOverride).toBeUndefined();
   expect((await recvLines()).slice(mark).some((line) => /^(?:PLAY|CLEAR) /.test(line))).toBe(false);
 });
+
+it.each([
+  {
+    selection: 'single preset',
+    focus: false,
+    action: 'Stop',
+    terminal: 'stopItem' as const,
+    promoted: false,
+  },
+  {
+    selection: 'single preset',
+    focus: false,
+    action: 'Clear',
+    terminal: 'out' as const,
+    promoted: false,
+  },
+  {
+    selection: 'Focus',
+    focus: true,
+    action: 'Stop',
+    terminal: 'stopItem' as const,
+    promoted: false,
+  },
+  { selection: 'Focus', focus: true, action: 'Clear', terminal: 'out' as const, promoted: false },
+  {
+    selection: 'single preset on promoted B',
+    focus: false,
+    action: 'Stop',
+    terminal: 'stopItem' as const,
+    promoted: true,
+  },
+  {
+    selection: 'Focus on promoted B',
+    focus: true,
+    action: 'Clear',
+    terminal: 'out' as const,
+    promoted: true,
+  },
+])(
+  'atomically hides a Control $selection on $action before clearing pictures on both engines',
+  async ({ focus, terminal, promoted }) => {
+    const r = await bootControlFocus(true, true, 'motion', false, promoted);
+    if (focus)
+      expect(
+        await r.setActiveLook(
+          'item-1',
+          controlLiveLayoutFocusLookId(soloPreset, focusFrameIds[0]),
+          focusMotion,
+        ),
+      ).toEqual({ ok: true });
+    const selected = r.activeLookId('item-1');
+    const records = r.liveLayers().get('item-1')!;
+    const layers = [...new Set([10, 36, ...records.map(({ slot }) => slot.layer)])];
+    const before = mock!.receivedCommands().length;
+    const peerBefore = backup!.receivedCommands().length;
+    const snapshots: number[][] = [];
+    const clear = defaultHandlers().get('CLEAR')!;
+    mock!.setHandler('CLEAR', (request, context, connection) => {
+      if (records.some(({ slot }) => request.raw === 'CLEAR 1-' + String(slot.layer)))
+        snapshots.push(
+          layers.map((layer) => mock!.layerState({ channel: 1, layer })?.opacity ?? 0),
+        );
+      return clear(request, context, connection);
+    });
+    expect(await r[terminal]('item-1')).toMatchObject({ accepted: true });
+    expect(snapshots[0]).toEqual(layers.map(() => 0));
+    for (const [engine, channel, mark] of [
+      [mock!, 1, before],
+      [backup!, 2, peerBefore],
+    ] as const) {
+      const lines = engine
+        .receivedCommands()
+        .slice(mark)
+        .map(({ line }) => line);
+      const commit = lines.indexOf('MIXER ' + String(channel) + ' COMMIT');
+      expect(commit).toBeGreaterThanOrEqual(0);
+      expect(lines.findIndex((line) => /^CLEAR /.test(line))).toBeGreaterThan(commit);
+      for (const layer of layers) {
+        const hidden = lines.indexOf(
+          'MIXER ' + String(channel) + '-' + String(layer) + ' OPACITY 0 DEFER',
+        );
+        expect(hidden).toBeGreaterThanOrEqual(0);
+        expect(hidden).toBeLessThan(commit);
+      }
+      expect(engine.stagedMixerCount(channel)).toBe(0);
+    }
+    expect(r.liveLayers().has('item-1')).toBe(false);
+    expect(r.activeLookId('item-1')).toBe(selected);
+    if (terminal === 'stopItem') {
+      const emptyStopAt = (await recvLines()).length;
+      expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+      expect(
+        (await recvLines()).slice(emptyStopAt).some((line) => / OPACITY 0 DEFER$/.test(line)),
+      ).toBe(false);
+    }
+    const retakeAt = (await recvLines()).length;
+    expect(await r.take('item-1')).toMatchObject({ accepted: true });
+    const retake = (await recvLines()).slice(retakeAt);
+    const restored = retake.indexOf('MIXER 1-10 OPACITY 1');
+    const played = retake.indexOf('CG 1-10 PLAY 0');
+    const lastPlate = retake.reduce(
+      (last, line, index) => (/^PLAY 1-/.test(line) ? index : last),
+      -1,
+    );
+    expect(restored).toBeGreaterThan(lastPlate);
+    expect(played).toBeGreaterThan(restored);
+    expect(mock!.layerState({ channel: 1, layer: 10 })?.opacity).toBe(1);
+    expect(backup!.layerState({ channel: 2, layer: 10 })?.opacity).toBe(1);
+    if (terminal === 'stopItem')
+      expect(retake.some((line) => /^CG 1-10 ADD /.test(line))).toBe(false);
+  },
+);
+
+it('clears a Control layout without adding a visibility batch behind another row mixer lease', async () => {
+  const r = await bootControlFocus();
+  const otherFrame: LiveFrameTarget = {
+    frameKey: 'el-src-a',
+    artworkKey: 'el-src-a',
+    resize: 'proportional',
+  };
+  const other = {
+    ...template([{ id: 'src-a', rect: BOX, operatorFrame: otherFrame }]),
+    templateId: 'other-layout',
+  };
+  expect(r.templateImport(other, FRAME_HTML).registered).toBe(true);
+  expect(
+    r.setSourceAssignments({
+      assignments: [
+        ...r.sourceAssignments().assignments,
+        { templateId: other.templateId, plateId: 'src-a', sourceId: 'src-a' },
+      ],
+    }),
+  ).toEqual({ ok: true });
+  await r.load('item-2', other.templateId, {});
+  expect(await r.take('item-2')).toMatchObject({ accepted: true });
+  await expect
+    .poll(() => r.stackSnapshot().find(({ itemId }) => itemId === 'item-2')?.onAirFramePlacement)
+    .toBe(true);
+  const native = r.liveLayers().get('item-2')![0]!;
+  const mixer = defaultHandlers().get('MIXER')!;
+  let resume: (() => void) | undefined;
+  mock!.setHandler('MIXER', async (request, context, connection) => {
+    const reply = mixer(request, context, connection);
+    if (
+      resume === undefined &&
+      request.raw.startsWith('MIXER 1-' + native.slot.layer + ' FILL ') &&
+      request.raw.endsWith(' DEFER')
+    )
+      await new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+    return reply;
+  });
+  const otherEdit = r.setFramePlacements('item-2', [
+    { frameKey: otherFrame.frameKey, rect: MOVED_FRAME.rect },
+  ]);
+  await expect.poll(() => resume !== undefined).toBe(true);
+  const before = (await recvLines()).length;
+  const clearing = r.out('item-1');
+  try {
+    // Let out reach the immediate busy-channel guard while the unrelated lease is held.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } finally {
+    resume?.();
+  }
+  expect(await clearing).toMatchObject({ accepted: true });
+  expect(await otherEdit).toMatchObject({ accepted: true });
+  const lines = (await recvLines()).slice(before);
+  expect(lines).not.toContain('MIXER 1-10 OPACITY 0 DEFER');
+  expect(lines).toContain('CLEAR 1-10');
+  expect(r.liveLayers().has('item-1')).toBe(false);
+  expect(r.liveLayers().has('item-2')).toBe(true);
+  expect(mock!.stagedMixerCount(1)).toBe(0);
+});
+
+it('keeps a refused Control Stop hidden and does not bypass the on-air Take interlock', async () => {
+  const r = await bootControlFocus(false, true);
+  const cg = defaultHandlers().get('CG')!;
+  mock!.setHandler('CG', (request, context, connection) =>
+    request.raw === 'CG 1-10 STOP 0'
+      ? { kind: 'err', code: 502, verb: 'CG' }
+      : cg(request, context, connection),
+  );
+  expect(await r.stopItem('item-1')).toMatchObject({ accepted: false });
+  expect(mock!.layerState({ channel: 1, layer: 10 })?.opacity).toBe(0);
+  const before = (await recvLines()).length;
+  expect(await r.take('item-1')).toMatchObject({ accepted: false, errorCode: 'already-on-air' });
+  expect((await recvLines()).slice(before)).not.toContain('MIXER 1-10 OPACITY 1');
+  mock!.setHandler('CG', cg);
+  expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+});
+
+it('atomically hides an exempt Control layout before Remove drops the row and its pictures', async () => {
+  const r = await bootControlFocus(false, true);
+  const before = (await recvLines()).length;
+  expect(await r.remove('item-1')).toMatchObject({ accepted: true });
+  const lines = (await recvLines()).slice(before);
+  const pageHide = lines.indexOf('MIXER 1-10 OPACITY 0 DEFER');
+  const commit = lines.indexOf('MIXER 1 COMMIT');
+  const firstClear = lines.findIndex((line) => /^CLEAR /.test(line));
+  expect(pageHide).toBeGreaterThanOrEqual(0);
+  expect(commit).toBeGreaterThan(pageHide);
+  expect(firstClear).toBeGreaterThan(commit);
+  expect(r.liveLayers().has('item-1')).toBe(false);
+  expect(mock!.stagedMixerCount(1)).toBe(0);
+});
+
+it.each(['restore applied with refused acknowledgement', 'resident Play refused'] as const)(
+  'rehides the owned Control composition before rollback when %s',
+  async (failure) => {
+    const r = await bootControlFocus(false, true);
+    const cg = defaultHandlers().get('CG')!;
+    expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+    expect(mock!.layerState({ channel: 1, layer: 10 })?.opacity).toBe(0);
+    mock!.setHandler('CG', (request, context, connection) => {
+      const reply = cg(request, context, connection);
+      return failure === 'resident Play refused' && request.raw === 'CG 1-10 PLAY 0'
+        ? { kind: 'err', code: 502, verb: 'CG' }
+        : reply;
+    });
+    const mixer = defaultHandlers().get('MIXER')!;
+    let failed = false;
+    mock!.setHandler('MIXER', (request, context, connection) => {
+      const answer = mixer(request, context, connection);
+      if (
+        !failed &&
+        failure === 'restore applied with refused acknowledgement' &&
+        request.raw === 'MIXER 1-10 OPACITY 1'
+      ) {
+        failed = true;
+        return { kind: 'err', code: 502, verb: 'MIXER' };
+      }
+      return answer;
+    });
+    const before = (await recvLines()).length;
+    const atClear: number[] = [];
+    const clear = defaultHandlers().get('CLEAR')!;
+    mock!.setHandler('CLEAR', (request, context, connection) => {
+      if (/^CLEAR 1-3[0-5]$/.test(request.raw))
+        atClear.push(mock!.layerState({ channel: 1, layer: 10 })?.opacity ?? 0);
+      return clear(request, context, connection);
+    });
+    expect(await r.take('item-1')).toMatchObject({ accepted: false, errorCode: 'amcp-502' });
+    expect(atClear.length).toBeGreaterThan(0);
+    expect(atClear.every((opacity) => opacity === 0)).toBe(true);
+    expect(mock!.layerState({ channel: 1, layer: 10 })?.opacity).toBe(0);
+    expect(mock!.stagedMixerCount(1)).toBe(0);
+    const lines = (await recvLines()).slice(before);
+    if (failure === 'restore applied with refused acknowledgement')
+      expect(lines).not.toContain('CG 1-10 PLAY 0');
+    mock!.setHandler('CG', cg);
+    mock!.setHandler('MIXER', mixer);
+    expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+    expect(await r.take('item-1')).toMatchObject({ accepted: true });
+    expect(mock!.layerState({ channel: 1, layer: 10 })?.opacity).toBe(1);
+  },
+);
+
+it.each([false, true])(
+  'keeps the Control background covering unhidden native pictures when a later hide is refused (paired=%s)',
+  async (paired) => {
+    const r = await bootControlFocus(paired);
+    const records = r.liveLayers().get('item-1')!;
+    const refusedLayer = records[1]!.slot.layer;
+    const mixer = defaultHandlers().get('MIXER')!;
+    mock!.setHandler('MIXER', (request, context, connection) =>
+      request.raw === 'MIXER 1-' + String(refusedLayer) + ' OPACITY 0 DEFER'
+        ? { kind: 'err', code: 502, verb: 'MIXER' }
+        : mixer(request, context, connection),
+    );
+    const before = (await recvLines()).length;
+    const snapshots: { page: number; native: number }[] = [];
+    const clear = defaultHandlers().get('CLEAR')!;
+    mock!.setHandler('CLEAR', (request, context, connection) => {
+      if (request.raw === 'CLEAR 1-' + String(records[0]!.slot.layer))
+        snapshots.push({
+          page: mock!.layerState({ channel: 1, layer: 10 })?.opacity ?? 0,
+          native: mock!.layerState({ channel: 1, layer: refusedLayer })?.opacity ?? 0,
+        });
+      return clear(request, context, connection);
+    });
+    expect(await r.out('item-1')).toMatchObject({ accepted: true });
+    expect(snapshots).toEqual([{ page: 1, native: 1 }]);
+    const lines = (await recvLines()).slice(before);
+    expect(lines).not.toContain('MIXER 1-10 OPACITY 0 DEFER');
+    expect(mock!.stagedMixerCount(1)).toBe(0);
+  },
+);
 
 it('refuses a Control Focus slide transaction and restores the previously shown frame', async () => {
   const r = await bootControlFocus();
