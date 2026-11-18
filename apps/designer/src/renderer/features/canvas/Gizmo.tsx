@@ -36,6 +36,7 @@ import {
   compositionSizeRatio,
   liveFrameCompositionAspect,
 } from '../inspector/composition-aspect.js';
+import { currentSafeAreaSnapTargets } from './safe-area-snap-targets.js';
 
 interface Props {
   element: Element;
@@ -468,6 +469,9 @@ function buildSnapTargets(
   }
   for (const gx of st.guides.x) xs.push(gx);
   for (const gy of st.guides.y) ys.push(gy);
+  const safeAreas = currentSafeAreaSnapTargets();
+  xs.push(...safeAreas.x);
+  ys.push(...safeAreas.y);
   return { xs, ys };
 }
 

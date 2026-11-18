@@ -84,6 +84,7 @@ import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lookGroupOf } from '@cg/shared-schema';
 import { frameAabb } from '../../state/off-frame.js';
 import { locate } from '../../state/scene-doc.js';
+import { currentSafeAreaSnapTargets } from './safe-area-snap-targets.js';
 import { ASSET_DND_ID, ASSET_DND_KIND, assetDragSource } from '../assets/asset-dnd.js';
 
 /**
@@ -1381,6 +1382,9 @@ function beginDrag(
   // Ruler guides are snap targets too.
   for (const gx of state.guides.x) xTargets.push(gx);
   for (const gy of state.guides.y) yTargets.push(gy);
+  const safeAreas = currentSafeAreaSnapTargets();
+  xTargets.push(...safeAreas.x);
+  yTargets.push(...safeAreas.y);
 
   // B-027 — clamp the drag so the element's full box stays inside the fixed pasteboard.
   const bounds = pasteboardSceneBounds(doc.resolution);
@@ -1506,6 +1510,9 @@ function beginGroupDrag(
   // Ruler guides are snap targets too.
   for (const gx of state.guides.x) xTargets.push(gx);
   for (const gy of state.guides.y) yTargets.push(gy);
+  const safeAreas = currentSafeAreaSnapTargets();
+  xTargets.push(...safeAreas.x);
+  yTargets.push(...safeAreas.y);
 
   // B-027 — clamp the group delta so the WHOLE selection box stays inside the pasteboard
   // (the group stops as soon as any member would cross an edge).
