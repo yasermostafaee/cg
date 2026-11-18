@@ -1,7 +1,34 @@
-export const BROADCAST_GUIDE_ASPECTS = ['auto', '16:9', '4:3'] as const;
+export const BROADCAST_GUIDE_ASPECTS = ['auto', '16:9', '4:3', 'custom'] as const;
 export type BroadcastGuideAspect = (typeof BROADCAST_GUIDE_ASPECTS)[number];
 export const MAX_BROADCAST_GUIDE_LINES = 64;
 export const DEFAULT_BROADCAST_GUIDE_COLOR = '#ffffff';
+export const MAX_BROADCAST_GUIDE_ASPECT_PART = 16_384;
+
+export interface BroadcastGuideCustomAspect {
+  readonly width: number;
+  readonly height: number;
+}
+
+export const DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT: BroadcastGuideCustomAspect = {
+  width: 3,
+  height: 4,
+};
+
+/** Ratio parts are bounded positive integers, never dimensions of the authored picture. */
+export function normalizeBroadcastGuideCustomAspect(
+  value: unknown,
+): BroadcastGuideCustomAspect | null {
+  if (value === null || typeof value !== 'object') return null;
+  const ratio = value as Record<string, unknown>;
+  const width = ratio['width'];
+  const height = ratio['height'];
+  const valid = (part: unknown): part is number =>
+    typeof part === 'number' &&
+    Number.isInteger(part) &&
+    part >= 1 &&
+    part <= MAX_BROADCAST_GUIDE_ASPECT_PART;
+  return valid(width) && valid(height) ? { width, height } : null;
+}
 
 export interface BroadcastGuideLine {
   readonly id: string;
@@ -17,6 +44,8 @@ export interface BroadcastGuideLine {
 export interface BroadcastGuideProfile {
   readonly version: 1;
   readonly aspect: BroadcastGuideAspect;
+  /** Optional in older v1 preferences; retained while a preset ratio is selected. */
+  readonly customAspect?: BroadcastGuideCustomAspect;
   readonly standardVisible: boolean;
   readonly color: string;
   readonly lines: readonly BroadcastGuideLine[];
@@ -34,6 +63,7 @@ export const DEFAULT_BROADCAST_GUIDE_PROFILE: BroadcastGuideProfile = {
 export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfile | null {
   if (value === null || typeof value !== 'object') return null;
   const profile = value as Record<string, unknown>;
+  const customAspect = normalizeBroadcastGuideCustomAspect(profile['customAspect']);
   const color =
     profile['color'] === undefined
       ? DEFAULT_BROADCAST_GUIDE_COLOR
@@ -82,7 +112,12 @@ export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfil
   }
   return {
     version: 1,
-    aspect: profile['aspect'] as BroadcastGuideAspect,
+    // Invalid custom metadata must not discard otherwise valid named/coloured guides.
+    aspect:
+      profile['aspect'] === 'custom' && customAspect === null
+        ? 'auto'
+        : (profile['aspect'] as BroadcastGuideAspect),
+    ...(customAspect === null ? {} : { customAspect }),
     standardVisible: profile['standardVisible'],
     color,
     lines,

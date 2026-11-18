@@ -16,8 +16,9 @@ export function broadcastSafeAreas(
   width: number,
   height: number,
   aspect: BroadcastGuideAspect = 'auto',
+  customAspect?: BroadcastGuideCustomAspect,
 ): readonly BroadcastSafeArea[] {
-  const frame = broadcastGuideFrame(width, height, aspect);
+  const frame = broadcastGuideFrame(width, height, aspect, customAspect);
   if (frame === null) return [];
   return (
     [
@@ -44,10 +45,12 @@ export function broadcastSafeAreas(
     };
   });
 }
-import type {
-  BroadcastGuideAspect,
-  BroadcastGuideLine,
-  BroadcastGuideProfile,
+import {
+  normalizeBroadcastGuideCustomAspect,
+  type BroadcastGuideAspect,
+  type BroadcastGuideCustomAspect,
+  type BroadcastGuideLine,
+  type BroadcastGuideProfile,
 } from './broadcast-guide-preferences.js';
 
 export interface BroadcastGuideFrame {
@@ -62,9 +65,18 @@ export function broadcastGuideFrame(
   width: number,
   height: number,
   aspect: BroadcastGuideAspect = 'auto',
+  customAspect?: BroadcastGuideCustomAspect,
 ): BroadcastGuideFrame | null {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
-  const ratio = aspect === '16:9' ? 16 / 9 : aspect === '4:3' ? 4 / 3 : width / height;
+  const custom = normalizeBroadcastGuideCustomAspect(customAspect);
+  const ratio =
+    aspect === '16:9'
+      ? 16 / 9
+      : aspect === '4:3'
+        ? 4 / 3
+        : aspect === 'custom' && custom !== null
+          ? custom.width / custom.height
+          : width / height;
   const frameWidth = Math.min(width, height * ratio);
   const frameHeight = Math.min(height, width / ratio);
   return {
@@ -87,7 +99,7 @@ export function broadcastCustomGuideLines(
   height: number,
   profile: BroadcastGuideProfile,
 ): readonly BroadcastCustomGuideLine[] {
-  const frame = broadcastGuideFrame(width, height, profile.aspect);
+  const frame = broadcastGuideFrame(width, height, profile.aspect, profile.customAspect);
   if (frame === null) return [];
   return profile.lines
     .filter((line) => line.visible)
