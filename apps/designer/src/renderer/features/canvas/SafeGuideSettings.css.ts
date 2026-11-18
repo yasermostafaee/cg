@@ -16,6 +16,24 @@ export const heading = style({
   gap: 8,
 });
 export const choices = style({ display: 'flex', gap: 4 });
+export const outputSettings = style({
+  display: 'grid',
+  gap: 6,
+  padding: 8,
+  border: `1px solid ${colors.border}`,
+  borderRadius: 4,
+});
+export const outputGrid = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 10,
+});
+export const outputField = style({
+  display: 'grid',
+  gridTemplateColumns: 'max-content minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 7,
+});
 export const check = style({ display: 'inline-flex', alignItems: 'center', gap: 7 });
 export const checkbox = style({ width: 14, height: 14, margin: 0, accentColor: colors.accent });
 export const list = style({ display: 'grid', gap: 6, maxHeight: 250, overflowY: 'auto' });

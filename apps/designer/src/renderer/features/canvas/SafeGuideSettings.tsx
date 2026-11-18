@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Info, Plus, RotateCcw, Settings2, Trash2, X } from 'lucide-react';
 import {
+  PositionAnchorSchema,
+  outputLetterbox,
+  outputScale,
+  outputTranslate,
+  type Position,
+  type PositionAnchor,
+  type Resolution,
+} from '@cg/shared-schema';
+import {
   BROADCAST_GUIDE_ASPECTS,
   MAX_BROADCAST_GUIDE_LINES,
   broadcastGuideColor,
@@ -12,6 +21,9 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Popover } from '../../ui/Popover.js';
+import { Select } from '../../ui/Select.js';
+import { designerStore } from '../../state/store.js';
+import { RealtimeNumberInput } from '../inspector/controls.js';
 import { designerGuideStore } from './broadcastGuideStore.js';
 import * as colorStyle from './BackgroundControl.css.js';
 import * as s from './SafeGuideSettings.css.js';
@@ -19,10 +31,16 @@ import * as s from './SafeGuideSettings.css.js';
 export function SafeGuideSettings({
   profile,
   buttonClassName,
+  outputRaster,
+  outputPosition,
+  compositionResolution,
   onEdit,
 }: {
   profile: BroadcastGuideProfile;
   buttonClassName: string;
+  outputRaster: Resolution;
+  outputPosition: Position;
+  compositionResolution: Resolution;
   onEdit(): void;
 }): JSX.Element {
   const anchor = useRef<HTMLButtonElement>(null);
@@ -81,9 +99,15 @@ export function SafeGuideSettings({
                 <Icon icon={X} size={14} />
               </Control>
             </div>
+            <ProjectOutputControls
+              raster={outputRaster}
+              position={outputPosition}
+              compositionResolution={compositionResolution}
+              onEdit={onEdit}
+            />
             <div className={s.heading}>
-              <span>Reference frame</span>
-              <span title="EBU R95 is the 16:9 broadcast reference. Other ratios use proportional composition guides.">
+              <span>Guide aspect ratio</span>
+              <span title="EBU R95 defines the 16:9 broadcast guides. Other ratios use proportional guides inside the project output.">
                 <Icon icon={Info} size={13} />
               </span>
             </div>
@@ -174,11 +198,133 @@ export function SafeGuideSettings({
                 ))}
               </div>
             )}
-            <p className={s.hint}>Saved for all projects in this app. Preview only.</p>
+            <p className={s.hint}>Guide settings are shared across projects in this app.</p>
           </div>
         </Popover>
       )}
     </>
+  );
+}
+
+const ANCHOR_LABELS: Record<PositionAnchor, string> = {
+  'top-left': 'Top left',
+  'top-center': 'Top center',
+  'top-right': 'Top right',
+  'mid-left': 'Middle left',
+  center: 'Center',
+  'mid-right': 'Middle right',
+  'bottom-left': 'Bottom left',
+  'bottom-center': 'Bottom center',
+  'bottom-right': 'Bottom right',
+};
+
+function ProjectOutputControls({
+  raster,
+  position,
+  compositionResolution,
+  onEdit,
+}: {
+  raster: Resolution;
+  position: Position;
+  compositionResolution: Resolution;
+  onEdit(): void;
+}): JSX.Element {
+  const scale = outputScale(raster);
+  const pad = outputLetterbox(raster);
+  const topLeft = outputTranslate({ resolution: compositionResolution }, position);
+  const outputX = pad.x + topLeft.x * scale;
+  const outputY = pad.y + topLeft.y * scale;
+  const changePosition = (next: Position): void => {
+    designerStore.setCompositionOutputPosition(next);
+    onEdit();
+  };
+  const changeRaster = (axis: keyof Resolution, value: number): void => {
+    designerStore.setProjectOutputRaster({ ...raster, [axis]: Math.round(value) });
+    onEdit();
+  };
+  const changeOrigin = (axis: 'x' | 'y', value: number): void => {
+    const output = axis === 'x' ? outputX : outputY;
+    changePosition({
+      ...position,
+      offset: { ...position.offset, [axis]: position.offset[axis] + (value - output) / scale },
+    });
+  };
+  return (
+    <section className={s.outputSettings} aria-label="Project output and composition placement">
+      <strong>Project output frame</strong>
+      <div className={s.outputGrid}>
+        <label className={s.outputField}>
+          <span>Width</span>
+          <RealtimeNumberInput
+            className={s.input}
+            ariaLabel="Project output width"
+            value={raster.width}
+            min={1}
+            step={1}
+            scrub={false}
+            onCommit={(value) => changeRaster('width', value)}
+            onCommitBoundary={designerStore.markHistoryBoundary}
+          />
+        </label>
+        <label className={s.outputField}>
+          <span>Height</span>
+          <RealtimeNumberInput
+            className={s.input}
+            ariaLabel="Project output height"
+            value={raster.height}
+            min={1}
+            step={1}
+            scrub={false}
+            onCommit={(value) => changeRaster('height', value)}
+            onCommitBoundary={designerStore.markHistoryBoundary}
+          />
+        </label>
+      </div>
+      <strong>Composition position on output</strong>
+      <label className={s.outputField}>
+        <span>Anchor</span>
+        <Select
+          aria-label="Composition output anchor"
+          value={position.anchor}
+          onChange={(event) => {
+            const anchor = PositionAnchorSchema.parse(event.target.value);
+            changePosition({ ...position, anchor });
+            designerStore.markHistoryBoundary();
+          }}
+        >
+          {PositionAnchorSchema.options.map((anchor) => (
+            <option key={anchor} value={anchor}>
+              {ANCHOR_LABELS[anchor]}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className={s.outputGrid}>
+        <label className={s.outputField}>
+          <span>X (px)</span>
+          <RealtimeNumberInput
+            className={s.input}
+            ariaLabel="Composition output X"
+            value={outputX}
+            scrub={false}
+            onCommit={(value) => changeOrigin('x', value)}
+            onCommitBoundary={designerStore.markHistoryBoundary}
+          />
+        </label>
+        <label className={s.outputField}>
+          <span>Y (px)</span>
+          <RealtimeNumberInput
+            className={s.input}
+            ariaLabel="Composition output Y"
+            value={outputY}
+            scrub={false}
+            onCommit={(value) => changeOrigin('y', value)}
+            onCommitBoundary={designerStore.markHistoryBoundary}
+          />
+        </label>
+      </div>
+      <p className={s.hint}>X and Y mark the composition’s top-left corner in the project frame.</p>
+    </section>
   );
 }
 
