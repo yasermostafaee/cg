@@ -3,13 +3,37 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.12",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۱۲",
+        "en": "Release 1.2.12"
+      },
+      "date": "2026-11-18",
+      "status": "prepared",
+      "summary": {
+        "fa": "راهنماهای محدودهٔ امن در Designer و PVW و نام‌گذاری یکسان Crawl، با حفظ سازگاری قالب‌های قبلی.",
+        "en": "Safe-area guides in Designer and PVW, and consistent Crawl naming with existing-template compatibility."
+      },
+      "features": [
+        {
+          "fa": "در بوم Designer و PVW در CG Control، گزینهٔ Safe areas راهنمای اکشن ۹۳٪ و گرافیک ۹۰٪ را بر پایهٔ EBU R95 نمایش می‌دهد. این خطوط فقط راهنمای محیط کاری‌اند و در خروجی پخش یا Export وارد نمی‌شوند.",
+          "en": "Toggle Safe areas in the Designer canvas and CG Control PVW to show EBU R95 guides: 93% Action and 90% Graphics. The guides are display-only and excluded from programme output and exports."
+        },
+        {
+          "fa": "ابزار متن رونده در رابط، راهنما و آیتم‌های آغازین با نام Crawl نمایش داده می‌شود. قالب‌ها و فایل‌های قبلی همچنان سازگارند.",
+          "en": "The scrolling-text tool is consistently named Crawl in the interface, help and starter items. Existing templates and files remain compatible."
+        }
+      ],
+      "fixes": []
+    },
+    {
       "version": "1.2.11",
       "title": {
         "fa": "نسخهٔ ۱.۲.۱۱",
         "en": "Release 1.2.11"
       },
       "date": "2026-11-18",
-      "status": "prepared",
+      "status": "published",
       "summary": {
         "fa": "تنظیم نسبت و برش قاب‌ها در هر پریست، انتخاب آسان‌تر ورودی و بهبود پیش‌نمایش و پخش روی رزرو.",
         "en": "Per-preset plate framing, a larger source picker, and improvements to preview and reserve playback."

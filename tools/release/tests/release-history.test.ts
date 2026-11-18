@@ -13,10 +13,10 @@ describe('versioned release history', () => {
     const data = parseReleaseHistory(
       fs.readFileSync(path.join(REPO, 'docs', 'release', 'release-history.json'), 'utf8'),
     );
-    for (const version of ['1.0.0', '1.1.0', '1.2.4', '1.2.5']) {
+    for (const version of ['1.0.0', '1.1.0', '1.2.4', '1.2.5', '1.2.11']) {
       expect(data.releases.find((release) => release.version === version)?.status).toBe('published');
     }
-    const html = releaseHistoryHtml(data, { currentVersion: '1.2.11' });
+    const html = releaseHistoryHtml(data, { currentVersion: '1.2.12' });
     for (const [prefix, label] of [['version-', 'منتشرشده'], ['en-version-', 'Published']]) {
       const card = html.slice(html.indexOf('id="' + prefix + '1.1.0"'));
       const summary = card.slice(0, card.indexOf('</summary>'));
