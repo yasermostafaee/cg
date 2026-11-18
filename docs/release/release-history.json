@@ -8,7 +8,7 @@
         "fa": "نسخهٔ ۱.۲.۱۱",
         "en": "Release 1.2.11"
       },
-      "date": "2026-11-17",
+      "date": "2026-11-18",
       "status": "prepared",
       "summary": {
         "fa": "تنظیم نسبت و برش قاب‌ها در هر پریست، انتخاب آسان‌تر ورودی و بهبود پیش‌نمایش و پخش روی رزرو.",
@@ -40,6 +40,10 @@
           "en": "Compatible Playout servers stream file or proxy video inside the media picker. Play, Pause, Stop, seek and optional listening operate in the same card. Audio starts muted and the preview identifies its serving server."
         },
         {
+          "fa": "پیش‌نمایش ورودی و مدیا می‌تواند از نسخهٔ معتبر روی سرور A یا B خوانده شود. رنگ نشان‌های A و B همچنان وضعیت دسترسی را نشان می‌دهد و کادر نشانِ سروری که تصویرش واقعاً نمایش داده شده پررنگ‌تر می‌شود.",
+          "en": "Source previews can use an independently verified copy on A or B. Badge colors retain their availability meaning; the existing badge border identifies the server whose picture has actually decoded."
+        },
+        {
           "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید همراه Fade را جداگانه انتخاب کنید. چیدمان زندهٔ ذخیره‌شده را هم می‌توان از Templates به‌صورت VCG صادر و دوباره وارد کرد.",
           "en": "Choose independent arrival and departure effects for preset changes. Export a saved live layout as a VCG from Templates and import it again."
         },
@@ -49,6 +53,22 @@
         }
       ],
       "fixes": [
+        {
+          "fa": "هشدار قدیمی Auto-failover در اتصال به Playout دوباره نمایش داده نمی‌شود. در اتصال مستقیم، بستن هشدار برای همان ایستگاه، کاربر و رخداد پس از بازکردن دوبارهٔ اپ حفظ می‌شود.",
+          "en": "Playout stations no longer display historical CG auto-failover notices. Direct-connection acknowledgements persist for the same station, operator and event after reopening the app."
+        },
+        {
+          "fa": "هنگام پخش معمول چندقاب، خروجی لیست پخشِ واجد شرایط روی رزرو از مسیر محلی و کانال تأییدشدهٔ خود B آماده می‌شود؛ قاب‌های پریست‌های بعدی هم از ابتدا آماده می‌مانند. تغییر جای قاب روی آنتن نیز مرحله‌های حرکت تصویر و گرافیک را برای رزرو تأییدشده ارسال می‌کند.",
+          "en": "A normal live-layout take seats an eligible reserve Playlist from B's own verified local route, including plates needed by later presets. On-air plate-placement updates also send the native-picture and artwork phases to the confirmed reserve."
+        },
+        {
+          "fa": "انتخاب پریست و Focus در Inspector فقط PVW را تغییر می‌دهد. دکمه‌های روی ردیف لایه انتخاب PGM هستند؛ در حالت خارج از آنتن، پریست شروع پخش را تعیین می‌کنند و تغییر PGM انتخاب مستقل PVW را پاک نمی‌کند.",
+          "en": "Inspector preset and Focus controls cue PVW independently. Layer-row controls select PGM, or its first preset while off air; programme changes preserve the separate PVW cue."
+        },
+        {
+          "fa": "اگر آماده‌شدن پیش‌نمایش طول بکشد، انتخاب قبلی دیگر نمی‌تواند پنجرهٔ جدید را جایگزین کند یا پس از Stop دوباره باز شود. تصویر، صدای ورودی و پوستر رزرو با شناسه‌ها و دسترسی خود همان سرور خوانده می‌شوند.",
+          "en": "A delayed preview lookup cannot replace a newer view or reopen a cancelled check after Stop. Reserve pictures, source audio and posters use that server's own authenticated identities."
+        },
         {
           "fa": "پیش‌نمایش ورودی با وضعیت نامشخص، از جمله NDI با پیش‌نمایش غیرفعالِ پشتیبانی‌نشده، با Preview unavailable مشخص می‌شود. پیام No signal برای قطع سیگنال تأییدشده نمایش داده می‌شود.",
           "en": "Input thumbnails distinguish an unavailable preview from confirmed signal loss, including NDI sources whose passive preview is unsupported."
