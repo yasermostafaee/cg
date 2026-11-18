@@ -1,12 +1,5 @@
 import type { Locator } from '@playwright/test';
-import {
-  outputLetterbox,
-  outputScale,
-  outputTranslate,
-  type Position,
-  type Raster,
-  type Scene,
-} from '@cg/shared-schema';
+import { outputTranslate, type Position, type Raster, type Scene } from '@cg/shared-schema';
 import { packProject } from '@cg/vcg-format';
 import { expect, test, type DesignerApp } from './fixtures/designer.js';
 
@@ -51,9 +44,7 @@ async function expectOutputPicture(
     await expect(app.previewFrame.locator(tag)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(app.previewFrame.locator(tag)).toHaveCSS('background-image', 'none');
   }
-  const scale = outputScale(raster);
-  const pad = outputLetterbox(raster);
-  const translation = outputTranslate({ resolution }, position);
+  const translation = outputTranslate({ resolution }, position, raster);
   await expect
     .poll(async () => {
       const available = await app.previewDialog
@@ -74,10 +65,10 @@ async function expectOutputPicture(
         height: raster.height * fit,
       };
       const picture = {
-        x: frame.x + (pad.x + translation.x * scale) * fit,
-        y: frame.y + (pad.y + translation.y * scale) * fit,
-        width: resolution.width * scale * fit,
-        height: resolution.height * scale * fit,
+        x: frame.x + translation.x * fit,
+        y: frame.y + translation.y * fit,
+        width: resolution.width * fit,
+        height: resolution.height * fit,
       };
       return Math.max(
         ...(['x', 'y', 'width', 'height'] as const).flatMap((key) => [
@@ -116,7 +107,7 @@ async function expectTransparentPreviewPaint(app: DesignerApp): Promise<void> {
     [0, 61, 91],
     [1, 66, 96],
     [2, 83, 117],
-  ]) {
+  ] as const) {
     expect(pixel[channel]).toBeGreaterThanOrEqual(min);
     expect(pixel[channel]).toBeLessThanOrEqual(max);
   }
@@ -129,7 +120,7 @@ test('Composition Preview fits one project checkerboard and places the lower-thi
   await app.newProject('Lower-third output preview');
   await app.addTextElement({ x: 100, y: 40 });
   await app.setDataKey('headline');
-  const resolution = { width: 1920, height: 190 };
+  const resolution = { width: 1280, height: 190 };
   await resizeComposition(app, resolution);
   await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
@@ -140,9 +131,7 @@ test('Composition Preview fits one project checkerboard and places the lower-thi
     settings.getByRole('spinbutton', { name: 'Project output height' }),
     raster.height,
   );
-  await settings
-    .getByRole('combobox', { name: 'Composition output anchor' })
-    .selectOption('bottom-center');
+  await settings.getByRole('button', { name: 'Bottom center', exact: true }).click();
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
   await app.openPreviewModal();
   await expect(app.previewFrame.locator('body')).toHaveClass(/cg-pending/);
@@ -235,9 +224,7 @@ test('a legacy cropped project defaults to full-HD Preview and keeps tiny center
   await app.previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
-  await settings
-    .getByRole('combobox', { name: 'Composition output anchor' })
-    .selectOption('top-right');
+  await settings.getByRole('button', { name: 'Top right', exact: true }).click();
   await setNumber(settings.getByRole('spinbutton', { name: 'Composition output X' }), 1795);
   await setNumber(settings.getByRole('spinbutton', { name: 'Composition output Y' }), 35);
   await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
@@ -247,4 +234,61 @@ test('a legacy cropped project defaults to full-HD Preview and keeps tiny center
     offset: { x: -25, y: 35 },
   });
   await page.screenshot({ path: testInfo.outputPath('project-preview-tiny-logo.png') });
+});
+
+test('equal1280×720 project and composition share native pixels in Canvas guides and Composition Preview', async ({
+  app,
+  page,
+}, testInfo) => {
+  await app.newProject('Native HD output');
+  const raster = { width: 1280, height: 720 };
+  await resizeComposition(app, raster);
+  await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  await setNumber(settings.getByRole('spinbutton', { name: 'Project output width' }), raster.width);
+  await setNumber(
+    settings.getByRole('spinbutton', { name: 'Project output height' }),
+    raster.height,
+  );
+  await settings.getByRole('button', { name: 'Center', exact: true }).click();
+  await expect(settings.getByRole('spinbutton', { name: 'Composition output X' })).toHaveValue('0');
+  await expect(settings.getByRole('spinbutton', { name: 'Composition output Y' })).toHaveValue('0');
+  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  const guides = page.locator('[data-safe-area-guides]');
+  await expect(guides).toHaveAttribute('viewBox', '0 0 1280 720');
+  const outline = guides.locator('[data-composition-output-frame]');
+  for (const [key, value] of Object.entries({ x: 0, y: 0, width: 1280, height: 720 }))
+    await expect(outline).toHaveAttribute(key, String(value));
+  await expect
+    .poll(async () => {
+      const [project, composition] = await Promise.all([
+        guides.boundingBox(),
+        app.canvasFrame.locator('.cg-stage').boundingBox(),
+      ]);
+      if (project === null || composition === null) return Infinity;
+      return Math.max(
+        ...(['x', 'y', 'width', 'height'] as const).map((key) =>
+          Math.abs(project[key] - composition[key]),
+        ),
+      );
+    })
+    .toBeLessThan(0.75);
+  await app.openPreviewModal();
+  await expectOutputPicture(app, raster, raster, { anchor: 'center', offset: { x: 0, y: 0 } });
+  await expect
+    .poll(async () => {
+      const [project, composition] = await Promise.all([
+        app.previewDialog.locator('[data-preview-output-frame]').boundingBox(),
+        app.previewDialog.locator('iframe').boundingBox(),
+      ]);
+      if (project === null || composition === null) return Infinity;
+      return Math.max(
+        ...(['x', 'y', 'width', 'height'] as const).map((key) =>
+          Math.abs(project[key] - composition[key]),
+        ),
+      );
+    })
+    .toBeLessThan(0.75);
+  await expectTransparentPreviewPaint(app);
+  await page.screenshot({ path: testInfo.outputPath('native-hd-equal-project-composition.png') });
 });
