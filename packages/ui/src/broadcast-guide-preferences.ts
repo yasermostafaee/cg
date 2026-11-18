@@ -1,6 +1,7 @@
 export const BROADCAST_GUIDE_ASPECTS = ['auto', '16:9', '4:3'] as const;
 export type BroadcastGuideAspect = (typeof BROADCAST_GUIDE_ASPECTS)[number];
 export const MAX_BROADCAST_GUIDE_LINES = 64;
+export const DEFAULT_BROADCAST_GUIDE_COLOR = '#ffffff';
 
 export interface BroadcastGuideLine {
   readonly id: string;
@@ -9,12 +10,15 @@ export interface BroadcastGuideLine {
   readonly axis: 'x' | 'y';
   readonly position: number;
   readonly visible: boolean;
+  /** Absent means inherit the profile's common line colour. */
+  readonly color?: string;
 }
 
 export interface BroadcastGuideProfile {
   readonly version: 1;
   readonly aspect: BroadcastGuideAspect;
   readonly standardVisible: boolean;
+  readonly color: string;
   readonly lines: readonly BroadcastGuideLine[];
 }
 
@@ -22,6 +26,7 @@ export const DEFAULT_BROADCAST_GUIDE_PROFILE: BroadcastGuideProfile = {
   version: 1,
   aspect: 'auto',
   standardVisible: true,
+  color: DEFAULT_BROADCAST_GUIDE_COLOR,
   lines: [],
 };
 
@@ -29,10 +34,15 @@ export const DEFAULT_BROADCAST_GUIDE_PROFILE: BroadcastGuideProfile = {
 export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfile | null {
   if (value === null || typeof value !== 'object') return null;
   const profile = value as Record<string, unknown>;
+  const color =
+    profile['color'] === undefined
+      ? DEFAULT_BROADCAST_GUIDE_COLOR
+      : normalizeBroadcastGuideColor(profile['color']);
   if (
     profile['version'] !== 1 ||
     !BROADCAST_GUIDE_ASPECTS.some((aspect) => aspect === profile['aspect']) ||
     typeof profile['standardVisible'] !== 'boolean' ||
+    color === null ||
     !Array.isArray(profile['lines']) ||
     profile['lines'].length > MAX_BROADCAST_GUIDE_LINES
   )
@@ -42,6 +52,8 @@ export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfil
   for (const value of profile['lines'] as unknown[]) {
     if (value === null || typeof value !== 'object') return null;
     const line = value as Record<string, unknown>;
+    const lineColor =
+      line['color'] === undefined ? undefined : normalizeBroadcastGuideColor(line['color']);
     if (
       typeof line['id'] !== 'string' ||
       line['id'].length === 0 ||
@@ -54,7 +66,8 @@ export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfil
       !Number.isFinite(line['position']) ||
       line['position'] < 0 ||
       line['position'] > 100 ||
-      typeof line['visible'] !== 'boolean'
+      typeof line['visible'] !== 'boolean' ||
+      lineColor === null
     )
       return null;
     ids.add(line['id']);
@@ -64,14 +77,28 @@ export function parseBroadcastGuideProfile(value: unknown): BroadcastGuideProfil
       axis: line['axis'],
       position: line['position'],
       visible: line['visible'],
+      ...(lineColor === undefined ? {} : { color: lineColor }),
     });
   }
   return {
     version: 1,
     aspect: profile['aspect'] as BroadcastGuideAspect,
     standardVisible: profile['standardVisible'],
+    color,
     lines,
   };
+}
+
+/** Opaque sRGB line colours only; never arbitrary CSS or alpha-bearing values. */
+export function normalizeBroadcastGuideColor(value: unknown): string | null {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+export function broadcastGuideColor(
+  profile: BroadcastGuideProfile,
+  line?: BroadcastGuideLine,
+): string {
+  return line?.color ?? profile.color ?? DEFAULT_BROADCAST_GUIDE_COLOR;
 }
 
 type GuideStorage = Pick<Storage, 'getItem' | 'setItem'>;

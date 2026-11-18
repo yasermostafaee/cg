@@ -1,5 +1,10 @@
 # Tasks
 
+- [x] Extend the shared v1 profile with validated white-default common colour and optional
+      per-line inheritance/override, retaining old definitions without a new key/version.
+- [ ] Add Designer colour controls, white-default rendering and browser persistence proof.
+- [ ] Add Runtime/modal shared colour controls, rendering and browser persistence proof.
+
 - [x] Agree final Auto/16:9/4:3 choices and independent app-wide percentage profile.
 - [x] Add shared bounded model/parser, contained-reference geometry and safe storage adapter.
 - [x] Pass 22 shared profile/geometry regressions, package type build and lint.

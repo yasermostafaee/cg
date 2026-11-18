@@ -7,6 +7,14 @@ finite 0–100 percentage and `visible`. A pure parser rejects unsupported versi
 unknown ratios, duplicate IDs, oversized sets and invalid positions. Parsing strips
 unknown fields. Invalid saved JSON reads as the default without rewriting it.
 
+The common `color` is an opaque, normalized six-digit sRGB hex string and defaults
+to white. Custom lines can store an optional `color`; absence inherits the common
+colour. Older v1 records without colour fields acquire white in memory while
+retaining every reference and line setting. Invalid present colour values are
+rejected, and no storage version/key changes. Reference, Action, Graphics and
+inherited custom strokes use the common colour; black contrast outlines and the
+Action dashed/Graphics solid distinction remain. Colour edits stay preview-only.
+
 Auto uses the active raster. Explicit landscape references are centred and
 contained in that raster; they cannot extend into monitor letterbox. Both broadcast
 boxes and custom percentages reference that rectangle. EBU R95 is the formal 16:9

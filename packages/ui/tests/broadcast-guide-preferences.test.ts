@@ -5,6 +5,9 @@ import {
   broadcastSafeAreas,
   createBroadcastGuideStore,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
+  DEFAULT_BROADCAST_GUIDE_COLOR,
+  broadcastGuideColor,
+  normalizeBroadcastGuideColor,
   parseBroadcastGuideProfile,
   type BroadcastGuideProfile,
 } from '../src/index.js';
@@ -13,12 +16,45 @@ const profile: BroadcastGuideProfile = {
   version: 1,
   aspect: '4:3',
   standardVisible: false,
+  color: DEFAULT_BROADCAST_GUIDE_COLOR,
   lines: [
     { id: 'h', name: 'زیرنویس', axis: 'y', position: 75, visible: true },
     { id: 'v', name: 'Logo', axis: 'x', position: 25, visible: true },
     { id: 'hidden', name: '', axis: 'y', position: 50, visible: false },
   ],
 };
+
+it('upgrades older v1 preferences to white without changing their reference or named H/V set', () => {
+  const { color: _oldMissingColor, ...old } = profile;
+  expect(parseBroadcastGuideProfile(old)).toEqual(profile);
+  expect(old.lines).toEqual(profile.lines);
+  expect(broadcastGuideColor(DEFAULT_BROADCAST_GUIDE_PROFILE)).toBe('#ffffff');
+});
+
+it('normalizes saved colours and preserves per-line overrides and inheritance independently', () => {
+  const saved = parseBroadcastGuideProfile({
+    ...profile,
+    color: '#AABBCC',
+    lines: [{ ...profile.lines[0], color: '#12EF34' }, profile.lines[1]],
+  });
+  expect(saved?.color).toBe('#aabbcc');
+  expect(saved?.lines[0]?.color).toBe('#12ef34');
+  expect(saved?.lines[1]).not.toHaveProperty('color');
+  if (saved === null) throw new Error('Expected validated profile');
+  expect(broadcastGuideColor(saved, saved.lines[0])).toBe('#12ef34');
+  expect(broadcastGuideColor(saved, saved.lines[1])).toBe('#aabbcc');
+});
+
+it.each(['#fff', '#12345678', 'rgb(255,255,255)', 'url(javascript:bad)', 'red', '', null, 123])(
+  'rejects invalid present guide colour %s',
+  (color) => {
+    expect(normalizeBroadcastGuideColor(color)).toBeNull();
+    expect(parseBroadcastGuideProfile({ ...profile, color })).toBeNull();
+    expect(
+      parseBroadcastGuideProfile({ ...profile, lines: [{ ...profile.lines[0], color }] }),
+    ).toBeNull();
+  },
+);
 
 it('contains the landscape reference in either landscape or portrait active pictures', () => {
   expect(broadcastGuideFrame(1920, 1080, '4:3')).toEqual({

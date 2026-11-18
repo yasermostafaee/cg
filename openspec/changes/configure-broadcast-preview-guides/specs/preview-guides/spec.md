@@ -11,6 +11,20 @@ independent local settings. The master display toggle SHALL remain default-off
 session state. Guide settings SHALL NOT alter projects, exported pages, PGM or
 programme commands.
 
+The common guide colour SHALL default to white and SHALL apply to reference,
+broadcast and inherited custom lines. Users SHALL be able to override a custom
+line's colour and restore inheritance. Saved v1 records without colour SHALL use
+white without discarding existing guide definitions or changing storage keys.
+
+#### Scenario: Common and custom colours remain independent
+
+- **GIVEN** old v1 preferences contain reference and line definitions without colours
+- **WHEN** the user opens guide settings
+- **THEN** the existing definitions remain and all guide strokes default to white
+- **AND WHEN** the common colour or a custom override changes
+- **THEN** only the corresponding preview strokes change and persist across reloads
+- **AND** restoring inheritance makes that custom line follow the common colour again
+
 #### Scenario: One saved guide set is used in a different project
 
 - **GIVEN** the user saved a named 75% horizontal guide and a 4:3 reference

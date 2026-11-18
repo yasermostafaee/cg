@@ -18,8 +18,11 @@ export {
 export {
   BROADCAST_GUIDE_ASPECTS,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
+  DEFAULT_BROADCAST_GUIDE_COLOR,
   MAX_BROADCAST_GUIDE_LINES,
   parseBroadcastGuideProfile,
+  normalizeBroadcastGuideColor,
+  broadcastGuideColor,
   createBroadcastGuideStore,
   type BroadcastGuideAspect,
   type BroadcastGuideLine,
