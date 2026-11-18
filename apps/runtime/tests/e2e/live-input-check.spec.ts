@@ -139,10 +139,13 @@ test('C-023 · inspect input picture from source controls without changing a bin
     const unavailableRow = options.getByRole('row').filter({
       has: page.locator('[data-picker-input="in-li-input4"]'),
     });
-    const passiveTile = unavailableRow.locator('[data-input-thumbnail="passive"]');
-    await expect(passiveTile).toBeVisible();
-    await expect(passiveTile).toHaveText('Preview unavailable');
-    await expect(passiveTile).not.toHaveRole('button');
+    // Unavailable on A is still eligible for an independently resolved read on B.
+    // Read eligibility does not select a source or commit a template binding.
+    const unavailableTile = unavailableRow.locator('[data-input-thumbnail="checkable"]');
+    await expect(unavailableTile).toBeVisible();
+    await expect(unavailableTile).toHaveRole('button');
+    await expect(unavailableRow.locator('[data-picker-input]')).toContainText('Unavailable');
+    await expect(field).toHaveAttribute('data-picker-value', '');
     await options.getByRole('button', { name: 'Switch to list view', exact: true }).click();
     const studioRow = options.getByRole('row').filter({
       has: page.locator('[data-picker-input="in-li-studio1"]'),

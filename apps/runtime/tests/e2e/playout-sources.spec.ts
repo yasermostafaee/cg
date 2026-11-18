@@ -831,9 +831,11 @@ test.describe('source audio meters', () => {
               id,
               id === 'in-studio-1'
                 ? { A: 'present', B: 'missing' }
-                : id === 'md-m-meter-sound'
-                  ? { A: 'present', B: 'present' }
-                  : {},
+                : id === 'in-input-4'
+                  ? { A: 'missing', B: 'present' }
+                  : id === 'md-m-meter-sound'
+                    ? { A: 'present', B: 'present' }
+                    : {},
             ]),
           ),
         });
@@ -974,7 +976,13 @@ test.describe('source audio meters', () => {
     expect(
       initial.batches.every(({ channel, maxChannels }) => channel === 1 && maxChannels === 32),
     ).toBe(true);
-    expect(initial.batches.flatMap(({ ids }) => ids)).not.toContain('in-input-4');
+    // A source unavailable on A can still supply a read-only preview/meter from B.
+    expect(initial.batches.flatMap(({ ids }) => ids)).toContain('in-input-4');
+    await expect(presence(inputRow('in-input-4'), 'B')).toHaveAttribute(
+      'data-source-presence-state',
+      'present',
+    );
+    await expect(field).toHaveAttribute('data-picker-value', '');
     expect(initial.checked).toEqual([]);
 
     await page.evaluate(() => {
