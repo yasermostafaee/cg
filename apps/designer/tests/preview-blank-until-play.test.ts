@@ -87,6 +87,19 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     expect(html).toContain('D-087');
   });
 
+  it('can leave only the project-sized modal backdrop outside the composition document', () => {
+    const transparent = preview.load(SCENE, true, false, undefined, true).html;
+    expect(transparent).toContain('html, body { background: transparent !important; }');
+    expect(transparent).toContain('html { color-scheme: dark; }');
+    expect(transparent).not.toContain('background-image: linear-gradient');
+    expect(transparent).toContain('const REVEAL_ON_LOAD = false;');
+    // The opt-in never changes the authoring pasteboard or the ordinary builder default.
+    expect(preview.load(SCENE, true).html).toContain('background-color: #3d4253 !important;');
+    expect(preview.load(SCENE, false, true, undefined, true).html).toContain(
+      'background-color: #3d4253;',
+    );
+  });
+
   it('limits editable expired countdowns to the stopped main Canvas', () => {
     const canvas = preview.load(SCENE, false, true).html;
     const broadcast = preview.load(SCENE, true, false).html;

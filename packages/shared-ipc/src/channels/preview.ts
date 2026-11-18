@@ -38,6 +38,8 @@ export const PreviewLoadChannel = defineChannel(
      * (modal/export) ⇒ the frame stays at the iframe origin (no inset).
      */
     frameOffset: z.object({ x: z.number(), y: z.number() }).optional(),
+    /** The Composition Preview paints one project-sized checker outside its transparent iframe. */
+    transparent: z.boolean().optional(),
   }),
   z.object({
     /** Blob/cgpreview URL — fallback for callers that can't use srcdoc. */

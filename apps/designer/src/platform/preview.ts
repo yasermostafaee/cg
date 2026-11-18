@@ -1,5 +1,6 @@
 import type { Scene } from '@cg/shared-schema';
 import { attachRobustVideoPoster } from '../shared/video-poster.js';
+import { previewCheckerboard } from '../shared/preview-checkerboard.js';
 
 export interface PreviewOptions {
   cgJs: string;
@@ -77,9 +78,10 @@ export class Preview {
     broadcast = false,
     authoring = false,
     frameOffset: { x: number; y: number } = { x: 0, y: 0 },
+    transparent = false,
   ): { src: string; html: string } {
     if (this.#docUrl !== null) URL.revokeObjectURL(this.#docUrl);
-    const html = this.#buildHtml(scene, broadcast, authoring, frameOffset);
+    const html = this.#buildHtml(scene, broadcast, authoring, frameOffset, transparent);
     this.#docUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     return { src: this.#docUrl, html };
   }
@@ -109,6 +111,7 @@ export class Preview {
     broadcast: boolean,
     authoring: boolean,
     frameOffset: { x: number; y: number },
+    transparent: boolean,
   ): string {
     const cgJsUrl = this.#cgJsUrl ?? '';
     const cgJsLottieUrl = this.#cgJsLottieUrl;
@@ -133,12 +136,8 @@ export class Preview {
     // here — the canvas overlay measures from the same offset.
     const ox = Math.round(frameOffset.x);
     const oy = Math.round(frameOffset.y);
-    const checkerImage =
-      `linear-gradient(45deg, #5b6075 25%, transparent 25%),` +
-      `linear-gradient(-45deg, #5b6075 25%, transparent 25%),` +
-      `linear-gradient(45deg, transparent 75%, #5b6075 75%),` +
-      `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`;
-    const checkerPos = `0 0, 0 24px, 24px -24px, -24px 0`;
+    const checkerImage = previewCheckerboard.backgroundImage;
+    const checkerPos = previewCheckerboard.backgroundPosition;
     // The authoring frame page reuses the SAME checker as the broadcast modal (darker
     // #5b6075 squares on a #3d4253 page) so the editing surface matches the preview
     // exactly — the prior near-white authoring checker read too bright (operator request).
@@ -172,16 +171,21 @@ export class Preview {
         width: var(--cg-frame-w, ${String(w)}px) !important;
         height: var(--cg-frame-h, ${String(h)}px) !important;
         overflow: visible !important;
-        background-color: #3d4253;
+        background-color: ${previewCheckerboard.backgroundColor};
         background-image: ${checkerImage};
         background-size: 48px 48px;
         background-position: ${checkerPos};
         box-shadow: 0 0 0 1px rgba(120,170,255,0.5), 0 10px 36px rgba(0,0,0,0.55);
       }`
-      : `/* D-011 — transparency checkerboard (broadcast modal). Authoring-only; the
+      : transparent
+        ? `/* The project-sized Composition Preview owns the checkerboard. */
+      /* Match the dark host: Chromium otherwise paints an opaque canvas across the iframe boundary. */
+      html { color-scheme: dark; }
+      html, body { background: transparent !important; }`
+        : `/* D-011 — transparency checkerboard (broadcast modal). Authoring-only; the
          exported .vcg uses the baseline cgCss (transparent) without it. */
       html, body {
-        background-color: #3d4253 !important;
+        background-color: ${previewCheckerboard.backgroundColor} !important;
         background-image: ${checkerImage} !important;
         background-size: 48px 48px !important;
         background-position: ${checkerPos} !important;

@@ -1,3 +1,4 @@
+import { resolveProjectOutputRaster } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { PreviewModal } from '../fields/PreviewModal.js';
 
@@ -11,6 +12,14 @@ import { PreviewModal } from '../fields/PreviewModal.js';
  */
 export function PreviewHost(): JSX.Element | null {
   const previewScene = useDesignerSelector((s) => s.previewScene);
+  // Export-scoped preview scenes intentionally omit this project-only metadata.
+  const outputRaster = useDesignerSelector((s) => resolveProjectOutputRaster(s.scene ?? {}));
   if (previewScene === null) return null;
-  return <PreviewModal scene={previewScene} onClose={() => designerStore.setPreviewScene(null)} />;
+  return (
+    <PreviewModal
+      scene={previewScene}
+      outputRaster={outputRaster}
+      onClose={() => designerStore.setPreviewScene(null)}
+    />
+  );
 }

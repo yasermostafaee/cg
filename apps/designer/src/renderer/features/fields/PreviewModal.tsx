@@ -9,10 +9,16 @@ import {
   withListLimits,
   defaultNestedValues,
   hasNextStep,
+  outputLetterbox,
+  outputScale,
+  outputTranslate,
+  resolveDefaultPosition,
+  resolveProjectOutputRaster,
   type AggregatedFields,
   type FieldValue,
   type NestedFieldValues,
   type Scene,
+  type Raster,
 } from '@cg/shared-schema';
 import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
 import { useAssets } from '../assets/useAssets.js';
@@ -142,7 +148,7 @@ function sequenceListFieldIds(scene: Scene): ReadonlySet<string> {
  * D-018 / D-020 — the preview as a large modal opened from the toolbar's "PREVIEW"
  * button. It owns a *dedicated* preview iframe (the same `platform/preview.ts`
  * harness used by the canvas and shared with the single-file HTML export),
- * rendered at the composition's native resolution and scaled to fill the stage.
+ * rendered at the composition's native resolution inside the fitted project output raster.
  *
  * The sidebar separates concerns: the data-key form scrolls in its own region,
  * while the playout transport (momentary Play / Pause / Stop / Next commands) and
@@ -152,9 +158,11 @@ function sequenceListFieldIds(scene: Scene): ReadonlySet<string> {
  */
 export function PreviewModal({
   scene,
+  outputRaster = resolveProjectOutputRaster(scene),
   onClose,
 }: {
   scene: Scene;
+  outputRaster?: Raster;
   onClose: () => void;
 }): JSX.Element {
   const assets = useAssets();
@@ -173,8 +181,8 @@ export function PreviewModal({
     previewDocument !== null &&
     previewDocument.scene === scene &&
     readyGeneration === previewDocument.generation;
-  // Measured stage size, so the composition scales to fit whatever the (large)
-  // modal gives us rather than a fixed thumbnail.
+  // Fit the project output raster to the available area; composition pixels keep
+  // their authored placement inside that independently sized frame.
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   // D-020 / D-026 — session-only playout overrides (mode / holdMs / repeat), now
   // PER-SCOPE: keyed by the composition-instance path (`''` = this composition,
@@ -343,7 +351,7 @@ export function PreviewModal({
     // D-087 — the modal mirrors broadcast: open loaded-but-unpainted (blank)
     // and paint only on Play. The editor canvas omits this flag (stays visible
     // for editing).
-    void window.cg.preview.load({ scene, broadcast: true }).then((res) => {
+    void window.cg.preview.load({ scene, broadcast: true, transparent: true }).then((res) => {
       if (alive) setPreviewDocument({ scene, html: res.html, generation });
     });
     return () => {
@@ -603,11 +611,16 @@ export function PreviewModal({
 
   const { width: resW, height: resH } = scene.resolution;
   const scale =
-    stageSize.w > 0 && stageSize.h > 0 ? Math.min(stageSize.w / resW, stageSize.h / resH) : 0;
+    stageSize.w > 0 && stageSize.h > 0
+      ? Math.min(stageSize.w / outputRaster.width, stageSize.h / outputRaster.height)
+      : 0;
+  const compositionScale = outputScale(outputRaster);
+  const pad = outputLetterbox(outputRaster);
+  const translation = outputTranslate(scene, resolveDefaultPosition(scene));
 
   return (
     <Modal
-      title={`Preview · ${String(resW)}×${String(resH)}`}
+      title={`Preview · ${String(outputRaster.width)}×${String(outputRaster.height)}`}
       onClose={onClose}
       width="min(1800px, 98vw)"
       minBodyHeight="84vh"
@@ -622,23 +635,36 @@ export function PreviewModal({
             currentFrame={displayedFrame}
             totalFrames={scene.frameRange.out}
           />
-          <div ref={stageRef} className={s.stage}>
-            {previewDocument !== null && previewDocument.scene === scene && (
-              <iframe
-                // Remount even when HTML is identical: a reused iframe keeps its WindowProxy,
-                // so an obsolete document's queued ready event could unlock its replacement.
-                key={previewDocument.generation}
-                ref={iframeRef}
-                title="cgpreview-modal"
-                srcDoc={previewDocument.html}
-                className={s.stageFrame}
-                style={{
-                  width: resW,
-                  height: resH,
-                  transform: `translate(-50%, -50%) scale(${String(scale)})`,
-                }}
-              />
-            )}
+          <div ref={stageRef} className={s.stage} data-preview-stage="">
+            <div
+              className={s.outputFrame}
+              data-preview-output-frame=""
+              style={{
+                width: outputRaster.width,
+                height: outputRaster.height,
+                transform: `translate(-50%, -50%) scale(${String(scale)})`,
+              }}
+            >
+              {previewDocument !== null && previewDocument.scene === scene && (
+                <iframe
+                  // Remount even when HTML is identical: a reused iframe keeps its WindowProxy,
+                  // so an obsolete document's queued ready event could unlock its replacement.
+                  key={previewDocument.generation}
+                  ref={iframeRef}
+                  title="cgpreview-modal"
+                  srcDoc={previewDocument.html}
+                  className={s.stageFrame}
+                  data-preview-composition-frame=""
+                  style={{
+                    width: resW,
+                    height: resH,
+                    left: pad.x + translation.x * compositionScale,
+                    top: pad.y + translation.y * compositionScale,
+                    transform: `scale(${String(compositionScale)})`,
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
         <div className={s.sidebar}>

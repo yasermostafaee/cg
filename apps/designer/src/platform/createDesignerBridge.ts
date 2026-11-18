@@ -778,7 +778,9 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
 
     preview: {
       load: (req) =>
-        Promise.resolve(preview.load(req.scene, req.broadcast, req.authoring, req.frameOffset)),
+        Promise.resolve(
+          preview.load(req.scene, req.broadcast, req.authoring, req.frameOffset, req.transparent),
+        ),
       update: (req) => Promise.resolve(preview.update(req.fields)),
       reload: () => Promise.resolve(preview.reload()),
     },

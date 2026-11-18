@@ -1,5 +1,6 @@
 import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
+import { previewCheckerboard } from '../../../shared/preview-checkerboard.js';
 
 // Fills a tall modal body: the preview stage on the left, the data form sidebar
 // on the right.
@@ -24,8 +25,7 @@ export const stageColumn = style({
   minHeight: 0,
 });
 
-// The preview area. Letterbox is dark; the composition's own transparency
-// checkerboard comes from inside the (scaled) iframe.
+// The available preview area. The project output frame is fitted inside this dark surround.
 export const stage = style({
   position: 'relative',
   flex: 1,
@@ -37,15 +37,24 @@ export const stage = style({
   background: colors.background,
 });
 
-// Native-resolution iframe, centred and scaled to fit the stage.
-export const stageFrame = style({
+// One project-sized transparency backdrop, independent of composition size/play state.
+export const outputFrame = style({
   position: 'absolute',
   top: '50%',
   left: '50%',
+  ...previewCheckerboard,
+  overflow: 'hidden',
+  boxShadow: `0 0 0 1px ${colors.border}`,
+  transformOrigin: 'center',
+});
+
+// Native composition pixels, placed using the same reference transform as output.
+export const stageFrame = style({
+  position: 'absolute',
   border: 0,
   display: 'block',
   background: 'transparent',
-  transformOrigin: 'center',
+  transformOrigin: 'top left',
 });
 
 // The sidebar is split so the (potentially long) data form scrolls on its own
