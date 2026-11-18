@@ -3,6 +3,7 @@ import {
   broadcastSafeAreas,
   broadcastGuideFrame,
   broadcastCustomGuideLines,
+  broadcastGuideColor,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
   type BroadcastGuideProfile,
 } from '@cg/ui';
@@ -22,6 +23,7 @@ export function SafeAreaGuides({
   profile?: BroadcastGuideProfile;
 }): JSX.Element {
   const reference = broadcastGuideFrame(width, height, profile.aspect);
+  const commonColor = broadcastGuideColor(profile);
   return (
     <svg
       aria-hidden
@@ -36,7 +38,7 @@ export function SafeAreaGuides({
           data-guide-reference={profile.aspect}
           {...reference}
           fill="none"
-          stroke="#aeb4c7"
+          stroke={commonColor}
           strokeWidth="1"
           strokeDasharray="2 4"
           vectorEffect="non-scaling-stroke"
@@ -57,7 +59,7 @@ export function SafeAreaGuides({
               data-safe-area={area.kind}
               {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
               fill="none"
-              stroke={area.kind === 'action' ? '#f5c879' : '#fff'}
+              stroke={commonColor}
               strokeWidth="1"
               strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
               vectorEffect="non-scaling-stroke"
@@ -68,7 +70,7 @@ export function SafeAreaGuides({
               textAnchor="middle"
               fontSize={10 / scale}
               fontFamily="sans-serif"
-              fill={area.kind === 'action' ? '#f5c879' : '#fff'}
+              fill={commonColor}
               stroke="#000"
               strokeWidth={3 / scale}
               paintOrder="stroke"
@@ -99,7 +101,7 @@ export function SafeAreaGuides({
             y1={line.y1}
             x2={line.x2}
             y2={line.y2}
-            stroke="#c4b5fd"
+            stroke={broadcastGuideColor(profile, line)}
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
           />
@@ -116,7 +118,7 @@ export function SafeAreaGuides({
               }
               fontSize={10 / scale}
               fontFamily="Vazirmatn, sans-serif"
-              fill="#e4dcff"
+              fill={broadcastGuideColor(profile, line)}
               stroke="#000"
               strokeWidth={3 / scale}
               paintOrder="stroke"

@@ -2,8 +2,12 @@
 
 - [x] Extend the shared v1 profile with validated white-default common colour and optional
       per-line inheritance/override, retaining old definitions without a new key/version.
-- [ ] Add Designer colour controls, white-default rendering and browser persistence proof.
-- [ ] Add Runtime/modal shared colour controls, rendering and browser persistence proof.
+- [x] Add Designer colour controls and white-default rendering; pass scoped lint, both
+      TypeScript realms, 13 dependency/build tasks and 3 fresh Edge cases including
+      old-profile preservation, common/individual/inherited colours, reloads and output isolation.
+- [x] Add Runtime/modal shared colour controls and rendering; pass 13 DOM/guard/census
+      cases, typecheck/lint/build and 3 fresh Edge cases covering white defaults,
+      per-line overrides/reset, shared PVW/modal colours, reloads and no output writes.
 
 - [x] Agree final Auto/16:9/4:3 choices and independent app-wide percentage profile.
 - [x] Add shared bounded model/parser, contained-reference geometry and safe storage adapter.

@@ -107,6 +107,10 @@ test('broadcast safe guides toggle without changing the document and stay on the
   const graphics = guides.locator('[data-safe-area="graphics"]');
   await expect(action).toHaveAttribute('width', '1786');
   await expect(graphics).toHaveAttribute('width', '1728');
+  await expect(action).toHaveAttribute('stroke', '#ffffff');
+  await expect(graphics).toHaveAttribute('stroke', '#ffffff');
+  await expect(action).toHaveAttribute('stroke-dasharray', '6 4');
+  await expect(graphics).not.toHaveAttribute('stroke-dasharray');
   const frame = page.frameLocator('iframe[title="cgpreview"]');
   await expect(frame.locator('[data-safe-area-guides]')).toHaveCount(0);
   const compare = async (): Promise<void> => {
@@ -136,6 +140,93 @@ test('broadcast safe guides toggle without changing the document and stay on the
   await toggle.click();
   await expect(guides).toHaveCount(0);
   // A view aid must never mark a new project as edited.
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: /^Undo/ })).toBeDisabled();
+});
+
+test('guide colors inherit white for old profiles and retain common and individual edits across projects', async ({
+  app,
+}, testInfo) => {
+  const page = app.page;
+  // An existing v1 preference has no colour fields. Opening it must retain its guides.
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'cg.designer.safe-guides.v1',
+      JSON.stringify({
+        version: 1,
+        aspect: '4:3',
+        standardVisible: true,
+        lines: [{ id: 'old-guide', name: 'عنوان', axis: 'y', position: 75, visible: true }],
+      }),
+    );
+  });
+  await app.goto();
+  await app.newProject('Guide colors first project');
+  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
+  const guides = page.locator('[data-safe-area-guides]');
+  await page.getByRole('button', { name: 'Safe areas', exact: true }).click();
+  const reference = guides.locator('[data-guide-reference="4:3"]');
+  const custom = guides.locator('[data-custom-guide="old-guide"]');
+  const action = guides.locator('[data-safe-area="action"]');
+  const graphics = guides.locator('[data-safe-area="graphics"]');
+  for (const outline of [reference, custom, action, graphics])
+    await expect(outline).toHaveAttribute('stroke', '#ffffff');
+  await expect(custom).toHaveAttribute('y1', '810');
+  await expect(guides.getByText('عنوان', { exact: true })).toHaveAttribute('fill', '#ffffff');
+  await configure.click();
+  const commonColor = settings.getByRole('textbox', { name: 'Guide color hex', exact: true });
+  const lineColor = settings.getByRole('textbox', { name: 'Guide 1 color hex', exact: true });
+  const inherit = settings.getByRole('button', {
+    name: 'Use guide color for guide 1',
+    exact: true,
+  });
+  await expect(commonColor).toHaveValue('#ffffff');
+  await expect(inherit).toBeDisabled();
+  await commonColor.fill('#1256AB');
+  await commonColor.press('Enter');
+  for (const outline of [reference, custom, action, graphics])
+    await expect(outline).toHaveAttribute('stroke', '#1256ab');
+  await lineColor.fill('#ed5511');
+  await lineColor.press('Enter');
+  await expect(custom).toHaveAttribute('stroke', '#ed5511');
+  await expect(guides.getByText('عنوان', { exact: true })).toHaveAttribute('fill', '#ed5511');
+  await commonColor.fill('#42aa77');
+  await commonColor.press('Enter');
+  await expect(custom).toHaveAttribute('stroke', '#ed5511');
+  await expect(action).toHaveAttribute('stroke', '#42aa77');
+  await inherit.click();
+  await expect(custom).toHaveAttribute('stroke', '#42aa77');
+  await expect(inherit).toBeDisabled();
+  await lineColor.fill('#ffzz00');
+  await lineColor.blur();
+  await expect(lineColor).toHaveValue('#42aa77');
+  await expect(custom).toHaveAttribute('stroke', '#42aa77');
+  await lineColor.fill('#ed5511');
+  await lineColor.press('Enter');
+  await page.screenshot({ path: testInfo.outputPath('designer-guide-colors.png') });
+  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await expect(
+    page.frameLocator('iframe[title="cgpreview"]').locator('[data-safe-area-guides]'),
+  ).toHaveCount(0);
+  await app.goto();
+  await app.newProject('Guide colors second project');
+  await expect(page.getByRole('button', { name: 'Safe areas', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await configure.click();
+  await expect(commonColor).toHaveValue('#42aa77');
+  await expect(lineColor).toHaveValue('#ed5511');
+  await expect(settings.getByRole('textbox', { name: 'Guide 1 name', exact: true })).toHaveValue(
+    'عنوان',
+  );
+  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Safe areas', exact: true }).click();
+  await expect(reference).toHaveAttribute('stroke', '#42aa77');
+  await expect(action).toHaveAttribute('stroke', '#42aa77');
+  await expect(custom).toHaveAttribute('stroke', '#ed5511');
+  await expect(custom).toHaveAttribute('y1', '810');
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: /^Undo/ })).toBeDisabled();
 });

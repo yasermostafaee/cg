@@ -21,7 +21,7 @@ export const checkbox = style({ width: 14, height: 14, margin: 0, accentColor: c
 export const list = style({ display: 'grid', gap: 6, maxHeight: 250, overflowY: 'auto' });
 export const row = style({
   display: 'grid',
-  gridTemplateColumns: '16px 18px minmax(70px,1fr) 76px 22px',
+  gridTemplateColumns: '16px 18px minmax(70px,1fr) 64px 94px 22px 22px',
   alignItems: 'center',
   gap: 5,
 });
@@ -51,3 +51,8 @@ export const position = style({
   gap: 3,
 });
 export const hint = style({ margin: 0, fontSize: 11, color: colors.textMuted, lineHeight: 1.4 });
+export const colorControl = style({ display: 'inline-flex', alignItems: 'center', gap: 4 });
+export const colorHex = style([
+  input,
+  { width: 68, height: 24, padding: '2px 3px', fontSize: 11, fontVariantNumeric: 'tabular-nums' },
+]);
