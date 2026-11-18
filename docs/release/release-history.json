@@ -40,8 +40,8 @@
           "en": "Compatible Playout servers stream file or proxy video inside the media picker. Play, Pause, Stop, seek and optional listening operate in the same card. Audio starts muted and the preview identifies its serving server."
         },
         {
-          "fa": "پیش‌نمایش ورودی و مدیا می‌تواند از نسخهٔ معتبر روی سرور A یا B خوانده شود. رنگ نشان‌های A و B همچنان وضعیت دسترسی را نشان می‌دهد و کادر نشانِ سروری که تصویرش واقعاً نمایش داده شده پررنگ‌تر می‌شود.",
-          "en": "Source previews can use an independently verified copy on A or B. Badge colors retain their availability meaning; the existing badge border identifies the server whose picture has actually decoded."
+          "fa": "پیش‌نمایش ورودی و مدیا می‌تواند از نسخهٔ معتبر روی سرور A یا B خوانده شود. رنگ نشان‌های A و B همچنان وضعیت دسترسی را نشان می‌دهد و فقط نشانِ سروری که تصویرش واقعاً نمایش داده شده کادر دارد؛ با نبود تصویر هیچ نشانی کادر نمی‌گیرد.",
+          "en": "Source previews can use an independently verified copy on A or B. Badge colors retain their availability meaning. Only the server whose picture has actually decoded is outlined; without a picture, neither badge is outlined."
         },
         {
           "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید همراه Fade را جداگانه انتخاب کنید. چیدمان زندهٔ ذخیره‌شده را هم می‌توان از Templates به‌صورت VCG صادر و دوباره وارد کرد.",
