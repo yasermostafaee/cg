@@ -505,6 +505,11 @@ export function resolveProjectOutputRaster(scene: {
   return REFERENCE_FRAME;
 }
 
+/** Authored broadcast reference; absence preserves legacy R-030 placement exactly. */
+export function resolveOutputReference(scene: { outputReference?: Raster | undefined }): Raster {
+  return scene.outputReference ?? REFERENCE_FRAME;
+}
+
 /** Remove authoring-only output guides from a compiled template, preserving its own raster. */
 export function withoutEditorOutputRaster(scene: Scene): Scene {
   const { outputRaster: _editorOnly, ...compiled } = scene;
@@ -599,6 +604,8 @@ const SceneObjectSchema = z
     resolution: ResolutionSchema,
     /** Editor-only output reference, independent of each composition's raster. */
     outputRaster: ResolutionSchema.optional(),
+    /** Broadcast coordinate reference carried by newly compiled project output. Absent = legacy Full HD. */
+    outputReference: ResolutionSchema.optional(),
     frameRate: FrameRateSchema,
     safeAreas: z.object({
       title: z.number().min(0).max(50),

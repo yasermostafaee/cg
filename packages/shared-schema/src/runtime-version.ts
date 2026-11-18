@@ -1,5 +1,5 @@
 import type { Element } from './elements.js';
-import type { Scene } from './scene.js';
+import { REFERENCE_FRAME, type Scene } from './scene.js';
 
 /**
  * 🔴 **`B-196` — THE RUNTIME CONTRACT VERSION, and the ONE comparison anybody makes with it.**
@@ -55,15 +55,23 @@ import type { Scene } from './scene.js';
  * 1.2.6 applies the vertical offset of text inside its box.
  * 1.2.7 applies per-instance frame art and masked input variants.
  * 1.2.11 applies input fit and crop overrides for shared plates in each preset.
+ * 1.2.12 applies an authored output reference independently of composition dimensions.
  */
-export const CG_RUNTIME_VERSION = '1.2.11';
+export const CG_RUNTIME_VERSION = '1.2.12';
+export const OUTPUT_REFERENCE_RUNTIME_VERSION = '1.2.12';
 export const LIVE_PRESET_FIT_RUNTIME_VERSION = '1.2.11';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
-  scene: Pick<Scene, 'layers' | 'compositions' | 'lookGroups'>,
+  scene: Pick<Scene, 'layers' | 'compositions' | 'lookGroups' | 'outputReference'>,
   requiresLivePlatePaintOrder = false,
 ): string {
+  if (
+    scene.outputReference !== undefined &&
+    (scene.outputReference.width !== REFERENCE_FRAME.width ||
+      scene.outputReference.height !== REFERENCE_FRAME.height)
+  )
+    return OUTPUT_REFERENCE_RUNTIME_VERSION;
   if (
     scene.lookGroups?.some(({ looks }) =>
       looks.some(

@@ -6,6 +6,7 @@ import {
   livePlateMaskRegions,
   liveRevealSceneRect,
   liveSourceFit,
+  scenePointOnRaster,
   type LiveSourceFitInput,
 } from '../src/live-geometry.js';
 
@@ -58,6 +59,54 @@ const px = (
   y: r.y * raster.height,
   width: r.width * raster.width,
   height: r.height * raster.height,
+});
+
+describe('native authored output reference', () => {
+  it('fills an HD channel with same-size authored HD artwork without the legacy 2/3 shrink', () => {
+    const raster = { width: 1280, height: 720 };
+    const input = base({ raster, sceneResolution: raster, rect: { x: 0, y: 0, ...raster } });
+    expectRect(liveSourceFit({ ...input, outputReference: raster }).fill, {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+    expectRect(liveSourceFit({ ...input, outputReference: raster }).clip, {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+    expect(liveSourceFit(input).fill.width).toBeCloseTo(2 / 3, 6);
+  });
+  it('places cropped graphics in authored-reference pixels and agrees at scene corners', () => {
+    const outputReference = { width: 1280, height: 720 };
+    const input = base({
+      outputReference,
+      raster: outputReference,
+      sceneResolution: { width: 1280, height: 190 },
+      rect: { x: 0, y: 0, width: 1280, height: 190 },
+      position: { anchor: 'bottom-center', offset: { x: 0, y: -20 } },
+    });
+    expectRect(px(liveSourceFit(input).clip, outputReference), {
+      x: 0,
+      y: 510,
+      width: 1280,
+      height: 190,
+    });
+    expect(scenePointOnRaster({ x: 1280, y: 190 }, input)).toEqual({ x: 1280, y: 700 });
+  });
+  it('retains explicit and absent legacy reference geometry byte-for-byte', () => {
+    for (const raster of [
+      { width: 1280, height: 720 },
+      { width: 1440, height: 1080 },
+    ]) {
+      const input = base({ raster });
+      expect(liveSourceFit({ ...input, outputReference: { width: 1920, height: 1080 } })).toEqual(
+        liveSourceFit(input),
+      );
+    }
+  });
 });
 
 describe('authored operator frame motion', () => {

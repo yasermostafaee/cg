@@ -152,6 +152,8 @@ export const TemplateLookSchema = z.object({
 export type TemplateLook = z.infer<typeof TemplateLookSchema>;
 
 export const TemplateLiveSourcesSchema = z.object({
+  /** Authored broadcast coordinate reference; absent preserves legacy 1920×1080. */
+  outputReference: ResolutionSchema.optional(),
   /** The scene's own pixel raster — the space `sources[].rect` is expressed in. */
   resolution: ResolutionSchema,
   /** The RESOLVED authored default position (see above). Never absent. */

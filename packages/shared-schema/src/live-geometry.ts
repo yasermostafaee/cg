@@ -2,6 +2,7 @@ import {
   outputLetterbox,
   outputScale,
   outputTranslate,
+  resolveOutputReference,
   type Position,
   type Raster,
 } from './scene.js';
@@ -83,6 +84,8 @@ export interface LiveSourceFitInput {
   readonly rect: LiveSourceRect;
   /** The scene's own pixel raster — the space `rect` is expressed in. */
   readonly sceneResolution: { readonly width: number; readonly height: number };
+  /** Authored reference, independent of the composition and actual channel rasters. */
+  readonly outputReference?: Raster | undefined;
   /** The CHANNEL's real output geometry. */
   readonly raster: Raster;
   /**
@@ -218,9 +221,10 @@ function holeInRaster(input: LiveSourceFitInput): {
   width: number;
   height: number;
 } {
-  const s = outputScale(input.raster);
-  const pad = outputLetterbox(input.raster);
-  const t = outputTranslate({ resolution: input.sceneResolution }, input.position);
+  const reference = resolveOutputReference(input);
+  const s = outputScale(input.raster, reference);
+  const pad = outputLetterbox(input.raster, reference);
+  const t = outputTranslate({ resolution: input.sceneResolution }, input.position, reference);
   return {
     x: pad.x + s * (t.x + input.rect.x),
     y: pad.y + s * (t.y + input.rect.y),
@@ -313,9 +317,10 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   // 🔴 `fitted.visible`, NOT the hole. Under `cover` they are the same rect and this is
   // byte-identical to what shipped; under `contain` the clip shrinks to the picture,
   // which is what stops the margin being a transparent hole onto the channel.
-  const s = outputScale(raster);
-  const pad = outputLetterbox(raster);
-  const t = outputTranslate({ resolution: input.sceneResolution }, input.position);
+  const reference = resolveOutputReference(input);
+  const s = outputScale(raster, reference);
+  const pad = outputLetterbox(raster, reference);
+  const t = outputTranslate({ resolution: input.sceneResolution }, input.position, reference);
   const continuousStage = {
     x: pad.x + s * t.x,
     y: pad.y + s * t.y,
@@ -397,10 +402,11 @@ function normalize(
  */
 export function scenePointOnRaster(
   point: { x: number; y: number },
-  input: Pick<LiveSourceFitInput, 'sceneResolution' | 'raster' | 'position'>,
+  input: Pick<LiveSourceFitInput, 'sceneResolution' | 'raster' | 'position' | 'outputReference'>,
 ): { x: number; y: number } {
-  const s = outputScale(input.raster);
-  const pad = outputLetterbox(input.raster);
-  const t = outputTranslate({ resolution: input.sceneResolution }, input.position);
+  const reference = resolveOutputReference(input);
+  const s = outputScale(input.raster, reference);
+  const pad = outputLetterbox(input.raster, reference);
+  const t = outputTranslate({ resolution: input.sceneResolution }, input.position, reference);
   return { x: pad.x + s * (t.x + point.x), y: pad.y + s * (t.y + point.y) };
 }

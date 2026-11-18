@@ -106,6 +106,29 @@ describe('runtimeShortfallMessage', () => {
   });
 });
 
+describe('authored output reference runtime floor', () => {
+  it('rejects older runtimes only when the native reference differs from legacy Full HD', () => {
+    expect(CG_RUNTIME_VERSION).toBe('1.2.12');
+    const required = requiredRuntimeVersionForScene({
+      layers: [],
+      outputReference: { width: 1280, height: 720 },
+    });
+    expect(required).toBe('1.2.12');
+    expect(runtimeShortfall(required, '1.2.11')).toEqual({
+      required: '1.2.12',
+      available: '1.2.11',
+    });
+    expect(runtimeShortfall(required, CG_RUNTIME_VERSION)).toBeNull();
+    expect(requiredRuntimeVersionForScene({ layers: [] })).toBe('1.1.0');
+    expect(
+      requiredRuntimeVersionForScene({
+        layers: [],
+        outputReference: { width: 1920, height: 1080 },
+      }),
+    ).toBe('1.1.0');
+  });
+});
+
 describe('CG_RUNTIME_VERSION', () => {
   const versionFor = (element: Element) =>
     requiredRuntimeVersionForScene({

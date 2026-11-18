@@ -45,6 +45,24 @@ describe('TemplateInfoSchema — the Live Source carrier', () => {
     ).toEqual([]);
   });
 
+  it('retains an optional authored reference even when there are no native live sources', () => {
+    const parsed = TemplateInfoSchema.parse({
+      ...base,
+      liveSources: { ...carrier, outputReference: { width: 1280, height: 720 } },
+    });
+    expect(parsed.liveSources?.outputReference).toEqual({ width: 1280, height: 720 });
+    expect(parsed.liveSources?.sources).toEqual([]);
+    expect(
+      TemplateInfoSchema.parse({ ...base, liveSources: carrier }).liveSources,
+    ).not.toHaveProperty('outputReference');
+    expect(
+      TemplateInfoSchema.safeParse({
+        ...base,
+        liveSources: { ...carrier, outputReference: { width: 0, height: 720 } },
+      }).success,
+    ).toBe(false);
+  });
+
   it('REFUSES a carrier with no defaultPosition — the on-air term is not optional', () => {
     const { defaultPosition: _dropped, ...withoutPosition } = carrier;
     expect(TemplateInfoSchema.safeParse({ ...base, liveSources: withoutPosition }).success).toBe(

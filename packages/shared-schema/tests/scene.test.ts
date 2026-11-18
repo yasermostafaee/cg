@@ -6,6 +6,7 @@ import {
   playoutOf,
   SceneSchema,
   resolveProjectOutputRaster,
+  resolveOutputReference,
   resolveDefaultPosition,
   withoutEditorOutputRaster,
 } from '../src/scene.js';
@@ -78,6 +79,24 @@ describe('Scene', () => {
       }),
     ).toEqual({ width: 3840, height: 2160 });
     expect(resolveProjectOutputRaster({})).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it('keeps the authored broadcast reference optional and independent of editor/channel/comp dimensions', () => {
+    const old = SceneSchema.parse({
+      ...minimalScene,
+      resolution: { width: 1280, height: 720 },
+      outputRaster: { width: 1280, height: 720 },
+    });
+    expect(resolveOutputReference(old)).toEqual({ width: 1920, height: 1080 });
+    const native = SceneSchema.parse({ ...old, outputReference: { width: 1280, height: 720 } });
+    expect(resolveOutputReference(native)).toEqual({ width: 1280, height: 720 });
+    expect(withoutEditorOutputRaster(native).outputReference).toEqual({ width: 1280, height: 720 });
+    expect(SceneSchema.parse(JSON.parse(JSON.stringify(native))).outputReference).toEqual(
+      native.outputReference,
+    );
+    expect(() =>
+      SceneSchema.parse({ ...old, outputReference: { width: 0, height: 720 } }),
+    ).toThrow();
   });
 
   it('persists an independent output raster and composition placement without changing nested geometry', () => {
