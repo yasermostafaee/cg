@@ -6898,6 +6898,7 @@ export function buildRoutes(
     liveFramePlacement: true as const,
     liveFramePlacementReset: true as const,
     livePlatePaintOrder: true as const,
+    authoredOutputReference: true as const,
     controlLiveLayouts: true as const,
     liveCropReset: true as const,
     previewResizeMode: true as const,

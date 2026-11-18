@@ -917,6 +917,28 @@ it('🔴 a declared, assigned plate REACHES AIR — the PLAY, the mute and the f
   expect(lines[play]).toContain('route://2');
 });
 
+it('seats a full-frame HD plate using the authored reference on both programme engines', async () => {
+  const outputReference = { width: 1280, height: 720 };
+  const hdTemplate = template([{ id: 'guest-1', rect: { x: 0, y: 0, ...outputReference } }]);
+  const r = await boot({
+    template: {
+      ...hdTemplate,
+      liveSources: {
+        ...hdTemplate.liveSources!,
+        resolution: outputReference,
+        outputReference,
+      },
+    },
+    mirrorChannel: 2,
+  });
+  expect((await loadAndTake(r)).accepted).toBe(true);
+  const slot = { channel: 1, layer: BAND.start };
+  const full = { x: 0, y: 0, width: 1, height: 1 };
+  expect(mock!.layerRenderedRect(slot)).toEqual(full);
+  expect(backup!.layerRenderedRect({ ...slot, channel: 2 })).toEqual(full);
+  expect(await recvLines()).toContain('MIXER 1-30 CLIP 0 0 1 1 DEFER');
+});
+
 it('the plates are seated BEFORE the graphic they belong to plays', async () => {
   // A template landing with its holes still empty is the outcome 6.7's refusal
   // exists to prevent; reaching it by an ordering choice is no better than

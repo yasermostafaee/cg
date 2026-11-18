@@ -54,8 +54,10 @@ import {
   outputTranslate,
   positionQuery,
   resolveDefaultPosition,
+  resolveOutputReference,
   sameLiveMaskRect,
   type LiveSourceFit,
+  type Raster,
 } from '@cg/shared-schema';
 import type {
   AuditEntry,
@@ -10143,6 +10145,7 @@ export class CasparRuntime {
     rect: { x: number; y: number; width: number; height: number };
     sceneResolution: { width: number; height: number };
     carriedDefaultPosition?: Position | undefined;
+    outputReference?: Raster | undefined;
     positionOverride?: Position | undefined;
     sourceAspect: number | null;
     /**
@@ -10158,6 +10161,7 @@ export class CasparRuntime {
     return liveSourceFit({
       rect: input.rect,
       sceneResolution: input.sceneResolution,
+      outputReference: input.outputReference,
       raster: this.#channelSettings.rasterFor(input.channel),
       position:
         input.positionOverride ??
@@ -10758,6 +10762,7 @@ export class CasparRuntime {
         itemId,
         rect,
         sceneResolution: carrier.resolution,
+        outputReference: carrier.outputReference,
         carriedDefaultPosition: carrier.defaultPosition,
         positionOverride: positionProposal?.position,
         sourceAspect: aspect.aspect,
@@ -10979,6 +10984,7 @@ export class CasparRuntime {
           itemId,
           rect: liveRevealSceneRect(upperRect, rect),
           sceneResolution: carrier.resolution,
+          outputReference: carrier.outputReference,
           carriedDefaultPosition: carrier.defaultPosition,
           positionOverride: positionProposal?.position,
           sourceAspect: null,
@@ -11018,6 +11024,7 @@ export class CasparRuntime {
           itemId,
           rect: liveRevealSceneRect(rect, region),
           sceneResolution: carrier.resolution,
+          outputReference: carrier.outputReference,
           carriedDefaultPosition: carrier.defaultPosition,
           positionOverride: positionProposal?.position,
           sourceAspect: null,
@@ -12658,6 +12665,7 @@ export class CasparRuntime {
       itemId,
       rect,
       sceneResolution: carrier.resolution,
+      outputReference: carrier.outputReference,
       carriedDefaultPosition: carrier.defaultPosition,
       sourceAspect,
       fitMode: lookPlateFits(carrier, frame.lookId)[frame.plateId],
@@ -12743,6 +12751,7 @@ export class CasparRuntime {
         itemId,
         rect,
         sceneResolution: carrier.resolution,
+        outputReference: carrier.outputReference,
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: null,
       };
@@ -13528,6 +13537,7 @@ export class CasparRuntime {
             ? this.#planPresetArtworkSlide(departure, fromLook, fromRects, {
                 channel,
                 resolution,
+                outputReference: carrier.outputReference,
                 direction: transition.exitDirection,
                 frameLimit: 128 - frames.length,
                 retained: visible.filter(({ sourceId }) => !departure.plateIds.includes(sourceId)),
@@ -13538,6 +13548,7 @@ export class CasparRuntime {
             ? this.#planPresetArtworkSlide(arrival, toLook, toRects, {
                 channel,
                 resolution,
+                outputReference: carrier.outputReference,
                 direction: transition.enterDirection,
                 frameLimit: 128,
                 retained: plan.placements
@@ -13660,6 +13671,7 @@ export class CasparRuntime {
               : {
                   destinationLookId: toLook.id,
                   resolution: layout.resolution,
+                  outputReference: metadata?.liveSources?.outputReference,
                   position: this.#effectivePosition(itemId, metadata?.liveSources?.defaultPosition),
                 },
           )
@@ -13719,6 +13731,7 @@ export class CasparRuntime {
     artwork?: {
       destinationLookId: string;
       resolution: { width: number; height: number };
+      outputReference?: Raster | undefined;
       position: Position;
     },
   ): Pick<FocusSwapEffect, 'initial' | 'steps' | 'slide'> | undefined {
@@ -13739,9 +13752,10 @@ export class CasparRuntime {
     const plan = planInputSlide(incoming.fit, outgoing, viewport, direction, push, frames, !push);
     let slide: FocusSwapEffect['slide'];
     if (artwork !== undefined) {
-      const scale = outputScale(raster);
-      const pad = outputLetterbox(raster);
-      const origin = outputTranslate(artwork, artwork.position);
+      const reference = resolveOutputReference(artwork);
+      const scale = outputScale(raster, reference);
+      const pad = outputLetterbox(raster, reference);
+      const origin = outputTranslate(artwork, artwork.position, reference);
       const axis = direction.x === 0 ? 'y' : 'x';
       slide = {
         destinationLookId: artwork.destinationLookId,
@@ -13890,6 +13904,7 @@ export class CasparRuntime {
     options: {
       channel: number;
       resolution: TemplateLiveSources['resolution'];
+      outputReference?: Raster | undefined;
       direction: NonNullable<FrameTransition['exitDirection']>;
       frameLimit: number;
       retained: readonly Pick<LiveLayerRecord, 'slot' | 'clip'>[];
@@ -13899,7 +13914,7 @@ export class CasparRuntime {
   ): Pick<PresetArtworkEffect, 'slideFits' | 'slideFrames'> | undefined {
     const { channel, resolution, direction, frameLimit, retained, arrivalRoutes } = options;
     const raster = this.#channelSettings.rasterFor(channel);
-    const scale = outputScale(raster);
+    const scale = outputScale(raster, options.outputReference);
     const offset = presetDepartureRect({ x: 0, y: 0, width: 1, height: 1 }, direction, resolution);
     const dx = (offset.x * scale) / raster.width;
     const dy = (offset.y * scale) / raster.height;
