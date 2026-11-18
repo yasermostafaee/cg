@@ -25,6 +25,103 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 test.use({ playoutSources: E2E_PLAYOUT });
 
+test('closed media bindings show a compact decoded poster and its actual server badge', async ({
+  app,
+}, testInfo) => {
+  const page = app.page;
+  const defaults = await openDefaults(app);
+  await page.evaluate(
+    (dataUrl) => {
+      const capabilities = window.cg.auth.capabilities();
+      if (capabilities === null) throw new Error('Expected station capabilities');
+      window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+      window.cg.link.status = () => 'live';
+      window.cg.sources.presence = async ({ sourceIds }) => ({
+        engines: ['A', 'B'],
+        sources: Object.fromEntries(sourceIds.map((id) => [id, { A: 'present', B: 'present' }])),
+      });
+      const state = { reads: [] as string[], streams: 0, receivers: 0 };
+      Object.assign(window, { compactMediaProof: state });
+      window.cg.sources.mediaThumbnail = async ({ id }) => {
+        state.reads.push(id);
+        return { ok: true, dataUrl, engine: 'B' };
+      };
+      window.cg.sourcePreviews.mediaOpen = async () => {
+        state.streams++;
+        return { state: 'unsupported' };
+      };
+      const start = window.cg.livePreview.start;
+      window.cg.livePreview.start = (request) => {
+        state.receivers++;
+        return start(request);
+      };
+    },
+    `data:image/jpeg;base64,${FRAME_A.toString('base64')}`,
+  );
+  const field = defaults.locator('[data-defaults-select="l-1"]');
+  await app.chooseSource(field, { media: 'Clip 001', search: 'Clip 001' });
+  const checkField = async (binding: Locator): Promise<void> => {
+    const picture = binding.locator('[data-media-thumbnail] img');
+    await expect(picture).toBeVisible();
+    await expect
+      .poll(() => picture.evaluate((image) => (image as HTMLImageElement).naturalWidth))
+      .toBe(64);
+    await expect(binding.locator('[data-source-preview-provider]')).toHaveCount(1);
+    await expect(binding.locator('[data-source-presence-server="B"]')).toHaveAttribute(
+      'data-source-preview-provider',
+      '',
+    );
+    await expect(binding.locator('[data-source-presence-server="A"]')).not.toHaveAttribute(
+      'data-source-preview-provider',
+      '',
+    );
+    await expect(binding.locator('[data-source-presence-server="A"]')).toHaveCSS(
+      'border-top-color',
+      'rgba(0, 0, 0, 0)',
+    );
+    expect(
+      await binding
+        .locator('[data-source-presence-server="B"]')
+        .evaluate((badge) => getComputedStyle(badge).borderTopColor),
+    ).toBe(
+      await binding
+        .locator('[data-source-presence-server="B"]')
+        .evaluate((badge) => getComputedStyle(badge).color),
+    );
+    const bounds = await picture.boundingBox();
+    expect(bounds?.width).toBeLessThanOrEqual(40);
+    expect(bounds?.height).toBeLessThanOrEqual(24);
+    await expect(binding.locator('video, [data-source-audio-meter]')).toHaveCount(0);
+  };
+  await checkField(field);
+  await defaults.locator('[data-defaults-save]').click();
+  const inherited = app.inspector.locator('[data-look-binding="two:l-1"]');
+  await expect(inherited).toContainText('Default');
+  await checkField(inherited);
+  await page.screenshot({ path: testInfo.outputPath('collapsed-media-provider.png') });
+  const readProof = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            compactMediaProof: { reads: string[]; streams: number; receivers: number };
+          }
+        ).compactMediaProof,
+    );
+  const before = (await readProof()).reads.filter((id) => id === 'md-m-clip-001').length;
+  for (let i = 0; i < 2; i++) {
+    await inherited.click();
+    await expect(picker(page).locator('[data-picker-tab="media"]')).toBeVisible();
+    await expect(picker(page).locator('[data-picker-choice=""] img')).toBeVisible();
+    await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+    await checkField(inherited);
+  }
+  const proof = await readProof();
+  expect(proof.reads.filter((id) => id === 'md-m-clip-001')).toHaveLength(before);
+  expect(proof.streams).toBe(0);
+  expect(proof.receivers).toBe(0);
+});
+
 test('a received B picture emphasizes its existing B badge while A remains unavailable', async ({
   app,
 }) => {

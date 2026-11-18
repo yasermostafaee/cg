@@ -7,6 +7,7 @@ import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
 import { inputAudioSource } from './InputAudioMeter.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import { MediaThumbnail, type MediaThumbnailLoader } from './MediaThumbnail.js';
 import { SourcePresenceBadges } from './SourcePresenceBadges.js';
 import { usePreviewOrigins } from './usePreviewOrigins.js';
 import {
@@ -86,6 +87,7 @@ export function SourceLabel({
   fallback = 'None',
   meta = true,
   meterChannel,
+  mediaThumbnail,
   presence = null,
   presenceAccessible = true,
 }: {
@@ -96,6 +98,7 @@ export function SourceLabel({
   /** A media item's length after its name. */
   meta?: boolean | undefined;
   meterChannel?: number | undefined;
+  mediaThumbnail?: MediaThumbnailLoader | undefined;
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
 }): JSX.Element {
@@ -141,6 +144,14 @@ export function SourceLabel({
           meterChannel={meterChannel}
           compact
           onPreviewEngineChange={(engine) => publish(input.id, engine)}
+        />
+      )}
+      {media && sourceId && mediaThumbnail !== undefined && (
+        <MediaThumbnail
+          id={sourceId}
+          load={mediaThumbnail}
+          compact
+          onPreviewEngineChange={(engine) => publish(sourceId, engine)}
         />
       )}
       <SourcePresenceBadges

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MEDIA_THUMBNAIL_DATA_URL_PREFIX } from '@cg/shared-ipc';
+import { ImageOff } from 'lucide-react';
+import { Icon } from '../../ui/Icon.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
 import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 
@@ -11,7 +13,7 @@ export type MediaThumbnailLoader = ((id: string) => Promise<string | null>) & {
   origin?: (id: string) => PreviewEngine | undefined;
 };
 
-/** Reuse poster reads for visible media cards while this picker is open. */
+/** Reuse bounded poster reads for one source field and its visible modal cards. */
 export function createMediaThumbnailLoader(channel?: number): MediaThumbnailLoader {
   const cache = new Map<string, Promise<string | null>>();
   const origins = new Map<string, PreviewEngine>();
@@ -33,6 +35,8 @@ export function createMediaThumbnailLoader(channel?: number): MediaThumbnailLoad
       )
       .then(
         (result) => {
+          // An evicted pending read must not label a newer poster for this same id.
+          if (cache.get(id) !== request) return null;
           if (result.ok && result.dataUrl?.startsWith(MEDIA_THUMBNAIL_DATA_URL_PREFIX) === true) {
             if (result.engine === undefined) origins.delete(id);
             else origins.set(id, result.engine);
@@ -57,22 +61,39 @@ export function createMediaThumbnailLoader(channel?: number): MediaThumbnailLoad
 export function MediaThumbnail({
   id,
   load,
+  compact = false,
   onPreviewEngineChange,
 }: {
   id: string | undefined;
   load: MediaThumbnailLoader;
+  compact?: boolean;
   onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
   const foreground = useModalForeground();
   const tile = useRef<HTMLSpanElement>(null);
-  const [picture, setPicture] = useState<{ id: string; src: string | null }>();
-  const poster = picture?.id === id ? (picture?.src ?? null) : null;
-  const [decoded, setDecoded] = useState<{ id: string; engine?: PreviewEngine }>();
+  const [picture, setPicture] = useState<{
+    id: string;
+    src: string | null;
+    load: MediaThumbnailLoader;
+  }>();
+  const poster =
+    picture !== undefined && picture.id === id && picture.load === load
+      ? (picture.src ?? null)
+      : null;
+  const [decoded, setDecoded] = useState<{
+    id: string;
+    load: MediaThumbnailLoader;
+    engine?: PreviewEngine;
+  }>();
 
   useEffect(() => {
     if (poster === null) setDecoded(undefined);
-    onPreviewEngineChange?.(poster !== null && decoded?.id === id ? decoded?.engine : undefined);
-  }, [poster, decoded, id, onPreviewEngineChange]);
+    onPreviewEngineChange?.(
+      poster !== null && decoded !== undefined && decoded.id === id && decoded.load === load
+        ? decoded.engine
+        : undefined,
+    );
+  }, [poster, decoded, id, load, onPreviewEngineChange]);
 
   useEffect(() => {
     const element = tile.current;
@@ -83,7 +104,7 @@ export function MediaThumbnail({
     let retry: ReturnType<typeof setTimeout> | undefined;
     const accept = (src: string | null): void => {
       if (!current) return;
-      setPicture({ id, src });
+      setPicture({ id, src, load });
       if (src !== null) observer?.disconnect();
       else if (visible && attempts < MAX_POSTER_ATTEMPTS)
         retry = setTimeout(read, attempts * POSTER_RETRY_DELAY_MS);
@@ -118,10 +139,15 @@ export function MediaThumbnail({
       ref={tile}
       className="cg-input-thumbnail cg-media-thumbnail"
       data-media-thumbnail=""
+      data-input-thumbnail-compact={compact ? '' : undefined}
       aria-hidden="true"
     >
       {poster === null ? (
-        'No poster'
+        compact ? (
+          <Icon icon={ImageOff} size={12} />
+        ) : (
+          'No poster'
+        )
       ) : (
         <img
           src={poster}
@@ -129,7 +155,7 @@ export function MediaThumbnail({
           onLoad={() => {
             if (id !== undefined) {
               const engine = load.origin?.(id);
-              setDecoded({ id, ...(engine === undefined ? {} : { engine }) });
+              setDecoded({ id, load, ...(engine === undefined ? {} : { engine }) });
             }
           }}
           onError={() => setPicture(undefined)}

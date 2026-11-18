@@ -127,11 +127,13 @@ export function choiceText(choice: SourceChoice): string {
 export function ChoiceLabel({
   choice,
   meterChannel,
+  mediaThumbnail,
   presence = null,
   presenceAccessible = true,
 }: {
   choice: SourceChoice;
   meterChannel?: number | undefined;
+  mediaThumbnail?: MediaThumbnailLoader | undefined;
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
 }): JSX.Element {
@@ -140,6 +142,7 @@ export function ChoiceLabel({
   if (choice.names === null) {
     return <span className="cg-choice-label">{`${choice.label} (none set)`}</span>;
   }
+  const sourceId = choice.names;
   const source = labelledSource(choice.names);
   const name = source?.name ?? NOT_LISTED;
   const offered = source !== null && !source.unavailable;
@@ -160,6 +163,14 @@ export function ChoiceLabel({
           meterChannel={meterChannel}
           compact
           onPreviewEngineChange={(engine) => publish(input.id, engine)}
+        />
+      )}
+      {source?.origin === 'media' && mediaThumbnail !== undefined && (
+        <MediaThumbnail
+          id={choice.names}
+          load={mediaThumbnail}
+          compact
+          onPreviewEngineChange={(engine) => publish(sourceId, engine)}
         />
       )}
       <SourcePresenceBadges
@@ -252,6 +263,15 @@ export function SourcePicker({
   const thumbnailChannel = previewChannel ?? channel;
   const showingChoice = choice !== undefined && (value === '' || !known);
   const selectedSource = showingChoice ? choice.names : value;
+  const posterIdentity = JSON.stringify(
+    currentSourceCatalog().sources.find((source) => source.id === selectedSource),
+  );
+  // The closed binding and its modal share cached poster reads. Rebinding or changing
+  // channel/source identity starts a new scope; a previous scope cannot publish its origin.
+  const loadThumbnail = useMemo(
+    () => createMediaThumbnailLoader(thumbnailChannel),
+    [thumbnailChannel, selectedSource, posterIdentity],
+  );
   const selectedPresence = useSourcePresence(
     thumbnailChannel,
     selectedSource ? [selectedSource] : [],
@@ -283,6 +303,7 @@ export function SourcePicker({
             <ChoiceLabel
               choice={choice}
               meterChannel={thumbnailChannel}
+              mediaThumbnail={loadThumbnail}
               presence={selectedPresence}
               presenceAccessible={false}
             />
@@ -291,6 +312,7 @@ export function SourcePicker({
           <SourceLabel
             sourceId={value}
             meterChannel={thumbnailChannel}
+            mediaThumbnail={loadThumbnail}
             presence={selectedPresence}
             presenceAccessible={false}
             fallback={choices[0] !== undefined ? choiceText(choices[0]) : 'None'}
@@ -328,6 +350,7 @@ export function SourcePicker({
             choices={choices}
             channel={channel}
             previewChannel={thumbnailChannel}
+            loadThumbnail={loadThumbnail}
             onPick={setDraft}
             initialTab={isMediaId(selectedSource ?? '') ? 'media' : 'inputs'}
           />
@@ -345,6 +368,7 @@ function PickerPanel({
   previewChannel,
   onPick,
   initialTab,
+  loadThumbnail,
 }: {
   base: string;
   value: string;
@@ -353,13 +377,13 @@ function PickerPanel({
   previewChannel: number | undefined;
   onPick: (value: string) => void;
   initialTab: Tab;
+  loadThumbnail: MediaThumbnailLoader;
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [inputView, setInputView] = useState<InputView>('grid');
   const [mediaView, setMediaView] = useState<InputView>('grid');
   const tabChanged = useRef(false);
   const media = useMediaSearch();
-  const loadThumbnail = useMemo(() => createMediaThumbnailLoader(previewChannel), [previewChannel]);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
   const choice = choices.find((entry) => entry.value === value);
@@ -405,7 +429,12 @@ function PickerPanel({
               onClick={() => chooseInput(c.value, c.names ?? '')}
             >
               {value === c.value && <Icon icon={Check} size={13} />}
-              <ChoiceLabel choice={c} meterChannel={previewChannel} presence={choicePresence} />
+              <ChoiceLabel
+                choice={c}
+                meterChannel={previewChannel}
+                mediaThumbnail={loadThumbnail}
+                presence={choicePresence}
+              />
             </Button>
           ))}
         </div>
