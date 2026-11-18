@@ -8,7 +8,7 @@ ratio choice or reusable custom lines.
 
 ## What changes
 
-- Add Auto, 16:9 and landscape 4:3 reference frames contained inside the active picture.
+- Add Auto, 16:9, landscape 4:3 and a custom aspect reference frame contained inside the active picture.
 - Add a compact guide-settings popover beside each app's existing Safe areas toggle.
 - Reuse CG Control's profile on the normal New live layout preview, with an independent
   view-only visibility switch for that surface.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
+import { resolveProjectOutputRaster } from '@cg/shared-schema';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { SharedLibraryPanel } from './features/sharedLibrary/SharedLibraryPanel.js';
@@ -634,7 +635,12 @@ export function App(): JSX.Element {
           </div>
         </>
       )}
-      <StatusBar scene={editScene ?? scene} issues={issues} />
+      <StatusBar
+        scene={editScene ?? scene}
+        compositionResolution={editScene?.resolution ?? null}
+        projectOutput={scene === null ? null : resolveProjectOutputRaster(scene)}
+        issues={issues}
+      />
       {/* D-151 — the add-time duration guard's dialog: mounted ONCE here because several add
           doors (assets panel, canvas drops, compositions panel) raise it; it renders only
           while a guarded add is pending. */}

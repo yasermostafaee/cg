@@ -11,9 +11,13 @@ import {
 } from '@cg/shared-schema';
 import {
   BROADCAST_GUIDE_ASPECTS,
+  DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
+  MAX_BROADCAST_GUIDE_ASPECT_PART,
   MAX_BROADCAST_GUIDE_LINES,
   broadcastGuideColor,
   normalizeBroadcastGuideColor,
+  normalizeBroadcastGuideCustomAspect,
+  type BroadcastGuideCustomAspect,
   type BroadcastGuideLine,
   type BroadcastGuideProfile,
 } from '@cg/ui';
@@ -49,6 +53,11 @@ export function SafeGuideSettings({
   const update = (next: BroadcastGuideProfile): void => {
     designerGuideStore.set(next);
     onEdit();
+  };
+  const customAspect = profile.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT;
+  const changeCustomAspect = (axis: keyof BroadcastGuideCustomAspect, value: number): void => {
+    const ratio = normalizeBroadcastGuideCustomAspect({ ...customAspect, [axis]: value });
+    if (ratio !== null) update({ ...profile, customAspect: ratio });
   };
   const changeLine = (id: string, patch: Partial<BroadcastGuideLine>): void =>
     update({
@@ -119,12 +128,44 @@ export function SafeGuideSettings({
                   role="radio"
                   aria-checked={profile.aspect === aspect}
                   selected={profile.aspect === aspect}
-                  onClick={() => update({ ...profile, aspect })}
+                  onClick={() =>
+                    update({ ...profile, aspect, ...(aspect === 'custom' && { customAspect }) })
+                  }
                 >
-                  {aspect === 'auto' ? 'Auto' : aspect}
+                  {aspect === 'auto' ? 'Auto' : aspect === 'custom' ? 'Custom' : aspect}
                 </Button>
               ))}
             </div>
+            {profile.aspect === 'custom' && (
+              <div className={s.outputGrid} role="group" aria-label="Custom guide ratio">
+                <label className={s.outputField}>
+                  <span>Ratio width</span>
+                  <RealtimeNumberInput
+                    className={s.input}
+                    ariaLabel="Custom guide ratio width"
+                    value={customAspect.width}
+                    min={1}
+                    max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+                    step={1}
+                    scrub={false}
+                    onCommit={(value) => changeCustomAspect('width', value)}
+                  />
+                </label>
+                <label className={s.outputField}>
+                  <span>Ratio height</span>
+                  <RealtimeNumberInput
+                    className={s.input}
+                    ariaLabel="Custom guide ratio height"
+                    value={customAspect.height}
+                    min={1}
+                    max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+                    step={1}
+                    scrub={false}
+                    onCommit={(value) => changeCustomAspect('height', value)}
+                  />
+                </label>
+              </div>
+            )}
             <label className={s.check}>
               <input
                 className={s.checkbox}

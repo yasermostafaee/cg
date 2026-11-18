@@ -2,7 +2,7 @@
 
 ### Requirement: Preview guides SHALL support reusable app-local reference profiles
 
-Designer canvas and CG Control PVW SHALL offer Auto, 16:9 and landscape 4:3
+Designer canvas and CG Control PVW SHALL offer Auto, 16:9, landscape 4:3 and Custom
 reference frames, contained and centred inside the active picture. Each app SHALL
 let users add, hide, rename, reposition and remove horizontal/vertical guides by
 percentage of the chosen reference. The ratio, broadcast-box choice and custom set
@@ -15,6 +15,19 @@ The common guide colour SHALL default to white and SHALL apply to reference,
 broadcast and inherited custom lines. Users SHALL be able to override a custom
 line's colour and restore inheritance. Saved v1 records without colour SHALL use
 white without discarding existing guide definitions or changing storage keys.
+
+Users SHALL be able to enter the width and height of a custom aspect ratio. The
+reference SHALL remain centered inside the project output or active picture.
+The custom ratio SHALL persist in the same app-local profile and remain available
+after temporarily selecting another reference. Standard boxes and percentage
+guides SHALL use the selected reference.
+
+#### Scenario: A custom portrait guide is reused on a different output
+
+- **GIVEN** the user selects Custom and enters 3:4 as the aspect ratio
+- **WHEN** the reference is shown on a 1280×720 output
+- **THEN** it is centered and measures 540×720
+- **AND** a different output applies the same ratio to its own dimensions
 
 #### Scenario: Common and custom colours remain independent
 

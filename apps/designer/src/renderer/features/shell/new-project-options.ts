@@ -17,11 +17,11 @@ export interface ProjectResolutionPreset {
 export const PROJECT_RESOLUTION_PRESETS: readonly ProjectResolutionPreset[] = [
   {
     key: 'fhd',
-    label: '1920 × 1080 — Full HD reference (16:9)',
+    label: '1920 × 1080 — Full HD (16:9)',
     width: 1920,
     height: 1080,
   },
-  { key: 'hd', label: '1280 × 720 — Small canvas (16:9)', width: 1280, height: 720 },
+  { key: 'hd', label: '1280 × 720 — HD (16:9)', width: 1280, height: 720 },
   { key: 'square-fhd', label: '1080 × 1080 — Square canvas', width: 1080, height: 1080 },
   { key: 'custom', label: 'Custom', width: 0, height: 0 },
 ];

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { ZoomIn, ZoomOut } from 'lucide-react';
-import type { Scene } from '@cg/shared-schema';
+import type { Raster, Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './StatusBar.css.js';
@@ -14,13 +14,20 @@ import { TIMELINE_ZOOM_MIN, timelineZoomMax } from '../../state/timeline-zoom.js
 
 interface Props {
   scene: Scene | null;
+  projectOutput: Raster | null;
+  compositionResolution: Raster | null;
   issues: readonly ExportIssue[];
 }
 
 /** Bottom-of-window status bar — project chrome + issues badge + a
  *  slider that horizontally zooms the timeline. Save / Export live in
  *  the TopToolbar on the right. */
-export function StatusBar({ scene, issues }: Props): JSX.Element {
+export function StatusBar({
+  scene,
+  projectOutput,
+  compositionResolution,
+  issues,
+}: Props): JSX.Element {
   const timelineZoom = useDesignerSelector((s) => s.timelineZoom);
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   /*
@@ -52,9 +59,19 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
 
   return (
     <footer className={s.bar} aria-label="Status bar">
-      {scene === null ? (
+      {projectOutput === null ? (
         <Tag className={s.pill}>no project</Tag>
       ) : (
+        <Tag className={s.pill} title="Project output resolution">
+          Project {projectOutput.width}×{projectOutput.height}
+        </Tag>
+      )}
+      {compositionResolution !== null && (
+        <Tag className={s.pill} title="Composition resolution">
+          Comp {compositionResolution.width}×{compositionResolution.height}
+        </Tag>
+      )}
+      {scene !== null && (
         <>
           <Tag className={s.pill} title="Frame rate">
             {scene.frameRate} fps
@@ -64,9 +81,6 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           </Tag>
         </>
       )}
-      <Tag className={s.pill} title="Resolution">
-        {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
-      </Tag>
       {issues.length > 0 && (
         <Button
           variant="bare"

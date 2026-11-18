@@ -49,8 +49,8 @@ test.describe('composition control polish', () => {
     const frames = dialog.getByRole('spinbutton', { name: 'Total frames' });
 
     await expect(resolution.locator('option')).toHaveText([
-      '1920 × 1080 — Full HD reference (16:9)',
-      '1280 × 720 — Small canvas (16:9)',
+      '1920 × 1080 — Full HD (16:9)',
+      '1280 × 720 — HD (16:9)',
       '1080 × 1080 — Square canvas',
       'Custom',
     ]);
@@ -70,7 +70,7 @@ test.describe('composition control polish', () => {
     await dialog.getByRole('button', { name: 'Create' }).click();
 
     await app.expectStudio();
-    await expect(app.page.getByTitle('Resolution')).toHaveText('1280×720');
+    await expect(app.page.getByTitle('Composition resolution')).toHaveText('Comp 1280×720');
     await expect(app.page.getByTitle('Frame rate')).toHaveText('30 fps');
     await expect(app.page.getByTitle('Duration')).toHaveText('300f · 10.0s');
   });

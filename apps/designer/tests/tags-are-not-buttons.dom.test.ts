@@ -19,7 +19,7 @@ import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
  * Because it is the one Designer surface that carries BOTH halves of the rule at once, which
  * makes it the only place the MATCH can be tested rather than just the ban:
  *
- *   - four readouts (`no project` / fps / duration / resolution) that do NOTHING when pressed
+ *   - readouts (`no project` / fps / duration / project output / composition resolution) that do NOTHING when pressed
  *     and must therefore not be buttons, not be focusable, and carry no hover treatment; and
  *   - the ISSUES pill, which DOES something (it opens the issues panel) and must therefore stay
  *     a real `<button>` — chip-shaped and correctly so.
@@ -62,7 +62,14 @@ function render(issues: readonly ExportIssue[], scene: Scene | null = SCENE): HT
   const r = createRoot(container);
   root = r;
   act(() => {
-    r.render(createElement(StatusBar, { scene, issues }));
+    r.render(
+      createElement(StatusBar, {
+        scene,
+        projectOutput: scene?.resolution ?? null,
+        compositionResolution: scene?.resolution ?? null,
+        issues,
+      }),
+    );
   });
   return container;
 }
@@ -70,14 +77,14 @@ function render(issues: readonly ExportIssue[], scene: Scene | null = SCENE): HT
 describe('the Designer status bar', () => {
   /*
     BOTH BRANCHES, because the bar renders a different set of readouts in each and a sweep of
-    one leaves the other unguarded: with a scene it shows fps + duration + resolution (3), and
-    with none it shows the `no project` pill + resolution (2). The counts are measured, not
+    one leaves the other unguarded: with a scene it shows fps, duration and both resolutions (4), and
+    with none it shows the `no project` pill (1). The counts are measured, not
     rounded — each is the positive control for its own branch, so a bar that silently stopped
     rendering goes red here instead of passing a sweep of nothing.
   */
   it.each([
-    ['with a scene', SCENE, 3],
-    ['with no project', null, 2],
+    ['with a scene', SCENE, 4],
+    ['with no project', null, 1],
   ] as const)('renders its readouts %s as tags that cannot be pressed', (_label, scene, count) => {
     const host = render([], scene);
     const tags = [...host.querySelectorAll(`[${TAG_MARKER}]`)];

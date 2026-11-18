@@ -32,7 +32,7 @@ test('D-208 — project defaults initialize new projects and persist separately 
   await creation.getByRole('combobox', { name: 'Frame rate' }).selectOption('30');
   await creation.getByRole('button', { name: 'Create' }).click();
   await app.expectStudio();
-  await expect(page.getByTitle('Resolution')).toHaveText('1024×576');
+  await expect(page.getByTitle('Composition resolution')).toHaveText('Comp 1024×576');
   await expect(page.getByTitle('Frame rate')).toHaveText('30 fps');
 
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
