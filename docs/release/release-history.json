@@ -11,17 +11,21 @@
       "date": "2026-11-18",
       "status": "prepared",
       "summary": {
-        "fa": "راهنماهای محدودهٔ امن در Designer و PVW و نام‌گذاری یکسان Crawl، با حفظ سازگاری قالب‌های قبلی.",
-        "en": "Safe-area guides in Designer and PVW, and consistent Crawl naming with existing-template compatibility."
+        "fa": "نام‌گذاری یکسان Crawl و راهنماهای امن قابل تنظیم در Designer، PVW و پیش‌نمایش New live layout.",
+        "en": "Consistent Crawl naming and configurable safe guides in Designer, PVW and the New live layout preview."
       },
       "features": [
         {
-          "fa": "در بوم Designer و PVW در CG Control، گزینهٔ Safe areas راهنمای اکشن ۹۳٪ و گرافیک ۹۰٪ را بر پایهٔ EBU R95 نمایش می‌دهد. این خطوط فقط راهنمای محیط کاری‌اند و در خروجی پخش یا Export وارد نمی‌شوند.",
-          "en": "Toggle Safe areas in the Designer canvas and CG Control PVW to show EBU R95 guides: 93% Action and 90% Graphics. The guides are display-only and excluded from programme output and exports."
-        },
-        {
           "fa": "ابزار متن رونده در رابط، راهنما و آیتم‌های آغازین با نام Crawl نمایش داده می‌شود. قالب‌ها و فایل‌های قبلی همچنان سازگارند.",
           "en": "The scrolling-text tool is consistently named Crawl in the interface, help and starter items. Existing templates and files remain compatible."
+        },
+        {
+          "fa": "در بوم Designer، PVW و پیش‌نمایش New live layout نسبت مرجع راهنما را روی Auto، 16:9 یا 4:3 بگذارید. راهنمای اکشن ۹۳٪ و گرافیک ۹۰٪ در 16:9 بر پایهٔ EBU R95 است. این خطوط در محیط پیش‌نمایش نمایش داده می‌شوند.",
+          "en": "Choose Auto, 16:9 or 4:3 as the guide reference in Designer, PVW and the New live layout preview. For 16:9, the 93% Action and 90% Graphics guides follow EBU R95. The lines appear in the preview interface."
+        },
+        {
+          "fa": "خطوط افقی و عمودی سفارشی با موقعیت درصدی بین پروژه‌ها و بعد از بستن برنامه ذخیره می‌شوند. PVW و New live layout تنظیمات مشترک دارند و Designer تنظیمات خودش را دارد.",
+          "en": "Custom horizontal and vertical guides use percent positions and persist across projects and restarts. PVW and New live layout share settings. Designer has its own guide settings."
         }
       ],
       "fixes": []
