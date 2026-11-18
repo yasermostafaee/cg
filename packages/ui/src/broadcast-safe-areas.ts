@@ -46,11 +46,13 @@ export function broadcastSafeAreas(
   });
 }
 import {
+  broadcastGuideFrameSettings,
   normalizeBroadcastGuideCustomAspect,
   type BroadcastGuideAspect,
   type BroadcastGuideCustomAspect,
   type BroadcastGuideLine,
   type BroadcastGuideProfile,
+  type BroadcastGuidePercent,
 } from './broadcast-guide-preferences.js';
 
 export interface BroadcastGuideFrame {
@@ -85,6 +87,46 @@ export function broadcastGuideFrame(
     width: frameWidth,
     height: frameHeight,
   };
+}
+
+export interface BroadcastGuideRectangle extends BroadcastGuideFrame {
+  aspect: BroadcastGuideAspect;
+  percent: BroadcastGuidePercent;
+  stroke: string;
+}
+
+export function broadcastGuideRectangles(
+  width: number,
+  height: number,
+  profile: BroadcastGuideProfile,
+): readonly BroadcastGuideRectangle[] {
+  return broadcastGuideFrameSettings(profile).flatMap(({ aspect, visible, color, borders }) => {
+    if (!visible) return [];
+    const frame = broadcastGuideFrame(width, height, aspect, profile.customAspect);
+    if (frame === null || (aspect === 'custom' && profile.customAspect === undefined)) return [];
+    return borders.flatMap((border) => {
+      if (!border.visible) return [];
+      const frameWidth = Math.min(
+        frame.width,
+        Math.max(1, Math.round((frame.width * border.percent) / 100)),
+      );
+      const frameHeight = Math.min(
+        frame.height,
+        Math.max(1, Math.round((frame.height * border.percent) / 100)),
+      );
+      return [
+        {
+          aspect,
+          percent: border.percent,
+          stroke: border.color ?? color,
+          width: border.percent === 100 ? frame.width : frameWidth,
+          height: border.percent === 100 ? frame.height : frameHeight,
+          x: frame.x + (border.percent === 100 ? 0 : (frame.width - frameWidth) / 2),
+          y: frame.y + (border.percent === 100 ? 0 : (frame.height - frameHeight) / 2),
+        },
+      ];
+    });
+  });
 }
 
 export interface BroadcastCustomGuideLine extends BroadcastGuideLine {

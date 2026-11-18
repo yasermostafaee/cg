@@ -8,15 +8,20 @@ export { TAG_MARKER, tagProps, tag, type TagRole } from './tag.js';
 export { clearImageThumbnailCache, imageThumbnailUrl } from './image-thumbnail.js';
 export {
   broadcastSafeAreas,
+  broadcastGuideRectangles,
   broadcastGuideFrame,
   broadcastCustomGuideLines,
   BROADCAST_SAFE_AREA_TITLE,
   type BroadcastSafeArea,
+  type BroadcastGuideRectangle,
   type BroadcastGuideFrame,
   type BroadcastCustomGuideLine,
 } from './broadcast-safe-areas.js';
 export {
   BROADCAST_GUIDE_ASPECTS,
+  broadcastGuideFrameSettings,
+  type BroadcastGuideFrameSetting,
+  type BroadcastGuideBorder,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
   DEFAULT_BROADCAST_GUIDE_COLOR,
   DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
