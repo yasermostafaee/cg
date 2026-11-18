@@ -12,6 +12,12 @@
       43 adapter tests; Bridge and adapter lint; Bridge typecheck; dependency build 8/8).
 - [ ] Real 21.32/21.43 Playlist and preset acceptance after integrated Bridge deployment.
 
+## Integration follow-up
+
+- [x] Await every declared-bank startup volume write before route-test wire baselines. A
+      delayed-startup regression fails with the previous fixed delay and passes with the
+      bounded readiness check; refused source swaps still require an entirely empty wire.
+
 The two-axis sweep covers primary-only route wording and route/backup components. Existing
 generic holder-route and failover refusal tests remain valid; this delta adds only an
 independently resolved reserve Playlist exception. Historical archived contracts are not

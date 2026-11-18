@@ -12,6 +12,7 @@ import {
 } from '@cg/shared-schema';
 import {
   inputSourceId,
+  fixedBankSlots,
   isolateText,
   type ConnectionConfig,
   type FixedLayerBank,
@@ -257,6 +258,7 @@ async function boot(
     readonly provider?: LocalPlayoutSources;
     readonly backup?: boolean;
     readonly backupChannels?: BackupChannelMap;
+    readonly startupVolumeDelayMs?: number;
   } = { assignments: bind('single', { l1: INPUT_3 }) },
 ): Promise<Rig> {
   const clock = fakeRouteClock();
@@ -274,6 +276,15 @@ async function boot(
 
   const oscPort = await freeUdpPort();
   const { mock, trace } = await newMock(clock, oscPort);
+  if ((options.startupVolumeDelayMs ?? 0) > 0) {
+    const mixer = defaultHandlers().get('MIXER');
+    if (mixer === undefined) throw new Error('Missing normal MIXER handler');
+    mock.setHandler('MIXER', async (request, context, connection) => {
+      if (/^MIXER 2-\d+ VOLUME 1$/.test(request.raw))
+        await delay(options.startupVolumeDelayMs ?? 0);
+      return mixer(request, context, connection);
+    });
+  }
   let backup: { mock: MockHandle; trace: string } | null = null;
   let backupOsc = 0;
   if (options.backup === true) {
@@ -324,6 +335,19 @@ async function boot(
   await r.whenServerHealthy(HEALTH_MS);
   await awaitChannelModeRead(r);
   await delay(250);
+  // Startup reasserts these volumes asynchronously at normal queue priority. A healthy
+  // connection and a fixed delay do not prove it has finished before a wire baseline.
+  const startupVolumes = fixedBankSlots(BANK).map(
+    ({ channel, layer }) => `MIXER ${String(channel)}-${String(layer)} VOLUME 1`,
+  );
+  await waitFor(
+    () => {
+      const received = new Set(mock.receivedCommands().map(({ line }) => line));
+      return startupVolumes.every((line) => received.has(line));
+    },
+    'the declared-bank startup volume reassertion',
+    HEALTH_MS,
+  );
   if (seam === null) throw new Error('the seam was not handed over');
   const backupHandle = backup;
   return {
@@ -1219,10 +1243,19 @@ describe('PLAYOUT-FEATURES-01 B (B-298) — `ownOutputOf`: refused on its own ch
   });
 
   it('🔴 a SWAP to the own output of CH 2, on CH 2, is refused and nothing is sent — control: a swap to the unmarked input lands', async () => {
-    const { r, mark, sentSince } = await boot({
+    const { r, mock, mark, sentSince } = await boot({
       assignments: bind('single', { l1: OWN_1 }),
       provider: new LocalPlayoutSources({ inputs: WITH_OWN }),
+      startupVolumeDelayMs: 25,
     });
+    // Slow startup must already be complete before the strict no-command baseline is taken.
+    expect(mock.receivedCommands().map(({ line }) => line)).toEqual(
+      expect.arrayContaining(
+        fixedBankSlots(BANK).map(
+          ({ channel, layer }) => `MIXER ${String(channel)}-${String(layer)} VOLUME 1`,
+        ),
+      ),
+    );
     await take(r, 'single');
     const from = await mark();
     const refused = await r.swapLiveSource(ROW, 'l1', OWN_2);
