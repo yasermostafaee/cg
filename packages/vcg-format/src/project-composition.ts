@@ -1,6 +1,8 @@
 import {
   compositionClosure,
   discardMissingSceneElementBindings,
+  REFERENCE_FRAME,
+  resolveProjectOutputRaster,
   withoutEditorOutputRaster,
   type Scene,
 } from '@cg/shared-schema';
@@ -22,8 +24,15 @@ export function projectCompositionForExport(
   if (composition === undefined) return null;
 
   const closure = compositionClosure(scene, compositionId);
+  const reference = resolveProjectOutputRaster(scene);
+  const { outputReference: _priorReference, ...compiledRoot } = withoutEditorOutputRaster(scene);
+  const nativeReference =
+    reference.width === REFERENCE_FRAME.width && reference.height === REFERENCE_FRAME.height
+      ? {}
+      : { outputReference: { ...reference } };
   const projected: Scene = {
-    ...withoutEditorOutputRaster(scene),
+    ...compiledRoot,
+    ...nativeReference,
     name: composition.name,
     resolution: composition.resolution,
     defaultPosition: composition.defaultPosition ?? scene.defaultPosition,

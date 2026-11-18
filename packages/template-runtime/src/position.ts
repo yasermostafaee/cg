@@ -6,6 +6,7 @@ import {
   PositionAnchorSchema,
   REFERENCE_FRAME,
   resolveDefaultPosition,
+  resolveOutputReference,
   type Position,
   type Raster,
   type Scene,
@@ -224,10 +225,11 @@ export function applyOutputPosition(scene: Scene, options: ApplyOutputPositionOp
         ? null
         : (window as RasterView);
   const raster = resolveChannelRaster(options.search ?? '', view);
-  const scale = outputScale(raster);
-  const pad = outputLetterbox(raster);
+  const reference = resolveOutputReference(scene);
+  const scale = outputScale(raster, reference);
+  const pad = outputLetterbox(raster, reference);
   const position = options.position ?? resolveOutputPosition(scene, options.search ?? '');
-  const { x, y } = outputTranslate(scene, position);
+  const { x, y } = outputTranslate(scene, position, reference);
   const anchor = `translate(${css(x)}px, ${css(y)}px)`;
   if (scale === 1 && pad.x === 0 && pad.y === 0) {
     stage.style.transform = anchor;

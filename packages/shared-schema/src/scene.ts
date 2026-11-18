@@ -493,14 +493,17 @@ export const REFERENCE_FRAME: Raster = { width: 1920, height: 1080 };
 
 /**
  * Resolve from the ORIGINAL project root, never a projected composition. Old HD
- * projects used the exact 1280×720 preset. Other legacy roots may be cropped graphics
+ * projects used the exact 1280×720 preset. Reopened native exports retain their carried
+ * reference when no editor raster exists. Other legacy roots may be cropped graphics
  * (including the old Small canvas preset), so their established output stays Full HD.
  */
 export function resolveProjectOutputRaster(scene: {
   outputRaster?: Raster | undefined;
+  outputReference?: Raster | undefined;
   resolution?: Raster | undefined;
 }): Raster {
   if (scene.outputRaster !== undefined) return scene.outputRaster;
+  if (scene.outputReference !== undefined) return scene.outputReference;
   if (scene.resolution?.width === 1280 && scene.resolution.height === 720) return scene.resolution;
   return REFERENCE_FRAME;
 }

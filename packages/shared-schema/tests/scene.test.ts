@@ -78,6 +78,19 @@ describe('Scene', () => {
         outputRaster: { width: 3840, height: 2160 },
       }),
     ).toEqual({ width: 3840, height: 2160 });
+    expect(
+      resolveProjectOutputRaster({
+        resolution: { width: 100, height: 100 },
+        outputReference: { width: 1280, height: 720 },
+      }),
+    ).toEqual({ width: 1280, height: 720 });
+    expect(
+      resolveProjectOutputRaster({
+        resolution: { width: 100, height: 100 },
+        outputReference: { width: 1280, height: 720 },
+        outputRaster: { width: 1920, height: 1080 },
+      }),
+    ).toEqual({ width: 1920, height: 1080 });
     expect(resolveProjectOutputRaster({})).toEqual({ width: 1920, height: 1080 });
   });
 

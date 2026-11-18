@@ -112,6 +112,30 @@ function pageMapsScenePoint(
   };
 }
 
+describe('native authored reference CSS/native contract', () => {
+  for (const outputReference of [
+    { width: 1280, height: 720 },
+    { width: 1024, height: 1024 },
+  ]) {
+    for (const { raster, name } of RASTERS) {
+      for (const { position, name: positionName } of POSITIONS) {
+        it(`${outputReference.width} reference · ${name} · ${positionName}`, () => {
+          const resolution = { width: 600, height: 190 };
+          const scene: Scene = { ...lowerThirdScene, resolution, outputReference };
+          const input = { sceneResolution: resolution, outputReference, raster, position };
+          const fit = liveSourceFit({ ...input, rect: HOLE, sourceAspect: null });
+          const fromPage = pageMapsScenePoint(scene, raster, position, { x: HOLE.x, y: HOLE.y });
+          const fromNative = scenePointOnRaster({ x: HOLE.x, y: HOLE.y }, input);
+          expect(Math.abs(fit.fill.x * raster.width - fromPage.x)).toBeLessThan(PIXEL_TOLERANCE);
+          expect(Math.abs(fit.fill.y * raster.height - fromPage.y)).toBeLessThan(PIXEL_TOLERANCE);
+          expect(Math.abs(fromNative.x - fromPage.x)).toBeLessThan(PIXEL_TOLERANCE);
+          expect(Math.abs(fromNative.y - fromPage.y)).toBeLessThan(PIXEL_TOLERANCE);
+        });
+      }
+    }
+  }
+});
+
 describe('C-015 6.2b — the bridge’s FILL and the page’s transform place the same point', () => {
   for (const { name: rasterName, raster } of RASTERS) {
     for (const { name: posName, position } of POSITIONS) {

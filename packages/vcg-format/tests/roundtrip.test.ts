@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Composition, Element, Scene } from '@cg/shared-schema';
+import {
+  requiredRuntimeVersionForScene,
+  type Composition,
+  type Element,
+  type Scene,
+} from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
 import { unpack } from '../src/unpack.js';
 import { verify } from '../src/verify.js';
@@ -89,6 +94,31 @@ describe('pack → unpack round-trip', () => {
     expect(result.manifest.resolution).toEqual(authored.resolution);
     expect(result.scene.defaultPosition).toEqual(authored.defaultPosition);
     expect(authored.outputRaster).toEqual({ width: 3840, height: 2160 });
+  });
+
+  it('preserves the authored output reference and matching runtime floor in a compiled package', async () => {
+    const scene: Scene = {
+      ...fixtureScene,
+      resolution: { width: 1280, height: 190 },
+      outputReference: { width: 1280, height: 720 },
+    };
+    const bytes = await pack({
+      scene,
+      manifestExtras: {
+        ...fixtureManifestExtras,
+        compatibility: {
+          ...fixtureManifestExtras.compatibility,
+          minRuntimeVersion: requiredRuntimeVersionForScene(scene),
+        },
+      },
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    const decoded = await unpack(bytes);
+    expect(decoded.scene.outputReference).toEqual(scene.outputReference);
+    expect(decoded.manifest.compatibility.minRuntimeVersion).toBe('1.2.12');
+    expect(decoded.manifest.resolution).toEqual({ width: 1280, height: 190 });
   });
 
   it('preserves per-preset Auto layout permissions and removes the global grant from a scoped VCG', async () => {

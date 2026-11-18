@@ -7,7 +7,12 @@ import {
   type Layer,
   type Scene,
 } from '@cg/shared-schema';
-import { compositionPackageId, projectCompositionForExport } from '../src/index.js';
+import {
+  compositionPackageId,
+  projectCompositionForExport,
+  packProject,
+  readProjectDocument,
+} from '../src/index.js';
 
 const transform = {
   position: { x: 0, y: 0 },
@@ -106,10 +111,58 @@ describe('projectCompositionForExport', () => {
     expect(projected?.layers).toBe(root.layers);
     expect(projected?.compositions?.[0]?.layers).toBe(source.compositions?.[1]?.layers);
     expect(projected).not.toHaveProperty('outputRaster');
+    expect(projected?.outputReference).toEqual(source.outputRaster);
     expect(projectCompositionForExport(source, 'nested')?.defaultPosition).toEqual(
       source.defaultPosition,
     );
     expect(source.outputRaster).toEqual({ width: 3840, height: 2160 });
+  });
+
+  it('derives native output reference from the original project and keeps legacy default reference absent', () => {
+    const source = project();
+    expect(projectCompositionForExport(source, 'root')).not.toHaveProperty('outputReference');
+    source.resolution = { width: 1280, height: 720 };
+    const hd = projectCompositionForExport(source, 'root');
+    expect(hd?.outputReference).toEqual({ width: 1280, height: 720 });
+    expect(hd?.resolution).toEqual({ width: 1280, height: 720 });
+    if (hd === null) throw new Error('Missing projected HD composition');
+    expect(requiredRuntimeVersionForScene(hd)).toBe('1.2.12');
+    source.outputRaster = { width: 1024, height: 1024 };
+    expect(projectCompositionForExport(source, 'nested')?.outputReference).toEqual({
+      width: 1024,
+      height: 1024,
+    });
+    source.outputRaster = { width: 1920, height: 1080 };
+    source.outputReference = { width: 1280, height: 720 };
+    expect(projectCompositionForExport(source, 'root')).not.toHaveProperty('outputReference');
+  });
+
+  it('retains a cropped native export reference through a saved imported project snapshot and re-export', async () => {
+    const source = project();
+    source.outputRaster = { width: 1280, height: 720 };
+    const root = source.compositions?.find(({ id }) => id === 'root');
+    if (root === undefined) throw new Error('Missing root');
+    root.resolution = { width: 100, height: 100 };
+    const compiled = projectCompositionForExport(source, 'root');
+    if (compiled === null) throw new Error('Missing compiled composition');
+    const { outputRaster: _editorRaster, ...reopenedProject } = {
+      ...source,
+      resolution: compiled.resolution,
+      outputReference: compiled.outputReference,
+    };
+    const snapshot = await packProject({
+      scene: reopenedProject,
+      index: [],
+      files: new Map(),
+      savedAt: '2026-11-18T00:00:00.000Z',
+    });
+    const restored = (await readProjectDocument(snapshot)).scene;
+    const reexported = projectCompositionForExport(restored, 'root');
+    expect(restored).not.toHaveProperty('outputRaster');
+    expect(restored.outputReference).toEqual({ width: 1280, height: 720 });
+    expect(reexported?.outputReference).toEqual({ width: 1280, height: 720 });
+    expect(reexported?.resolution).toEqual({ width: 100, height: 100 });
+    expect(restored.layers).toEqual(source.layers);
   });
 
   it('projects Auto layout permission only from the composition being exported', () => {

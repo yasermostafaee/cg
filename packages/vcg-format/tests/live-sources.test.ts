@@ -8,7 +8,7 @@ import type {
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { SceneSchema } from '@cg/shared-schema';
-import { collectLiveSources } from '../src/live-sources.js';
+import { collectLiveSources, buildTemplateLiveSources } from '../src/live-sources.js';
 import { fixtureScene } from './fixtures.js';
 
 /**
@@ -105,6 +105,21 @@ function sceneWith(children: Element[], compositions?: Composition[]): Scene {
     ...(compositions !== undefined ? { compositions } : {}),
   };
 }
+
+describe('authored reference metadata', () => {
+  it('carries the exact compiled reference with native and empty-source templates', () => {
+    const outputReference = { width: 1280, height: 720 };
+    const native = buildTemplateLiveSources({
+      ...sceneWith([liveSource('guest', transform())]),
+      outputReference,
+    });
+    expect(native.outputReference).toEqual(outputReference);
+    const empty = buildTemplateLiveSources({ ...sceneWith([]), outputReference });
+    expect(empty.outputReference).toEqual(outputReference);
+    expect(empty.sources).toEqual([]);
+    expect(buildTemplateLiveSources(sceneWith([]))).not.toHaveProperty('outputReference');
+  });
+});
 
 describe('collectLiveSources', () => {
   it('flattens a top-level Live Source to its own rect, and carries ONE id', () => {

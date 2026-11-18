@@ -71,7 +71,9 @@ describe('native authored output reference', () => {
       width: 1,
       height: 1,
     });
-    expectRect(liveSourceFit({ ...input, outputReference: raster }).clip, {
+    const nativeClip = liveSourceFit({ ...input, outputReference: raster }).clip;
+    if (nativeClip === null) throw new Error('Native full-frame picture is unexpectedly clipped');
+    expectRect(nativeClip, {
       x: 0,
       y: 0,
       width: 1,
@@ -88,7 +90,9 @@ describe('native authored output reference', () => {
       rect: { x: 0, y: 0, width: 1280, height: 190 },
       position: { anchor: 'bottom-center', offset: { x: 0, y: -20 } },
     });
-    expectRect(px(liveSourceFit(input).clip, outputReference), {
+    const clip = liveSourceFit(input).clip;
+    if (clip === null) throw new Error('Native cropped picture is unexpectedly clipped');
+    expectRect(px(clip, outputReference), {
       x: 0,
       y: 510,
       width: 1280,

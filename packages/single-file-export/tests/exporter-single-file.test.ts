@@ -62,11 +62,12 @@ describe('ExporterSingleFile', () => {
     expect(html).not.toContain('"name":"پروژه خبر"');
   });
 
-  it('strips the authoring output reference from direct HTML without changing the composition raster or position', async () => {
+  it('strips the editor raster from direct HTML and preserves the native reference, composition raster and position', async () => {
     const scene: Scene = {
       ...makeScene(),
       resolution: { width: 800, height: 200 },
       outputRaster: { width: 3840, height: 2160 },
+      outputReference: { width: 1280, height: 720 },
       defaultPosition: { anchor: 'bottom-left', offset: { x: 60, y: -40 } },
     };
     const { html } = await makeExporter().produce(scene);
@@ -75,6 +76,7 @@ describe('ExporterSingleFile', () => {
     const embedded = JSON.parse(literal) as Scene;
     expect(embedded).not.toHaveProperty('outputRaster');
     expect(embedded.resolution).toEqual(scene.resolution);
+    expect(embedded.outputReference).toEqual(scene.outputReference);
     expect(embedded.defaultPosition).toEqual(scene.defaultPosition);
     expect(scene.outputRaster).toEqual({ width: 3840, height: 2160 });
   });

@@ -699,6 +699,7 @@ export function collectLookCarrier(scene: Scene): {
 
 export function buildTemplateLiveSources(authored: Scene): {
   resolution: Scene['resolution'];
+  outputReference?: Scene['outputReference'];
   defaultPosition: ReturnType<typeof resolveDefaultPosition>;
   sources: LiveSourceDeclaration[];
   arrangements: LiveSourceArrangement[];
@@ -728,6 +729,7 @@ export function buildTemplateLiveSources(authored: Scene): {
       : undefined;
   return {
     resolution: scene.resolution,
+    ...(scene.outputReference !== undefined && { outputReference: scene.outputReference }),
     defaultPosition: resolveDefaultPosition(scene),
     // With a multi-frame group the carrier is SOURCE-KEYED (one declaration per declared
     // source); the per-element emission would double-seat a source two looks share.

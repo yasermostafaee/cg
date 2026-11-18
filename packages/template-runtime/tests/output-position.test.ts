@@ -64,6 +64,37 @@ function stage(): HTMLElement {
 }
 
 describe('applyOutputPosition — the on-air boot placement (R-011)', () => {
+  it('keeps a native HD composition full-size on an HD output and does not reapply the legacy reference', async () => {
+    const scene: Scene = {
+      ...smallScene(),
+      resolution: { width: 1280, height: 720 },
+      outputReference: { width: 1280, height: 720 },
+    };
+    const runtime = createRuntime(scene, { mode: 'output', skipFontLoad: true });
+    await runtime.ready;
+    applyOutputPosition(scene, { view: { innerWidth: 1280, innerHeight: 720 } });
+    expect(stage().style.transform).toBe('translate(0px, 0px)');
+    expect(document.documentElement.style.width).toBe('1280px');
+    applyOutputPosition(scene, { view: { innerWidth: 1920, innerHeight: 1080 } });
+    expect(stage().style.transform).toContain('scale(1.5)');
+    runtime.remove();
+  });
+
+  it('anchors a cropped HD-authored graphic in native reference pixels with independent channel letterbox', () => {
+    document.body.innerHTML = '<div class="cg-stage"></div>';
+    const scene: Scene = {
+      ...smallScene({ anchor: 'bottom-center', offset: { x: 0, y: -20 } }),
+      resolution: { width: 1280, height: 190 },
+      outputReference: { width: 1280, height: 720 },
+    };
+    applyOutputPosition(scene, { view: { innerWidth: 1280, innerHeight: 720 } });
+    expect(stage().style.transform).toBe('translate(0px, 510px)');
+    applyOutputPosition(scene, { view: { innerWidth: 1440, innerHeight: 1080 } });
+    expect(stage().style.transform).toBe(
+      'translate(0px, 135px) scale(1.125) translate(0px, 510px)',
+    );
+  });
+
   it('moves a playing output stage in place through CG UPDATE and retains the channel raster', async () => {
     const scene = smallScene();
     const search = '?pos=top-left&dx=6&dy=9&cw=1280&ch=720';
