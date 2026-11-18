@@ -55,6 +55,16 @@ export const liveLayoutArtwork = {
   plateBorder: '#ffffff',
 } as const;
 
+/** Preview-only safe guides, kept legible over both picture and transparency checker. */
+export const previewGuideColors = {
+  reference: '#b7c2cc',
+  halo: '#000',
+  action: '#f5c879',
+  graphics: '#fff',
+  custom: '#c4b5fd',
+  customLabel: '#e4dcff',
+} as const;
+
 /*
  * ── `RUNTIME-REDESIGN-01` PHASE 2 — THE REFERENCE PALETTE ────────────────────
  *

@@ -6,6 +6,7 @@ import {
   DEFAULT_BROADCAST_GUIDE_PROFILE,
   type BroadcastGuideProfile,
 } from '@cg/ui';
+import { previewGuideColors } from '../../theme.js';
 
 /** One stage-sized view aid for empty, loading and rendered previews alike. */
 export function FittedSafeAreaGuides({
@@ -75,7 +76,7 @@ export function SafeAreaGuides({
           data-guide-reference={profile.aspect}
           {...frame}
           fill="none"
-          stroke="#b7c2cc"
+          stroke={previewGuideColors.reference}
           strokeWidth="1"
           strokeDasharray="3 3"
           vectorEffect="non-scaling-stroke"
@@ -87,7 +88,7 @@ export function SafeAreaGuides({
             <rect
               {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
               fill="none"
-              stroke="#000"
+              stroke={previewGuideColors.halo}
               strokeWidth="3"
               vectorEffect="non-scaling-stroke"
               opacity="0.7"
@@ -96,7 +97,9 @@ export function SafeAreaGuides({
               data-safe-area={area.kind}
               {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
               fill="none"
-              stroke={area.kind === 'action' ? '#f5c879' : '#fff'}
+              stroke={
+                area.kind === 'action' ? previewGuideColors.action : previewGuideColors.graphics
+              }
               strokeWidth="1"
               strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
               vectorEffect="non-scaling-stroke"
@@ -107,8 +110,10 @@ export function SafeAreaGuides({
               textAnchor="middle"
               fontSize={10 / scale}
               fontFamily="sans-serif"
-              fill={area.kind === 'action' ? '#f5c879' : '#fff'}
-              stroke="#000"
+              fill={
+                area.kind === 'action' ? previewGuideColors.action : previewGuideColors.graphics
+              }
+              stroke={previewGuideColors.halo}
               strokeWidth={3 / scale}
               paintOrder="stroke"
               strokeLinejoin="round"
@@ -125,7 +130,7 @@ export function SafeAreaGuides({
             y1={line.y1}
             x2={line.x2}
             y2={line.y2}
-            stroke="#000"
+            stroke={previewGuideColors.halo}
             strokeWidth="3"
             opacity="0.65"
             vectorEffect="non-scaling-stroke"
@@ -138,7 +143,7 @@ export function SafeAreaGuides({
             y1={line.y1}
             x2={line.x2}
             y2={line.y2}
-            stroke="#c4b5fd"
+            stroke={previewGuideColors.custom}
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
           />
@@ -153,8 +158,8 @@ export function SafeAreaGuides({
               }
               fontSize={10 / scale}
               fontFamily="Vazirmatn, sans-serif"
-              fill="#e4dcff"
-              stroke="#000"
+              fill={previewGuideColors.customLabel}
+              stroke={previewGuideColors.halo}
               strokeWidth={3 / scale}
               paintOrder="stroke"
               strokeLinejoin="round"
