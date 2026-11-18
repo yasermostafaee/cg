@@ -8,6 +8,6 @@
 
 - [x] Real two-node source/bearer isolation and fallback regressions.
 - [x] Existing authenticated Bridge preview compatibility checks.
-- [x] Final targeted checks and strict OpenSpec validation (22 targeted tests, existing 5-test authenticated preview compatibility suite, Bridge typecheck and scoped lint).
+- [x] Final targeted checks and strict OpenSpec validation (25 targeted tests including delayed selector/media-ID rebinding, existing 5-test authenticated preview compatibility suite, Bridge typecheck and scoped lint).
 
 Integrated release checks, installers and live station verification are owned by the release coordinator and root agent.

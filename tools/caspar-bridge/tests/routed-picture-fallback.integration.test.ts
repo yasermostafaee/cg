@@ -205,6 +205,11 @@ async function fixture(preferred: PreviewEngine = 'B') {
     },
   });
   const routed = new Map<string, PreviewEngine>();
+  const selectorOverrides = {
+    A: new Map<string, SourcePreviewSelector>(),
+    B: new Map<string, SourcePreviewSelector>(),
+  };
+  const mediaIds = { A: 'A-media', B: 'B-media' };
   let permitted = true;
   let fallbackAllowed = true;
   let fallbackCalls = 0;
@@ -228,8 +233,9 @@ async function fixture(preferred: PreviewEngine = 'B') {
         permitted
           ? { origin: origins[engine], code: nodes[engine].code, bearer: `own-${engine}`, engine }
           : null,
-      selector: (engine, _owner, _channel, id) => nodes[engine].selector(id),
-      mediaId: (engine) => `${engine}-media`,
+      selector: (engine, _owner, _channel, id) =>
+        selectorOverrides[engine].get(id) ?? nodes[engine].selector(id),
+      mediaId: (engine) => mediaIds[engine],
     }),
     (held) => held.dispose(),
   );
@@ -238,6 +244,8 @@ async function fixture(preferred: PreviewEngine = 'B') {
     reads,
     owner,
     routed,
+    selectorOverrides,
+    mediaIds,
     fallbackCalls: () => fallbackCalls,
     advance: () => {
       now += 1100;
@@ -373,6 +381,46 @@ describe('authenticated passive picture fallback', () => {
     f.deny();
     release();
     expect(await work).toEqual({ frames: [] });
+  });
+
+  it.each(['pvw', 'thumbnails'] as const)(
+    'drops an earlier %s picture when its selector is rebound to a different non-null identity',
+    async (kind) => {
+      const f = await fixture();
+      f.routed.set('sibling', 'A');
+      const release = f.delayFallback();
+      const work =
+        kind === 'pvw'
+          ? f.reads.pvw(f.owner, {
+              channel: 1,
+              viewId: randomUUID(),
+              sourceIds: ['camera', 'sibling'],
+            })
+          : f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera', 'sibling'] });
+      await waitUntil(() => f.fallbackCalls() === 1, 'pending peer lookup after sibling picture');
+      f.selectorOverrides.A.set('sibling', { kind: 'live', inputId: 'A-sibling-new' });
+      f.forbidFallback();
+      release();
+      expect((await work).frames.find((frame) => frame.sourceId === 'sibling')).toBeUndefined();
+      expect(f.nodes.A.starts.length + f.nodes.A.batches.length).toBe(1);
+    },
+  );
+
+  it('drops positioned media if its non-null media ID changes during an unrelated fallback lookup', async () => {
+    const f = await fixture();
+    f.routed.set('media', 'A');
+    const release = f.delayFallback();
+    const work = f.reads.thumbnails(f.owner, {
+      channel: 1,
+      sourceIds: ['camera'],
+      mediaPosition: { sourceId: 'media', atMs: 1234 },
+    });
+    await waitUntil(() => f.fallbackCalls() === 1, 'pending lookup after positioned-media picture');
+    f.mediaIds.A = 'A-new-media';
+    f.forbidFallback();
+    release();
+    expect((await work).mediaFrame).toBeUndefined();
+    expect(f.nodes.A.batches).toHaveLength(1);
   });
 
   it('does not issue a late alternate snapshot after thumbnail cleanup', async () => {

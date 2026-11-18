@@ -29,6 +29,12 @@ interface WarmPictures {
   routes: ReadonlyMap<string, PreviewEngine>;
 }
 
+interface PictureScope {
+  target: LivePreviewTarget | null;
+  selectors: ReadonlyMap<string, string | null>;
+  media?: { sourceId: string; atMs: number; mediaId: string | null };
+}
+
 interface Options {
   prepare: (
     owner: AuthSession,
@@ -122,7 +128,10 @@ export class RoutedSourceReads {
     const requested = (engine: PreviewEngine, extra: ReadonlyMap<string, PreviewEngine>) =>
       request.sourceIds.filter((id) => routes.get(id) === engine || extra.get(id) === engine);
     const targets = new Map(
-      ENGINES.map((engine) => [engine, this.options.target(engine, owner, request.channel)]),
+      ENGINES.map((engine) => [
+        engine,
+        this.#pictureScope(engine, owner, request.channel, requested(engine, warm)),
+      ]),
     );
     const replies = await Promise.all(
       ENGINES.map(async (engine) => {
@@ -137,13 +146,13 @@ export class RoutedSourceReads {
     const fallback = await this.#fallbackRoutes(owner, request.channel, missing, warm, current);
     if (!current()) return { frames: [] };
     // One union per node keeps another wanted source's lease when adding/removing a fallback.
-    const extraTargets = new Map<PreviewEngine, LivePreviewTarget | null>();
+    const extraTargets = new Map<PreviewEngine, PictureScope>();
     const extra = await Promise.all(
       ENGINES.map(async (engine) => {
         const ids = requested(engine, fallback);
         if (JSON.stringify(ids) === JSON.stringify(requested(engine, warm))) return [];
         if (!current()) return [];
-        extraTargets.set(engine, this.options.target(engine, owner, request.channel));
+        extraTargets.set(engine, this.#pictureScope(engine, owner, request.channel, ids));
         const result = await this.#previews[engine].pvw(owner, { ...request, sourceIds: ids });
         return result.frames.map((frame) => ({ ...frame, engine }));
       }),
@@ -182,7 +191,7 @@ export class RoutedSourceReads {
     );
     if (!current()) return { frames: [] };
     const called = new Set<PreviewEngine>();
-    const targets = new Map<PreviewEngine, LivePreviewTarget | null>();
+    const targets = new Map<PreviewEngine, PictureScope>();
     const query = async (
       engine: PreviewEngine,
       extra: ReadonlyMap<string, PreviewEngine>,
@@ -198,7 +207,10 @@ export class RoutedSourceReads {
           : undefined;
       if (sourceIds.length === 0 && mediaPosition === undefined) return { frames: [] };
       called.add(engine);
-      targets.set(engine, this.options.target(engine, owner, request.channel));
+      targets.set(
+        engine,
+        this.#pictureScope(engine, owner, request.channel, sourceIds, mediaPosition),
+      );
       const result = await this.#previews[engine].thumbnails(owner, {
         channel: request.channel,
         sourceIds,
@@ -316,21 +328,59 @@ export class RoutedSourceReads {
     owner: AuthSession,
     channel: number,
     frames: readonly T[],
-    targets: ReadonlyMap<PreviewEngine, LivePreviewTarget | null>,
+    targets: ReadonlyMap<PreviewEngine, PictureScope>,
   ): T[] {
     return frames.filter((frame) => {
       if (frame.engine === undefined) return false;
-      const before = targets.get(frame.engine);
+      const scope = targets.get(frame.engine);
+      const before = scope?.target;
       const current = this.options.target(frame.engine, owner, channel);
+      const selector = this.options.selector(frame.engine, owner, channel, frame.sourceId);
+      const samePosition =
+        !('previewPositionMs' in frame) ||
+        (scope?.media !== undefined &&
+          scope.media.sourceId === frame.sourceId &&
+          scope.media.atMs === frame.previewPositionMs &&
+          scope.media.mediaId !== null &&
+          this.options.mediaId(frame.engine, owner, channel, frame.sourceId, scope.media.atMs) ===
+            scope.media.mediaId);
       return (
         before != null &&
         current !== null &&
         before.origin === current.origin &&
         before.code === current.code &&
         before.bearer === current.bearer &&
-        this.options.selector(frame.engine, owner, channel, frame.sourceId) !== null
+        selector !== null &&
+        scope?.selectors.get(frame.sourceId) === JSON.stringify(selector) &&
+        samePosition
       );
     });
+  }
+
+  #pictureScope(
+    engine: PreviewEngine,
+    owner: AuthSession,
+    channel: number,
+    ids: readonly string[],
+    media?: NonNullable<ThumbnailRequest['mediaPosition']>,
+  ): PictureScope {
+    return {
+      target: this.options.target(engine, owner, channel),
+      selectors: new Map(
+        [...new Set([...ids, ...(media === undefined ? [] : [media.sourceId])])].map((id) => {
+          const selector = this.options.selector(engine, owner, channel, id);
+          return [id, selector === null ? null : JSON.stringify(selector)];
+        }),
+      ),
+      ...(media === undefined
+        ? {}
+        : {
+            media: {
+              ...media,
+              mediaId: this.options.mediaId(engine, owner, channel, media.sourceId, media.atMs),
+            },
+          }),
+    };
   }
 
   async #warmRoutes(

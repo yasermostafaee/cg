@@ -4,7 +4,7 @@ An actual per-source observation without a JPEG qualifies for a fallback decisio
 
 PVW keeps both nodes' same-view source unions warm, so adding a fallback never replaces a sibling source and repeated polls do not reopen leases. Recovered preferred pictures win and release unused alternate leases. Thumbnails and positioned media use at most one snapshot batch per node per normal poll. If the alternate already used its snapshot budget, its union warms on the next poll. Independent passive-input and positioned-media requests remain independent.
 
-Only the matching source, and for positioned media the matching requested position, may replace a missing picture. Returned metadata names the actual delivering engine. Existing renderer provenance matching clears mismatched audio readings rather than presenting another node's VU as the picture's audio. Final target and selector checks prevent releasing earlier pictures after authorization or node configuration changed during asynchronous fallback validation.
+Only the matching source, and for positioned media the matching requested position, may replace a missing picture. Returned metadata names the actual delivering engine. Existing renderer provenance matching clears mismatched audio readings rather than presenting another node's VU as the picture's audio. Each node request captures the exact target and serialized source selectors, plus the positioned media ID. Final checks require those identities to remain unchanged after asynchronous fallback validation; a different non-null selector is insufficient.
 
 Owner cleanup and PVW Stop invalidate pending fallback decisions. Both nodes' owned subscriptions close through their existing lifecycle. No PGM command or receiver-opening API is introduced.
 
