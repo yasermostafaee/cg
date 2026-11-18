@@ -53,6 +53,23 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
       ['y', 50, true],
       ['x', 50, true],
     ]);
+    expect(input('Guide color').value).toBe('#ffffff');
+    await act(async () => {
+      const color = input('Guide color');
+      color.value = '#22aaee';
+      Simulate.change(color);
+    });
+    expect(saved.color).toBe('#22aaee');
+    expect(input('Guide 2 color').value).toBe('#22aaee');
+    await act(async () => {
+      const color = input('Guide 2 color');
+      color.value = '#ff6600';
+      Simulate.change(color);
+    });
+    expect(saved.lines[1]?.color).toBe('#ff6600');
+    await act(async () => button('Use guide color for guide 2').click());
+    expect(saved.lines[1]).not.toHaveProperty('color');
+    expect(input('Guide 2 color').value).toBe('#22aaee');
     await act(async () => {
       const name = input('Guide 1 name');
       name.value = 'زیرنویس';

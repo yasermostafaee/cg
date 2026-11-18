@@ -57,12 +57,7 @@ export const liveLayoutArtwork = {
 
 /** Preview-only safe guides, kept legible over both picture and transparency checker. */
 export const previewGuideColors = {
-  reference: '#b7c2cc',
   halo: '#000',
-  action: '#f5c879',
-  graphics: '#fff',
-  custom: '#c4b5fd',
-  customLabel: '#e4dcff',
 } as const;
 
 /*

@@ -3,6 +3,7 @@ import {
   broadcastSafeAreas,
   broadcastGuideFrame,
   broadcastCustomGuideLines,
+  broadcastGuideColor,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
   type BroadcastGuideProfile,
 } from '@cg/ui';
@@ -76,7 +77,7 @@ export function SafeAreaGuides({
           data-guide-reference={profile.aspect}
           {...frame}
           fill="none"
-          stroke={previewGuideColors.reference}
+          stroke={profile.color}
           strokeWidth="1"
           strokeDasharray="3 3"
           vectorEffect="non-scaling-stroke"
@@ -97,9 +98,7 @@ export function SafeAreaGuides({
               data-safe-area={area.kind}
               {...{ x: area.x, y: area.y, width: area.width, height: area.height }}
               fill="none"
-              stroke={
-                area.kind === 'action' ? previewGuideColors.action : previewGuideColors.graphics
-              }
+              stroke={profile.color}
               strokeWidth="1"
               strokeDasharray={area.kind === 'action' ? '6 4' : undefined}
               vectorEffect="non-scaling-stroke"
@@ -110,9 +109,7 @@ export function SafeAreaGuides({
               textAnchor="middle"
               fontSize={10 / scale}
               fontFamily="sans-serif"
-              fill={
-                area.kind === 'action' ? previewGuideColors.action : previewGuideColors.graphics
-              }
+              fill={profile.color}
               stroke={previewGuideColors.halo}
               strokeWidth={3 / scale}
               paintOrder="stroke"
@@ -143,7 +140,7 @@ export function SafeAreaGuides({
             y1={line.y1}
             x2={line.x2}
             y2={line.y2}
-            stroke={previewGuideColors.custom}
+            stroke={broadcastGuideColor(profile, line)}
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
           />
@@ -158,7 +155,7 @@ export function SafeAreaGuides({
               }
               fontSize={10 / scale}
               fontFamily="Vazirmatn, sans-serif"
-              fill={previewGuideColors.customLabel}
+              fill={broadcastGuideColor(profile, line)}
               stroke={previewGuideColors.halo}
               strokeWidth={3 / scale}
               paintOrder="stroke"

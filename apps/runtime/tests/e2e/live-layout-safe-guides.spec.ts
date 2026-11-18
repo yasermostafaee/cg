@@ -89,9 +89,26 @@ test('New live layout safe guides fit its active picture and share only view pre
     await toggle.click();
     await expectAligned(stage);
     await expect(stage.locator('[data-safe-area="action"]')).toHaveAttribute('width', '1786');
+    await expect(stage.locator('[data-safe-area="action"]')).toHaveCSS(
+      'stroke',
+      'rgb(255, 255, 255)',
+    );
+    await expect(stage.locator('[data-safe-area="graphics"]')).toHaveCSS(
+      'stroke',
+      'rgb(255, 255, 255)',
+    );
+    await expect(stage.locator('[data-safe-area="action"]')).toHaveAttribute(
+      'stroke-dasharray',
+      '6 4',
+    );
+    await expect(stage.locator('[data-safe-area="graphics"]')).not.toHaveAttribute(
+      'stroke-dasharray',
+    );
     await expect(stage.locator('[data-safe-area-guides]')).toHaveCSS('pointer-events', 'none');
     await editor.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+    await expect(settings.getByLabel('Guide color', { exact: true })).toHaveValue('#ffffff');
+    await settings.getByLabel('Guide color', { exact: true }).fill('#22aaee');
     await settings.getByRole('radio', { name: '4:3', exact: true }).click();
     await settings.getByRole('button', { name: 'Add horizontal guide', exact: true }).click();
     await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('تیتر · 25%');
@@ -108,11 +125,18 @@ test('New live layout safe guides fit its active picture and share only view pre
     await settings
       .getByRole('textbox', { name: 'Guide 2 position percent', exact: true })
       .press('Tab');
+    await settings.getByLabel('Guide 2 color', { exact: true }).fill('#ff6600');
     await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
     const guides = stage.locator('[data-safe-area-guides]');
     await expect(guides.locator('[data-guide-reference="4:3"]')).toHaveAttribute('x', '240');
     await expect(guides.locator('[data-guide-axis="y"]')).toHaveAttribute('y1', '270');
     await expect(guides.locator('[data-guide-axis="x"]')).toHaveAttribute('x1', '1320');
+    await expect(guides.locator('[data-guide-reference="4:3"]')).toHaveCSS(
+      'stroke',
+      'rgb(34, 170, 238)',
+    );
+    await expect(guides.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(34, 170, 238)');
+    await expect(guides.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(255, 102, 0)');
 
     await editor
       .getByRole('textbox', { name: 'Layout name', exact: true })
@@ -165,7 +189,20 @@ test('New live layout safe guides fit its active picture and share only view pre
     await pvwToggle.click();
     await expect(pvw.locator('[data-guide-reference="4:3"]')).toBeVisible();
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveAttribute('data-guide-position', '25');
+    await expect(pvw.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(34, 170, 238)');
+    await expect(pvw.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(255, 102, 0)');
     await pvw.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
+    await settings.getByLabel('Guide color', { exact: true }).fill('#99dd44');
+    await expect(pvw.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(153, 221, 68)');
+    await expect(pvw.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(255, 102, 0)');
+    await settings
+      .getByRole('button', { name: 'Use guide color for guide 2', exact: true })
+      .click();
+    await expect(pvw.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(153, 221, 68)');
+    await expect(
+      settings.getByRole('button', { name: 'Use guide color for guide 2', exact: true }),
+    ).toBeDisabled();
+    await settings.getByLabel('Guide 2 color', { exact: true }).fill('#cc55aa');
     await settings
       .getByRole('textbox', { name: 'Guide 1 name', exact: true })
       .fill('Shared view guide');
@@ -177,6 +214,28 @@ test('New live layout safe guides fit its active picture and share only view pre
     await toggle.click();
     await expect(stage.locator('[data-guide-reference="16:9"]')).toBeVisible();
     await expect(stage.getByText('Shared view guide', { exact: true })).toBeVisible();
+    await expect(stage.locator('[data-safe-area="action"]')).toHaveCSS(
+      'stroke',
+      'rgb(153, 221, 68)',
+    );
+    await expect(stage.locator('[data-safe-area="graphics"]')).toHaveCSS(
+      'stroke',
+      'rgb(153, 221, 68)',
+    );
+    await expect(stage.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(204, 85, 170)');
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.reload();
+    await expect(layers).toBeVisible();
+    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await toggle.click();
+    await expect(stage.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(153, 221, 68)');
+    await expect(stage.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(204, 85, 170)');
+    await editor.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
+    await expect(settings.getByLabel('Guide color', { exact: true })).toHaveValue('#99dd44');
+    await expect(settings.getByLabel('Guide 2 color', { exact: true })).toHaveValue('#cc55aa');
+    await page.screenshot({ path: testInfo.outputPath('new-layout-guide-colors.png') });
+    await settings.getByRole('button', { name: 'Close safe guides', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     expect(runtime.templatePage(saved.templateId, 1)).toEqual(served);
     expect(

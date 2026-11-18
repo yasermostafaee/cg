@@ -4878,6 +4878,7 @@ test('custom safe guides persist across channels and reload, fit the active pict
   await settings.getByRole('textbox', { name: 'Guide 1 position percent' }).fill('۲۵');
   await settings.getByRole('textbox', { name: 'Guide 1 position percent' }).press('Enter');
   await expect(horizontal).toHaveAttribute('y1', '270');
+  await expect(horizontal).toHaveCSS('stroke', 'rgb(255, 255, 255)');
   await settings.getByRole('button', { name: 'Add vertical guide' }).click();
   await settings.getByRole('textbox', { name: 'Guide 2 position percent' }).fill('75');
   await settings.getByRole('textbox', { name: 'Guide 2 position percent' }).press('Enter');

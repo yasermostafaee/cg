@@ -7,6 +7,7 @@
 
 .cg-safe-guide-settings__heading,
 .cg-safe-guide-settings__check,
+.cg-safe-guide-settings__colors,
 .cg-safe-guide-settings__position {
   display: flex;
   align-items: center;
@@ -39,9 +40,18 @@
 
 .cg-safe-guide-settings__line {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) 5rem auto;
+  grid-template-columns: auto auto minmax(0, 1fr) 4.5rem auto auto;
   align-items: center;
   gap: 0.35rem;
+}
+
+.cg-safe-guide-settings__colors {
+  gap: 0.2rem;
+}
+
+.cg-safe-guide-settings__color {
+  width: 2rem;
+  min-width: 2rem;
 }
 
 .cg-safe-guide-settings__position {

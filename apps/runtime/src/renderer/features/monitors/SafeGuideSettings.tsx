@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { MoveHorizontal, MoveVertical, Plus, Settings2, Trash2, X } from 'lucide-react';
+import { MoveHorizontal, MoveVertical, Plus, RotateCcw, Settings2, Trash2, X } from 'lucide-react';
 import {
   BROADCAST_GUIDE_ASPECTS,
   MAX_BROADCAST_GUIDE_LINES,
+  broadcastGuideColor,
   type BroadcastGuideLine,
   type BroadcastGuideProfile,
 } from '@cg/ui';
@@ -10,6 +11,7 @@ import { parseLocalizedNumber } from '@cg/text-shaping';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
+import { ColorInput } from '../../ui/ColorInput.js';
 import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Popover } from '../../ui/Popover.js';
@@ -66,7 +68,7 @@ export function SafeGuideSettings({
           anchor={anchor}
           id={id}
           aria-label="Safe guides"
-          minWidth={360}
+          minWidth={400}
           maxHeight={480}
           onClose={() => setOpen(false)}
         >
@@ -119,6 +121,15 @@ export function SafeGuideSettings({
                 </Button>
               ))}
             </div>
+            <div className="cg-safe-guide-settings__heading">
+              <span>Guide color</span>
+              <ColorInput
+                aria-label="Guide color"
+                className="cg-safe-guide-settings__color"
+                value={profile.color}
+                onChange={(color) => onChange({ ...profile, color })}
+              />
+            </div>
             <label
               className="cg-safe-guide-settings__check"
               htmlFor={`${id}-standard`}
@@ -165,7 +176,18 @@ export function SafeGuideSettings({
                   key={line.id}
                   line={line}
                   index={index + 1}
+                  color={broadcastGuideColor(profile, line)}
                   onChange={(patch) => changeLine(line.id, patch)}
+                  onInherit={() =>
+                    onChange({
+                      ...profile,
+                      lines: profile.lines.map((entry) => {
+                        if (entry.id !== line.id) return entry;
+                        const { color, ...inherited } = entry;
+                        return color === undefined ? entry : inherited;
+                      }),
+                    })
+                  }
                   onRemove={() =>
                     onChange({
                       ...profile,
@@ -185,12 +207,16 @@ export function SafeGuideSettings({
 function GuideRow({
   line,
   index,
+  color,
   onChange,
+  onInherit,
   onRemove,
 }: {
   line: BroadcastGuideLine;
   index: number;
+  color: string;
   onChange: (patch: Partial<BroadcastGuideLine>) => void;
+  onInherit: () => void;
   onRemove: () => void;
 }): JSX.Element {
   const [position, setPosition] = useState(String(line.position));
@@ -236,6 +262,23 @@ function GuideRow({
           }}
         />
         <span>%</span>
+      </div>
+      <div className="cg-safe-guide-settings__colors">
+        <ColorInput
+          aria-label={`${label} color`}
+          className="cg-safe-guide-settings__color"
+          value={color}
+          onChange={(color) => onChange({ color })}
+        />
+        <Button
+          variant="icon"
+          aria-label={`Use guide color for ${label.toLowerCase()}`}
+          title="Use guide color"
+          disabled={line.color === undefined}
+          onClick={onInherit}
+        >
+          <Icon icon={RotateCcw} size={13} />
+        </Button>
       </div>
       <Button variant="icon" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
         <Icon icon={Trash2} size={14} />
