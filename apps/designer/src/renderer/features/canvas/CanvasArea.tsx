@@ -1349,8 +1349,9 @@ export function CanvasArea({
           className={cx(s.headerButton, safeAreasVisible && s.headerButtonActive)}
           onClick={() => designerStore.toggleSafeAreas()}
           aria-label="Safe areas"
+          aria-keyshortcuts="Shift+S"
           aria-pressed={safeAreasVisible}
-          title={BROADCAST_SAFE_AREA_TITLE}
+          title={`Safe areas (Shift+S) · ${BROADCAST_SAFE_AREA_TITLE}`}
         >
           <Icon icon={SquareDashed} size={16} />
         </Control>

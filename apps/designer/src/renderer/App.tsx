@@ -361,11 +361,14 @@ export function App(): JSX.Element {
     };
   }, []);
 
-  // "R" toggles the canvas rulers (no modifier). Ignored while typing in a
+  // Canvas guide shortcuts are ignored while typing in a
   // field so it doesn't fight text entry.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const rulers = e.code === 'KeyR' && !e.shiftKey;
+      const safeAreas = e.code === 'KeyS' && e.shiftKey;
+      if (!rulers && !safeAreas) return;
       const t = e.target;
       if (
         t instanceof HTMLElement &&
@@ -376,8 +379,11 @@ export function App(): JSX.Element {
       ) {
         return;
       }
-      // Physical key, so it also fires on non-English layouts.
-      if (e.code === 'KeyR') {
+      if (safeAreas) {
+        if (e.repeat || designerStore.get().activeCompositionId === null) return;
+        e.preventDefault();
+        designerStore.toggleSafeAreas();
+      } else {
         e.preventDefault();
         designerStore.toggleRuler();
       }

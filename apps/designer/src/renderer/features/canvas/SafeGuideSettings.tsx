@@ -10,10 +10,7 @@ import {
   ArrowUpRight,
   CircleDot,
   Info,
-  Plus,
-  RotateCcw,
   Settings2,
-  Trash2,
   X,
 } from 'lucide-react';
 import {
@@ -27,12 +24,9 @@ import {
   BROADCAST_GUIDE_ASPECTS,
   DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
   MAX_BROADCAST_GUIDE_ASPECT_PART,
-  MAX_BROADCAST_GUIDE_LINES,
-  broadcastGuideColor,
   normalizeBroadcastGuideColor,
   normalizeBroadcastGuideCustomAspect,
   type BroadcastGuideCustomAspect,
-  type BroadcastGuideLine,
   type BroadcastGuideProfile,
 } from '@cg/ui';
 import { Button } from '../../ui/Button.js';
@@ -71,27 +65,6 @@ export function SafeGuideSettings({
   const changeCustomAspect = (axis: keyof BroadcastGuideCustomAspect, value: number): void => {
     const ratio = normalizeBroadcastGuideCustomAspect({ ...customAspect, [axis]: value });
     if (ratio !== null) update({ ...profile, customAspect: ratio });
-  };
-  const changeLine = (id: string, patch: Partial<BroadcastGuideLine>): void =>
-    update({
-      ...profile,
-      lines: profile.lines.map((line) => (line.id === id ? { ...line, ...patch } : line)),
-    });
-  const add = (axis: 'x' | 'y'): void => {
-    if (profile.lines.length === MAX_BROADCAST_GUIDE_LINES) return;
-    update({
-      ...profile,
-      lines: [
-        ...profile.lines,
-        {
-          id: crypto.randomUUID(),
-          name: `Guide ${profile.lines.length + 1}`,
-          axis,
-          position: 50,
-          visible: true,
-        },
-      ],
-    });
   };
   return (
     <>
@@ -196,62 +169,6 @@ export function SafeGuideSettings({
                 onChange={(color) => update({ ...profile, color })}
               />
             </div>
-            <div className={s.heading}>
-              <span>Custom guides</span>
-              <div className={s.choices}>
-                <Button
-                  size="sm"
-                  aria-label="Add horizontal guide"
-                  disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
-                  onClick={() => add('y')}
-                >
-                  <Icon icon={Plus} size={12} />
-                  Horizontal
-                </Button>
-                <Button
-                  size="sm"
-                  aria-label="Add vertical guide"
-                  disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
-                  onClick={() => add('x')}
-                >
-                  <Icon icon={Plus} size={12} />
-                  Vertical
-                </Button>
-              </div>
-            </div>
-            {profile.lines.length === 0 ? (
-              <p className={s.hint}>
-                Add a line and set its position as a percentage of the reference frame.
-              </p>
-            ) : (
-              <div className={s.list}>
-                {profile.lines.map((line, index) => (
-                  <GuideRow
-                    key={line.id}
-                    line={line}
-                    color={broadcastGuideColor(profile, line)}
-                    index={index + 1}
-                    change={(patch) => changeLine(line.id, patch)}
-                    inherit={() =>
-                      update({
-                        ...profile,
-                        lines: profile.lines.map((candidate) => {
-                          if (candidate.id !== line.id) return candidate;
-                          const { color: _override, ...inherited } = candidate;
-                          return inherited;
-                        }),
-                      })
-                    }
-                    remove={() =>
-                      update({
-                        ...profile,
-                        lines: profile.lines.filter((candidate) => candidate.id !== line.id),
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            )}
             <p className={s.hint}>Guide settings are shared across projects in this app.</p>
           </div>
         </Popover>
@@ -387,94 +304,6 @@ function ProjectOutputControls({
       </div>
       <p className={s.hint}>Choose an anchor to reset the position. Drag X or Y to adjust it.</p>
     </section>
-  );
-}
-
-function GuideRow({
-  line,
-  color,
-  index,
-  change,
-  inherit,
-  remove,
-}: {
-  line: BroadcastGuideLine;
-  color: string;
-  index: number;
-  change(patch: Partial<BroadcastGuideLine>): void;
-  inherit(): void;
-  remove(): void;
-}): JSX.Element {
-  const [position, setPosition] = useState(String(line.position));
-  useEffect(() => setPosition(String(line.position)), [line.position]);
-  const number = Number(position);
-  const valid = position.trim() !== '' && Number.isFinite(number) && number >= 0 && number <= 100;
-  return (
-    <div className={s.row}>
-      <input
-        className={s.checkbox}
-        type="checkbox"
-        aria-label={`Show guide ${index}`}
-        checked={line.visible}
-        onChange={(event) => change({ visible: event.target.checked })}
-      />
-      <span className={s.axis} title={line.axis === 'x' ? 'Vertical' : 'Horizontal'}>
-        {line.axis === 'x' ? 'V' : 'H'}
-      </span>
-      <input
-        className={s.input}
-        dir="auto"
-        aria-label={`Guide ${index} name`}
-        value={line.name}
-        maxLength={80}
-        onChange={(event) => change({ name: event.target.value })}
-      />
-      <span className={s.position}>
-        <input
-          className={s.input}
-          type="number"
-          min={0}
-          max={100}
-          step={0.1}
-          aria-label={`Guide ${index} position percent`}
-          aria-invalid={!valid}
-          value={position}
-          onChange={(event) => {
-            const raw = event.target.value;
-            setPosition(raw);
-            const next = Number(raw);
-            if (raw !== '' && Number.isFinite(next) && next >= 0 && next <= 100)
-              change({ position: next });
-          }}
-          onBlur={() => {
-            if (!valid) setPosition(String(line.position));
-          }}
-        />
-        <span>%</span>
-      </span>
-      <GuideColorControl
-        label={`Guide ${index} color`}
-        value={color}
-        onChange={(next) => change({ color: next })}
-      />
-      <Control
-        variant="bare"
-        aria-label={`Use guide color for guide ${index}`}
-        title={line.color === undefined ? 'Using guide color' : 'Use guide color'}
-        disabled={line.color === undefined}
-        onClick={inherit}
-      >
-        <Icon icon={RotateCcw} size={13} />
-      </Control>
-      <Control
-        variant="bare"
-        aria-label={`Remove guide ${index}`}
-        title="Remove guide"
-        onClick={remove}
-      >
-        <Icon icon={Trash2} size={13} />
-      </Control>
-    </div>
   );
 }
 

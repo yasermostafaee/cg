@@ -2,7 +2,6 @@ import type { CSSProperties } from 'react';
 import {
   broadcastSafeAreas,
   broadcastGuideFrame,
-  broadcastCustomGuideLines,
   broadcastGuideColor,
   DEFAULT_BROADCAST_GUIDE_PROFILE,
   type BroadcastGuideProfile,
@@ -108,54 +107,6 @@ export function SafeAreaGuides({
           >
             {area.label}
           </text>
-        </g>
-      ))}
-      {broadcastCustomGuideLines(width, height, profile).map((line) => (
-        <g key={line.id}>
-          <line
-            x1={line.x1}
-            y1={line.y1}
-            x2={line.x2}
-            y2={line.y2}
-            stroke="#000"
-            strokeWidth="3"
-            opacity="0.7"
-            vectorEffect="non-scaling-stroke"
-          />
-          <line
-            data-custom-guide={line.id}
-            data-guide-axis={line.axis}
-            data-guide-percent={line.position}
-            x1={line.x1}
-            y1={line.y1}
-            x2={line.x2}
-            y2={line.y2}
-            stroke={broadcastGuideColor(profile, line)}
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
-          {line.name !== '' && (
-            <text
-              x={line.x1 + (line.axis === 'x' && line.position > 50 ? -4 : 4) / scale}
-              textAnchor={line.axis === 'x' && line.position > 50 ? 'end' : 'start'}
-              y={
-                line.axis === 'y' &&
-                reference !== null &&
-                line.y1 + 12 / scale > reference.y + reference.height
-                  ? line.y1 - 4 / scale
-                  : line.y1 + 12 / scale
-              }
-              fontSize={10 / scale}
-              fontFamily="Vazirmatn, sans-serif"
-              fill={broadcastGuideColor(profile, line)}
-              stroke="#000"
-              strokeWidth={3 / scale}
-              paintOrder="stroke"
-              strokeLinejoin="round"
-            >
-              {line.name}
-            </text>
-          )}
         </g>
       ))}
     </svg>
