@@ -746,6 +746,20 @@ it.each(['missing', 'offline'] as const)(
       engine: 'B',
       dataUrl: 'data:image/jpeg;base64,' + FRAME_B.toString('base64'),
     });
+    if (state === 'missing') {
+      const viewer = (
+        await a.issueToken({ user: 'viewer', cgChannels: [{ host: '127.0.0.1', channel: 1 }] })
+      ).token;
+      expect((await client.authenticate('poster-viewer', viewer)).error).toBeUndefined();
+      expect(
+        (
+          await client.ask('viewer-b-poster', 'sources.media-thumbnail', {
+            channel: 1,
+            id: sourceId,
+          })
+        ).payload,
+      ).toEqual(poster.payload);
+    }
   },
   20_000,
 );

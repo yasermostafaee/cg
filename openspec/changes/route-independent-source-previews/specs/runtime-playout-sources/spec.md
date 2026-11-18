@@ -39,6 +39,15 @@ not change programme authority, bindings or programme output.
 - **AND** obsolete selector caches are not published after cancellation
 - **AND** independent passive thumbnail or meter polling does not cancel the current PVW intent
 
+#### Scenario: A viewer reads an existing poster
+
+- **GIVEN** a viewer can read a media catalogue item
+- **WHEN** an older client requests its poster without a channel
+- **THEN** the existing response shape is preserved
+- **AND WHEN** a channel-granted viewer requests a channel-aware A or B poster
+- **THEN** the read succeeds without operator privilege and identifies the serving engine
+- **AND** a viewer without that channel grant remains refused
+
 ### Requirement: Source badges SHALL distinguish availability from decoded preview provenance
 
 Existing A/B badge colors SHALL continue to represent source availability. The

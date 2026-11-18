@@ -3281,22 +3281,33 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   */
   const tickets = new HttpTickets();
   const previewOrigin = auth.playout === null ? null : new URL(auth.playout.channelsUrl).origin;
+  const previewReadPermitted = (owner: AuthSession, channel: number): boolean => {
+    const token = owner.token;
+    return (
+      token !== null &&
+      token.jti !== null &&
+      authGateState(owner, playoutAuth) === 'signed-in' &&
+      runtime.isDeclaredChannel(channel) &&
+      socketScope(owner, playoutAuth, runtime)?.(channel) !== false
+    );
+  };
   const previewPermitted = (owner: AuthSession, channel: number): boolean => {
     const token = owner.token;
     const lock = runtime.lockState();
     return (
       token !== null &&
-      token.jti !== null &&
-      authGateState(owner, playoutAuth) === 'signed-in' &&
+      previewReadPermitted(owner, channel) &&
       holdsPermissionClass(token.principal.roles, 'operator') &&
-      runtime.isDeclaredChannel(channel) &&
-      socketScope(owner, playoutAuth, runtime)?.(channel) !== false &&
       !(lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
     );
   };
-  const primaryPreviewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
+  const primaryPreviewTarget = (
+    owner: AuthSession,
+    channel: number,
+    permitted = previewPermitted,
+  ): LivePreviewTarget | null => {
     const token = owner.token;
-    if (previewOrigin === null || token === null || !previewPermitted(owner, channel)) return null;
+    if (previewOrigin === null || token === null || !permitted(owner, channel)) return null;
     const named = stationChannelsFor(
       owner,
       'signed-in',
@@ -3310,8 +3321,12 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       ? null
       : { origin: previewOrigin, code: named.id, bearer: token.rawToken, engine: 'A' };
   };
-  const backupPreviewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
-    if (!previewPermitted(owner, channel)) return null;
+  const backupPreviewTarget = (
+    owner: AuthSession,
+    channel: number,
+    permitted = previewPermitted,
+  ): LivePreviewTarget | null => {
+    if (!permitted(owner, channel)) return null;
     const address = backupEngine?.address();
     const bearer = backupEngine?.accessToken();
     const physical = backupChannels.channelOnB(channel);
@@ -3380,6 +3395,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     owner: AuthSession,
     channel: number,
     fingerprint: string,
+    permitted = previewPermitted,
   ): Promise<string | null> => {
     const address = backupEngine?.address();
     const bearer = backupEngine?.accessToken();
@@ -3388,7 +3404,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       address == null ||
       bearer == null ||
       mediaUrl == null ||
-      backupPreviewTarget(owner, channel) === null
+      backupPreviewTarget(owner, channel, permitted) === null
     )
       return null;
     const key = `${address}\n${bearer}\n${fingerprint}`;
@@ -3416,7 +3432,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     }
     if (
       found.id === null ||
-      !previewPermitted(owner, channel) ||
+      !permitted(owner, channel) ||
       backupEngine?.accessToken() !== bearer ||
       backupEngine.address() !== address
     )
@@ -3426,12 +3442,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const preferredReadEngine = async (
     owner: AuthSession,
     channel: number,
+    permitted = previewPermitted,
   ): Promise<PreviewEngine | null> => {
     const topology = await readProgrammeTopology(channel);
     return mediaPreviewEngine(
       topology?.active,
       runtime.health().currentPrimary,
-      primaryPreviewTarget(owner, channel) !== null,
+      primaryPreviewTarget(owner, channel, permitted) !== null,
     );
   };
   const mediaPreviews = new MediaPreviewService({
@@ -3759,37 +3776,37 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     request: ChannelRequest<typeof SourcesMediaThumbnailChannel>,
   ): Promise<{ ok: boolean; dataUrl?: string; engine?: PreviewEngine }> => {
     if (request.channel === undefined) {
-      const result = await playoutSources?.mediaThumbnail(request.id);
-      return result?.ok === true ? { ...result, engine: 'A' } : { ok: false };
+      return (await playoutSources?.mediaThumbnail(request.id)) ?? { ok: false };
     }
-    if (owner === null || !previewPermitted(owner, request.channel)) return { ok: false };
+    if (owner === null || !previewReadPermitted(owner, request.channel)) return { ok: false };
     const channel = request.channel;
+    const posterToken = owner.token;
     const result = await sourceReadTarget(
-      await preferredReadEngine(owner, channel),
+      await preferredReadEngine(owner, channel, previewReadPermitted),
       async (engine) => {
         if (engine === 'A') {
           if (playoutSources?.mediaForPresence(request.id)?.state === 'missing') return null;
           const response = await playoutSources?.mediaThumbnail(request.id);
           return response?.ok === true ? { ...response, engine } : null;
         }
-        const target = backupPreviewTarget(owner, channel);
+        const target = backupPreviewTarget(owner, channel, previewReadPermitted);
         const mediaUrl = backupEngine?.mediaUrl();
         const fingerprint = playoutSources?.mediaForPresence(request.id)?.fingerprint;
         if (
           target === null ||
           mediaUrl == null ||
           fingerprint === undefined ||
-          (await backupPreviewMediaId(owner, channel, fingerprint)) === null
+          (await backupPreviewMediaId(owner, channel, fingerprint, previewReadPermitted)) === null
         )
           return null;
         const provider = new HttpPlayoutSources({ inputsUrl: mediaUrl, mediaUrl }, () => {
-          const current = backupPreviewTarget(owner, channel);
+          const current = backupPreviewTarget(owner, channel, previewReadPermitted);
           return current !== null && targetSignature(current) === targetSignature(target)
             ? target.bearer
             : null;
         });
         const bytes = await provider.readMediaThumbnail(fingerprint);
-        const current = backupPreviewTarget(owner, channel);
+        const current = backupPreviewTarget(owner, channel, previewReadPermitted);
         return bytes === null ||
           current === null ||
           targetSignature(current) !== targetSignature(target)
@@ -3801,7 +3818,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
             };
       },
     );
-    return result ?? { ok: false };
+    return owner.token === posterToken && previewReadPermitted(owner, channel)
+      ? (result ?? { ok: false })
+      : { ok: false };
   };
   const selectedReadTarget = (
     owner: AuthSession,

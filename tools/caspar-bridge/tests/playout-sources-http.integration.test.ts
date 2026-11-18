@@ -27,6 +27,7 @@ import {
 } from './support/fake-playout.js';
 import { deadConnection, openClient, startAuthedBridge, waitFor } from './support/auth-harness.js';
 import { FRAME_A } from './support/fake-pgm-feed.js';
+import { standardBank } from './support/two-channel-rig.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §4 — **D10 AND D11 OVER HTTP, against the fake Playout.**
@@ -463,6 +464,7 @@ describe('the bridge’s routes, as a console reaches them', () => {
       await createBridge({
         port: 0,
         connection: deadConnection(),
+        fixedLayers: [standardBank(1)],
         playout: { auth: 'playout', address: playout.baseUrl, issuer: playout.issuer },
       }),
       (h) => h.close(),
@@ -495,6 +497,28 @@ describe('the bridge’s routes, as a console reaches them', () => {
         authorization: `Bearer ${viewer.token}`,
       },
     ]);
+    expect(
+      (await client.ask('ungranted-channel-poster', 'sources.media-thumbnail', { id, channel: 1 }))
+        .error,
+    ).toEqual(expect.any(String));
+    const channelViewer = await playout.issueToken({
+      user: 'viewer',
+      cgChannels: [{ host: '127.0.0.1', channel: 1 }],
+    });
+    expect(
+      (await client.authenticate('channel-viewer', channelViewer.token)).error,
+    ).toBeUndefined();
+    const channelPoster = await client.ask('channel-poster', 'sources.media-thumbnail', {
+      id,
+      channel: 1,
+    });
+    expect(channelPoster.error).toBeUndefined();
+    expect(channelPoster.payload).toEqual({
+      ok: true,
+      engine: 'A',
+      dataUrl: MEDIA_THUMBNAIL_DATA_URL_PREFIX + FRAME_A.toString('base64'),
+    });
+    expect(received.at(-1)?.authorization).toBe(`Bearer ${channelViewer.token}`);
     expect(handle.runtime.sourceCatalog().sources.some((source) => source.id === id)).toBe(false);
     for (const failure of ['missing', 'bad', 'oversize'] as const) {
       poster = failure;
