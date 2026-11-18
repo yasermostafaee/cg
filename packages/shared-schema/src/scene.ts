@@ -491,9 +491,18 @@ export interface Raster {
  */
 export const REFERENCE_FRAME: Raster = { width: 1920, height: 1080 };
 
-/** Legacy projects use the established output reference, even when their root is cropped. */
-export function resolveProjectOutputRaster(scene: { outputRaster?: Raster | undefined }): Raster {
-  return scene.outputRaster ?? REFERENCE_FRAME;
+/**
+ * Resolve from the ORIGINAL project root, never a projected composition. Old HD
+ * projects used the exact 1280×720 preset. Other legacy roots may be cropped graphics
+ * (including the old Small canvas preset), so their established output stays Full HD.
+ */
+export function resolveProjectOutputRaster(scene: {
+  outputRaster?: Raster | undefined;
+  resolution?: Raster | undefined;
+}): Raster {
+  if (scene.outputRaster !== undefined) return scene.outputRaster;
+  if (scene.resolution?.width === 1280 && scene.resolution.height === 720) return scene.resolution;
+  return REFERENCE_FRAME;
 }
 
 /** Remove authoring-only output guides from a compiled template, preserving its own raster. */

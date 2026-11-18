@@ -29,7 +29,9 @@ function fresh(): string {
   const { scene: source } = projects.newScene('Small graphic', 'custom', {
     resolution: { width: 800, height: 200 },
   });
-  designerStore.setScene(source, null);
+  // Existing project fixture predates the explicit output raster written by New Project.
+  const { outputRaster: _createdRaster, ...legacy } = source;
+  designerStore.setScene(legacy, null);
   const id = designerStore.get().activeCompositionId;
   if (id === null) throw new Error('Missing active composition');
   return id;
@@ -47,6 +49,67 @@ describe('project output raster and independent composition placement', () => {
     expect(active().resolution).toEqual({ width: 800, height: 200 });
     expect(scene().resolution).toEqual({ width: 800, height: 200 });
     expect(resolveProjectOutputRaster(active())).toEqual({ width: 1280, height: 720 });
+  });
+
+  it('retains the original legacy HD project raster while resizing or opening compositions', () => {
+    fresh();
+    const source = { ...scene(), resolution: { width: 1280, height: 720 } };
+    designerStore.setScene(source, null);
+    expect(active().resolution).toEqual({ width: 800, height: 200 });
+    expect(active().outputRaster).toEqual({ width: 1280, height: 720 });
+    expect(scene().outputRaster).toBeUndefined();
+    designerStore.updateScene({ resolution: { width: 1920, height: 190 } });
+    expect(resolveProjectOutputRaster(active())).toEqual({ width: 1280, height: 720 });
+    expect(scene().resolution).toEqual({ width: 1280, height: 720 });
+    designerStore.setProjectOutputRaster({ width: 1920, height: 1080 });
+    expect(active().outputRaster).toEqual({ width: 1920, height: 1080 });
+    designerStore.undo();
+    expect(active().outputRaster).toEqual({ width: 1280, height: 720 });
+    designerStore.undo();
+    expect(active().resolution).toEqual({ width: 800, height: 200 });
+  });
+
+  it('never mistakes an HD-sized composition in an old Full HD or cropped-root project for the output', () => {
+    fresh();
+    for (const resolution of [
+      { width: 1920, height: 1080 },
+      { width: 1920, height: 190 },
+      { width: 1024, height: 1024 },
+    ]) {
+      designerStore.setScene({ ...scene(), resolution }, null);
+      designerStore.updateScene({ resolution: { width: 1280, height: 720 } });
+      expect(active().outputRaster).toEqual({ width: 1920, height: 1080 });
+      expect(resolveProjectOutputRaster(active())).toEqual({ width: 1920, height: 1080 });
+      expect(scene().outputRaster).toBeUndefined();
+    }
+  });
+
+  it('keeps a newly chosen HD output explicit through composition resize, save and export', async () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const created = projects.newScene('HD lower third', 'custom', {
+      resolution: { width: 1280, height: 720 },
+    }).scene;
+    expect(created.outputRaster).toEqual({ width: 1280, height: 720 });
+    expect(created.outputRaster).not.toBe(created.resolution);
+    designerStore.setScene(created, null);
+    designerStore.updateScene({ resolution: { width: 1920, height: 190 } });
+    expect(active().outputRaster).toEqual({ width: 1280, height: 720 });
+    designerStore.setCompositionOutputPosition({ anchor: 'bottom-center', offset: { x: 0, y: 0 } });
+    const bytes = await packProject({
+      scene: scene(),
+      index: [],
+      files: new Map(),
+      savedAt: '2026-11-18T00:00:00.000Z',
+    });
+    const reopened = await readProjectDocument(bytes);
+    expect(reopened.scene.outputRaster).toEqual({ width: 1280, height: 720 });
+    const compiled = projectCompositionForExport(
+      reopened.scene,
+      designerStore.get().activeCompositionId,
+    );
+    expect(compiled?.resolution).toEqual({ width: 1920, height: 190 });
+    expect(compiled).not.toHaveProperty('outputRaster');
+    expect(compiled?.defaultPosition).toEqual({ anchor: 'bottom-center', offset: { x: 0, y: 0 } });
   });
 
   it('writes the root raster and active placement independently, with dirty tracking and one undo per commit', () => {

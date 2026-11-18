@@ -17,6 +17,7 @@ describe('ProjectStore', () => {
     expect(path).toBeNull();
     expect(scene.name).toBe('My Bug');
     expect(scene.templateType).toBe('logo-bug');
+    expect(scene.outputRaster).toEqual({ width: 1920, height: 1080 });
     expect(() => SceneSchema.parse(scene)).not.toThrow();
   });
 
@@ -62,12 +63,24 @@ describe('ProjectStore', () => {
     expect(reopened.scene).toMatchObject({
       resolution: { width: 1280, height: 720 },
       frameRate: 30,
+      outputRaster: { width: 1280, height: 720 },
       frameRange: { in: 0, out: 300 },
     });
     expect(reopened.scene?.compositions?.[0]).toMatchObject({
       resolution: { width: 1280, height: 720 },
       frameRange: { in: 0, out: 300 },
     });
+  });
+
+  it('stores the chosen square or custom output explicitly instead of inferring it from later comp sizes', () => {
+    for (const resolution of [
+      { width: 1024, height: 1024 },
+      { width: 3840, height: 2160 },
+    ]) {
+      const { scene } = makeStore().newScene('Custom raster', 'custom', { resolution });
+      expect(scene.outputRaster).toEqual(resolution);
+      expect(scene.outputRaster).not.toBe(resolution);
+    }
   });
 
   it('records recents on save, most-recent first, deduped', async () => {

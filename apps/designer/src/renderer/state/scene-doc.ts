@@ -18,6 +18,7 @@ import type {
 import {
   discardMissingSceneElementBindings,
   migrateGlobalFieldsToCompositions,
+  resolveProjectOutputRaster,
 } from '@cg/shared-schema';
 import { projectCompositionForExport } from '@cg/vcg-format';
 import { current } from './store-core.js';
@@ -263,6 +264,8 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     ...scene,
     name: c.name,
     resolution: c.resolution,
+    // Materialize the original project reference before replacing its raster with the comp.
+    outputRaster: resolveProjectOutputRaster(scene),
     defaultPosition: c.defaultPosition ?? scene.defaultPosition,
     // D-026 — fps is project-level; the projected scene keeps the project fps.
     frameRate: scene.frameRate,

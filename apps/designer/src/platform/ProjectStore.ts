@@ -78,6 +78,7 @@ export class ProjectStore {
       name,
       templateType,
       resolution,
+      outputRaster: { ...resolution },
       frameRate,
       safeAreas: { title: 10, action: 5 },
       frameRange,

@@ -323,7 +323,9 @@ export function CanvasArea({
   // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
   const guideProfile = useDesignerBroadcastGuides();
-  const outputRaster = resolveProjectOutputRaster(scene ?? {});
+  const outputRaster = useDesignerSelector((state) =>
+    resolveProjectOutputRaster(state.scene ?? {}),
+  );
   const outputPosition = resolveDefaultPosition(scene ?? {});
   const rasterScale = outputScale(outputRaster);
   const rasterPad = outputLetterbox(outputRaster);

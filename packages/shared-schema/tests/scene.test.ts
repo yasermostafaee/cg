@@ -58,6 +58,28 @@ describe('Scene', () => {
     expect(resolveDefaultPosition(scene)).toEqual({ anchor: 'center', offset: { x: 0, y: 0 } });
   });
 
+  it('recognizes only the exact legacy HD project preset and honors an explicit output reference', () => {
+    expect(resolveProjectOutputRaster({ resolution: { width: 1280, height: 720 } })).toEqual({
+      width: 1280,
+      height: 720,
+    });
+    for (const resolution of [
+      { width: 1024, height: 1024 },
+      { width: 1920, height: 190 },
+      { width: 1280, height: 200 },
+      { width: 1281, height: 720 },
+    ]) {
+      expect(resolveProjectOutputRaster({ resolution })).toEqual({ width: 1920, height: 1080 });
+    }
+    expect(
+      resolveProjectOutputRaster({
+        resolution: { width: 1280, height: 720 },
+        outputRaster: { width: 3840, height: 2160 },
+      }),
+    ).toEqual({ width: 3840, height: 2160 });
+    expect(resolveProjectOutputRaster({})).toEqual({ width: 1920, height: 1080 });
+  });
+
   it('persists an independent output raster and composition placement without changing nested geometry', () => {
     const position = { anchor: 'bottom-right', offset: { x: -40, y: -30 } } as const;
     const scene = SceneSchema.parse({
