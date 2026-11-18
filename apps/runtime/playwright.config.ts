@@ -146,8 +146,17 @@ function resolveWorkers(): number | undefined {
  * Run 43636673813 reached the 17-minute Runtime deadline with 44 tests still to run out of 461.
  * The observed rate projects roughly 18.8 minutes for the full suite. Allow 21 minutes for
  * Runtime and retain 17 for Designer, with a 44-minute job cap for setup and build.
+ *
+ * Run 44211228849 reached 1260 seconds with 384 unique Runtime passes and 98 not run.
+ * Its 404 successful attempts took 1181.233 seconds; removing the 20 serial-group retry
+ * passes leaves 1010.233 seconds for 384 healthy cases. Failed/interrupted attempts cost
+ * another 46.5 seconds. Even excluding every retry, the measured rate projects 21.3 minutes
+ * for the current 486 runnable cases, plus about 32 seconds of observed suite overhead.
+ * Allow 26 minutes (~19% headroom over that healthy projection), retain Designer's 17,
+ * and keep the same six-minute setup/build margin by raising the shared job cap to 49.
+ * Individual assertion timeouts, retries and coverage are unchanged.
  */
-const CI_GLOBAL_TIMEOUT_MS = 21 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 26 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,

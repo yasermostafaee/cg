@@ -428,7 +428,10 @@ jobs:
     # now 17 + 17 suite budgets below the outer cap with setup/build room. Run 43636673813
     # reached the Runtime budget with 44 tests still to run. 44 minutes leaves setup and build
     # room for the 17-minute Designer and 21-minute Runtime suites.
-    timeout-minutes: 44
+    # Run 44211228849's retry-free Runtime projection is ~21.85 minutes, already above 21.
+    # Its measured adjustment is Runtime 26 + Designer 17 = 43, retaining the existing
+    # six-minute setup/build margin inside 49. Assertions, retries and test coverage stay.
+    timeout-minutes: 49
 
     steps:
       - name: Checkout

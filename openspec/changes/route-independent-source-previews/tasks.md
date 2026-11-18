@@ -32,3 +32,22 @@
 - [ ] Integrate with the release fixes, pass the full local gate and push normally.
 - [ ] Record the carrying commit's actual completed green Linux E2E URL and build installers.
 - [ ] Verify the updated Bridge/Control previews on the target A/B station.
+
+## Linux integration evidence
+
+Source `927412a7` passed all 103 local gate tasks (Runtime 2746, Designer 2026, Bridge
+2261), formatting, the control-byte scan and 218 strict OpenSpec checks. Its Linux heavy
+gate and Docs check passed, but the actual E2E job failed:
+https://github.com/yasermostafaee/cg/actions/runs/44211228849/job/134489928764.
+Designer passed 461 with 15 skipped; pack E2E passed 2. Runtime passed 384, failed 3,
+skipped 2 and left 98 unrun at its 1260-second global deadline. The failures retained
+obsolete unavailable-A preview expectations and coupled PVW to a PGM row selection.
+Their repairs preserve read-only, binding, programme and permission guards.
+
+Budget diagnosis excludes all retry cost: 404 successful attempts took 1181.233 seconds,
+including 171 seconds of repeated successes. The 384 unique healthy cases took 1010.233
+seconds; failed/interrupted attempts took 46.5 seconds. The healthy rate over the current
+486 runnable tests plus observed suite overhead projects about 21.85 minutes. Runtime's
+global ceiling is therefore 26 minutes, Designer stays at 17, and the outer job becomes
+49 minutes, preserving its six-minute setup/build margin. Per-test assertions, retries
+and coverage are unchanged. This failed run does not discharge the final Linux E2E debt.
