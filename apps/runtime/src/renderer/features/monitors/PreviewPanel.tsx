@@ -1,7 +1,8 @@
 import { isPositionLocked } from '../inspector/PositionPicker.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { BROADCAST_SAFE_AREA_TITLE } from '@cg/ui';
 import {
   ArrowRightFromLine,
   CircleArrowOutDownRight,
@@ -61,6 +62,7 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
+import { FittedSafeAreaGuides } from './SafeAreaGuides.js';
 import { sourceDisplayName, templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
@@ -175,6 +177,8 @@ export function PreviewPanel({
   const preserveFrameAspect = usePreserveFrameAspect();
   const frameEffect = useFrameTransitionPreference();
   const [panSession, setPanSession] = useState(0);
+  const [safeAreasVisible, setSafeAreasVisible] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
   // when the bridge cannot be reached, or why there is none (`templates.page`).
@@ -626,6 +630,17 @@ export function PreviewPanel({
             <Icon icon={Hand} size={13} />
             <span className="cg-pvw-tool-label">Move template</span>
           </Button>
+          <Button
+            variant="ghost"
+            active={safeAreasVisible}
+            aria-label="Safe areas in Preview"
+            aria-pressed={safeAreasVisible}
+            title={BROADCAST_SAFE_AREA_TITLE}
+            onClick={() => setSafeAreasVisible((shown) => !shown)}
+          >
+            <Icon icon={SquareDashed} size={13} />
+            <span className="cg-pvw-tool-label">Safe areas</span>
+          </Button>
           {panVisible && (
             <Button
               variant="ghost"
@@ -754,7 +769,7 @@ export function PreviewPanel({
           onSelect={(lookId) => setPreviewLookPin(selectedLayout.itemId, lookId)}
         />
       )}
-      <div className="cg-pvw-stage">
+      <div className="cg-pvw-stage" ref={stageRef} style={{ position: 'relative' }}>
         {subjects.length === 0 ? (
           <div
             style={styles.screen}
@@ -794,6 +809,9 @@ export function PreviewPanel({
             panSession={panSession}
             panSourceAspects={panSourceAspects}
           />
+        )}
+        {safeAreasVisible && (
+          <FittedSafeAreaGuides width={raster.width} height={raster.height} stage={stageRef} />
         )}
       </div>
     </Panel>

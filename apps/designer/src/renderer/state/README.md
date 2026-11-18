@@ -14,6 +14,10 @@ method bodies moved unchanged; only the file they live in differs.
 
 ## Files
 
+`safeAreasVisible` is session-only canvas chrome, toggled by `toggleSafeAreas`.
+Its EBU R95 93% Action / 90% Graphics guides do not read or replace authored
+`scene.safeAreas`, dirty the document, create history, or enter an export page.
+
 `timelinePlaybackMode` is session-only (`lifecycle`, `playhead` or `null`), paired with
 `timelinePlaying` by `setTimelinePlayback`. Ordinary Canvas Play and explicit authoring
 loops/reverse use the local frame clock; D-199's opt-in Rehearse controls use the runtime and

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
+import { SquareDashed, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
+import { BROADCAST_SAFE_AREA_TITLE } from '@cg/ui';
 import type { ExportIssue } from '@cg/shared-ipc';
 import type { Element, Scene } from '@cg/shared-schema';
 import { lookGroupOf } from '@cg/shared-schema';
@@ -30,6 +31,7 @@ import {
 import { ARROW_CURSOR, BIND_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { LookPicker } from './LookPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import { SafeAreaGuides } from './SafeAreaGuides.js';
 import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
 import { shownSequenceItem } from '../../state/slices/view.js';
 import { PreviewHost } from './PreviewHost.js';
@@ -284,6 +286,7 @@ export function CanvasArea({
   } | null>(null);
   const {
     rulerVisible,
+    safeAreasVisible,
     guides,
     snapGuides,
     currentFrame,
@@ -294,6 +297,7 @@ export function CanvasArea({
   } = useDesignerSelector(
     (s) => ({
       rulerVisible: s.rulerVisible,
+      safeAreasVisible: s.safeAreasVisible,
       guides: s.guides,
       snapGuides: s.snapGuides,
       currentFrame: s.currentFrame,
@@ -1252,6 +1256,16 @@ export function CanvasArea({
           onPick={(id) => designerStore.setActiveLook(id)}
         />
         <span className={s.spacer} />
+        <Control
+          variant="bare"
+          className={cx(s.headerButton, safeAreasVisible && s.headerButtonActive)}
+          onClick={() => designerStore.toggleSafeAreas()}
+          aria-label="Safe areas"
+          aria-pressed={safeAreasVisible}
+          title={BROADCAST_SAFE_AREA_TITLE}
+        >
+          <Icon icon={SquareDashed} size={16} />
+        </Control>
         <span className={s.zoomReadout} data-testid="zoom-readout">
           {zoomPct}%
         </span>
@@ -1367,6 +1381,14 @@ export function CanvasArea({
                   onPan={applyPan}
                   issues={issues}
                 />
+                {safeAreasVisible && (
+                  <SafeAreaGuides
+                    width={scene.resolution.width}
+                    height={scene.resolution.height}
+                    scale={zoom}
+                    style={{ left: frameOffset.x * zoom, top: frameOffset.y * zoom, zIndex: 5 }}
+                  />
+                )}
               </div>
             </div>
           )}

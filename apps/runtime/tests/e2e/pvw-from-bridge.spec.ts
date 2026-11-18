@@ -412,6 +412,102 @@ test('B-444: maximizing and restoring PROGRAM leaves the same PREVIEW animation 
   ).toEqual([]);
 });
 
+test('safe areas are optional PVW chrome, follow the fitted active raster and never enter output pages', async ({
+  page,
+}, testInfo) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Missing engine');
+  await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
+  handle.runtime.templateImport(TEMPLATE, HTML, 1);
+  const servedBefore = handle.runtime.templatePage(TEMPLATE.templateId, 1);
+  expect(
+    await handle.runtime.loadFixed(
+      { channel: 1, layer: ROW },
+      'safe-area-item',
+      TEMPLATE.templateId,
+      {},
+    ),
+  ).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const toggle = pvw.getByRole('button', { name: 'Safe areas in Preview', exact: true });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(pvw.locator('[data-safe-area-guides]')).toHaveCount(0);
+  await toggle.click();
+  const guides = pvw.locator('[data-safe-area-guides]');
+  await expect(guides).toBeVisible();
+  await expect(pvw.getByText('No layers on preview', { exact: true })).toBeVisible();
+  const emptyBounds = await guides.boundingBox();
+  const emptyStage = await pvw.locator('.cg-pvw-stage').boundingBox();
+  expect(emptyBounds?.width).toBeCloseTo(
+    Math.min(emptyStage?.width ?? 0, ((emptyStage?.height ?? 0) * 16) / 9),
+    0,
+  );
+  await page.evaluate(() => {
+    const read = window.cg.templates.page;
+    const state = window as unknown as { releaseSafeAreaPage?: () => void };
+    window.cg.templates.page = (request) =>
+      new Promise((resolve) => {
+        state.releaseSafeAreaPage = () => {
+          void read(request).then(resolve);
+        };
+      });
+  });
+  await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await expect(pvw.locator('[data-pvw-no-page]')).toBeVisible();
+  await expect(guides).toBeVisible();
+  await page.waitForFunction(
+    () =>
+      typeof (window as unknown as { releaseSafeAreaPage?: () => void }).releaseSafeAreaPage ===
+      'function',
+  );
+  await page.evaluate(() =>
+    (window as unknown as { releaseSafeAreaPage: () => void }).releaseSafeAreaPage(),
+  );
+  await expect(guides).toHaveCSS('pointer-events', 'none');
+  await expect(guides.locator('[data-safe-area="action"]')).toHaveAttribute('width', '1786');
+  await expect(guides.locator('[data-safe-area="graphics"]')).toHaveAttribute('height', '972');
+  await expect(pvw.locator('[data-rehearsal-checker]')).toBeVisible();
+  const compare = async (): Promise<void> => {
+    const [picture, outline, fit] = await Promise.all([
+      pvw.locator('[data-rehearsal-checker]').boundingBox(),
+      guides.boundingBox(),
+      pvw.getByRole('group', { name: 'Local preview' }).boundingBox(),
+    ]);
+    expect(picture).not.toBeNull();
+    expect(outline).not.toBeNull();
+    expect(fit).not.toBeNull();
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      expect(outline?.[key]).toBeCloseTo(picture?.[key] ?? -1000, 0);
+    expect((outline?.width ?? 0) / (outline?.height ?? 1)).toBeCloseTo(16 / 9, 3);
+    const expectedWidth = Math.min(fit?.width ?? 0, ((fit?.height ?? 0) * 16) / 9);
+    expect(outline?.width).toBeCloseTo(expectedWidth, 0);
+  };
+  await compare();
+  const baseline = engine.receivedCommands().length;
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await expect(async () => await compare()).toPass();
+  await page.screenshot({ path: testInfo.outputPath('control-pvw-safe-areas.png') });
+  await expect(
+    pvw.frameLocator('iframe[data-rehearsal-frame]').locator('[data-safe-area-guides]'),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'PROGRAM (PGM)' }).locator('[data-safe-area-guides]'),
+  ).toHaveCount(0);
+  expect(handle.runtime.templatePage(TEMPLATE.templateId, 1)).toEqual(servedBefore);
+  await toggle.click();
+  await expect(guides).toHaveCount(0);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(baseline)
+      .filter(({ line }) => /^(CG|PLAY|LOADBG|CLEAR|MIXER) /.test(line)),
+  ).toEqual([]);
+});
+
 test('a file poster survives an absent passive PVW and yields to a decoded moving picture without programme commands', async ({
   page,
 }) => {

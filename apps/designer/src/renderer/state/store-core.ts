@@ -187,6 +187,8 @@ export interface DesignerStoreState {
   timelineZoom: number;
   /** View menu — show the canvas pixel rulers (top + left). */
   rulerVisible: boolean;
+  /** Session-only broadcast guide visibility; never scene or export content. */
+  safeAreasVisible: boolean;
   /** View menu — snap element edges/centers while dragging on the canvas. */
   snappingEnabled: boolean;
   /**
@@ -291,6 +293,7 @@ export const initialState: DesignerStoreState = {
   keyframeInspectorOpen: false,
   timelineZoom: 1,
   rulerVisible: false,
+  safeAreasVisible: false,
   snappingEnabled: true,
   issuesOpen: false,
   aspectLockOff: new Set<string>(),

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { SceneSchema } from '@cg/shared-schema';
 import { designerStore } from '../src/renderer/state/store.js';
 
 afterEach(() => {
@@ -9,6 +10,7 @@ describe('designerStore — View prefs (ruler + snapping)', () => {
   it('defaults: ruler off, snapping on, no guides', () => {
     const s = designerStore.get();
     expect(s.rulerVisible).toBe(false);
+    expect(s.safeAreasVisible).toBe(false);
     expect(s.snappingEnabled).toBe(true);
     expect(s.snapGuides).toEqual({ x: [], y: [] });
   });
@@ -18,6 +20,39 @@ describe('designerStore — View prefs (ruler + snapping)', () => {
     expect(designerStore.get().rulerVisible).toBe(true);
     designerStore.toggleRuler();
     expect(designerStore.get().rulerVisible).toBe(false);
+  });
+
+  it('safe-area visibility stays in view state without dirtying or creating undo history', () => {
+    designerStore.setScene(
+      SceneSchema.parse({
+        schemaVersion: 1,
+        id: 'safe-area-project',
+        name: 'Custom authored margins',
+        templateType: 'custom',
+        resolution: { width: 1920, height: 1080 },
+        frameRate: 50,
+        frameRange: { in: 0, out: 50 },
+        editorBackdrop: 'transparent',
+        safeAreas: { title: 10, action: 5 },
+        layers: [],
+        fields: [],
+        bindings: [],
+        fonts: [],
+        metadata: { createdAt: '2026-11-18T00:00:00.000Z', updatedAt: '2026-11-18T00:00:00.000Z' },
+      }),
+      null,
+    );
+    const before = designerStore.get();
+    designerStore.toggleSafeAreas();
+    expect(designerStore.get()).toMatchObject({
+      safeAreasVisible: true,
+      dirty: false,
+      canUndo: false,
+    });
+    expect(designerStore.get().scene).toBe(before.scene);
+    expect(designerStore.get().scene?.safeAreas).toEqual({ title: 10, action: 5 });
+    designerStore.toggleSafeAreas();
+    expect(designerStore.get().safeAreasVisible).toBe(false);
   });
 
   it('toggleSnapping flips snapping and clears any live guides', () => {

@@ -40,6 +40,12 @@ export const headerButton = style({
   justifyContent: 'center',
 });
 
+export const headerButtonActive = style({
+  color: colors.accent,
+  background: colors.menuHover,
+  borderColor: colors.accent,
+});
+
 // Text variant of `headerButton` for the "100%" zoom-reset label: a self-contained
 // style (not a class override) that keeps the 22px height + the shared look but
 // grows in width to fit the text, so the hover background wraps the whole label

@@ -82,6 +82,10 @@ export const viewSlice = {
     set({ rulerVisible: !current.rulerVisible });
   },
 
+  toggleSafeAreas(): void {
+    set({ safeAreasVisible: !current.safeAreasVisible });
+  },
+
   /** View menu — enable/disable canvas snapping. Clears any live guides. */
   toggleSnapping(): void {
     set({ snappingEnabled: !current.snappingEnabled, snapGuides: { x: [], y: [] } });
