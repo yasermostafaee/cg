@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest';
  * Runtime's source spells — `cg.runtime.*` in the real renderer's `localStorage` and
  * `sessionStorage`, `cg-runtime:*` in the offline mock's, the IndexedDB database, the OPFS
  * workspace — is DERIVED from the tree and compared to the inventory recorded at
- * `576a72eb`, the head this change was built on. Identical before and after.
+ * `576a72eb`, the head Station setup was built on, plus the explicitly documented
+ * additions below. Station setup itself added no keys.
  *
  * ── WHY A CENSUS AND NOT A REVIEW ─────────────────────────────────────────────
  *
@@ -82,8 +83,8 @@ function inventory(): {
 }
 
 /**
- * THE INVENTORY AT `576a72eb`, before Station setup — and after it. A change to any line
- * here is a persisted-key change and needs its own migration story, not a settings move.
+ * The Station setup baseline at `576a72eb`, plus reviewed additions documented inline.
+ * A change to any line is a persisted-key change and needs its own migration story.
  */
 const BEFORE_AND_AFTER = {
   realLocalStorage: [
@@ -129,6 +130,14 @@ const BEFORE_AND_AFTER = {
       value reads as absent.
     */
     'cg.runtime.check-show-all.v1',
+    /*
+      `fix-persistent-failover-notice` — this console's acknowledged failover events.
+      Each record binds the configured Bridge address, auth origin, A/B endpoints and
+      stable operator ID to one timestamp/from/to/reason identity; retain at most 64 scopes.
+      No migration is owed: ABSENT or unreadable means no event was dismissed. This is
+      an acknowledgement preference only, never failover authority or station state.
+    */
+    'cg.runtime.failover.dismissed.v1',
     /*
       🔴 `FIELD-FIXES-01` L — the notices this console's operator dismissed about another system's
       layers inside CG's bands (`foreignNotice.ts`): per channel and strip, the `layer:producer`
@@ -210,7 +219,7 @@ const BEFORE_AND_AFTER = {
 };
 
 describe('§4 — the browser’s persisted keys, before and after Station setup', () => {
-  it('the inventory derived from the tree is IDENTICAL to the one recorded at 576a72eb', () => {
+  it('the tree matches the exact reviewed inventory and documented additions to 576a72eb', () => {
     expect(inventory()).toEqual(BEFORE_AND_AFTER);
   });
 
