@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type RefObject } from 'react';
 import {
   broadcastGuideRectangles,
+  layoutBroadcastGuideLabels,
   broadcastGuideFrame,
   broadcastCustomGuideLines,
   broadcastGuideColor,
@@ -8,7 +9,6 @@ import {
   type BroadcastGuideProfile,
 } from '@cg/ui';
 import { previewGuideColors } from '../../theme.js';
-import { GUIDE_BORDER_LABELS, guideFrameLabel } from './safeGuideLabels.js';
 
 /** One stage-sized view aid for empty, loading and rendered previews alike. */
 export function FittedSafeAreaGuides({
@@ -141,30 +141,26 @@ export function SafeAreaGuides({
         </g>
       ))}
       {/* Paint every outline before any label, so adjacent borders cannot cover text. */}
-      {rectangles.map((area) => (
-        <text
-          key={`label-${area.frameId}/${String(area.percent)}`}
-          data-safe-area-label=""
-          x={
-            area.percent === 100
-              ? area.x + 6 / scale
-              : area.percent === 80
-                ? area.x + area.width - 6 / scale
-                : area.x + area.width / 2
-          }
-          y={area.percent === 90 ? area.y + area.height - 4 / scale : area.y + 12 / scale}
-          textAnchor={area.percent === 100 ? 'start' : area.percent === 80 ? 'end' : 'middle'}
-          fontSize={10 / scale}
-          fontFamily="sans-serif"
-          fill={area.stroke}
-          stroke={previewGuideColors.halo}
-          strokeWidth={3 / scale}
-          paintOrder="stroke"
-          strokeLinejoin="round"
-        >
-          {guideFrameLabel(area)} · {GUIDE_BORDER_LABELS[area.percent]}
-        </text>
-      ))}
+      {layoutBroadcastGuideLabels(rectangles, scale).map(
+        ({ key, label, labelX, baseline, leftAligned, stroke }) => (
+          <text
+            key={`label-${key}`}
+            data-safe-area-label=""
+            x={labelX}
+            y={baseline}
+            textAnchor={leftAligned ? 'start' : 'end'}
+            fontSize={10 / scale}
+            fontFamily="sans-serif"
+            fill={stroke}
+            stroke={previewGuideColors.halo}
+            strokeWidth={4 / scale}
+            paintOrder="stroke"
+            strokeLinejoin="round"
+          >
+            {label}
+          </text>
+        ),
+      )}
       {custom
         .filter((line) => line.name !== '')
         .map((line) => (

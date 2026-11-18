@@ -135,6 +135,49 @@ export function broadcastGuideRectangles(
   );
 }
 
+export function layoutBroadcastGuideLabels(
+  areas: readonly BroadcastGuideRectangle[],
+  scale: number,
+) {
+  const occupied: { left: number; right: number; baseline: number }[] = [];
+  const lineHeight = 20 / scale;
+  return areas.map(({ x, y, width, height, percent, aspect, stroke, frameId, customAspect }) => {
+    const ratio =
+      aspect === 'auto'
+        ? 'Auto'
+        : customAspect === undefined
+          ? aspect
+          : `${customAspect.width}:${customAspect.height}`;
+    const label =
+      aspect === 'auto' && percent === 93
+        ? 'Action 93%'
+        : aspect === 'auto' && percent === 90
+          ? 'Graphics 90%'
+          : `${ratio} · ${percent}%`;
+    const leftAligned = percent === 100 || percent === 80;
+    const fromTop = percent >= 93;
+    const labelX = leftAligned ? x + 5 / scale : x + width - 5 / scale;
+    const labelWidth = (6 * label.length + 4) / scale;
+    const left = leftAligned ? labelX - 2 / scale : labelX - labelWidth;
+    const right = leftAligned ? labelX + labelWidth : labelX + 2 / scale;
+    let baseline = fromTop ? y + 12 / scale : y + height - 4 / scale;
+    const step = fromTop ? lineHeight : -lineHeight;
+    // Keep captions for nested guides together, while giving neighboring captions their own row.
+    while (
+      occupied.some(
+        (box) =>
+          left < box.right && right > box.left && Math.abs(baseline - box.baseline) < lineHeight,
+      ) &&
+      baseline + step >= y + lineHeight &&
+      baseline + step <= y + height - 4 / scale
+    ) {
+      baseline += step;
+    }
+    occupied.push({ left, right, baseline });
+    return { key: `${frameId}:${percent}`, label, labelX, baseline, leftAligned, stroke };
+  });
+}
+
 export interface BroadcastCustomGuideLine extends BroadcastGuideLine {
   x1: number;
   y1: number;

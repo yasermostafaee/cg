@@ -9,6 +9,7 @@ export { clearImageThumbnailCache, imageThumbnailUrl } from './image-thumbnail.j
 export {
   broadcastSafeAreas,
   broadcastGuideRectangles,
+  layoutBroadcastGuideLabels,
   broadcastGuideFrame,
   broadcastCustomGuideLines,
   BROADCAST_SAFE_AREA_TITLE,
