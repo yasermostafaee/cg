@@ -9,6 +9,7 @@ import {
   Monitor,
   Pencil,
   Plus,
+  SquareDashed,
   RotateCcw,
   Trash2,
   Video,
@@ -57,6 +58,9 @@ import {
   readControlLiveLayoutFontFile,
 } from './controlLiveLayoutCompiler.js';
 import { usePvwSourceFrames } from '../monitors/usePvwSourceFrames.js';
+import { FittedSafeAreaGuides } from '../monitors/SafeAreaGuides.js';
+import { SafeGuideSettings } from '../monitors/SafeGuideSettings.js';
+import { useSafeGuidePreferences } from '../monitors/useSafeGuidePreferences.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
 import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { sourcePresenceDescription } from '../sources/SourcePresenceBadges.js';
@@ -188,6 +192,9 @@ export function LiveLayoutEditor({
   });
   const [focusId, setFocusId] = useState<string>();
   const [showPreviewMeters, setShowPreviewMeters] = useState(false);
+  const [showSafeGuides, setShowSafeGuides] = useState(false);
+  const { profile: safeGuideProfile, setProfile: setSafeGuideProfile } = useSafeGuidePreferences();
+  const emptyPreview = useRef<HTMLDivElement>(null);
   const [maskSelection, setMaskSelection] = useState<{ frameId: string; index: number }>();
   const [maskEditFrameId, setMaskEditFrameId] = useState<string>();
   const [cropEditFrameId, setCropEditFrameId] = useState<string>();
@@ -918,6 +925,28 @@ export function LiveLayoutEditor({
                 <Icon icon={Monitor} size={16} /> Preview · PVW
               </h3>
               <div className="cg-live-layout-preview-actions">
+                <div
+                  className="cg-live-layout-safe-guides"
+                  role="group"
+                  aria-label="Layout safe guides"
+                >
+                  <Button
+                    variant="neutral"
+                    aria-pressed={showSafeGuides}
+                    active={showSafeGuides}
+                    title={showSafeGuides ? 'Hide safe guides' : 'Show safe guides'}
+                    onClick={() => setShowSafeGuides((visible) => !visible)}
+                  >
+                    <Icon icon={SquareDashed} size={15} /> Safe areas
+                  </Button>
+                  <SafeGuideSettings
+                    profile={safeGuideProfile}
+                    onChange={(profile) => {
+                      setSafeGuideProfile(profile);
+                      setShowSafeGuides(true);
+                    }}
+                  />
+                </div>
                 {focusId !== undefined && preset !== undefined && (
                   <Button ref={returnButton} variant="neutral" onClick={returnToPreset}>
                     <Icon icon={RotateCcw} size={15} /> Return to{' '}
@@ -946,6 +975,7 @@ export function LiveLayoutEditor({
                 backgroundUrl={assetUrl}
                 sourceFrames={sourceFrames}
                 showMeters={showPreviewMeters}
+                guideProfile={showSafeGuides ? safeGuideProfile : undefined}
                 attachmentSources={attachmentAssets}
                 onFocus={focusFrame}
                 cropEditor={
@@ -977,6 +1007,7 @@ export function LiveLayoutEditor({
               />
             ) : (
               <div
+                ref={emptyPreview}
                 className="cg-live-layout-stage cg-live-layout-empty-preview"
                 data-layout-preview=""
                 data-transparent-background={layout.background.kind === 'none' ? '' : undefined}
@@ -987,6 +1018,14 @@ export function LiveLayoutEditor({
                   : preset === undefined
                     ? 'Add a preset to preview these plates.'
                     : 'Choose plates for this preset.'}
+                {showSafeGuides && (
+                  <FittedSafeAreaGuides
+                    width={layout.resolution.width}
+                    height={layout.resolution.height}
+                    stage={emptyPreview}
+                    profile={safeGuideProfile}
+                  />
+                )}
               </div>
             )}
             <div className="cg-live-layout-preview-controls">

@@ -223,9 +223,16 @@
 
 .cg-live-layout-preview-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
   gap: var(--r-space-2);
+}
+
+.cg-live-layout-safe-guides {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-1);
 }
 
 .cg-live-layout-preview-actions > .cg-btn {

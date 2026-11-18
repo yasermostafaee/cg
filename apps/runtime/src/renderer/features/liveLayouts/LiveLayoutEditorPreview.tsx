@@ -28,12 +28,14 @@ import {
   type Resolution,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
+import type { BroadcastGuideProfile } from '@cg/ui';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { liveLayoutArtwork } from '../../theme.js';
 import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
+import { FittedSafeAreaGuides } from '../monitors/SafeAreaGuides.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
 import { focusSlideOcclusion } from './focusSlideClip.js';
 import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
@@ -414,6 +416,7 @@ export function LiveLayoutEditorPreview({
   backgroundUrl,
   sourceFrames,
   showMeters,
+  guideProfile,
   attachmentSources,
   onFocus,
   placementEditor,
@@ -428,6 +431,7 @@ export function LiveLayoutEditorPreview({
   backgroundUrl: string | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
   showMeters: boolean;
+  guideProfile?: BroadcastGuideProfile | undefined;
   attachmentSources: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
   onFocus: (frameId: string) => void;
   placementEditor?: ReactNode;
@@ -726,6 +730,14 @@ export function LiveLayoutEditorPreview({
             </div>
           );
         })}
+        {guideProfile !== undefined && (
+          <FittedSafeAreaGuides
+            width={raster.width}
+            height={raster.height}
+            stage={stage}
+            profile={guideProfile}
+          />
+        )}
       </div>
       {activeSingle !== undefined && layout.frames.length > 1 && (
         <div className="cg-live-layout-switch" role="group" aria-label="Switch focused plate">
