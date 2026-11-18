@@ -54,6 +54,14 @@
       ],
       "fixes": [
         {
+          "fa": "پس از جابه‌جایی بین سرورها، پیش‌نمایش همان مدیای تأییدشده می‌تواند خودکار برگردد و موقعیت پخش، حالت پخش یا مکث و تنظیم شنیدن صدا را حفظ کند.",
+          "en": "After a verified handoff between servers, the same media preview can reopen automatically while preserving its position, Play or Pause intent and listening setting."
+        },
+        {
+          "fa": "اگر سرور انتخاب‌شده برای پیش‌نمایش تصویر ندهد، تصویر معتبر منبع روی سرور دیگر می‌تواند در PVW و کارت‌های ورودی جایگزین شود. نشان A یا B سرورِ تصویر نمایش‌داده‌شده را مشخص می‌کند.",
+          "en": "When the selected passive-preview server has no picture, an independently verified peer picture can fill PVW and source tiles. The A or B badge identifies the displayed picture's server."
+        },
+        {
           "fa": "هشدار قدیمی Auto-failover در اتصال به Playout دوباره نمایش داده نمی‌شود. در اتصال مستقیم، بستن هشدار برای همان ایستگاه، کاربر و رخداد پس از بازکردن دوبارهٔ اپ حفظ می‌شود.",
           "en": "Playout stations no longer display historical CG auto-failover notices. Direct-connection acknowledgements persist for the same station, operator and event after reopening the app."
         },
