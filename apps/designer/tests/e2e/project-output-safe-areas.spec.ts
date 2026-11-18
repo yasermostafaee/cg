@@ -318,6 +318,9 @@ test('a tiny top-right composition follows output pixels while project Fit and c
   await expectProjectFits(page);
   await page.screenshot({ path: testInfo.outputPath('project-output-top-right-logo.png') });
 
+  // Placement is authored project state: finish a normal Save before leaving it.
+  await page.getByRole('button', { name: 'SAVE', exact: true }).click();
+  await expect(page).toHaveTitle('Project frame logo');
   await app.goto();
   await app.newProject('Another project keeps only the guide preferences');
   await expect(page.getByRole('button', { name: 'Safe areas', exact: true })).toHaveAttribute(
