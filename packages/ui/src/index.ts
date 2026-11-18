@@ -8,9 +8,23 @@ export { TAG_MARKER, tagProps, tag, type TagRole } from './tag.js';
 export { clearImageThumbnailCache, imageThumbnailUrl } from './image-thumbnail.js';
 export {
   broadcastSafeAreas,
+  broadcastGuideFrame,
+  broadcastCustomGuideLines,
   BROADCAST_SAFE_AREA_TITLE,
   type BroadcastSafeArea,
+  type BroadcastGuideFrame,
+  type BroadcastCustomGuideLine,
 } from './broadcast-safe-areas.js';
+export {
+  BROADCAST_GUIDE_ASPECTS,
+  DEFAULT_BROADCAST_GUIDE_PROFILE,
+  MAX_BROADCAST_GUIDE_LINES,
+  parseBroadcastGuideProfile,
+  createBroadcastGuideStore,
+  type BroadcastGuideAspect,
+  type BroadcastGuideLine,
+  type BroadcastGuideProfile,
+} from './broadcast-guide-preferences.js';
 
 /**
  * Join truthy class names. Tiny `clsx` stand-in so feature code can compose
