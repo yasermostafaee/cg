@@ -3695,6 +3695,7 @@ test('Auto layout follows the active preset permission and retains separate cont
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
   const templateId = 'tpl-preset-auto-layout';
   const itemId = 'preset-auto-layout-item';
   const { scene: base } = await unpack(await buildPositionedVcg(templateId));
@@ -3837,8 +3838,24 @@ test('Auto layout follows the active preset permission and retains separate cont
   const arrange = layout.getByRole('button', { name: 'Arrange frames' });
   const stackItem = () => handle.runtime.stackSnapshot().find((item) => item.itemId === itemId);
   const choosePreset = async (id: string, count: number): Promise<void> => {
+    const previewId = await inspector
+      .locator('[data-look-tab][aria-pressed="true"]')
+      .getAttribute('data-look-tab');
+    if (previewId === null) throw new Error('The Inspector must identify its PVW preset');
+    const previewCount = await visiblePlates.count();
     await row.locator(`[data-look-id="${id}"]`).click();
     await expect.poll(() => stackItem()?.activeLookId).toBe(id);
+    await expect(inspector.locator(`[data-look-tab="${previewId}"]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(visiblePlates).toHaveCount(previewCount);
+    // The row chooses PGM; Inspector selection explicitly chooses the preview being arranged.
+    await inspector.locator(`[data-look-tab="${id}"]`).click();
+    await expect(inspector.locator(`[data-look-tab="${id}"]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expect(visiblePlates).toHaveCount(count);
   };
   const openLayout = async (): Promise<void> => {
