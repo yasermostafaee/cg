@@ -89,6 +89,15 @@ it('emphasizes only the server of the decoded picture, retaining A until B decod
     expect(provider()).toBeUndefined();
     await act(async () => host.querySelector('img')!.dispatchEvent(new Event('load')));
     expect(provider()).toBe('A');
+    const decodedImage = host.querySelector('img')!;
+    Object.defineProperties(decodedImage, {
+      complete: { configurable: true, value: true },
+      naturalWidth: { configurable: true, value: 64 },
+    });
+    await publish({ sourceId: 'studio', signal: 'present', jpegBase64: 'first', engine: 'B' });
+    expect(provider()).toBe('B');
+    await publish({ sourceId: 'studio', signal: 'present', jpegBase64: 'first', engine: 'A' });
+    expect(provider()).toBe('A');
     await publish({ sourceId: 'studio', signal: 'present', jpegBase64: 'next', engine: 'B' });
     expect(provider()).toBe('A');
     await act(async () => host.querySelector('img')!.dispatchEvent(new Event('load')));

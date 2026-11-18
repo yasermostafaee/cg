@@ -479,16 +479,30 @@ function SampledSourceMediaPreview({
   );
   const [picture, setPicture] = useState<string | null>(null);
   const [pictureOrigin, setPictureOrigin] = useState<PreviewEngine>();
-  const [decodedOrigin, setDecodedOrigin] = useState<PreviewEngine>();
+  const [decodedPicture, setDecodedPicture] = useState<{ src: string; engine?: PreviewEngine }>();
+  const sampledImage = useRef<HTMLImageElement>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>(
     autoPlay ? 'loading' : 'idle',
   );
   const playing = request !== null && request.startedAt !== null;
   const src = picture ?? poster ?? loadedPoster;
+  const receivedOrigin =
+    picture === null ? (poster === undefined ? loadPoster.origin?.(id) : undefined) : pictureOrigin;
   useEffect(() => {
-    if (src === null) setDecodedOrigin(undefined);
-    onPreviewEngineChange?.(src === null ? undefined : decodedOrigin);
-  }, [src, decodedOrigin, onPreviewEngineChange]);
+    if (src === null) setDecodedPicture(undefined);
+    else if (
+      decodedPicture?.src === src &&
+      decodedPicture.engine !== receivedOrigin &&
+      sampledImage.current?.complete === true &&
+      sampledImage.current.naturalWidth > 0
+    ) {
+      setDecodedPicture({
+        src,
+        ...(receivedOrigin === undefined ? {} : { engine: receivedOrigin }),
+      });
+    }
+    onPreviewEngineChange?.(src === null ? undefined : decodedPicture?.engine);
+  }, [src, decodedPicture, receivedOrigin, onPreviewEngineChange]);
   const playbackButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (inline) playbackButton.current?.focus();
@@ -577,17 +591,15 @@ function SampledSourceMediaPreview({
         ) : (
           <img
             src={src}
+            ref={sampledImage}
             alt=""
             onLoad={() =>
-              setDecodedOrigin(
-                picture === null
-                  ? poster === undefined
-                    ? loadPoster.origin?.(id)
-                    : undefined
-                  : pictureOrigin,
-              )
+              setDecodedPicture({
+                src,
+                ...(receivedOrigin === undefined ? {} : { engine: receivedOrigin }),
+              })
             }
-            onError={() => setDecodedOrigin(undefined)}
+            onError={() => setDecodedPicture(undefined)}
           />
         )}
       </div>

@@ -54,6 +54,7 @@ export function InputThumbnail({
     check?.surface === inputCheck.surface &&
     check.sourceId === sourceId;
   const element = useRef<HTMLElement | null>(null);
+  const image = useRef<HTMLImageElement>(null);
   const attach = useCallback((tile: HTMLElement | null) => {
     element.current = tile;
   }, []);
@@ -64,6 +65,7 @@ export function InputThumbnail({
   const [brokenPicture, setBrokenPicture] = useState<string>();
   const [decodedOrigin, setDecodedOrigin] = useState<{
     sourceId: string;
+    src: string;
     engine?: PreviewEngine;
   }>();
   const frame =
@@ -77,12 +79,25 @@ export function InputThumbnail({
   const picture = src === undefined || src === brokenPicture ? null : src;
 
   useEffect(() => {
-    if (picture === null) setDecodedOrigin(undefined);
+    if (picture === null || active) setDecodedOrigin(undefined);
+    else if (
+      decodedOrigin?.sourceId === sourceId &&
+      decodedOrigin.src === picture &&
+      decodedOrigin.engine !== frame?.engine &&
+      image.current?.complete === true &&
+      image.current.naturalWidth > 0
+    ) {
+      setDecodedOrigin({
+        sourceId,
+        src: picture,
+        ...(frame?.engine === undefined ? {} : { engine: frame.engine }),
+      });
+    }
     if (!active)
       onPreviewEngineChange?.(
         picture !== null && decodedOrigin?.sourceId === sourceId ? decodedOrigin.engine : undefined,
       );
-  }, [active, picture, decodedOrigin, sourceId, onPreviewEngineChange]);
+  }, [active, picture, decodedOrigin, sourceId, onPreviewEngineChange, frame?.engine]);
 
   useEffect(() => {
     if (snapshot === undefined || !foreground || active) return;
@@ -163,12 +178,14 @@ export function InputThumbnail({
   const content =
     picture !== null ? (
       <img
+        ref={image}
         src={picture}
         alt=""
         onLoad={(event) => {
           if (event.currentTarget.getAttribute('src') === picture)
             setDecodedOrigin({
               sourceId,
+              src: picture,
               ...(frame?.engine === undefined ? {} : { engine: frame.engine }),
             });
         }}

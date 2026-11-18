@@ -335,6 +335,45 @@ it('keeps the sampled preview available when the Engine does not support file pr
   }
 });
 
+it('updates the sampled origin for an identical decoded frame from another server', async () => {
+  mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue({ state: 'unsupported' });
+  const origin = vi.fn();
+  const view = await mount(mediaOpen, false, origin);
+  let engine: 'A' | 'B' = 'A';
+  window.cg.sourcePreviews.thumbnails = async ({ mediaPosition }) =>
+    mediaPosition === undefined
+      ? { frames: [] }
+      : {
+          frames: [],
+          mediaFrame: {
+            sourceId: 'md-film',
+            signal: 'present',
+            jpegBase64: 'same-frame',
+            engine,
+            previewPositionMs: mediaPosition.atMs,
+          },
+        };
+  try {
+    await act(async () => view.button('Play preview').click());
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    const image = view.host.querySelector('img')!;
+    await act(async () => image.dispatchEvent(new Event('load')));
+    expect(origin).toHaveBeenLastCalledWith('A');
+    Object.defineProperties(image, {
+      complete: { configurable: true, value: true },
+      naturalWidth: { configurable: true, value: 64 },
+    });
+    engine = 'B';
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(origin).toHaveBeenLastCalledWith('B');
+  } finally {
+    await view.close();
+  }
+});
+
 it('releases a failed player and retries through a fresh lease', async () => {
   mockPlayer();
   const mediaOpen = vi
