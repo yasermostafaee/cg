@@ -286,7 +286,7 @@ const BRIDGE_SURFACE: {
     // C-016 — the programme return. The mock has no relay: `feedUrl` is `null`, nothing is watched.
     pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged', 'topology'],
     livePreview: ['start', 'status', 'stop', 'url'],
-    sourcePreviews: ['audioLevels', 'pvw', 'thumbnails'],
+    sourcePreviews: ['audioLevels', 'mediaOpen', 'mediaClose', 'pvw', 'thumbnails'],
     playlistGain: ['get', 'set'],
     // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
     // part-A seam): `tests/**` is not typechecked, so the mapped type above
@@ -492,6 +492,16 @@ it('refuses to stage preview framing in Test mode', async () => {
     targets: [],
     message: 'Preview framing is practice-only in Test mode.',
   });
+});
+
+it('keeps native media preview explicitly unsupported in Test mode', async () => {
+  const mock = createMockBridge();
+  await expect(
+    mock.sourcePreviews.mediaOpen?.({ channel: 1, sourceId: 'media-preview-parity' }),
+  ).resolves.toEqual({ state: 'unsupported' });
+  await expect(
+    mock.sourcePreviews.mediaClose?.({ previewId: 'aa1a5755-c7b7-44a3-9ad0-260259ad4ead' }),
+  ).resolves.toEqual({ closed: false });
 });
 
 it('the mock publishes the applied position override in StackItemState (B-072)', () => {

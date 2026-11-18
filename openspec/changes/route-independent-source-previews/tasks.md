@@ -18,6 +18,7 @@
 - [x] Pass all 498 shared-IPC tests, including separate preview, binding and seating eligibility.
 - [x] Add 7 delayed-preparation regressions for replacement, cancellation, cleanup and passive polling.
 - [x] Pass 53 poster/media/HTTP/channel-fence cases, including legacy and scoped viewer reads.
+- [x] Keep the exact live/mock method inventory current and prove native media stays unsupported in Test mode.
 - [x] Prove B-only input reads with both A and B active, mixed-engine PVW, B-owned listen/audio,
       and media/poster fallback with A missing or offline.
 - [x] Pass final Bridge and Runtime typechecks, scoped lint and 59 renderer DOM cases after freeze.
