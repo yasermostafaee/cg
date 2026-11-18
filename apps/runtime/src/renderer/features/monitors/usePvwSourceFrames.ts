@@ -3,6 +3,7 @@ import { playoutMediaIdOf, type SourcePreviewFrame } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
 import { uuid } from '../../lib/uuid.js';
 import { subscribeInputThumbnail } from '../sources/inputThumbnailDemand.js';
+import { PvwMediaPosters } from './pvwMediaPosters.js';
 
 export type PvwSourceFrame = SourcePreviewFrame & { snapshotOnly?: true };
 
@@ -45,6 +46,9 @@ class PreviewFeed {
   readonly #cache = new Map<string, CachedFrame>();
   readonly #snapshots = new Map<string, CachedFrame>();
   readonly #snapshotReaders = new Map<string, () => void>();
+  readonly #posters = new PvwMediaPosters(window.cg, () => this.#publish());
+  readonly #readCompleted = new Set<string>();
+  readonly #missingSnapshots = new Set<string>();
   #demand: Demand | undefined;
   #sentChannel: number | undefined;
   #snapshot = EMPTY_SNAPSHOT;
@@ -92,9 +96,14 @@ class PreviewFeed {
       if (channel !== undefined) {
         this.#cache.clear();
         this.#snapshots.clear();
+        this.#readCompleted.clear();
+        this.#missingSnapshots.clear();
       }
     }
     this.#demand = demand;
+    if (demand !== undefined) this.#posters.setDemand(channel, sourceIds);
+    for (const ids of [this.#readCompleted, this.#missingSnapshots])
+      for (const id of ids) if (!sourceIds.includes(id)) ids.delete(id);
     if (demand !== undefined) this.#publish();
     this.#schedule(0);
   }
@@ -105,11 +114,14 @@ class PreviewFeed {
     for (const cache of [this.#cache, this.#snapshots])
       for (const [id, entry] of cache) if (entry.expires <= now) cache.delete(id);
     const nextSnapshotCheck = this.#reconcileSnapshots(now);
+    this.#requestPosters();
     const frames = new Map([...this.#cache].map(([id, { frame }]) => [id, frame]));
     for (const [id, { frame }] of this.#snapshots) {
       const current = frames.get(id);
       if (current?.jpegBase64 === undefined) frames.set(id, frame);
     }
+    for (const frame of this.#posters.frames())
+      if (frames.get(frame.sourceId)?.jpegBase64 === undefined) frames.set(frame.sourceId, frame);
     this.#snapshot = {
       channel: this.#demand?.channel,
       frames,
@@ -133,11 +145,7 @@ class PreviewFeed {
     for (const id of ids) {
       const primary = this.#cache.get(id);
       // The PVW decoder can lose its lease while a separate input snapshot still has signal.
-      // Media has no live-input snapshot to use after an explicit absence.
-      if (primary?.frame.signal === 'absent' && playoutMediaIdOf(id) !== null) {
-        this.#snapshots.delete(id);
-        continue;
-      }
+      // A missing native media producer says nothing about the independent file snapshot/poster.
       if (primary?.frame.jpegBase64 === undefined || primary.expires - SNAPSHOT_LEAD_MS <= now) {
         needsSnapshot.add(id);
       } else {
@@ -157,7 +165,13 @@ class PreviewFeed {
         channel,
         sourceId: id,
         publish: (frame) => {
-          if (frame === undefined) return;
+          if (this.#demand?.channel !== channel || !this.#demand.sourceIds.includes(id)) return;
+          if (frame?.jpegBase64 === undefined) this.#missingSnapshots.add(id);
+          else this.#missingSnapshots.delete(id);
+          if (frame === undefined) {
+            this.#requestPosters();
+            return;
+          }
           if (frame.signal === 'absent') {
             if (this.#snapshots.delete(id)) this.#publish();
           } else if (frame.jpegBase64 !== undefined) {
@@ -168,11 +182,23 @@ class PreviewFeed {
             });
             this.#publish();
           }
+          this.#requestPosters();
         },
       });
       this.#snapshotReaders.set(id, stop);
     }
     return nextCheck;
+  }
+
+  #requestPosters(): void {
+    for (const id of this.#missingSnapshots)
+      if (
+        this.#readCompleted.has(id) &&
+        this.#demand?.sourceIds.includes(id) &&
+        this.#cache.get(id)?.frame.jpegBase64 === undefined &&
+        this.#snapshots.get(id)?.frame.jpegBase64 === undefined
+      )
+        this.#posters.request(id);
   }
 
   #schedule(delay: number): void {
@@ -189,6 +215,9 @@ class PreviewFeed {
     if (demand === undefined) {
       this.#cache.clear();
       this.#snapshots.clear();
+      this.#posters.setDemand(undefined, []);
+      this.#readCompleted.clear();
+      this.#missingSnapshots.clear();
       this.#publish();
     }
     try {
@@ -221,6 +250,11 @@ class PreviewFeed {
       // The independent expiry timer drops old pictures if the service stops responding.
     } finally {
       this.#inFlight = false;
+      if (demand !== undefined && this.#demand?.channel === channel) {
+        for (const id of demand.sourceIds)
+          if (this.#demand.sourceIds.includes(id)) this.#readCompleted.add(id);
+        this.#requestPosters();
+      }
       if (this.#demand !== undefined || this.#sentChannel !== undefined)
         this.#schedule(demand?.key === this.#demand?.key ? POLL_MS : 0);
     }

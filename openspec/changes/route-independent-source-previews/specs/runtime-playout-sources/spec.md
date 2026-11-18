@@ -48,6 +48,17 @@ not change programme authority, bindings or programme output.
 - **THEN** the read succeeds without operator privilege and identifies the serving engine
 - **AND** a viewer without that channel grant remains refused
 
+#### Scenario: Media PVW lacks a passive picture while its independent poster exists
+
+- **GIVEN** the normal media PVW and shared snapshot reads supply no JPEG
+- **WHEN** its current channel-authorized official file poster is available
+- **THEN** PVW can display it with its real JPEG dimensions and serving engine
+- **AND** a passive producer's absent observation does not discard an independent file picture
+- **AND** a valid moving picture or current snapshot takes precedence over the poster
+- **AND** owner, Bridge, channel, source demand or file-identity changes discard late poster replies
+- **AND** the bounded once-per-identity read starts no player, proxy or programme command
+- **AND** a static poster does not grant interactive crop authority
+
 ### Requirement: Source badges SHALL distinguish availability from decoded preview provenance
 
 Existing A/B badge colors SHALL continue to represent source availability. The

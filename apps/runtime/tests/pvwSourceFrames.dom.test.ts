@@ -229,7 +229,7 @@ it('shows the shared input snapshot and keeps the media poster while the PVW lea
     release?.({ frames: [recovered, { sourceId: media, signal: 'absent' }] });
     await advance(0);
     expect(shown?.get('studio')).toEqual(recovered);
-    expect(shown?.get(media)).toEqual({ sourceId: media, signal: 'absent' });
+    expect(shown?.get(media)).toEqual({ ...sample(media), snapshotOnly: true });
 
     const absent = { sourceId: 'studio', signal: 'absent' as const };
     pvw.mockResolvedValue({ frames: [absent] });

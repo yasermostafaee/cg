@@ -412,6 +412,147 @@ test('B-444: maximizing and restoring PROGRAM leaves the same PREVIEW animation 
   ).toEqual([]);
 });
 
+test('a file poster survives an absent passive PVW and yields to a decoded moving picture without programme commands', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
+  handle.runtime.setSourceCatalog({
+    layerRange: { start: 60, end: 79 },
+    sources: [
+      {
+        id: 'md-poster-file',
+        name: 'Poster file',
+        origin: 'media',
+        producer: { kind: 'media', file: 'poster-file' },
+        media: { fingerprint: 'verified-poster-file' },
+      },
+    ],
+  });
+  const template: TemplateInfo = {
+    templateId: 'tpl-pvw-crop',
+    name: 'File poster fixture',
+    templateType: 'custom',
+    fields: [],
+    liveSources: {
+      resolution: { width: 1920, height: 1080 },
+      defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+      sources: [
+        {
+          elementId: 'guest-el',
+          sourceId: 'guest',
+          dynamic: false,
+          fitMode: 'cover',
+          rect: { x: 720, y: 270, width: 480, height: 540 },
+        },
+      ],
+    },
+  };
+  handle.runtime.templateImport(
+    template,
+    HTML.replace(
+      '</body>',
+      '<div data-cg-live-source="guest" style="position:absolute;left:720px;top:270px;width:480px;height:540px"></div></body>',
+    ),
+    1,
+  );
+  handle.runtime.setSourceAssignments({
+    assignments: [
+      { templateId: template.templateId, plateId: 'guest', sourceId: 'md-poster-file' },
+    ],
+  });
+  expect(
+    await handle.runtime.loadFixed(
+      { channel: 1, layer: 59 },
+      'poster-item',
+      template.templateId,
+      {},
+    ),
+  ).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  await page.evaluate(() => {
+    const make = (width: number, height: number, color: string): string => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (context === null) throw new Error('Missing canvas');
+      context.fillStyle = color;
+      context.fillRect(0, 0, width, height);
+      return canvas.toDataURL('image/jpeg');
+    };
+    const poster = make(160, 90, '#ff0000');
+    const moving = make(320, 180, '#0000ff').split(',')[1];
+    const state = window as unknown as { posterReads: number; movingRecovered: boolean };
+    state.posterReads = 0;
+    state.movingRecovered = false;
+    window.cg.sources.mediaThumbnail = async () => {
+      state.posterReads += 1;
+      return { ok: true, dataUrl: poster, engine: 'B' };
+    };
+    window.cg.sourcePreviews.pvw = async ({ sourceIds }) => ({
+      frames: sourceIds.map((sourceId) =>
+        state.movingRecovered
+          ? {
+              sourceId,
+              signal: 'present' as const,
+              jpegBase64: moving,
+              width: 320,
+              height: 180,
+              engine: 'B' as const,
+            }
+          : { sourceId, signal: 'absent' as const },
+      ),
+    });
+    window.cg.sourcePreviews.thumbnails = async () => ({ frames: [] });
+  });
+  await showMonitors(page);
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  const wireStart = engine.receivedCommands().length;
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const image = pvw
+    .frameLocator('iframe[data-rehearsal-frame]')
+    .locator('[data-cg-live-source="guest"] [data-cg-pvw-picture-part] img');
+  const raster = () =>
+    image.evaluate((node) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext('2d');
+      if (context === null || !(node instanceof HTMLImageElement))
+        throw new Error('Missing decoded image');
+      context.drawImage(node, 0, 0, 1, 1);
+      return { width: node.naturalWidth, pixels: [...context.getImageData(0, 0, 1, 1).data] };
+    });
+  await expect.poll(async () => (await raster()).width).toBe(160);
+  expect((await raster()).pixels[0]).toBeGreaterThan(240);
+  const reads = await page.evaluate(
+    () => (window as unknown as { posterReads: number }).posterReads,
+  );
+  expect(reads).toBeGreaterThanOrEqual(1);
+  await expect(
+    pvw.getByRole('button', { name: 'Pan source picture in Plate 1', exact: true }),
+  ).toHaveCount(0);
+  await page.evaluate(() => {
+    (window as unknown as { movingRecovered: boolean }).movingRecovered = true;
+  });
+  await expect.poll(async () => (await raster()).width).toBe(320);
+  expect((await raster()).pixels[2]).toBeGreaterThan(240);
+  expect(
+    await page.evaluate(() => (window as unknown as { posterReads: number }).posterReads),
+  ).toBe(reads);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(wireStart)
+      .filter(({ line }) => /^(CG|PLAY|LOADBG|CLEAR|MIXER) /.test(line)),
+  ).toEqual([]);
+});
+
 test('D-178 / B-433 — PVW crop reaches the first Take and Update on air reframes the existing seat', async ({
   page,
 }) => {

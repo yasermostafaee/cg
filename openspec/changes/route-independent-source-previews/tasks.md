@@ -13,6 +13,8 @@
 - [x] Preserve availability colors and emphasize only the decoded picture's existing A/B badge border.
 - [x] Forward compact inherited/default combo thumbnail provenance to its existing A/B badges,
       matching direct bindings and the source-selection modal after decoding.
+- [x] Preserve independent media snapshots despite passive PVW absence and add a bounded,
+      identity-checked official file poster fallback with real dimensions, provenance and no crop authority.
 
 ## Verification
 
@@ -34,6 +36,11 @@
 - [x] Record the carrying commit's actual completed green [Linux E2E job](https://github.com/yasermostafaee/cg/actions/runs/44222510030/job/134528154034)
       on `261b57c8ae1840e96a3d10d6540c3094ad529239`; verify the three native 1.2.11 installers.
 - [ ] Verify the updated Bridge/Control previews on the target A/B station.
+- [x] Cover empty/absent media PVW, once-only poster reads, moving recovery, known-picture
+      precedence, owner/Bridge/channel/source cancellation and fingerprint changes in DOM regressions.
+- [x] Verify the fallback and moving recovery with real decoded JPEG pixels in a fresh Windows
+      Edge browser: one scoped case passes, with zero programme-write commands. All 22 focused DOM
+      cases, Runtime typecheck, scoped lint and the 17-task dependency build pass.
 
 ## Linux integration evidence
 

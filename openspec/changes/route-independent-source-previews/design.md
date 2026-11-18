@@ -34,3 +34,16 @@ surface's provenance; another surface's player cannot relabel the retained poste
 
 There is no programme take, source binding, active-server transfer or output write
 in this read fallback. Selection continues through the existing Select action.
+
+# Media PVW poster recovery
+
+A passive producer's absent state does not describe the independent media file.
+PVW retains a valid shared file snapshot. After both normal PVW and snapshot reads
+have supplied no picture, it may request the existing channel-scoped official poster.
+It starts no receiver, native player or proxy. A current moving picture or snapshot
+always wins. The file fingerprint and producer are rechecked before and after the
+poster read, and owner, Bridge, channel and exact demand changes discard late replies.
+The demanded cache is bounded to four sources and one attempt per file identity;
+failures do not poll indefinitely. Disconnect, auth, catalogue identity or demand
+changes invalidate that cache. Real JPEG dimensions and serving-engine metadata are
+kept, with `snapshotOnly` preventing a static poster from granting crop authority.

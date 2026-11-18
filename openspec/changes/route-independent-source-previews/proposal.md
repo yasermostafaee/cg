@@ -18,6 +18,9 @@ do not identify the server that supplied the picture currently on screen.
 - Carry actual engine metadata on accepted snapshots, audio and listen leases,
   and on media/poster responses. Emphasize the existing serving-server badge border
   only after the surface accepts a decoded picture; retained pictures retain their origin.
+- When passive PVW and shared snapshots lack a media picture, read its independently
+  authorized official poster once per current file identity. Never hide a valid file
+  snapshot merely because the passive producer reports absent.
 
 ## Impact
 
