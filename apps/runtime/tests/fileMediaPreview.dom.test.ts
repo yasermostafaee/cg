@@ -128,8 +128,9 @@ async function mount(
             channel: 1,
             inline,
             playRequest: request,
-            poster: load === undefined ? 'data:image/jpeg;base64,original-poster' : undefined,
-            loadThumbnail: load,
+            ...(load === undefined
+              ? { poster: 'data:image/jpeg;base64,original-poster' }
+              : { loadThumbnail: load }),
             onPreviewEngineChange,
           }),
           covered
