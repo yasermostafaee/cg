@@ -221,6 +221,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
         }
         if ((result.state === 'unavailable' || result.state === 'error') && !playQueued()) {
           video.current?.pause();
+          setPlayerError(result.message ?? 'Preview unavailable');
           currentIntent.current = 'paused';
           setIntent('paused');
         }
@@ -588,7 +589,11 @@ function SampledSourceMediaPreview({
     () => loadThumbnail ?? createMediaThumbnailLoader(channel),
     [loadThumbnail, channel],
   );
-  const [loadedPoster, setLoadedPoster] = useState<string | null>(null);
+  const [loadedPoster, setLoadedPoster] = useState<{
+    id: string;
+    load: MediaThumbnailLoader;
+    src: string;
+  }>();
   const [positionMs, setPositionMs] = useState(0);
   const position = useRef(positionMs);
   position.current = positionMs;
@@ -603,9 +608,15 @@ function SampledSourceMediaPreview({
     autoPlay ? 'loading' : 'idle',
   );
   const playing = request !== null && request.startedAt !== null;
-  const src = picture ?? poster ?? loadedPoster;
+  const currentPoster =
+    loadedPoster?.id === id && loadedPoster.load === loadPoster ? loadedPoster.src : undefined;
+  const src = picture ?? poster ?? currentPoster ?? null;
   const receivedOrigin =
-    picture === null ? (poster === undefined ? loadPoster.origin?.(id) : undefined) : pictureOrigin;
+    picture === null
+      ? poster === undefined && currentPoster !== undefined
+        ? loadPoster.origin?.(id)
+        : undefined
+      : pictureOrigin;
   useEffect(() => {
     if (src === null) setDecodedPicture(undefined);
     else if (
@@ -627,15 +638,15 @@ function SampledSourceMediaPreview({
   }, [inline]);
 
   useEffect(() => {
-    if (!foreground || poster !== undefined || loadedPoster !== null) return;
+    if (!foreground || poster !== undefined || currentPoster !== undefined) return;
     let current = true;
-    void loadPoster(id).then((value) => {
-      if (current) setLoadedPoster(value);
+    void loadPoster(id).then((src) => {
+      if (current && src !== null) setLoadedPoster({ id, load: loadPoster, src });
     });
     return () => {
       current = false;
     };
-  }, [id, loadPoster, poster, foreground]);
+  }, [id, loadPoster, poster, currentPoster, foreground]);
 
   useEffect(() => {
     if (!foreground || !enabled || channel === undefined || request === null) return;

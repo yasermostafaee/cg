@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { MediaPlaybackPreview } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 import { SourceMediaPreview } from '../src/renderer/features/sources/SourceMediaPreview.js';
+import type { MediaThumbnailLoader } from '../src/renderer/features/sources/MediaThumbnail.js';
 import { Modal } from '../src/renderer/ui/Modal.js';
 
 const FIRST = '10000000-0000-4000-8000-000000000001';
@@ -94,6 +95,7 @@ async function mount(
   inline = false,
   onPreviewEngineChange?: (engine: 'A' | 'B' | undefined) => void,
   playRequest?: number,
+  loadThumbnail?: MediaThumbnailLoader,
 ) {
   const previous = window.cg;
   const mediaClose = vi.fn(async () => ({ closed: true }));
@@ -107,7 +109,7 @@ async function mount(
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  const show = (covered = false, id = 'md-film', request = playRequest) =>
+  const show = (covered = false, id = 'md-film', request = playRequest, load = loadThumbnail) =>
     act(async () =>
       root.render(
         createElement(
@@ -120,7 +122,8 @@ async function mount(
             channel: 1,
             inline,
             playRequest: request,
-            poster: 'data:image/jpeg;base64,original-poster',
+            poster: load === undefined ? 'data:image/jpeg;base64,original-poster' : undefined,
+            loadThumbnail: load,
             onPreviewEngineChange,
           }),
           covered
@@ -240,6 +243,35 @@ it('keeps an explicit Play queued behind a failed passive preview read', async (
       sourceId: 'md-film',
       prepare: true,
     });
+    expect(player.play).toHaveBeenCalledOnce();
+  } finally {
+    await view.close();
+  }
+});
+
+it('keeps a terminal proxy reason visible and only requests preparation again on Play', async () => {
+  const player = mockPlayer();
+  const reason = "This media exceeds Playout's preview proxy size limit.";
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), state: 'error', videoUrl: undefined, message: reason })
+    .mockResolvedValueOnce({ ...ready(), state: 'preparing', videoUrl: undefined })
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, false, undefined, 1);
+  try {
+    expect(view.host.textContent).toContain(reason);
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(mediaOpen).toHaveBeenLastCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      previewId: FIRST,
+      prepare: false,
+    });
+    expect(view.host.textContent).toContain(reason);
+    expect(player.play).not.toHaveBeenCalled();
+    await act(async () => view.button('Play preview').click());
+    expect(mediaOpen.mock.lastCall?.[0].prepare).toBe(true);
+    expect(view.host.textContent).not.toContain(reason);
     expect(player.play).toHaveBeenCalledOnce();
   } finally {
     await view.close();
@@ -783,6 +815,40 @@ it('keeps the sampled preview available when the Engine does not support file pr
     expect(view.host.querySelector('[data-media-file-preview]')).toBeNull();
     expect(view.host.textContent).toContain('Silent preview · sampled frames');
     expect(view.button('Play preview').disabled).toBe(false);
+  } finally {
+    await view.close();
+  }
+});
+
+it('replaces a sampled player poster when the source route gives it a new loader', async () => {
+  mockPlayer();
+  const origin = vi.fn();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue({ state: 'unsupported' });
+  const aPoster = 'data:image/jpeg;base64,cG9zdGVyQQ==';
+  const bPoster = 'data:image/jpeg;base64,cG9zdGVyQg==';
+  const loadA = Object.assign(
+    vi.fn(async () => aPoster),
+    { origin: () => 'A' as const },
+  );
+  const loadB = Object.assign(
+    vi.fn(async () => bPoster),
+    { origin: () => 'B' as const },
+  );
+  const view = await mount(mediaOpen, false, origin, undefined, loadA);
+  const image = () => view.host.querySelector('img');
+  try {
+    expect(image()?.getAttribute('src')).toBe(aPoster);
+    await act(async () => image()?.dispatchEvent(new Event('load')));
+    expect(origin).toHaveBeenLastCalledWith('A');
+    await view.show(false, 'md-film', undefined, loadB);
+    expect(loadB).toHaveBeenCalledOnce();
+    expect(loadB).toHaveBeenCalledWith('md-film');
+    expect(image()?.getAttribute('src')).toBe(bPoster);
+    await act(async () => image()?.dispatchEvent(new Event('load')));
+    expect(origin).toHaveBeenLastCalledWith('B');
+    expect(mediaOpen).toHaveBeenCalledOnce();
   } finally {
     await view.close();
   }
