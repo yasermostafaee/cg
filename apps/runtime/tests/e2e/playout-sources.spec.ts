@@ -1568,7 +1568,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
   }
 });
 
-test('one Play action survives delayed proxy preparation in grid and list without changing the binding', async ({
+test('one Play action per clip survives delayed proxy preparation in the same grid or list dialog', async ({
   app,
 }) => {
   const clip = await readFile(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url));
@@ -1605,27 +1605,41 @@ test('one Play action survives delayed proxy preparation in grid and list withou
     const field = defaults.locator('[data-defaults-select="l-1"]');
     const page = app.page;
     await page.evaluate((origin) => {
-      const state = { opens: 0, closes: 0, writes: 0 };
+      const state = {
+        opens: 0,
+        closes: 0,
+        writes: 0,
+        requests: [] as { sourceId: string; prepare: boolean }[],
+      };
       Object.assign(window, { singlePlayProof: state });
-      window.cg.sourcePreviews.mediaOpen = async ({ previewId }) => {
+      const requestsByLease = new Map<string, number>();
+      window.cg.sourcePreviews.mediaOpen = async ({ sourceId, previewId, prepare }) => {
+        state.requests.push({ sourceId, prepare: prepare === true });
         await new Promise((resolve) => setTimeout(resolve, 250));
-        if (previewId === undefined) {
-          state.opens++;
+        const lease = previewId ?? crypto.randomUUID();
+        if (previewId === undefined) state.opens++;
+        const prepares = (requestsByLease.get(lease) ?? 0) + (prepare === true ? 1 : 0);
+        requestsByLease.set(lease, prepares);
+        const common = {
+          previewId: lease,
+          durationMs: 10_000,
+          posterUrl: `${origin}/poster`,
+          engine: 'B' as const,
+        };
+        const waitsForCapacity = sourceId === 'md-m-clip-002';
+        if (prepare !== true || prepares <= (waitsForCapacity ? 2 : 1)) {
           return {
+            ...common,
             state: 'preparing',
-            previewId: crypto.randomUUID(),
-            durationMs: 10_000,
-            posterUrl: `${origin}/poster`,
-            engine: 'B',
+            ...(waitsForCapacity && prepare === true
+              ? { message: 'The media proxy queue is busy. Waiting for capacity.' }
+              : {}),
           };
         }
         return {
+          ...common,
           state: 'ready',
-          previewId,
-          videoUrl: `${origin}/video?lease=${previewId}`,
-          posterUrl: `${origin}/poster`,
-          durationMs: 10_000,
-          engine: 'B',
+          videoUrl: `${origin}/video?source=${sourceId}&lease=${lease}`,
         };
       };
       window.cg.sourcePreviews.mediaClose = async () => {
@@ -1649,8 +1663,10 @@ test('one Play action survives delayed proxy preparation in grid and list withou
       await panel.getByRole('tab', { name: /^Media/ }).click();
       if (view === 'list')
         await panel.getByRole('button', { name: 'Switch to list view', exact: true }).click();
-      await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
-      const rowPlay = panel.getByRole('button', { name: 'Preview · Studio 1', exact: true });
+      await panel.getByRole('textbox', { name: 'Search media' }).fill('Clip 00');
+      const playRow = (name: string) =>
+        panel.getByRole('button', { name: `Preview · ${name}`, exact: true });
+      const rowPlay = playRow('Clip 001');
       await rowPlay.click();
       const preview = panel.locator('[data-media-file-preview]');
       await expect(
@@ -1676,6 +1692,39 @@ test('one Play action survives delayed proxy preparation in grid and list withou
         .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
         .toBeGreaterThanOrEqual(2.5);
       await expect(video).toHaveJSProperty('muted', false);
+
+      await playRow('Clip 002').click();
+      await expect(preview.getByRole('status')).toHaveText(
+        'The media proxy queue is busy. Waiting for capacity.',
+      );
+      await expect(preview.locator('img')).toBeVisible();
+      await expect(video).toHaveAttribute('src', /source=md-m-clip-002/);
+      await expect(video).toHaveJSProperty('videoWidth', 64);
+      await expect
+        .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+        .toBeGreaterThan(0);
+
+      if (view === 'list') {
+        await panel.locator('[data-picker-media="md-m-clip-003"]').getByText('Clip 003').click();
+        const reads = () =>
+          page.evaluate(() => {
+            const { singlePlayProof } = window as unknown as {
+              singlePlayProof: { requests: { sourceId: string; prepare: boolean }[] };
+            };
+            return singlePlayProof.requests
+              .filter((request) => request.sourceId === 'md-m-clip-003')
+              .map((request) => request.prepare);
+          });
+        await expect.poll(reads).toContain(false);
+        expect(await reads()).not.toContain(true);
+        await playRow('Clip 003').click();
+        await expect(video).toHaveAttribute('src', /source=md-m-clip-003/);
+        await expect(video).toHaveJSProperty('videoWidth', 64);
+        await expect
+          .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+          .toBeGreaterThan(0);
+      }
+
       await preview.getByRole('button', { name: 'Stop preview', exact: true }).click();
       await expect(
         preview.getByRole('slider', { name: 'Preview position', exact: true }),
@@ -1719,20 +1768,20 @@ test('one Play action survives delayed proxy preparation in grid and list withou
             (window as unknown as { singlePlayProof: { closes: number } }).singlePlayProof.closes,
         ),
       )
-      .toBe(3);
+      .toBe(6);
     await panel.getByRole('tab', { name: /^Media/ }).click();
     await expect(panel.locator('[data-media-file-preview]')).toHaveCount(0);
     await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
     expect(
-      await page.evaluate(
-        () =>
-          (
-            window as unknown as {
-              singlePlayProof: { opens: number; closes: number; writes: number };
-            }
-          ).singlePlayProof,
-      ),
-    ).toEqual({ opens: 3, closes: 3, writes: 0 });
+      await page.evaluate(() => {
+        const { opens, closes, writes } = (
+          window as unknown as {
+            singlePlayProof: { opens: number; closes: number; writes: number };
+          }
+        ).singlePlayProof;
+        return { opens, closes, writes };
+      }),
+    ).toEqual({ opens: 6, closes: 6, writes: 0 });
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
