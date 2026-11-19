@@ -103,6 +103,19 @@ const ControlLiveLayoutAdditionalTextSchema = z.object({
 });
 export type ControlLiveLayoutAdditionalText = z.infer<typeof ControlLiveLayoutAdditionalTextSchema>;
 
+const ControlLiveLayoutImageSchema = z.object({
+  kind: z.literal('image'),
+  name: z.string().min(1).max(255),
+  mime: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+});
+
+const ControlLiveLayoutFrameFallbackSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('bars') }),
+  z.object({ kind: z.literal('color'), color: HexColorSchema }),
+  ControlLiveLayoutImageSchema,
+]);
+export type ControlLiveLayoutFrameFallback = z.infer<typeof ControlLiveLayoutFrameFallbackSchema>;
+
 const ControlLiveLayoutFrameSchema = z.object({
   id: ControlLiveLayoutFrameIdSchema,
   /** Catalog id chosen by the operator. The logical frame id stays stable across all presets. */
@@ -123,6 +136,9 @@ const ControlLiveLayoutFrameSchema = z.object({
   operatorPlacement: z.union([z.literal('locked'), LiveFrameResizeSchema]).optional(),
   liveMask: LivePlateMaskSchema.optional(),
   allowOperatorMaskEdit: z.boolean().optional(),
+  fallback: ControlLiveLayoutFrameFallbackSchema.optional(),
+  /** Paint the authored fallback beneath the live picture on Programme. */
+  showFallback: z.boolean().optional(),
   border: z
     .object({
       color: HexColorSchema,
@@ -131,6 +147,12 @@ const ControlLiveLayoutFrameSchema = z.object({
     .optional(),
 });
 export type ControlLiveLayoutFrame = z.infer<typeof ControlLiveLayoutFrameSchema>;
+
+export function controlLiveLayoutShowFallback(
+  frame: Pick<ControlLiveLayoutFrame, 'fallback' | 'showFallback'>,
+): boolean {
+  return frame.showFallback ?? frame.fallback !== undefined;
+}
 
 export function controlLiveLayoutPlateBorder(frame: ControlLiveLayoutFrame, raster: Resolution) {
   const border = frame.border;
@@ -241,11 +263,7 @@ export function controlLiveLayoutPlateCropFocus(
 const ControlLiveLayoutBackgroundSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('color'), color: HexColorSchema }),
-  z.object({
-    kind: z.literal('image'),
-    name: z.string().min(1).max(255),
-    mime: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
-  }),
+  ControlLiveLayoutImageSchema,
   z.object({
     kind: z.literal('video'),
     name: z.string().min(1).max(255),

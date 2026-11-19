@@ -64,6 +64,116 @@ function layoutFixture(): ControlLiveLayout {
 }
 
 describe('CG Control authored live layouts', () => {
+  it('keeps legacy plates transparent on Programme and applies authored fallback per plate', async () => {
+    const layout = layoutFixture();
+    const [bars, color, legacy] = layout.frames;
+    if (bars === undefined || color === undefined || legacy === undefined)
+      throw new Error('Fixture has no frames');
+    bars.fallback = { kind: 'bars' };
+    color.fallback = { kind: 'color', color: '#2851ab' };
+    color.showFallback = false;
+    const bytes = await compileControlLiveLayout(layout);
+    const { scene } = await unpack(bytes);
+    const plate = (id: string) =>
+      scene.compositions?.find((item) => item.id === 'layout-frame-' + id)?.layers[0]?.children[0];
+    expect(plate(bars.id)).toMatchObject({ fallbackKind: 'bars', showFallback: true });
+    expect(plate(color.id)).toMatchObject({
+      fallbackKind: 'color',
+      fallbackColor: '#2851ab',
+      showFallback: false,
+    });
+    expect(plate(legacy.id)).toMatchObject({ showFallback: false });
+    expect(plate(legacy.id)).not.toHaveProperty('fallbackKind');
+    const looks = buildTemplateLiveSources(scene).looks ?? [];
+    expect(looks.find(({ id }) => id === layout.defaultPresetId)?.fallbacks).toEqual([bars.id]);
+    expect(
+      looks.find(({ id }) => id === controlLiveLayoutFocusLookId(layout.defaultPresetId, bars.id))
+        ?.fallbacks,
+    ).toEqual([bars.id]);
+    expect(
+      looks.find(({ id }) => id === controlLiveLayoutFocusLookId(layout.defaultPresetId, color.id))
+        ?.fallbacks,
+    ).toBeUndefined();
+    const reopened = await readControlLiveLayout(bytes);
+    expect(reopened.layout).toEqual(layout);
+    expect(reopened.fallbackFiles.size).toBe(0);
+  });
+
+  it('keeps distinct fallback image bytes across Save, Edit and Programme delivery', async () => {
+    const layout = layoutFixture();
+    const [left, right] = layout.frames;
+    if (left === undefined || right === undefined) throw new Error('Fixture has no frames');
+    const png = new Uint8Array(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRlkAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    );
+    const gif = new Uint8Array(
+      Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'),
+    );
+    left.fallback = { kind: 'image', mime: 'image/png', name: 'fallback-left.png' };
+    right.fallback = { kind: 'image', mime: 'image/gif', name: 'fallback-right.gif' };
+    right.showFallback = false;
+    const imageFiles = new Map([
+      [left.id, new Blob([png], { type: 'image/png' })],
+      [right.id, new Blob([gif], { type: 'image/gif' })],
+    ]);
+    const bytes = await compileControlLiveLayout(
+      layout,
+      undefined,
+      undefined,
+      undefined,
+      imageFiles,
+    );
+    const reopened = await readControlLiveLayout(bytes);
+    expect(reopened.layout).toEqual(layout);
+    expect(reopened.fallbackFiles.size).toBe(2);
+    expect(reopened.asset).toBeUndefined();
+    const { scene, manifest, files } = await unpack(bytes);
+    for (const [id, image] of imageFiles) {
+      const imageBytes = new Uint8Array(await image.arrayBuffer());
+      const sha256 = sha256Hex(imageBytes);
+      const asset = manifest.assetIndex.find((item) => item.sha256 === sha256);
+      expect(asset).toMatchObject({ kind: 'image', mime: image.type });
+      const reopenedImage = reopened.fallbackFiles.get(id)!;
+      expect(reopenedImage.type).toEqual(image.type);
+      expect(new Uint8Array(await reopenedImage.arrayBuffer())).toEqual(imageBytes);
+      expect(files.get(asset!.path)).toEqual(imageBytes);
+      const plate = scene.compositions?.find((item) => item.id === 'layout-frame-' + id)?.layers[0]
+        ?.children[0];
+      expect(plate).toMatchObject({ fallbackKind: 'image', posterAssetId: asset!.id });
+    }
+    const { template } = await produceTemplateDelivery(bytes);
+    expect(
+      template.liveSources?.looks?.find(({ id }) => id === layout.defaultPresetId)?.fallbacks,
+    ).toEqual([left.id]);
+    expect(template.controlLiveLayout?.frames[1]?.fallback).toEqual(right.fallback);
+
+    const missing = new Map(imageFiles);
+    missing.delete(right.id);
+    await expect(
+      compileControlLiveLayout(layout, undefined, undefined, undefined, missing),
+    ).rejects.toThrow('Choose the fallback image');
+    missing.set(right.id, new Blob([png], { type: 'image/gif' }));
+    await expect(
+      compileControlLiveLayout(layout, undefined, undefined, undefined, missing),
+    ).rejects.toThrow('does not match its format');
+
+    const badIndex = manifest.assetIndex.map((entry, index) =>
+      index === 0 ? { ...entry, sha256: 'f'.repeat(64) } : entry,
+    );
+    const corrupt = await pack({
+      scene,
+      manifestExtras: { ...manifest, assetIndex: badIndex },
+      assets: new Map([...files].filter(([path]) => path.startsWith('assets/'))),
+      indexHtml: '',
+      cgJs: '',
+      cgCss: '',
+    });
+    await expect(readControlLiveLayout(corrupt)).rejects.toThrow('The saved fallback image');
+  });
+
   it('delivers independent preset aspect and fit while keeping each plate and linked artwork shared', async () => {
     const layout = layoutFixture();
     const [panel, solo] = layout.presets;

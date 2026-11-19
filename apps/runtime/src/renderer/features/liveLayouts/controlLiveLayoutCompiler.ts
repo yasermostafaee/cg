@@ -1,4 +1,4 @@
-import { TEMPLATE_SOURCE_MAX_BYTES } from '@cg/shared-ipc';
+import { probeImage, TEMPLATE_SOURCE_MAX_BYTES } from '@cg/shared-ipc';
 import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   CONTROL_LIVE_LAYOUT_TITLE_FONTS,
@@ -16,6 +16,7 @@ import {
   controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutRects,
+  controlLiveLayoutShowFallback,
   controlLiveLayoutTitleHidden,
   liveRevealSceneRect,
   requiredRuntimeVersionForScene,
@@ -28,6 +29,7 @@ import {
   type ControlLiveLayoutFont,
   type ControlLiveLayoutFrame,
   type ControlLiveLayoutFrameAttachment,
+  type ControlLiveLayoutFrameFallback,
   type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
   type DynamicField,
@@ -56,6 +58,7 @@ import {
 } from './controlLiveLayoutFrameAttachments.js';
 
 const BACKGROUND_ASSET = 'control-live-layout-background';
+const fallbackAssetId = (frameId: string): string => 'control-live-layout-fallback-' + frameId;
 const FRAME_RANGE = { in: 0, out: 1 };
 const BACKGROUND_FORMATS = {
   png: { kind: 'image', mime: 'image/png', extension: 'png' },
@@ -69,6 +72,7 @@ const BACKGROUND_FORMATS = {
 type BackgroundFormat = (typeof BACKGROUND_FORMATS)[keyof typeof BACKGROUND_FORMATS];
 const backgroundFormats = Object.values(BACKGROUND_FORMATS);
 type MediaBackground = Extract<ControlLiveLayoutBackground, { kind: 'image' | 'video' }>;
+type FallbackImage = Extract<ControlLiveLayoutFrameFallback, { kind: 'image' }>;
 const FONT_FORMATS = {
   ttf: { mime: 'font/ttf', signatures: ['\u0000\u0001\u0000\u0000', 'true'] },
   otf: { mime: 'font/otf', signatures: ['OTTO', '\u0000\u0001\u0000\u0000'] },
@@ -78,6 +82,11 @@ const FONT_FORMATS = {
 
 export const CONTROL_LIVE_LAYOUT_BACKGROUND_ACCEPT = Object.keys(BACKGROUND_FORMATS)
   .map((extension) => '.' + extension)
+  .join(',');
+
+export const CONTROL_LIVE_LAYOUT_FALLBACK_ACCEPT = Object.entries(BACKGROUND_FORMATS)
+  .filter(([, { kind }]) => kind === 'image')
+  .map(([extension]) => '.' + extension)
   .join(',');
 
 export const CONTROL_LIVE_LAYOUT_FONT_ACCEPT = Object.keys(FONT_FORMATS)
@@ -146,60 +155,77 @@ function backgroundTooLarge() {
   return new Error('This background exceeds the saved layout size limit. Choose a smaller file.');
 }
 
-/** Validate that the browser can actually read a selected image or video. */
-export async function readControlLiveLayoutBackgroundFile(file: File): Promise<MediaBackground> {
-  if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
+function fileBackgroundFormat(file: File): BackgroundFormat | undefined {
   const extension = file.name.split('.').at(-1)?.toLowerCase();
-  const format =
+  return (
     backgroundFormats.find(({ mime }) => mime === file.type) ??
-    Object.entries(BACKGROUND_FORMATS).find(([suffix]) => suffix === extension)?.[1];
-  if (format === undefined)
-    throw new Error('Choose a PNG, JPEG, WebP, GIF, WebM or MP4 background.');
-  if (file.size === 0) throw new Error('The background file is empty.');
+    Object.entries(BACKGROUND_FORMATS).find(([suffix]) => suffix === extension)?.[1]
+  );
+}
+
+async function validateImageFile(file: File, errorMessage: string): Promise<void> {
   const url = URL.createObjectURL(file);
   try {
-    const name = file.name;
-    if (format.kind === 'video') {
-      const video = document.createElement('video');
-      video.muted = true;
-      video.preload = 'metadata';
-      const durationMs = await new Promise<number>((resolve, reject) => {
-        const fail = () => reject(new Error('This video background could not be read.'));
-        const timer = setTimeout(fail, 10_000);
-        video.onloadedmetadata = () => {
-          clearTimeout(timer);
-          const duration = Math.round(video.duration * 1_000);
-          if (
-            !video.videoWidth ||
-            !video.videoHeight ||
-            !Number.isFinite(duration) ||
-            duration <= 0
-          )
-            fail();
-          else resolve(duration);
-        };
-        video.onerror = () => {
-          clearTimeout(timer);
-          fail();
-        };
-        video.src = url;
-      }).finally(() => {
-        video.onloadedmetadata = null;
-        video.onerror = null;
-        video.removeAttribute('src');
-        video.load();
-      });
-      return { kind: 'video', name, mime: format.mime, durationMs };
-    }
     const image = new Image();
     image.src = url;
     await image.decode().catch(() => {
-      throw new Error('This image background could not be read.');
+      throw new Error(errorMessage);
     });
-    return { kind: 'image', name, mime: format.mime };
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** Validate that the browser can actually read a selected image or video. */
+export async function readControlLiveLayoutBackgroundFile(file: File): Promise<MediaBackground> {
+  if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
+  const format = fileBackgroundFormat(file);
+  if (format === undefined)
+    throw new Error('Choose a PNG, JPEG, WebP, GIF, WebM or MP4 background.');
+  if (file.size === 0) throw new Error('The background file is empty.');
+  if (format.kind === 'image') {
+    await validateImageFile(file, 'This image background could not be read.');
+    return { kind: 'image', name: file.name, mime: format.mime };
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.preload = 'metadata';
+    const durationMs = await new Promise<number>((resolve, reject) => {
+      const fail = () => reject(new Error('This video background could not be read.'));
+      const timer = setTimeout(fail, 10_000);
+      video.onloadedmetadata = () => {
+        clearTimeout(timer);
+        const duration = Math.round(video.duration * 1_000);
+        if (!video.videoWidth || !video.videoHeight || !Number.isFinite(duration) || duration <= 0)
+          fail();
+        else resolve(duration);
+      };
+      video.onerror = () => {
+        clearTimeout(timer);
+        fail();
+      };
+      video.src = url;
+    }).finally(() => {
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      video.removeAttribute('src');
+      video.load();
+    });
+    return { kind: 'video', name: file.name, mime: format.mime, durationMs };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function readControlLiveLayoutFallbackFile(file: File): Promise<FallbackImage> {
+  if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
+  const format = fileBackgroundFormat(file);
+  if (format?.kind !== 'image') throw new Error('Choose a PNG, JPEG, WebP or GIF fallback image.');
+  if (file.size === 0) throw new Error('The fallback image is empty.');
+  await validateImageFile(file, 'This fallback image could not be read.');
+  return { kind: 'image', name: file.name, mime: format.mime };
 }
 
 /** Read only fonts that the browser can render. The same bytes travel in the VCG. */
@@ -442,6 +468,13 @@ function frameComposition(
   const { resolution } = layout;
   const resize = frame.operatorPlacement ?? 'free';
   const operatorMove = frame.operatorMove ?? (resize === 'locked' ? true : undefined);
+  const fallback = frame.fallback;
+  const fallbackProps = {
+    showFallback: controlLiveLayoutShowFallback(frame),
+    ...(fallback !== undefined && { fallbackKind: fallback.kind }),
+    ...(fallback?.kind === 'color' && { fallbackColor: fallback.color }),
+    ...(fallback?.kind === 'image' && { posterAssetId: fallbackAssetId(frame.id) }),
+  };
   const children: Element[] = [
     {
       ...elementBase(frame.id + '-plate', 'Live input', fullFrame),
@@ -453,7 +486,7 @@ function frameComposition(
       ...(frame.liveMask !== undefined && { liveMask: frame.liveMask }),
       ...(frame.operatorCrop !== undefined && { allowOperatorCrop: frame.operatorCrop }),
       ...(frame.allowOperatorMaskEdit === true && { allowOperatorMaskEdit: true }),
-      showFallback: false,
+      ...fallbackProps,
     },
   ];
   attachments.forEach(({ attachment, source }, index) => {
@@ -473,7 +506,7 @@ function frameComposition(
         ...(operatorMove !== undefined && { operatorMove }),
         ...(frame.operatorCrop !== undefined && { allowOperatorCrop: frame.operatorCrop }),
         ...(frame.allowOperatorMaskEdit === true && { allowOperatorMaskEdit: true }),
-        showFallback: false,
+        ...fallbackProps,
       });
     }
     children.push({
@@ -758,11 +791,24 @@ function mediaFormat(mime: BackgroundFormat['mime']): BackgroundFormat {
   return format;
 }
 
+function hasFallbackImageFormat(bytes: Uint8Array, mime: FallbackImage['mime']): boolean {
+  if (mime !== 'image/gif') return probeImage(bytes)?.mime === mime;
+  // The page-book probe intentionally excludes GIF; layouts support its ordinary image format.
+  const signature = String.fromCharCode(...bytes.subarray(0, 6));
+  return (
+    bytes.length >= 13 &&
+    (signature === 'GIF87a' || signature === 'GIF89a') &&
+    (bytes[6] !== 0 || bytes[7] !== 0) &&
+    (bytes[8] !== 0 || bytes[9] !== 0)
+  );
+}
+
 export async function compileControlLiveLayout(
   layout: ControlLiveLayout,
   asset?: Blob,
   fontFiles?: ReadonlyMap<string, Blob>,
   attachmentSources?: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
+  fallbackFiles?: ReadonlyMap<string, Blob>,
 ): Promise<Uint8Array> {
   const scene = buildControlLiveLayoutScene(layout, attachmentSources);
   const background = layout.background;
@@ -770,7 +816,12 @@ export async function compileControlLiveLayout(
   const backgroundBytes = hasBackgroundAsset ? (asset?.size ?? 0) : 0;
   const fontAssets = layout.fonts ?? [];
   const fontBytes = fontAssets.reduce((sum, { id }) => sum + (fontFiles?.get(id)?.size ?? 0), 0);
-  if (backgroundBytes + fontBytes > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
+  const fallbackImages = layout.frames.flatMap(({ id, fallback }) =>
+    fallback?.kind === 'image' ? [{ id, fallback, file: fallbackFiles?.get(id) }] : [],
+  );
+  const fallbackBytes = fallbackImages.reduce((sum, { file }) => sum + (file?.size ?? 0), 0);
+  const ownMediaBytes = backgroundBytes + fontBytes + fallbackBytes;
+  if (ownMediaBytes > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
   const assetIndex: AssetEntry[] = [];
   const fontIndex: AssetEntry[] = [];
   const assets = new Map<string, Uint8Array>();
@@ -796,8 +847,7 @@ export async function compileControlLiveLayout(
       }
     }
   }
-  if (backgroundBytes + fontBytes + attachmentBytes > TEMPLATE_SOURCE_MAX_BYTES)
-    throw layoutTooLarge();
+  if (ownMediaBytes + attachmentBytes > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
   if (hasBackgroundAsset) {
     if (asset === undefined || asset.size === 0) throw new Error('Choose the background file.');
     if (asset.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
@@ -811,6 +861,25 @@ export async function compileControlLiveLayout(
       filename: background.name,
       kind: format.kind,
       mime: format.mime,
+      bytes: bytes.length,
+      sha256,
+    });
+    assets.set(path, bytes);
+  }
+  for (const { id, fallback, file } of fallbackImages) {
+    if (file === undefined || file.size === 0)
+      throw new Error(`Choose the fallback image “${fallback.name}” again.`);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!hasFallbackImageFormat(bytes, fallback.mime))
+      throw new Error(`The fallback image “${fallback.name}” does not match its format.`);
+    const sha256 = sha256Hex(bytes);
+    const path = `assets/image/${sha256}.${mediaFormat(fallback.mime).extension}`;
+    assetIndex.push({
+      id: fallbackAssetId(id),
+      path,
+      filename: fallback.name,
+      kind: 'image',
+      mime: fallback.mime,
       bytes: bytes.length,
       sha256,
     });
@@ -887,6 +956,7 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
   asset?: Blob;
   fonts: Map<string, Blob>;
   attachments: Map<string, ControlLiveLayoutFrameAttachmentSource>;
+  fallbackFiles: Map<string, Blob>;
 }> {
   if (!(await verify(bytes)).ok) throw new Error('The saved live layout could not be verified.');
   const { scene, manifest, files } = await unpack(bytes);
@@ -895,6 +965,7 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
     throw new Error('This template does not contain an editable live layout.');
   const fonts = new Map<string, Blob>();
   const attachments = new Map<string, ControlLiveLayoutFrameAttachmentSource>();
+  const fallbackFiles = new Map<string, Blob>();
   for (const { sourceId, name } of controlLiveLayoutAttachments(layout)) {
     if (attachments.has(sourceId)) continue;
     const raw = files.get(frameAttachmentArchivePath(sourceId));
@@ -909,8 +980,26 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
       throw new Error(`The saved font file “${font.name}” is unavailable.`);
     fonts.set(font.id, new Blob([new Uint8Array(data)], { type: font.mime }));
   }
+  for (const { id, fallback } of layout.frames) {
+    if (fallback?.kind !== 'image') continue;
+    const entries = manifest.assetIndex.filter((entry) => entry.id === fallbackAssetId(id));
+    const entry = entries[0];
+    const data = entry === undefined ? undefined : files.get(entry.path);
+    if (
+      entries.length !== 1 ||
+      entry === undefined ||
+      entry.kind !== 'image' ||
+      entry.mime !== fallback.mime ||
+      data === undefined ||
+      entry.bytes !== data.byteLength ||
+      sha256Hex(data) !== entry.sha256.toLowerCase() ||
+      !hasFallbackImageFormat(data, fallback.mime)
+    )
+      throw new Error(`The saved fallback image “${fallback.name}” is unavailable.`);
+    fallbackFiles.set(id, new Blob([new Uint8Array(data)], { type: fallback.mime }));
+  }
   if (layout.background.kind === 'color' || layout.background.kind === 'none')
-    return { layout, fonts, attachments };
+    return { layout, fonts, attachments, fallbackFiles };
   const entry = manifest.assetIndex.find(({ id }) => id === BACKGROUND_ASSET);
   const data = entry === undefined ? undefined : files.get(entry.path);
   if (entry === undefined || data === undefined || entry.mime !== layout.background.mime)
@@ -920,5 +1009,6 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
     asset: new Blob([new Uint8Array(data)], { type: entry.mime }),
     fonts,
     attachments,
+    fallbackFiles,
   };
 }
