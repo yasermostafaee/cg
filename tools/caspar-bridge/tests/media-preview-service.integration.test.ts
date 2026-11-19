@@ -59,6 +59,7 @@ async function fixture() {
   let preparationStatus = 202;
   let preparationError: string | undefined;
   let retryAfter: string | undefined;
+  let losePreparationResponse = false;
   let preparationGate: Promise<void> | null = null;
   let targetGate: Promise<void> | null = null;
   let targetOnce = false;
@@ -106,6 +107,10 @@ async function fixture() {
       preparations++;
       const respond = () => {
         if (preparationStatus === 202) proxyState = 'ready';
+        if (losePreparationResponse) {
+          res.destroy();
+          return;
+        }
         if (retryAfter !== undefined) res.setHeader('retry-after', retryAfter);
         res
           .writeHead(preparationStatus, { 'content-type': 'application/json' })
@@ -227,6 +232,9 @@ async function fixture() {
       preparationStatus = status;
       retryAfter = retryAfterHeader;
       preparationError = error;
+    },
+    losePreparationResponse: () => {
+      losePreparationResponse = true;
     },
     delayPrepare: () => {
       let release: () => void = () => undefined;
@@ -474,6 +482,21 @@ it('observes a ready shared proxy without reposting during the busy cooldown', a
   expect(f.preparations()).toBe(1);
   f.readyProxy();
   expect((await f.open(busy.previewId)).state).toBe('ready');
+  expect(f.preparations()).toBe(1);
+});
+
+it('continues playback when Playout accepted preparation but its POST response was lost', async () => {
+  const f = await fixture();
+  f.setMode();
+  const initial = await f.open(undefined, false);
+  f.losePreparationResponse();
+  const ready = await f.open(initial.previewId);
+  expect(ready).toMatchObject({
+    state: 'ready',
+    previewId: initial.previewId,
+    posterUrl: initial.posterUrl,
+  });
+  expect((await fetch(f.url(ready.videoUrl))).status).toBe(200);
   expect(f.preparations()).toBe(1);
 });
 

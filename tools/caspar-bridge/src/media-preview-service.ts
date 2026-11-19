@@ -535,19 +535,34 @@ export class MediaPreviewService {
           body: '{}',
           signal: signal(),
           maxResponseBytes: 128 * 1024,
-        });
-        const accepted = prepared.status === 200 || prepared.status === 202;
-        const busy = prepared.status === 429;
+        }).catch(() => null);
+        const accepted = prepared?.status === 200 || prepared?.status === 202;
+        const busy = prepared?.status === 429;
         const refusal =
-          accepted || busy
+          prepared === null || accepted || busy
             ? undefined
             : preparationErrorSchema.safeParse(await prepared.json().catch(() => undefined));
-        if ((await this.#currentTarget(preview)) === null)
+        const current = await this.#currentTarget(preview);
+        if (current === null)
           return this.#recovery(preview.owner, {
             channel: preview.channel,
             sourceId: preview.sourceId,
             previewId: preview.id,
           });
+        if (prepared === null) {
+          // Losing the POST response does not cancel the Playout's shared job. Verify
+          // its state with one read on the authorized source before reporting a failure.
+          preview.target = current;
+          const result = await this.#readManifest(preview, false);
+          if (result.state === 'preparing' && preview.manifest?.proxy.state === 'notPrepared') {
+            return this.#view(
+              preview,
+              'error',
+              'The source server could not confirm proxy preparation.',
+            );
+          }
+          return result;
+        }
         // The Playout's shared encoder is busy. A later poll first rechecks the manifest,
         // then retries the same authenticated item only when the server's cooldown has passed.
         if (busy) {
