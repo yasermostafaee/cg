@@ -144,11 +144,12 @@ describe('CG Control authored live layouts', () => {
         ?.children[0];
       expect(plate).toMatchObject({ fallbackKind: 'image', posterAssetId: asset!.id });
     }
-    const { template } = await produceTemplateDelivery(bytes);
+    const { template, html } = await produceTemplateDelivery(bytes);
     expect(
       template.liveSources?.looks?.find(({ id }) => id === layout.defaultPresetId)?.fallbacks,
     ).toEqual([left.id]);
     expect(template.controlLiveLayout?.frames[1]?.fallback).toEqual(right.fallback);
+    expect(html).toContain('data:image/png;base64,' + Buffer.from(png).toString('base64'));
 
     const missing = new Map(imageFiles);
     missing.delete(right.id);
@@ -1020,6 +1021,7 @@ describe('CG Control authored live layouts', () => {
       layout,
       fonts: new Map(),
       attachments: new Map(),
+      fallbackFiles: new Map(),
     });
 
     const { html, template } = await produceTemplateDelivery(bytes);
