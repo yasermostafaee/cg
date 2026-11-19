@@ -1245,12 +1245,16 @@ test.describe('live source thumbnails', () => {
       ({ liveJpeg, playlistJpeg }) => {
         const batches: { channel: number; ids: string[]; time: number }[] = [];
         const state = { batches, checks: 0 };
+        const firstPicture = new Promise<void>((resolve) => {
+          Object.assign(window, { allowFirstInputPicture: resolve });
+        });
         Object.assign(window, { sourcePreviewTest: state });
         window.cg.sourcePreviews = {
           pvw: () => Promise.resolve({ frames: [] }),
-          thumbnails: ({ channel, sourceIds }) => {
+          thumbnails: async ({ channel, sourceIds }) => {
             batches.push({ channel, ids: sourceIds, time: performance.now() });
-            return Promise.resolve({
+            await firstPicture;
+            return {
               frames: sourceIds.map((sourceId) => ({
                 sourceId,
                 signal:
@@ -1263,7 +1267,7 @@ test.describe('live source thumbnails', () => {
                 width: 64,
                 height: 36,
               })),
-            });
+            };
           },
         };
         const start = window.cg.livePreview.start;
@@ -1297,6 +1301,11 @@ test.describe('live source thumbnails', () => {
         .locator('[data-input-thumbnail]');
     const live = tile('in-studio-1').locator('img');
     const playlist = tile('in-fixture-playlist').locator('img');
+    await expect(tile('in-studio-1')).toHaveText('Loading preview…');
+    await expect(tile('in-fixture-playlist')).toHaveText('Loading preview…');
+    await page.evaluate(() => {
+      (window as unknown as { allowFirstInputPicture: () => void }).allowFirstInputPicture();
+    });
     await expect(live).toHaveAttribute('src', `data:image/jpeg;base64,${liveJpeg}`);
     await expect(playlist).toHaveAttribute('src', `data:image/jpeg;base64,${playlistJpeg}`);
     await expect(

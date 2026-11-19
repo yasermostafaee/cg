@@ -46,6 +46,12 @@ export function InputThumbnail({
       ? channel
       : undefined;
   const sourceId = source.id;
+  const canRequestPicture =
+    previewChannel !== undefined &&
+    window.cg?.sourcePreviews !== undefined &&
+    typeof IntersectionObserver !== 'undefined';
+  const pictureRequestKey =
+    previewChannel === undefined ? undefined : `${previewChannel}:${sourceId}`;
   const checkable = inputCheck !== undefined;
   const control = useLiveInputCheck();
   const check = control?.check;
@@ -62,6 +68,7 @@ export function InputThumbnail({
     channel: number;
     frame: SourcePreviewFrame;
   }>();
+  const [answeredPictureKey, setAnsweredPictureKey] = useState<string>();
   const [brokenPicture, setBrokenPicture] = useState<string>();
   const [decodedOrigin, setDecodedOrigin] = useState<{
     sourceId: string;
@@ -77,6 +84,11 @@ export function InputThumbnail({
       ? `data:image/jpeg;base64,${frame.jpegBase64}`
       : undefined;
   const picture = src === undefined || src === brokenPicture ? null : src;
+  const awaitingPicture =
+    frame === undefined &&
+    foreground &&
+    canRequestPicture &&
+    answeredPictureKey !== pictureRequestKey;
 
   useEffect(() => {
     if (picture === null || active) setDecodedOrigin(undefined);
@@ -113,11 +125,10 @@ export function InputThumbnail({
     const tile = element.current;
     if (
       !foreground ||
+      !canRequestPicture ||
       previewChannel === undefined ||
       active ||
-      tile === null ||
-      window.cg?.sourcePreviews === undefined ||
-      typeof IntersectionObserver === 'undefined'
+      tile === null
     ) {
       return;
     }
@@ -130,6 +141,7 @@ export function InputThumbnail({
           channel: previewChannel,
           sourceId,
           publish: (frame) => {
+            setAnsweredPictureKey(pictureRequestKey);
             if (
               frame === undefined ||
               (frame.signal !== 'absent' && frame.jpegBase64 === undefined)
@@ -150,7 +162,15 @@ export function InputThumbnail({
       observer.disconnect();
       unsubscribe?.();
     };
-  }, [active, foreground, previewChannel, sourceId, checkable]);
+  }, [
+    active,
+    foreground,
+    previewChannel,
+    sourceId,
+    checkable,
+    canRequestPicture,
+    pictureRequestKey,
+  ]);
 
   if (active && check != null && control !== null) {
     return (
@@ -172,7 +192,9 @@ export function InputThumbnail({
       ? 'Input picture.'
       : frame?.signal === 'absent'
         ? 'No current input signal.'
-        : PLACEHOLDER_DESCRIPTION;
+        : awaitingPicture
+          ? 'Loading preview…'
+          : PLACEHOLDER_DESCRIPTION;
   const className =
     picture === null ? 'cg-input-thumbnail' : 'cg-input-thumbnail cg-media-thumbnail';
   const content =
@@ -198,6 +220,8 @@ export function InputThumbnail({
       <Icon icon={VideoOff} size={12} />
     ) : frame?.signal === 'absent' ? (
       'No signal'
+    ) : awaitingPicture ? (
+      'Loading preview…'
     ) : (
       'Preview unavailable'
     );
