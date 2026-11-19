@@ -514,7 +514,7 @@ function useListKeys(
   tiled = false,
 ): {
   active: number | null;
-  setActive: (index: number) => void;
+  setPointerActive: (index: number) => void;
   onKeyDown: (e: KeyboardEvent<HTMLElement>, fromField?: boolean) => void;
 } {
   const [active, setActiveState] = useState<number | null>(null);
@@ -524,10 +524,6 @@ function useListKeys(
     setActiveState(selectedIndex);
     list.current?.scrollToIndex(selectedIndex);
   }, [selectedIndex, tiled]);
-  const setActive = (index: number): void => {
-    setActiveState(index);
-    list.current?.scrollToIndex(index);
-  };
   // A list that changed under the active row keeps a row that exists.
   useEffect(() => {
     if (active !== null && active >= rows.length) setActiveState(null);
@@ -536,7 +532,9 @@ function useListKeys(
     const verticalStep = tiled && !fromField ? (list.current?.columnCount() ?? 1) : 1;
     const move = (to: number | null): void => {
       e.preventDefault();
-      if (to !== null) setActive(to);
+      if (to === null) return;
+      setActiveState(to);
+      list.current?.scrollToIndex(to);
     };
     switch (e.key) {
       case 'ArrowDown':
@@ -573,7 +571,8 @@ function useListKeys(
         return;
     }
   };
-  return { active, setActive, onKeyDown };
+  // Pointer activation must keep row actions in place until the click is delivered.
+  return { active, setPointerActive: setActiveState, onKeyDown };
 }
 
 // ── Inputs ───────────────────────────────────────────────────────────────────────────────
@@ -716,7 +715,7 @@ function InputsTab({
             tiled ? INPUT_GRID_HEIGHT : Math.min(LIST_HEIGHT, Math.max(rows.length, 1) * INPUT_ROW)
           }
           activeIndex={keys.active}
-          onActiveChange={keys.setActive}
+          onActiveChange={keys.setPointerActive}
           onPick={pick}
           onKeyDown={(e) => {
             if (e.target instanceof Element && e.target.closest('button') !== null) return;
@@ -1186,7 +1185,7 @@ function MediaTab({
             headingHeight={MEDIA_HEADING_HEIGHT}
             height={LIST_HEIGHT}
             activeIndex={keys.active}
-            onActiveChange={keys.setActive}
+            onActiveChange={keys.setPointerActive}
             onPick={chooseMedia}
             onKeyDown={(e) => {
               if (e.target instanceof Element && e.target.closest('button, input') !== null) return;

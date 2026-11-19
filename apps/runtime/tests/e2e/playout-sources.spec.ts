@@ -1687,7 +1687,7 @@ test('one Play action per clip survives delayed proxy preparation in the same gr
           posterUrl: `${origin}/poster`,
           engine: 'B' as const,
         };
-        const waitsForCapacity = sourceId === 'md-m-clip-002';
+        const waitsForCapacity = sourceId === 'md-m-clip-002' || sourceId === 'md-m-clip-007';
         if (prepare !== true || prepares <= (waitsForCapacity ? 2 : 1)) {
           return {
             ...common,
@@ -1754,12 +1754,37 @@ test('one Play action per clip survives delayed proxy preparation in the same gr
         .toBeGreaterThanOrEqual(2.5);
       await expect(video).toHaveJSProperty('muted', false);
 
-      await playRow('Clip 002').click();
+      const nextClip = view === 'grid' ? '007' : '002';
+      const nextPlay = playRow(`Clip ${nextClip}`);
+      if (view === 'grid') {
+        // Click the visible Play button of a partially clipped card without Playwright
+        // automatically scrolling the card into view before pointerdown.
+        const point = await nextPlay.evaluate((button) => {
+          const row = button.closest<HTMLElement>('[data-vlist-action-index]');
+          const viewport = button.closest<HTMLElement>('[data-picker-list]');
+          if (row === null || viewport === null) throw new Error('Missing media viewport');
+          viewport.scrollTop +=
+            row.getBoundingClientRect().bottom - viewport.getBoundingClientRect().bottom - 30;
+          const bounds = button.getBoundingClientRect();
+          const x = bounds.x + bounds.width / 2;
+          const y = bounds.y + bounds.height / 2;
+          return {
+            x,
+            y,
+            hitsButton: button.contains(document.elementFromPoint(x, y)),
+            clipped: row.getBoundingClientRect().bottom > viewport.getBoundingClientRect().bottom,
+          };
+        });
+        expect(point).toMatchObject({ hitsButton: true, clipped: true });
+        await page.mouse.click(point.x, point.y);
+      } else {
+        await nextPlay.click();
+      }
       await expect(preview.getByRole('status')).toHaveText(
         'The media proxy queue is busy. Waiting for capacity.',
       );
       await expect(preview.locator('img')).toBeVisible();
-      await expect(video).toHaveAttribute('src', /source=md-m-clip-002/);
+      await expect(video).toHaveAttribute('src', new RegExp(`source=md-m-clip-${nextClip}`));
       await expect(video).toHaveJSProperty('videoWidth', 64);
       await expect
         .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
