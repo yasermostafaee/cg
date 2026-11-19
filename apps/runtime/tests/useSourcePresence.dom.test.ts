@@ -147,6 +147,45 @@ describe('source presence subscriptions', () => {
     expect(host.textContent).toBe(JSON.stringify(GOOD));
   });
 
+  it('refreshes after a role change even through unknown topology and discards older presence', async () => {
+    let resolvePrevious: (value: SourcePresenceView) => void = () => undefined;
+    const read = vi
+      .fn<Read>(() => Promise.resolve(GOOD))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePrevious = resolve;
+          }),
+      );
+    bridgeStub(read);
+    let active: 'A' | 'B' | null = 'A';
+    window.cg.pgmReturn = {
+      ...window.cg.pgmReturn,
+      topology: async (channel) => ({
+        channel,
+        active,
+        members: [
+          { engine: 'A', name: 'A', physicalChannel: 1, resourceKey: 'a' },
+          { engine: 'B', name: 'B', physicalChannel: 2, resourceKey: 'b' },
+        ],
+      }),
+    };
+    await watch(['in-studio']);
+    await advance(0);
+    expect(read).toHaveBeenCalledTimes(1);
+    active = null;
+    await advance(5_000);
+    expect(read).toHaveBeenCalledTimes(1);
+    active = 'B';
+    await advance(5_001);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toBe(JSON.stringify(GOOD));
+    await act(async () => {
+      resolvePrevious({ ...GOOD, sources: { 'in-studio': { A: 'missing' } } });
+    });
+    expect(host.textContent).toBe(JSON.stringify(GOOD));
+  });
+
   it('skips badges and recurring requests on a single-engine station', async () => {
     const read = vi.fn<Read>(() => Promise.resolve({ engines: ['A'], sources: {} }));
     bridgeStub(read);

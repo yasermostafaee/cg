@@ -122,6 +122,94 @@ test('closed media bindings show a compact decoded poster and its actual server 
   expect(proof.receivers).toBe(0);
 });
 
+test('source availability and decoded poster providers follow A/B changes without reopening', async ({
+  app,
+}) => {
+  const page = app.page;
+  const defaults = await openDefaults(app);
+  await page.evaluate(
+    (dataUrl) => {
+      const caps = window.cg.auth.capabilities();
+      if (caps === null) throw new Error('Expected station capabilities');
+      window.cg.auth.capabilities = () => ({ ...caps, sourcePresence: true });
+      window.cg.link.status = () => 'live';
+      const state = { active: 'A' as 'A' | 'B', reads: [] as string[] };
+      Object.assign(window, { posterRouteTest: state });
+      window.cg.pgmReturn.topology = async (channel) => ({
+        active: state.active,
+        channel,
+        members: [
+          { engine: 'A', name: 'A', physicalChannel: channel, resourceKey: 'fixture-a' },
+          { engine: 'B', name: 'B', physicalChannel: channel, resourceKey: 'fixture-b' },
+        ],
+      });
+      window.cg.sources.presence = async ({ sourceIds }) => ({
+        engines: ['A', 'B'],
+        sources: Object.fromEntries(
+          sourceIds.map((id) => [
+            id,
+            {
+              A: 'present',
+              B: state.active === 'B' && id === 'md-m-clip-001' ? 'present' : 'missing',
+            },
+          ]),
+        ),
+      });
+      window.cg.sources.mediaThumbnail = async ({ id }) => {
+        const engine = id === 'md-m-clip-001' ? state.active : 'A';
+        state.reads.push(`${id}:${engine}`);
+        return { ok: true, dataUrl, engine };
+      };
+    },
+    `data:image/jpeg;base64,${FRAME_A.toString('base64')}`,
+  );
+  await app.chooseSource(defaults.locator('[data-defaults-select="l-1"]'), {
+    media: 'Clip 001',
+    search: 'Clip 001',
+  });
+  await defaults.locator('[data-defaults-save]').click();
+  const inherited = app.inspector.locator('[data-look-binding="two:l-1"]');
+  const provider = (surface: Locator, server: 'A' | 'B'): Promise<void> =>
+    expect(surface.locator('[data-source-preview-provider]')).toHaveAttribute(
+      'data-source-presence-server',
+      server,
+    );
+  const changeRole = (active: 'A' | 'B') =>
+    page.evaluate((engine) => {
+      (window as unknown as { posterRouteTest: { active: 'A' | 'B' } }).posterRouteTest.active =
+        engine;
+    }, active);
+
+  await provider(inherited, 'A');
+  await inherited.click();
+  const dialog = picker(page);
+  await expect(dialog).toBeVisible();
+  const fallback = dialog.locator('[data-picker-media="md-m-clip-002"]');
+  const firstMedia = dialog.locator('[data-picker-media="md-m-clip-001"]');
+  const defaultBar = dialog.locator('[data-picker-choice=""]');
+  await provider(defaultBar, 'A');
+  await provider(firstMedia, 'A');
+
+  await changeRole('B');
+  await provider(firstMedia, 'B');
+  await expect(firstMedia.locator('[data-source-presence-server="B"]')).toHaveAttribute(
+    'data-source-presence-state',
+    'present',
+  );
+  await provider(defaultBar, 'B');
+  await provider(fallback, 'A');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await provider(inherited, 'B');
+
+  await changeRole('A');
+  await provider(inherited, 'A');
+  await expect(inherited.locator('[data-source-presence-server="B"]')).toHaveAttribute(
+    'data-source-presence-state',
+    'missing',
+  );
+});
+
 test('a received B picture emphasizes its existing B badge while A remains unavailable', async ({
   app,
 }) => {

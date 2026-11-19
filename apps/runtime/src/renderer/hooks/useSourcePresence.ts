@@ -5,6 +5,11 @@ import {
   type SourcePresenceView,
 } from '@cg/shared-ipc';
 import type { RuntimeBridge, Unsubscribe } from '../../shared/runtime-bridge.js';
+import {
+  getProgramTopology,
+  sourcePreviewRoute,
+  subscribeProgramTopology,
+} from './useProgramTopology.js';
 
 const REFRESH_MS = 15_000;
 
@@ -17,6 +22,7 @@ interface ChannelRead {
   view: SourcePresenceView | null;
   read: object | null;
   queued: boolean;
+  stopTopology?: Unsubscribe;
 }
 
 /** One reader per console groups concurrent pickers and cards into station-channel requests. */
@@ -35,7 +41,7 @@ class SourcePresenceReader {
 
   subscribe(channel: number, ids: readonly string[], changed: () => void): Unsubscribe {
     if (this.#channels.size === 0) this.#start();
-    const state = this.#channels.get(channel) ?? {
+    const state: ChannelRead = this.#channels.get(channel) ?? {
       interests: new Set<Interest>(),
       view: null,
       read: null,
@@ -44,24 +50,31 @@ class SourcePresenceReader {
     this.#channels.set(channel, state);
     const interest = { ids, changed };
     state.interests.add(interest);
+    if (state.stopTopology === undefined) {
+      const route = () => sourcePreviewRoute(getProgramTopology(this.bridge, channel));
+      let previous = route();
+      state.stopTopology = subscribeProgramTopology(this.bridge, channel, () => {
+        const current = route();
+        if (current === undefined || current === previous) return;
+        previous = current;
+        // A role change leaves the link intact and may arrive during the first topology read.
+        this.#invalidate(state, true);
+      });
+    }
     this.#schedule();
     return () => {
       state.interests.delete(interest);
-      if (state.interests.size === 0) this.#channels.delete(channel);
+      if (state.interests.size === 0) {
+        state.stopTopology?.();
+        this.#channels.delete(channel);
+      }
       if (this.#channels.size === 0) this.#stop();
     };
   }
 
   #start(): void {
     const invalidate = (sameStation: boolean): void => {
-      for (const state of this.#channels.values()) {
-        state.read = null;
-        state.queued = false;
-        const engines = state.view?.engines;
-        const unknown = sameStation && engines?.includes('B') ? { engines, sources: {} } : null;
-        this.#publish(state, unknown);
-      }
-      this.#schedule();
+      for (const state of this.#channels.values()) this.#invalidate(state, sameStation);
     };
     const target = (): string => {
       const caps = this.bridge.auth.capabilities();
@@ -85,6 +98,15 @@ class SourcePresenceReader {
       this.bridge.connections.onConfigChanged(() => invalidate(false)),
     ];
     this.#pollTimer = setInterval(() => this.#schedule(), REFRESH_MS);
+  }
+
+  #invalidate(state: ChannelRead, sameStation: boolean): void {
+    state.read = null;
+    state.queued = false;
+    const engines = state.view?.engines;
+    const unknown = sameStation && engines?.includes('B') ? { engines, sources: {} } : null;
+    this.#publish(state, unknown);
+    this.#schedule();
   }
 
   #stop(): void {

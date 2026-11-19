@@ -44,6 +44,7 @@ import {
 } from './MediaThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
+import { useSourcePreviewRoute } from '../../hooks/useProgramTopology.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
 import {
@@ -261,16 +262,17 @@ export function SourcePicker({
     if (draft !== value) onChange(draft);
   };
   const thumbnailChannel = previewChannel ?? channel;
+  const previewRoute = useSourcePreviewRoute(thumbnailChannel);
   const showingChoice = choice !== undefined && (value === '' || !known);
   const selectedSource = showingChoice ? choice.names : value;
   const posterIdentity = JSON.stringify(
     currentSourceCatalog().sources.find((source) => source.id === selectedSource),
   );
-  // The closed binding and its modal share cached poster reads. Rebinding or changing
-  // channel/source identity starts a new scope; a previous scope cannot publish its origin.
+  // The closed binding and its modal share cached poster reads. A route or binding
+  // change gets a fresh cache; late reads from the old route cannot label new posters.
   const loadThumbnail = useMemo(
     () => createMediaThumbnailLoader(thumbnailChannel),
-    [thumbnailChannel, selectedSource, posterIdentity],
+    [thumbnailChannel, selectedSource, posterIdentity, previewRoute],
   );
   const selectedPresence = useSourcePresence(
     thumbnailChannel,
