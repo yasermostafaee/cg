@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { MediaPlaybackPreview } from '@cg/shared-ipc';
+import type { MediaPlaybackPreview, PgmTopology } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 import { SourceMediaPreview } from '../src/renderer/features/sources/SourceMediaPreview.js';
 import type { MediaThumbnailLoader } from '../src/renderer/features/sources/MediaThumbnail.js';
@@ -96,6 +96,7 @@ async function mount(
   onPreviewEngineChange?: (engine: 'A' | 'B' | undefined) => void,
   playRequest?: number,
   loadThumbnail?: MediaThumbnailLoader,
+  readTopology?: () => Promise<PgmTopology>,
 ) {
   const previous = window.cg;
   const mediaClose = vi.fn(async () => ({ closed: true }));
@@ -105,6 +106,11 @@ async function mount(
   window.cg = {
     sourcePreviews: { mediaOpen, mediaClose, thumbnails },
     stack: { take, update },
+    ...(readTopology !== undefined && {
+      pgmReturn: { topology: readTopology },
+      link: { status: () => 'live', onStatusChanged: () => () => undefined },
+      auth: { state: () => ({ kind: 'off' }), onStateChanged: () => () => undefined },
+    }),
   } as unknown as RuntimeBridge;
   const host = document.createElement('div');
   document.body.append(host);
@@ -273,6 +279,55 @@ it('keeps a terminal proxy reason visible and only requests preparation again on
     expect(mediaOpen.mock.lastCall?.[0].prepare).toBe(true);
     expect(view.host.textContent).not.toContain(reason);
     expect(player.play).toHaveBeenCalledOnce();
+  } finally {
+    await view.close();
+  }
+});
+
+it('revalidates the held media on a verified role switch without waiting for its next renewal', async () => {
+  const player = mockPlayer();
+  let active: PgmTopology['active'] = 'A';
+  const readTopology = vi.fn(
+    async (): Promise<PgmTopology> => ({
+      channel: 1,
+      active,
+      members: [
+        { engine: 'A', name: 'A', physicalChannel: 1, resourceKey: 'primary' },
+        { engine: 'B', name: 'B', physicalChannel: 2, resourceKey: 'backup' },
+      ],
+    }),
+  );
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), engine: 'A' })
+    .mockResolvedValueOnce({ state: 'unavailable', recovery: 'target-changed' })
+    .mockResolvedValue(ready(SECOND));
+  const view = await mount(mediaOpen, false, undefined, 1, undefined, readTopology);
+  try {
+    const original = view.host.querySelector('video')!;
+    await act(async () => {
+      original.currentTime = 2;
+      original.dispatchEvent(new Event('timeupdate'));
+      view.button('Listen to preview').click();
+    });
+    active = null;
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(mediaOpen).toHaveBeenCalledOnce();
+    active = 'B';
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(mediaOpen).toHaveBeenNthCalledWith(2, {
+      channel: 1,
+      sourceId: 'md-film',
+      previewId: FIRST,
+      prepare: true,
+    });
+    expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
+    const resumed = view.host.querySelector('video')!;
+    await act(async () => resumed.dispatchEvent(new Event('loadedmetadata')));
+    expect(resumed.getAttribute('src')).toBe(ready(SECOND).videoUrl);
+    expect(resumed.currentTime).toBe(2);
+    expect(resumed.muted).toBe(false);
+    expect(player.play).toHaveBeenCalled();
   } finally {
     await view.close();
   }

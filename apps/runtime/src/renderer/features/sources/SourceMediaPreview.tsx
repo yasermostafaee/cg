@@ -6,6 +6,7 @@ import {
   type MediaPlaybackPreview,
 } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
+import { useSourcePreviewRoute } from '../../hooks/useProgramTopology.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
@@ -84,6 +85,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     onPreviewEngineChange,
   } = props;
   const foreground = useModalForeground();
+  const route = useSourcePreviewRoute(foreground ? channel : undefined);
+  const lastRoute = useRef<string>();
   const video = useRef<HTMLVideoElement>(null);
   const playbackButton = useRef<HTMLButtonElement>(null);
   const [preview, setPreview] = useState<MediaPlaybackPreview | null>(null);
@@ -289,6 +292,15 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       stopLease();
     };
   }, [channel, foreground, id, mediaClose, mediaOpen]);
+
+  useEffect(() => {
+    if (route === undefined) return;
+    const previous = lastRoute.current;
+    lastRoute.current = route;
+    if (previous !== undefined && previous !== route && currentPreview.current?.previewId) {
+      refresh.current?.();
+    }
+  }, [route]);
 
   const play = useCallback((): void => {
     const player = video.current;
