@@ -125,3 +125,18 @@ The console SHALL let an operator focus a frame and return to its originating pr
 - **AND** the editor rehearsal and PVW show the selected effect between the two solo views, including when the console's interface uses reduced motion
 - **AND** on Push and Slide over, artwork attached to either frame follows its movement and disappears behind the same edge as its picture on PVW and Programme
 - **AND** a title hidden by Show title in Focus stays hidden in the solo view and keeps its regular preset visibility on Return
+
+### Requirement: Each plate can show an authored fallback
+
+New live layouts SHALL let the operator choose bars, a solid colour or an image as a plate's
+fallback. The chosen fallback SHALL appear beneath the plate picture in the editor and in PVW.
+Show fallback on air SHALL independently control whether it appears in Programme. The saved
+layout package SHALL retain the fallback settings and image assets for editing and export.
+Layouts saved before this setting existed SHALL keep their Programme output.
+
+#### Scenario: Use a fallback image while rehearsing a plate
+
+- **WHEN** the operator chooses an image for a plate and turns off Show fallback on air
+- **THEN** the image remains visible in the editor and in PVW when the source leaves the plate empty
+- **AND** the Programme plate remains transparent in that area
+- **AND** reopening the saved layout restores the image and the switch
