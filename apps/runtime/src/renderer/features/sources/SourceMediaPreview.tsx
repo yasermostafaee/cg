@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { LoaderCircle, Maximize2, Pause, Play, Square, Volume2, VolumeX, X } from 'lucide-react';
 import {
   MAX_MEDIA_PREVIEW_POSITION_MS,
   MEDIA_THUMBNAIL_DATA_URL_PREFIX,
@@ -35,6 +35,108 @@ interface PreviewRequest {
   positionMs: number;
   /** A null clock requests one silent frame at the selected position. */
   startedAt: number | null;
+}
+
+function MediaPreviewSurface({
+  name,
+  description,
+  inline,
+  file,
+  picture,
+  loading,
+  children,
+}: {
+  name: string;
+  description: string;
+  inline: boolean;
+  file?: boolean;
+  picture: ReactNode;
+  loading: string | undefined;
+  children: ReactNode;
+}): JSX.Element {
+  const surface = useRef<HTMLElement>(null);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState(false);
+
+  useEffect(() => {
+    const element = surface.current;
+    if (element === null || !document.fullscreenEnabled) return;
+    let wasExpanded = false;
+    const change = (): void => {
+      const next = document.fullscreenElement === element;
+      if (next === wasExpanded) return;
+      wasExpanded = next;
+      setExpanded(next);
+      fullscreenButton.current?.focus({ preventScroll: true });
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || document.fullscreenElement !== element) return;
+      event.preventDefault();
+      // This Escape belongs to the player, so the source picker's dialog stays open.
+      event.stopPropagation();
+      void document.exitFullscreen().catch(() => setFullscreenError(true));
+    };
+    document.addEventListener('fullscreenchange', change);
+    window.addEventListener('keydown', escape, true);
+    return () => {
+      document.removeEventListener('fullscreenchange', change);
+      window.removeEventListener('keydown', escape, true);
+    };
+  }, []);
+
+  const fullscreenLabel = expanded ? 'Close fullscreen preview' : 'Fullscreen preview';
+  return (
+    <section
+      ref={surface}
+      className={
+        inline ? 'cg-source-media-preview cg-source-media-preview--tile' : 'cg-source-media-preview'
+      }
+      aria-label="Media preview"
+      data-media-file-preview={file ? '' : undefined}
+    >
+      <div className="cg-source-media-preview__heading">
+        <IsolatedName>{name}</IsolatedName>
+        <span>{description}</span>
+      </div>
+      <div className="cg-source-media-preview__picture">
+        {picture}
+        {loading !== undefined && (
+          <span className="cg-source-media-preview__loading" role="status">
+            <Icon icon={LoaderCircle} size={18} />
+            {loading}
+          </span>
+        )}
+        {document.fullscreenEnabled && (
+          <Button
+            ref={fullscreenButton}
+            variant="icon"
+            className="cg-source-media-preview__fullscreen"
+            title={fullscreenLabel}
+            aria-label={fullscreenLabel}
+            onClick={() => {
+              const element = surface.current;
+              if (element === null) return;
+              setFullscreenError(false);
+              const request =
+                document.fullscreenElement === element
+                  ? document.exitFullscreen()
+                  : element.requestFullscreen();
+              void request.catch(() => setFullscreenError(true));
+            }}
+          >
+            <Icon icon={expanded ? X : Maximize2} size={18} />
+          </Button>
+        )}
+        {fullscreenError && (
+          <span className="cg-source-media-preview__fullscreen-error" role="status">
+            Fullscreen is unavailable.
+          </span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function SourceMediaPreview(props: SourceMediaPreviewProps): JSX.Element {
@@ -355,8 +457,10 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       setPositionMs(0);
       if (video.current !== null) video.current.currentTime = 0;
     }
-    if (currentPreview.current?.state === 'ready') play();
-    else refresh.current?.();
+    if (currentPreview.current?.state === 'ready') {
+      if (video.current?.paused !== false) setBuffering(true);
+      play();
+    } else refresh.current?.();
   }, [duration, play]);
 
   const consumedPlayRequest = useRef(playRequest);
@@ -411,6 +515,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   if (preview?.state === 'unsupported') {
     return <SampledSourceMediaPreview {...props} initialPlayback={intent === 'playing'} />;
   }
+  const loading =
+    intent === 'playing' &&
+    playerError === null &&
+    (preview === null ||
+      preview.state === 'preparing' ||
+      (preview.state === 'ready' && (!showVideo || buffering)));
   let message = '';
   if (intent !== 'stopped') {
     if (playerError !== null) message = playerError;
@@ -419,129 +529,126 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       message = preview.message ?? 'Preparing preview…';
     } else if (preview.state === 'unavailable' || preview.state === 'error') {
       message = preview.message ?? 'Preview unavailable';
-    } else if (buffering) message = 'Loading…';
+    } else if (loading) message = 'Loading…';
   }
   const origin = displayedEngine === undefined ? null : `Server ${displayedEngine}`;
 
   return (
-    <section
-      className={
-        inline ? 'cg-source-media-preview cg-source-media-preview--tile' : 'cg-source-media-preview'
+    <MediaPreviewSurface
+      name={name}
+      description={origin ?? 'Media preview'}
+      inline={inline}
+      file
+      loading={loading ? message : undefined}
+      picture={
+        <>
+          {preview?.videoUrl !== undefined && (
+            // Library preview manifests do not include caption assets.
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video
+              ref={video}
+              src={preview.videoUrl}
+              poster={posterUrl}
+              muted={muted}
+              preload="metadata"
+              playsInline
+              hidden={!showVideo}
+              onLoadedData={(event) => {
+                if (matchesReadyPreview(event.currentTarget, currentPreview.current))
+                  setVideoOrigin(currentPreview.current?.engine);
+              }}
+              onLoadedMetadata={(event) => {
+                const player = event.currentTarget;
+                if (!matchesReadyPreview(player, currentPreview.current)) return;
+                if (Number.isFinite(player.duration) && player.duration > 0) {
+                  setDuration(Math.round(player.duration * 1_000));
+                }
+                if (position.current > 0) player.currentTime = position.current / 1_000;
+                positionHeld.current = false;
+                play();
+              }}
+              onPlay={(event) => {
+                if (
+                  !foreground ||
+                  currentIntent.current !== 'playing' ||
+                  !matchesReadyPreview(event.currentTarget, currentPreview.current)
+                ) {
+                  event.currentTarget.pause();
+                  return;
+                }
+                setVideoVisible(true);
+                setBuffering(true);
+              }}
+              onWaiting={() => setBuffering(true)}
+              onEmptied={() => setVideoOrigin(undefined)}
+              onPlaying={(event) => {
+                setBuffering(false);
+                if (matchesReadyPreview(event.currentTarget, currentPreview.current))
+                  setVideoOrigin(currentPreview.current?.engine);
+              }}
+              onTimeUpdate={(event) => {
+                if (
+                  positionHeld.current ||
+                  currentIntent.current === 'stopped' ||
+                  !matchesReadyPreview(event.currentTarget, currentPreview.current)
+                )
+                  return;
+                position.current = Math.round(event.currentTarget.currentTime * 1_000);
+                setPositionMs(position.current);
+              }}
+              onEnded={(event) => {
+                if (!matchesReadyPreview(event.currentTarget, currentPreview.current)) return;
+                currentIntent.current = 'paused';
+                setIntent('paused');
+                setBuffering(false);
+              }}
+              onError={(event) => {
+                if (
+                  !foreground ||
+                  currentIntent.current === 'stopped' ||
+                  !matchesReadyPreview(event.currentTarget, currentPreview.current)
+                )
+                  return;
+                setVideoOrigin(undefined);
+                // Even a truncated old stream can report a decode error; only the Bridge's
+                // verified handoff hint can authorize a fresh lease after the diagnostic probe.
+                recover.current?.();
+              }}
+            />
+          )}
+          {posterUrl === undefined ? (
+            <span hidden={showVideo || loading}>No picture</span>
+          ) : (
+            <img
+              src={posterUrl}
+              alt=""
+              hidden={showVideo}
+              onLoad={() =>
+                setPosterOrigin(posterUrl === preview?.posterUrl ? preview?.engine : undefined)
+              }
+              onError={() => setPosterOrigin(undefined)}
+            />
+          )}
+          {inline && origin !== null && (
+            <span className="cg-source-media-preview__origin" title={origin}>
+              {displayedEngine}
+            </span>
+          )}
+        </>
       }
-      aria-label="Media preview"
-      data-media-file-preview=""
     >
-      {!inline && (
-        <div className="cg-source-media-preview__heading">
-          <IsolatedName>{name}</IsolatedName>
-          <span>{origin ?? 'Media preview'}</span>
-        </div>
-      )}
-      <div className="cg-source-media-preview__picture">
-        {preview?.videoUrl !== undefined && (
-          // Library preview manifests do not include caption assets.
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          <video
-            ref={video}
-            src={preview.videoUrl}
-            poster={posterUrl}
-            muted={muted}
-            preload="metadata"
-            playsInline
-            hidden={!showVideo}
-            onLoadedData={(event) => {
-              if (matchesReadyPreview(event.currentTarget, currentPreview.current))
-                setVideoOrigin(currentPreview.current?.engine);
-            }}
-            onLoadedMetadata={(event) => {
-              const player = event.currentTarget;
-              if (!matchesReadyPreview(player, currentPreview.current)) return;
-              if (Number.isFinite(player.duration) && player.duration > 0) {
-                setDuration(Math.round(player.duration * 1_000));
-              }
-              if (position.current > 0) player.currentTime = position.current / 1_000;
-              positionHeld.current = false;
-              play();
-            }}
-            onPlay={(event) => {
-              if (
-                !foreground ||
-                currentIntent.current !== 'playing' ||
-                !matchesReadyPreview(event.currentTarget, currentPreview.current)
-              ) {
-                event.currentTarget.pause();
-                return;
-              }
-              setVideoVisible(true);
-              setBuffering(false);
-            }}
-            onWaiting={() => setBuffering(true)}
-            onEmptied={() => setVideoOrigin(undefined)}
-            onPlaying={(event) => {
-              setBuffering(false);
-              if (matchesReadyPreview(event.currentTarget, currentPreview.current))
-                setVideoOrigin(currentPreview.current?.engine);
-            }}
-            onTimeUpdate={(event) => {
-              if (
-                positionHeld.current ||
-                currentIntent.current === 'stopped' ||
-                !matchesReadyPreview(event.currentTarget, currentPreview.current)
-              )
-                return;
-              position.current = Math.round(event.currentTarget.currentTime * 1_000);
-              setPositionMs(position.current);
-            }}
-            onEnded={(event) => {
-              if (!matchesReadyPreview(event.currentTarget, currentPreview.current)) return;
-              currentIntent.current = 'paused';
-              setIntent('paused');
-              setBuffering(false);
-            }}
-            onError={(event) => {
-              if (
-                !foreground ||
-                currentIntent.current === 'stopped' ||
-                !matchesReadyPreview(event.currentTarget, currentPreview.current)
-              )
-                return;
-              setVideoOrigin(undefined);
-              // Even a truncated old stream can report a decode error; only the Bridge's
-              // verified handoff hint can authorize a fresh lease after the diagnostic probe.
-              recover.current?.();
-            }}
-          />
-        )}
-        {posterUrl === undefined ? (
-          <span hidden={showVideo}>No picture</span>
-        ) : (
-          <img
-            src={posterUrl}
-            alt=""
-            hidden={showVideo}
-            onLoad={() =>
-              setPosterOrigin(posterUrl === preview?.posterUrl ? preview?.engine : undefined)
-            }
-            onError={() => setPosterOrigin(undefined)}
-          />
-        )}
-        {inline && origin !== null && (
-          <span className="cg-source-media-preview__origin" title={origin}>
-            {displayedEngine}
-          </span>
-        )}
-      </div>
       <div className="cg-source-media-preview__transport">
         <div className="cg-source-media-preview__controls">
           <Button
             ref={playbackButton}
             variant="icon"
+            className="cg-source-media-preview__play"
             title={intent === 'playing' ? 'Pause preview' : 'Play preview'}
             aria-label={intent === 'playing' ? 'Pause preview' : 'Play preview'}
             disabled={!foreground}
             onClick={setPlayback}
           >
-            <Icon icon={intent === 'playing' ? Pause : Play} size={16} />
+            <Icon icon={intent === 'playing' ? Pause : Play} size={19} />
           </Button>
           <Button
             variant="icon"
@@ -580,11 +687,13 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
         <span className="cg-source-media-preview__time">
           {formatMediaDuration(positionMs)} / {formatMediaDuration(duration)}
         </span>
-        <span className="cg-source-media-preview__status" role="status">
-          {message}
-        </span>
+        {!loading && (
+          <span className="cg-source-media-preview__status" role="status">
+            {message}
+          </span>
+        )}
       </div>
-    </section>
+    </MediaPreviewSurface>
   );
 }
 
@@ -729,25 +838,15 @@ function SampledSourceMediaPreview({
     setPicture(null);
     setStatus('idle');
   };
-  const message =
-    status === 'unavailable' ? 'Preview unavailable' : status === 'loading' ? 'Loading frame…' : '';
-
   return (
-    <section
-      className={
-        inline ? 'cg-source-media-preview cg-source-media-preview--tile' : 'cg-source-media-preview'
-      }
-      aria-label="Media preview"
-    >
-      {!inline && (
-        <div className="cg-source-media-preview__heading">
-          <IsolatedName>{name}</IsolatedName>
-          <span>{enabled ? 'Silent preview · sampled frames' : 'Poster'}</span>
-        </div>
-      )}
-      <div className="cg-source-media-preview__picture">
-        {src === null ? (
-          <span>{status === 'loading' ? 'Loading frame…' : 'No picture'}</span>
+    <MediaPreviewSurface
+      name={name}
+      description={enabled ? 'Silent preview · sampled frames' : 'Poster'}
+      inline={inline}
+      loading={status === 'loading' ? 'Loading frame…' : undefined}
+      picture={
+        src === null ? (
+          <span hidden={status === 'loading'}>No picture</span>
         ) : (
           <img
             src={src}
@@ -761,14 +860,16 @@ function SampledSourceMediaPreview({
             }
             onError={() => setDecodedPicture(undefined)}
           />
-        )}
-      </div>
+        )
+      }
+    >
       {enabled && (
         <div className="cg-source-media-preview__transport">
           <div className="cg-source-media-preview__controls">
             <Button
               ref={playbackButton}
               variant="icon"
+              className="cg-source-media-preview__play"
               title={playing ? 'Pause preview' : 'Play preview'}
               aria-label={playing ? 'Pause preview' : 'Play preview'}
               onClick={() =>
@@ -777,7 +878,7 @@ function SampledSourceMediaPreview({
                   : start(positionMs === end ? 0 : positionMs, true)
               }
             >
-              <Icon icon={playing ? Pause : Play} size={16} />
+              <Icon icon={playing ? Pause : Play} size={19} />
             </Button>
             <Button
               variant="icon"
@@ -801,11 +902,13 @@ function SampledSourceMediaPreview({
           <span className="cg-source-media-preview__time">
             {formatMediaDuration(positionMs)} / {formatMediaDuration(end + 1)}
           </span>
-          <span className="cg-source-media-preview__status" role="status">
-            {message}
-          </span>
+          {status === 'unavailable' && (
+            <span className="cg-source-media-preview__status" role="status">
+              Preview unavailable
+            </span>
+          )}
         </div>
       )}
-    </section>
+    </MediaPreviewSurface>
   );
 }

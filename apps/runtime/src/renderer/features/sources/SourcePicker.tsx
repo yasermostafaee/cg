@@ -876,7 +876,7 @@ function mediaRow(
       data-picker-preview={item.id}
       onClick={() => setPreview({ key, item })}
     >
-      <Icon icon={Play} size={14} />
+      <Icon icon={Play} size={grid ? 23 : 17} />
       {!grid && <span>Preview</span>}
     </Button>
   );

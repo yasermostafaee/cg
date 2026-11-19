@@ -1477,6 +1477,10 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     const defaults = await openDefaults(app);
     const field = defaults.locator('[data-defaults-select="l-1"]');
     await page.evaluate((origin) => {
+      let resumeFirstOpen = (): void => undefined;
+      const firstOpen = new Promise<void>((resolve) => {
+        resumeFirstOpen = resolve;
+      });
       const state = {
         sessions: [] as string[],
         closes: [] as string[],
@@ -1484,6 +1488,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
         violations: [] as string[],
         engine: 'B' as 'A' | 'B',
         sessionEngines: {} as Record<string, 'A' | 'B'>,
+        resumeFirstOpen,
       };
       Object.assign(window, { filePreviewTest: state });
       document.addEventListener('securitypolicyviolation', (event) => {
@@ -1496,6 +1501,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
         if (previewId === undefined) {
           state.sessions.push(id);
           state.sessionEngines[id] = state.engine;
+          if (state.sessions.length === 1) await firstOpen;
         }
         return {
           state: 'ready',
@@ -1541,10 +1547,20 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     const panel = picker(page);
     await panel.getByRole('tab', { name: /^Media/ }).click();
     await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
-    await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
+    const play = panel.getByRole('button', { name: 'Preview · Studio 1' });
+    expect((await play.boundingBox())?.width).toBeGreaterThanOrEqual(40);
+    await play.click();
     const preview = panel.locator('[data-media-file-preview]');
     const video = preview.locator('video');
     const poster = preview.locator('img');
+    await expect(preview.getByRole('status')).toHaveText('Loading preview…');
+    await expect(preview.getByRole('status')).toBeVisible();
+    await expect.poll(() => state().then((value) => value.sessions.length)).toBe(1);
+    await page.evaluate(() => {
+      (
+        window as unknown as { filePreviewTest: { resumeFirstOpen(): void } }
+      ).filePreviewTest.resumeFirstOpen();
+    });
     await expect(video).toBeVisible();
     await expect
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
@@ -1558,6 +1574,41 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     expect(
       (await state()).violations.filter((directive) => /media-src|default-src/.test(directive)),
     ).toEqual([]);
+    const player = await video.elementHandle();
+    const beforeFullscreen = await state();
+    const beforeFullscreenTime = await video.evaluate(
+      (element) => (element as HTMLVideoElement).currentTime,
+    );
+    await preview.getByRole('button', { name: 'Fullscreen preview', exact: true }).click();
+    await expect(preview.locator('video')).toBeVisible();
+    await expect
+      .poll(() => preview.evaluate((element) => document.fullscreenElement === element))
+      .toBe(true);
+    expect(
+      await video.evaluate((element) => {
+        const picture = element.parentElement!.getBoundingClientRect();
+        const media = element.getBoundingClientRect();
+        return (
+          Math.abs(picture.width - media.width) <= 2 &&
+          Math.abs(picture.height - media.height) <= 2 &&
+          getComputedStyle(element).objectFit === 'contain'
+        );
+      }),
+    ).toBe(true);
+    await expect
+      .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
+      .toBeGreaterThan(beforeFullscreenTime);
+    await preview.getByRole('button', { name: 'Close fullscreen preview' }).click();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await expect(panel).toBeVisible();
+    expect(await video.evaluate((element, original) => element === original, player)).toBe(true);
+    expect((await state()).sessions).toEqual(beforeFullscreen.sessions);
+    expect((await state()).closes).toEqual(beforeFullscreen.closes);
+    await preview.getByRole('button', { name: 'Fullscreen preview', exact: true }).click();
+    await expect(preview.getByRole('button', { name: 'Close fullscreen preview' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await expect(panel).toBeVisible();
     await preview.getByRole('button', { name: 'Pause preview' }).click();
     expect(await video.evaluate((element) => (element as HTMLVideoElement).paused)).toBe(true);
     const pausedAt = await video.evaluate((element) => (element as HTMLVideoElement).currentTime);
