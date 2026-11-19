@@ -24,6 +24,8 @@ class PassiveNode {
   stops = 0;
   pending = false;
   snapshotStatus = 200;
+  readonly omittedSnapshots = new Set<string>();
+  corruptSnapshot = false;
   snapshotGate: Promise<void> | undefined;
   readonly code: string;
   readonly base: string;
@@ -125,12 +127,19 @@ class PassiveNode {
           return send(this.snapshotStatus, { error: 'sourcePreview.capacity' });
         return send(200, {
           observedAt: new Date().toISOString(),
-          items: wanted.map((source) => ({
-            source,
-            sourceRevision: 'catalogue-1',
-            status: 200,
-            frame: this.frame(source),
-          })),
+          items: [
+            ...(this.corruptSnapshot ? [null] : []),
+            ...wanted
+              .filter(
+                (source) => source.kind !== 'live' || !this.omittedSnapshots.has(source.inputId),
+              )
+              .map((source) => ({
+                source,
+                sourceRevision: 'catalogue-1',
+                status: 200,
+                frame: this.frame(source),
+              })),
+          ],
         });
       }
       if (url.pathname === this.base && body.source !== undefined && body.requestId !== undefined) {
@@ -289,18 +298,83 @@ describe('authenticated passive picture fallback', () => {
     },
   );
 
-  it('does not duplicate snapshots or guess fallback on empty/throttled or refused replies', async () => {
+  it.each([429, 403])(
+    'does not duplicate snapshots or guess fallback on HTTP %i',
+    async (status) => {
+      const f = await fixture();
+      f.nodes.B.snapshotStatus = status;
+      expect(await f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] })).toEqual({
+        frames: [],
+      });
+      expect(f.fallbackCalls()).toBe(0);
+      expect(f.nodes.A.batches).toEqual([]);
+      expect(await f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] })).toEqual({
+        frames: [],
+      });
+      expect(f.nodes.B.batches).toHaveLength(1);
+    },
+  );
+
+  it('shows an independently verified alternate picture on the initial snapshot when active B omits it', async () => {
     const f = await fixture();
-    f.nodes.B.snapshotStatus = 429;
+    f.nodes.B.omittedSnapshots.add('B-camera');
+    const result = await f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] });
+    expect(result.frames).toMatchObject([
+      { sourceId: 'camera', engine: 'A', jpegBase64: FRAME_A.toString('base64') },
+    ]);
+    expect(f.nodes.B.batches).toEqual([[{ kind: 'live', inputId: 'B-camera' }]]);
+    expect(f.nodes.A.batches).toEqual([[{ kind: 'live', inputId: 'A-camera' }]]);
+    expect(f.nodes.A.starts).toEqual([]);
+    expect(f.nodes.B.starts).toEqual([]);
+  });
+
+  it('does not read the alternate when its exact source is unconfirmed after an omitted snapshot', async () => {
+    const f = await fixture();
+    f.nodes.B.omittedSnapshots.add('B-camera');
+    f.forbidFallback();
+    const result = await f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] });
+    expect(result.frames).toEqual([{ sourceId: 'camera', engine: 'B', signal: 'unknown' }]);
+    expect(f.nodes.A.batches).toEqual([]);
+  });
+
+  it('uses the alternate only for the input omitted alongside a valid preferred picture', async () => {
+    const f = await fixture();
+    f.nodes.B.pending = false;
+    f.nodes.B.omittedSnapshots.add('B-camera');
+    const result = await f.reads.thumbnails(f.owner, {
+      channel: 1,
+      sourceIds: ['camera', 'sibling'],
+    });
+    expect(result.frames).toMatchObject([
+      { sourceId: 'camera', engine: 'A', jpegBase64: FRAME_A.toString('base64') },
+      { sourceId: 'sibling', engine: 'B', jpegBase64: FRAME_B.toString('base64') },
+    ]);
+    expect(f.nodes.A.batches).toEqual([[{ kind: 'live', inputId: 'A-camera' }]]);
+  });
+
+  it('does not treat malformed entries as omitted pictures despite a successful batch status', async () => {
+    const f = await fixture();
+    f.nodes.B.omittedSnapshots.add('B-camera');
+    f.nodes.B.corruptSnapshot = true;
     expect(await f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] })).toEqual({
       frames: [],
     });
     expect(f.fallbackCalls()).toBe(0);
     expect(f.nodes.A.batches).toEqual([]);
-    expect(await f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] })).toEqual({
-      frames: [],
+  });
+
+  it('ignores a late alternate from an omitted snapshot after permission is lost', async () => {
+    const f = await fixture();
+    f.nodes.B.omittedSnapshots.add('B-camera');
+    let release: () => void = () => undefined;
+    f.nodes.A.snapshotGate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    expect(f.nodes.B.batches).toHaveLength(1);
+    const pending = f.reads.thumbnails(f.owner, { channel: 1, sourceIds: ['camera'] });
+    await waitUntil(() => f.nodes.A.batches.length === 1, 'the alternate snapshot');
+    f.deny();
+    release();
+    expect(await pending).toEqual({ frames: [] });
   });
 
   it('keeps independent PVW leases in a per-node union and closes fallback when preferred pictures recover', async () => {

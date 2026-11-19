@@ -288,10 +288,14 @@ export class SourcePreviewService {
           );
     return {
       frames: wanted.flatMap(([sourceId, source], index) => {
+        if (!this.#sameSelector(owner, req.channel, sourceId, source)) return [];
         const frame = result.value.items[index]?.frame;
-        return frame == null || !this.#sameSelector(owner, req.channel, sourceId, source)
-          ? []
-          : [projectFrame(sourceId, frame, source.kind)];
+        if (frame != null) return [projectFrame(sourceId, frame, source.kind)];
+        // An authenticated, otherwise valid snapshot batch omitted this source. Keep that
+        // observation distinct from a refused, throttled, or malformed batch.
+        return result.value.omitted?.includes(index) === true
+          ? [{ sourceId, signal: 'unknown' }]
+          : [];
       }),
       ...(mediaFrame === undefined ? {} : { mediaFrame }),
     };

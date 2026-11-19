@@ -211,6 +211,8 @@ export type SourcePreviewObservation = z.infer<typeof observation>;
 export interface SourcePreviewBatch {
   readonly observedAt: string;
   readonly items: z.infer<typeof snapshotItem>[];
+  /** Requested indexes omitted by an otherwise verified successful batch. */
+  readonly omitted?: number[];
 }
 type SessionWire = z.infer<typeof sessionShape>;
 export type SourcePreviewSession = Readonly<Omit<SessionWire, 'frameUrl'>>;
@@ -371,6 +373,8 @@ export class PlayoutSourcePreviews {
       const parsed = snapshotSource.safeParse(raw);
       return parsed.success ? [{ raw, source: parsed.data.source }] : [];
     });
+    const omitted: number[] = [];
+    let verified = 0;
     const items = checked.data.map((source, index) => {
       const expectedCount = checked.data
         .slice(index)
@@ -381,16 +385,27 @@ export class PlayoutSourcePreviews {
         if (match !== undefined) {
           identified.splice(identified.indexOf(match), 1);
           const item = snapshotItem.safeParse(match.raw);
-          if (item.success) return item.data;
+          if (item.success) {
+            verified++;
+            return item.data;
+          }
         }
       }
+      if (matches.length === 0) omitted.push(index);
       return {
         source: canonicalSource.parse(source),
         status: 502,
         error: 'sourcePreview.invalidResponse',
       };
     });
-    return { ok: true, value: { observedAt: reply.value.observedAt, items } };
+    return {
+      ok: true,
+      value: {
+        observedAt: reply.value.observedAt,
+        items,
+        ...(verified === reply.value.items.length && omitted.length > 0 ? { omitted } : {}),
+      },
+    };
   }
 
   #endpoint(session: SessionWire): string {

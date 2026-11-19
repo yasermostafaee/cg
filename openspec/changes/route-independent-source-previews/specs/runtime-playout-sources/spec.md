@@ -39,6 +39,14 @@ not change programme authority, bindings or programme output.
 - **AND** obsolete selector caches are not published after cancellation
 - **AND** independent passive thumbnail or meter polling does not cancel the current PVW intent
 
+#### Scenario: A successful snapshot batch omits an input
+
+- **GIVEN** an otherwise verified passive snapshot batch omits a requested input
+- **WHEN** the independently authorized alternate engine has the exact matching input and supplies a picture
+- **THEN** the picker can show that picture without opening a live-input check
+- **AND** the picture remains scoped to its current selection, channel and authorization
+- **AND** a throttled, refused or malformed batch does not authorize this fallback
+
 #### Scenario: A viewer reads an existing poster
 
 - **GIVEN** a viewer can read a media catalogue item
