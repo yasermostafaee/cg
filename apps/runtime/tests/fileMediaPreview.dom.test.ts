@@ -334,6 +334,34 @@ it('revalidates the held media on a verified role switch without waiting for its
   }
 });
 
+it('rechecks an existing preview when the first confirmed route is already on the other server', async () => {
+  mockPlayer();
+  let resolveTopology!: (topology: PgmTopology) => void;
+  const readTopology = () =>
+    new Promise<PgmTopology>((resolve) => {
+      resolveTopology = resolve;
+    });
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), engine: 'A' })
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen, false, undefined, 1, undefined, readTopology);
+  try {
+    expect(mediaOpen).toHaveBeenCalledOnce();
+    await act(async () =>
+      resolveTopology({
+        channel: 1,
+        active: 'B',
+        members: [{ engine: 'B', name: 'B', physicalChannel: 2, resourceKey: 'backup' }],
+      }),
+    );
+    expect(mediaOpen).toHaveBeenCalledTimes(2);
+    expect(mediaOpen.mock.lastCall?.[0].previewId).toBe(FIRST);
+  } finally {
+    await view.close();
+  }
+});
+
 it('an explicit row Play request resumes the same paused player without losing seek or listening', async () => {
   const player = mockPlayer();
   const mediaOpen = vi

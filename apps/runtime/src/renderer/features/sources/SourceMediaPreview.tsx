@@ -6,7 +6,7 @@ import {
   type MediaPlaybackPreview,
 } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
-import { useSourcePreviewRoute } from '../../hooks/useProgramTopology.js';
+import { sourcePreviewRoute, useProgramTopology } from '../../hooks/useProgramTopology.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
@@ -85,7 +85,9 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     onPreviewEngineChange,
   } = props;
   const foreground = useModalForeground();
-  const route = useSourcePreviewRoute(foreground ? channel : undefined);
+  const topology = useProgramTopology(foreground ? (channel ?? null) : null);
+  const route = sourcePreviewRoute(topology);
+  const activeEngine = topology?.active;
   const lastRoute = useRef<string>();
   const video = useRef<HTMLVideoElement>(null);
   const playbackButton = useRef<HTMLButtonElement>(null);
@@ -297,10 +299,15 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     if (route === undefined) return;
     const previous = lastRoute.current;
     lastRoute.current = route;
-    if (previous !== undefined && previous !== route && currentPreview.current?.previewId) {
+    const held = currentPreview.current;
+    if (
+      held?.previewId !== undefined &&
+      previous !== route &&
+      (previous !== undefined || (held.engine !== undefined && held.engine !== activeEngine))
+    ) {
       refresh.current?.();
     }
-  }, [route]);
+  }, [activeEngine, route]);
 
   const play = useCallback((): void => {
     const player = video.current;
