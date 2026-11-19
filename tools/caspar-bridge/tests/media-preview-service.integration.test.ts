@@ -50,12 +50,15 @@ async function listen(server: http.Server): Promise<string> {
 async function fixture() {
   let mode: 'direct' | 'proxy' = 'direct';
   let proxyState = 'notPrepared';
+  let proxyError: string | undefined;
   let supported = true;
   let malicious = false;
   let slow = false;
   let streams = 0;
   let preparations = 0;
   let preparationStatus = 202;
+  let preparationError: string | undefined;
+  let retryAfter: string | undefined;
   let preparationGate: Promise<void> | null = null;
   let targetGate: Promise<void> | null = null;
   let targetOnce = false;
@@ -88,7 +91,7 @@ async function fixture() {
           fingerprint: FINGERPRINT,
           durationMs: 10_000,
           browserMode: mode,
-          proxy: { state: proxyState },
+          proxy: { state: proxyState, error: proxyError },
           fileUrl: malicious
             ? 'http://elsewhere.invalid/private'
             : `${root}/file?revision=${FINGERPRINT}`,
@@ -103,7 +106,10 @@ async function fixture() {
       preparations++;
       const respond = () => {
         if (preparationStatus === 202) proxyState = 'ready';
-        res.writeHead(preparationStatus, { 'content-type': 'application/json' }).end('{}');
+        if (retryAfter !== undefined) res.setHeader('retry-after', retryAfter);
+        res
+          .writeHead(preparationStatus, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ error: preparationError }));
       };
       if (preparationGate === null) respond();
       else void preparationGate.then(respond);
@@ -210,11 +216,17 @@ async function fixture() {
     resetProxy: () => {
       proxyState = 'notPrepared';
     },
-    failProxy: () => {
-      proxyState = 'error';
+    readyProxy: () => {
+      proxyState = 'ready';
     },
-    setPreparationStatus: (status: number) => {
+    failProxy: (error?: string) => {
+      proxyState = 'error';
+      proxyError = error;
+    },
+    setPreparationStatus: (status: number, retryAfterHeader?: string, error?: string) => {
       preparationStatus = status;
+      retryAfter = retryAfterHeader;
+      preparationError = error;
     },
     delayPrepare: () => {
       let release: () => void = () => undefined;
@@ -417,35 +429,95 @@ it('reauthorizes the destination before returning a saved handoff hint', async (
   expect(await f.open(opened.previewId)).toEqual({ state: 'unavailable' });
 });
 
-it('keeps a verified poster and owned lease when proxy capacity is exhausted and permits retry', async () => {
+it('keeps a second media selection pending while proxy capacity is busy and waits before retrying', async () => {
   const f = await fixture();
+  const first = await f.open();
+  expect(first.state).toBe('ready');
   f.setMode();
-  f.setPreparationStatus(429);
-  const busy = await f.open();
-  expect(busy.state).toBe('error');
+  f.setPreparationStatus(429, '3');
+  const openNext = (previewId?: string) =>
+    f.service.open(f.owner, {
+      channel: 1,
+      sourceId: 'md-next',
+      prepare: true,
+      ...(previewId === undefined ? {} : { previewId }),
+    });
+  const busy = await openNext();
+  expect(busy.state).toBe('preparing');
+  expect(busy.message).toContain('queue is busy');
   expect(busy.previewId).toBeDefined();
+  expect((await fetch(f.url(first.videoUrl))).status).toBe(403);
   expect((await fetch(f.url(busy.posterUrl))).status).toBe(200);
   f.setPreparationStatus(202);
-  expect((await f.open(busy.previewId)).state).toBe('preparing');
-  const ready = await f.open(busy.previewId);
+  f.advance(2_999);
+  expect((await openNext(busy.previewId)).message).toBe(busy.message);
+  expect(f.preparations()).toBe(1);
+  f.advance(1);
+  expect((await openNext(busy.previewId)).state).toBe('preparing');
+  const ready = await openNext(busy.previewId);
   expect(ready.state).toBe('ready');
+  expect(ready.previewId).toBe(busy.previewId);
   expect(ready.posterUrl).toBe(busy.posterUrl);
+  expect(f.preparations()).toBe(2);
   expect(f.service.close(f.owner, ready.previewId!)).toEqual({ closed: true });
   expect(f.tickets.size).toBe(0);
 });
 
-it('keeps a permanent proxy error terminal while renewing its independent poster', async () => {
+it('observes a ready shared proxy without reposting during the busy cooldown', async () => {
   const f = await fixture();
   f.setMode();
-  f.failProxy();
-  const failed = await f.open();
-  f.advance(15_000);
-  const renewed = await f.open(failed.previewId);
-  expect(renewed.state).toBe('error');
-  expect(renewed.posterUrl).toBe(failed.posterUrl);
-  expect((await fetch(f.url(renewed.posterUrl))).status).toBe(200);
-  expect(f.preparations()).toBe(0);
+  f.setPreparationStatus(429);
+  const busy = await f.open();
+  expect(busy.state).toBe('preparing');
+  f.advance(999);
+  expect((await f.open(busy.previewId)).state).toBe('preparing');
+  expect(f.preparations()).toBe(1);
+  f.readyProxy();
+  expect((await f.open(busy.previewId)).state).toBe('ready');
+  expect(f.preparations()).toBe(1);
 });
+
+it.each([
+  [422, 'mediaPreview.proxyTooLarge', 'size limit'],
+  [403, 'internal detail must stay private', 'refused access'],
+] as const)(
+  'reports a preparation refusal (%i) without treating it as capacity',
+  async (status, error, message) => {
+    const f = await fixture();
+    f.setMode();
+    f.setPreparationStatus(status, undefined, error);
+    const failed = await f.open();
+    expect(failed.state).toBe('error');
+    expect(failed.message).toContain(message);
+    expect(failed.message).not.toContain(error);
+    expect((await fetch(f.url(failed.posterUrl))).status).toBe(200);
+    await f.open(failed.previewId, false);
+    expect(f.preparations()).toBe(1);
+  },
+);
+
+it.each([
+  ['mediaPreview.proxyTooLarge', 'size limit'],
+  ['mediaPreview.preparationTimedOut', 'timed out'],
+  ['internal detail must stay private', 'could not be prepared'],
+] as const)(
+  'keeps a permanent proxy error (%s) terminal while renewing its independent poster',
+  async (error, message) => {
+    const f = await fixture();
+    f.setMode();
+    f.failProxy(error);
+    const failed = await f.open();
+    expect(failed.state).toBe('error');
+    expect(failed.message).toContain(message);
+    expect(failed.message).not.toContain(error);
+    f.advance(15_000);
+    const renewed = await f.open(failed.previewId);
+    expect(renewed.state).toBe('error');
+    expect(renewed.posterUrl).toBe(failed.posterUrl);
+    expect((await fetch(f.url(renewed.posterUrl))).status).toBe(200);
+    expect(f.preparations()).toBe(0);
+  },
+);
 
 it('aborts pending proxy preparation on close and never returns its revoked URLs', async () => {
   const f = await fixture();
