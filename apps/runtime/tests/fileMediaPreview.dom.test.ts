@@ -168,13 +168,79 @@ it('retains one explicit list Play request through a delayed proxy without anoth
   const view = await mount(mediaOpen, false, undefined, 1);
   try {
     expect(view.button('Pause preview')).not.toBeNull();
-    await act(async () => resolveFirst({ ...ready(), state: 'preparing', videoUrl: undefined }));
+    await act(async () =>
+      resolveFirst({
+        ...ready(),
+        state: 'preparing',
+        videoUrl: undefined,
+        message: 'The media proxy queue is busy. Waiting for capacity.',
+      }),
+    );
+    expect(view.host.textContent).toContain('Waiting for capacity.');
     expect(player.play).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(player.play).toHaveBeenCalledOnce();
     expect(view.host.querySelector('video')?.hidden).toBe(false);
     expect(view.take).not.toHaveBeenCalled();
     expect(view.update).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it('reads a selected media preview without preparing it until Play', async () => {
+  const player = mockPlayer();
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce({ ...ready(), state: 'preparing', videoUrl: undefined })
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen);
+  try {
+    expect(mediaOpen).toHaveBeenLastCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      prepare: false,
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(mediaOpen).toHaveBeenCalledOnce();
+    expect(view.host.textContent).not.toContain('Preparing preview…');
+    expect(player.play).not.toHaveBeenCalled();
+    await act(async () => view.button('Play preview').click());
+    expect(mediaOpen).toHaveBeenLastCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      previewId: FIRST,
+      prepare: true,
+    });
+    expect(player.play).toHaveBeenCalledOnce();
+  } finally {
+    await view.close();
+  }
+});
+
+it('keeps an explicit Play queued behind a failed passive preview read', async () => {
+  const player = mockPlayer();
+  let finishPassive!: (result: MediaPlaybackPreview) => void;
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPassive = resolve;
+        }),
+    )
+    .mockResolvedValue(ready());
+  const view = await mount(mediaOpen);
+  try {
+    await act(async () => view.button('Play preview').click());
+    expect(mediaOpen).toHaveBeenCalledOnce();
+    await act(async () => finishPassive({ state: 'unavailable' }));
+    expect(mediaOpen).toHaveBeenLastCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      prepare: true,
+    });
+    expect(player.play).toHaveBeenCalledOnce();
   } finally {
     await view.close();
   }
@@ -246,6 +312,29 @@ it('carries the explicit Play request into the sampled fallback when native prev
     expect(view.button('Pause preview')).not.toBeNull();
     await act(async () => view.button('Pause preview').click());
     await view.show(false, 'md-film', 2);
+    expect(view.button('Pause preview')).not.toBeNull();
+    expect(mediaOpen).toHaveBeenCalledOnce();
+  } finally {
+    await view.close();
+  }
+});
+
+it('carries the player Play click into a sampled fallback discovered after the click', async () => {
+  mockPlayer();
+  let finishLookup!: (result: MediaPlaybackPreview) => void;
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishLookup = resolve;
+        }),
+    );
+  const view = await mount(mediaOpen);
+  try {
+    await act(async () => view.button('Play preview').click());
+    await act(async () => finishLookup({ state: 'unsupported' }));
+    expect(view.host.textContent).toContain('Silent preview · sampled frames');
     expect(view.button('Pause preview')).not.toBeNull();
     expect(mediaOpen).toHaveBeenCalledOnce();
   } finally {
@@ -525,7 +614,7 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
     expect(video.preload).toBe('metadata');
     await act(async () => poster?.dispatchEvent(new Event('load')));
     expect(view.host.textContent).toContain('Server B');
-    expect(mediaOpen).toHaveBeenCalledWith({ channel: 1, sourceId: 'md-film', prepare: true });
+    expect(mediaOpen).toHaveBeenCalledWith({ channel: 1, sourceId: 'md-film', prepare: false });
     await act(async () => view.button('Play preview').click());
     expect(player.play).toHaveBeenCalledOnce();
     expect(video.hidden).toBe(false);
@@ -551,7 +640,11 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
     expect(mediaOpen).toHaveBeenCalledTimes(1);
     await act(async () => view.button('Play preview').click());
     expect(mediaOpen).toHaveBeenCalledTimes(2);
-    expect(mediaOpen.mock.calls[1]?.[0].previewId).toBeUndefined();
+    expect(mediaOpen.mock.calls[1]?.[0]).toEqual({
+      channel: 1,
+      sourceId: 'md-film',
+      prepare: true,
+    });
     expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(SECOND).videoUrl);
     expect(view.thumbnails).not.toHaveBeenCalled();
     expect(view.take).not.toHaveBeenCalled();

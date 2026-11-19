@@ -171,14 +171,17 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       clearTimeout(timer);
       pending = true;
       const requestGeneration = generation;
+      const prepare = currentIntent.current === 'playing';
       const current = (): boolean => alive && !stopped() && requestGeneration === generation;
+      const playQueued = (): boolean =>
+        !prepare && queuedRead && currentIntent.current === 'playing';
       try {
         const held = currentPreview.current;
         let result = await mediaOpen({
           channel,
           sourceId: id,
           ...(held?.previewId === undefined ? {} : { previewId: held.previewId }),
-          prepare: true,
+          prepare,
         });
         if (!current()) {
           close(result);
@@ -190,7 +193,11 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           holdPosition();
           currentPreview.current = null;
           close(held);
-          result = await mediaOpen({ channel, sourceId: id, prepare: true });
+          result = await mediaOpen({
+            channel,
+            sourceId: id,
+            prepare: currentIntent.current === 'playing',
+          });
           if (!current()) {
             close(result);
             return;
@@ -212,12 +219,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           stopLease();
           return;
         }
-        if (result.state === 'unavailable' || result.state === 'error') {
+        if ((result.state === 'unavailable' || result.state === 'error') && !playQueued()) {
           video.current?.pause();
           currentIntent.current = 'paused';
           setIntent('paused');
         }
-        if (result.state === 'preparing') {
+        if (result.state === 'preparing' && currentIntent.current === 'playing') {
           preparingSince ??= performance.now();
           if (performance.now() - preparingSince >= MAX_PROXY_PREPARATION_MS) {
             stopLease();
@@ -234,7 +241,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           timer = setTimeout(() => void read(), MEDIA_LEASE_REFRESH_MS);
         }
       } catch {
-        if (current()) {
+        if (current() && !playQueued()) {
           video.current?.pause();
           stopLease();
           setPlayerError('Preview unavailable. Try again.');
@@ -381,13 +388,16 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     if (preview?.state !== 'unsupported') onPreviewEngineChange?.(displayedEngine);
   }, [displayedEngine, onPreviewEngineChange, preview?.state, posterUrl, showVideo]);
 
-  if (preview?.state === 'unsupported') return <SampledSourceMediaPreview {...props} />;
+  if (preview?.state === 'unsupported') {
+    return <SampledSourceMediaPreview {...props} initialPlayback={intent === 'playing'} />;
+  }
   let message = '';
   if (intent !== 'stopped') {
     if (playerError !== null) message = playerError;
     else if (preview === null) message = 'Loading preview…';
-    else if (preview.state === 'preparing') message = 'Preparing preview…';
-    else if (preview.state === 'unavailable' || preview.state === 'error') {
+    else if (preview.state === 'preparing' && intent === 'playing') {
+      message = preview.message ?? 'Preparing preview…';
+    } else if (preview.state === 'unavailable' || preview.state === 'error') {
       message = preview.message ?? 'Preview unavailable';
     } else if (buffering) message = 'Loading…';
   }
@@ -567,12 +577,13 @@ function SampledSourceMediaPreview({
   loadThumbnail,
   inline = false,
   playRequest,
+  initialPlayback,
   onPreviewEngineChange,
-}: SourceMediaPreviewProps): JSX.Element {
+}: SourceMediaPreviewProps & { initialPlayback?: boolean }): JSX.Element {
   const foreground = useModalForeground();
   const end = Math.min(Math.ceil(durationMs ?? 0) - 1, MAX_MEDIA_PREVIEW_POSITION_MS);
   const enabled = channel !== undefined && end > 0;
-  const autoPlay = (inline || playRequest !== undefined) && enabled;
+  const autoPlay = (initialPlayback ?? (inline || playRequest !== undefined)) && enabled;
   const loadPoster = useMemo(
     () => loadThumbnail ?? createMediaThumbnailLoader(channel),
     [loadThumbnail, channel],

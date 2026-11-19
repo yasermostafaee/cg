@@ -7,7 +7,8 @@ controls SHALL operate inside its card. Playing, pausing, seeking, stopping and
 listening SHALL control the local preview. Select SHALL commit the staged binding.
 One explicit row Preview/Play action SHALL start or resume playback in either view,
 including when media preparation completes later. Selecting a row alone SHALL NOT
-start playback. Resuming an existing player SHALL retain its seek and listening state.
+start playback or request proxy preparation. Resuming an existing player SHALL retain
+its seek and listening state.
 
 When Playout offers a verified file or proxy preview, the player SHALL use native
 video playback through the authenticated Bridge relay. It SHALL start muted and
@@ -40,6 +41,15 @@ sampled player and identify its sampled playback.
 - **AND** the media request first waits and then reports a preparing proxy
 - **THEN** the ready native video starts and its playback clock advances without another click
 - **AND** its initial sound is muted and the calling field's binding remains unchanged
+
+#### Scenario: Another clip is played while the proxy encoder is busy
+
+- **GIVEN** the operator has previewed a clip without closing the picker
+- **WHEN** the operator presses Play once for another clip and Playout returns the documented capacity response
+- **THEN** the picker shows that capacity is pending and keeps the Play request for that clip
+- **AND** the Bridge waits before requesting preparation again, rereading the existing media manifest first
+- **AND** the video starts when ready without another click
+- **AND** a terminal preparation refusal remains visible and does not start another preparation automatically
 
 #### Scenario: Cancel a pending explicit preview
 
