@@ -1,9 +1,19 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import type { PgmTopology } from '@cg/shared-ipc';
-import type { RuntimeBridge, Unsubscribe } from '../../shared/runtime-bridge.js';
+import type { AuthSessionState, RuntimeBridge, Unsubscribe } from '../../shared/runtime-bridge.js';
 
 const POLL_MS = 5_000;
 type Snapshot = PgmTopology | null | undefined;
+
+function authReadScope(auth: AuthSessionState, channel: number): string {
+  if (auth.kind !== 'signed-in') return auth.kind;
+  return JSON.stringify([
+    auth.kind,
+    auth.principal.sub,
+    [...auth.principal.roles].sort(),
+    auth.permittedChannels.includes(channel),
+  ]);
+}
 
 /** The monitor and preview surfaces share one topology poll for each open station channel. */
 class ChannelTopology {
@@ -22,9 +32,15 @@ class ChannelTopology {
     const notify = (): void => listener();
     this.#listeners.add(notify);
     if (this.#listeners.size === 1) {
+      let authScope = authReadScope(this.bridge.auth.state(), this.channel);
       this.#stops = [
         this.bridge.link.onStatusChanged(this.#reset),
-        this.bridge.auth.onStateChanged(this.#reset),
+        this.bridge.auth.onStateChanged((auth) => {
+          const nextScope = authReadScope(auth, this.channel);
+          if (nextScope === authScope) return;
+          authScope = nextScope;
+          this.#reset();
+        }),
       ];
       const stopConfig = this.bridge.connections?.onConfigChanged?.(this.#reset);
       if (stopConfig !== undefined) this.#stops.push(stopConfig);
