@@ -71,7 +71,9 @@
   padding: 0;
 }
 
-.cg-input-thumbnail[data-input-thumbnail-compact] + .cg-input-meter {
+.cg-input-thumbnail[data-input-thumbnail-compact] + .cg-input-meter,
+.cg-source-label > .cg-input-meter,
+.cg-source-label > .cg-choice-label > .cg-input-meter {
   --cg-input-meter-track: 3px;
   --cg-input-meter-max-width: 5rem;
 }

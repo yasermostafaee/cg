@@ -30,12 +30,36 @@
         {
           "fa": "رنگ پیش‌فرض راهنماها سفید است. می‌توانید رنگ مشترک را تغییر دهید و برای هر خط سفارشی رنگ جداگانه ذخیره کنید.",
           "en": "Guides default to white. Change the shared color or save a separate color for any custom guide."
+        },
+        {
+          "fa": "در New live layout برای هر پلیت پس‌زمینهٔ جایگزین تعیین کنید و تصمیم بگیرید که هنگام نبود تصویر روی PGM هم نمایش داده شود.",
+          "en": "In New live layout, configure each plate's fallback background and choose whether to show it on PGM when the picture is unavailable."
+        },
+        {
+          "fa": "در Choose a source دکمهٔ Play بزرگ‌تر است. پیش‌نمایش مدیا از آغاز آماده‌سازی نشانگر بارگذاری دارد و با دکمهٔ تمام‌صفحه بزرگ می‌شود. با × یا Esc به همان پخش در پنجره برگردید.",
+          "en": "Choose a source has a larger Play button and an immediate media loading indicator. Expand the preview to fullscreen and return to the same playback with × or Escape."
         }
       ],
       "fixes": [
         {
-          "fa": "کمبوی مدیای انتخاب‌شده پوستر کوچک آن را نشان می‌دهد و فقط دور نشان سروری که پوسترش نمایش داده می‌شود کادر می‌کشد.",
-          "en": "A selected media field shows a small poster and outlines the server badge for the poster actually displayed."
+          "fa": "کمبوهای بسته نام منبع، وضعیت A/B و ویومتر ورودی‌های زنده را نشان می‌دهند. تصویر و پوستر در پنجره‌های پیش‌نمایش و PVW در دسترس‌اند.",
+          "en": "Closed source fields show the source name, A/B availability and live input meters. Pictures and posters are available in preview dialogs and PVW."
+        },
+        {
+          "fa": "Play در Grid و List با اولین کلیک اجرا می‌شود، حتی وقتی کارت نیمه‌پیداست. CG برای پاسخ آماده‌سازی پروکسی صبر می‌کند و اگر پاسخِ آماده‌سازی در راه قطع شود، Bridge وضعیت همان پروکسی را دوباره می‌خواند.",
+          "en": "Play works on the first click in Grid and List, including partly visible cards. CG waits for proxy preparation and Bridge checks the same proxy if the preparation response is interrupted."
+        },
+        {
+          "fa": "Hide Monitors و Show Monitors پخش و صفحهٔ فعلی PVW را حفظ می‌کنند. هنگام پنهان بودن مانیتورها، دریافت تصویر آن‌ها متوقف می‌شود.",
+          "en": "Hide Monitors and Show Monitors preserve the current PVW playback and page. Monitor picture subscriptions pause while hidden."
+        },
+        {
+          "fa": "وضعیت A/B در پنجرهٔ باز انتخاب منبع و Inspector بعد از تغییر سرور فعال تازه می‌شود. تصویر ورودی‌های سازگار به‌صورت خودکار در پنجرهٔ انتخاب ظاهر می‌شود.",
+          "en": "A/B availability in the open source picker and Inspector refreshes when the active server changes. Compatible input pictures appear automatically in the picker."
+        },
+        {
+          "fa": "با Stop یا Clear در حالت Focus یا تک‌قاب، پس‌زمینهٔ پریست لحظه‌ای روی خروجی ظاهر نمی‌شود.",
+          "en": "Stopping or clearing a focused or single-plate layout avoids briefly showing its preset background on air."
         }
       ]
     },
