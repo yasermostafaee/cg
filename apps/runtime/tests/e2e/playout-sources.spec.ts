@@ -25,7 +25,7 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 test.use({ playoutSources: E2E_PLAYOUT });
 
-test('closed media bindings show a compact decoded poster and its actual server badge', async ({
+test('closed media bindings request no pictures and the modal still shows their decoded poster', async ({
   app,
 }, testInfo) => {
   const page = app.page;
@@ -61,44 +61,17 @@ test('closed media bindings show a compact decoded poster and its actual server 
   const field = defaults.locator('[data-defaults-select="l-1"]');
   await app.chooseSource(field, { media: 'Clip 001', search: 'Clip 001' });
   const checkField = async (binding: Locator): Promise<void> => {
-    const picture = binding.locator('[data-media-thumbnail] img');
-    await expect(picture).toBeVisible();
-    await expect
-      .poll(() => picture.evaluate((image) => (image as HTMLImageElement).naturalWidth))
-      .toBe(64);
-    await expect(binding.locator('[data-source-preview-provider]')).toHaveCount(1);
-    await expect(binding.locator('[data-source-presence-server="B"]')).toHaveAttribute(
-      'data-source-preview-provider',
-      '',
-    );
-    await expect(binding.locator('[data-source-presence-server="A"]')).not.toHaveAttribute(
-      'data-source-preview-provider',
-      '',
-    );
-    await expect(binding.locator('[data-source-presence-server="A"]')).toHaveCSS(
-      'border-top-color',
-      'rgba(0, 0, 0, 0)',
-    );
-    expect(
-      await binding
-        .locator('[data-source-presence-server="B"]')
-        .evaluate((badge) => getComputedStyle(badge).borderTopColor),
-    ).toBe(
-      await binding
-        .locator('[data-source-presence-server="B"]')
-        .evaluate((badge) => getComputedStyle(badge).color),
-    );
-    const bounds = await picture.boundingBox();
-    expect(bounds?.width).toBeLessThanOrEqual(40);
-    expect(bounds?.height).toBeLessThanOrEqual(24);
-    await expect(binding.locator('video, [data-source-audio-meter]')).toHaveCount(0);
+    await expect(binding).toContainText('Clip 001');
+    await expect(binding.locator('img, video, [data-source-audio-meter]')).toHaveCount(0);
+    await expect(binding.locator('[data-source-preview-provider]')).toHaveCount(0);
+    await expect(binding.locator('[data-source-presence-state="present"]')).toHaveCount(2);
   };
   await checkField(field);
   await defaults.locator('[data-defaults-save]').click();
   const inherited = app.inspector.locator('[data-look-binding="two:l-1"]');
   await expect(inherited).toContainText('Default');
   await checkField(inherited);
-  await page.screenshot({ path: testInfo.outputPath('collapsed-media-provider.png') });
+  await page.screenshot({ path: testInfo.outputPath('collapsed-media-binding.png') });
   const readProof = () =>
     page.evaluate(
       () =>
@@ -112,12 +85,17 @@ test('closed media bindings show a compact decoded poster and its actual server 
   for (let i = 0; i < 2; i++) {
     await inherited.click();
     await expect(picker(page).locator('[data-picker-tab="media"]')).toBeVisible();
-    await expect(picker(page).locator('[data-picker-choice=""] img')).toBeVisible();
+    const choice = picker(page).locator('[data-picker-choice=""]');
+    await expect(choice.locator('img')).toBeVisible();
+    await expect(choice.locator('[data-source-preview-provider]')).toHaveAttribute(
+      'data-source-presence-server',
+      'B',
+    );
     await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
     await checkField(inherited);
   }
   const proof = await readProof();
-  expect(proof.reads.filter((id) => id === 'md-m-clip-001')).toHaveLength(before);
+  expect(proof.reads.filter((id) => id === 'md-m-clip-001')).toHaveLength(before + 1);
   expect(proof.streams).toBe(0);
   expect(proof.receivers).toBe(0);
 });
@@ -180,7 +158,8 @@ test('source availability and decoded poster providers follow A/B changes withou
         engine;
     }, active);
 
-  await provider(inherited, 'A');
+  const backupBadge = inherited.locator('[data-source-presence-server="B"]');
+  await expect(backupBadge).toHaveAttribute('data-source-presence-state', 'missing');
   await inherited.click();
   const dialog = picker(page);
   await expect(dialog).toBeVisible();
@@ -200,14 +179,11 @@ test('source availability and decoded poster providers follow A/B changes withou
   await provider(fallback, 'A');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await provider(inherited, 'B');
+  await expect(backupBadge).toHaveAttribute('data-source-presence-state', 'present');
 
   await changeRole('A');
-  await provider(inherited, 'A');
-  await expect(inherited.locator('[data-source-presence-server="B"]')).toHaveAttribute(
-    'data-source-presence-state',
-    'missing',
-  );
+  await expect(backupBadge).toHaveAttribute('data-source-presence-state', 'missing');
+  await expect(inherited.locator('[data-source-preview-provider]')).toHaveCount(0);
 });
 
 test('a received B picture emphasizes its existing B badge while A remains unavailable', async ({
@@ -257,27 +233,15 @@ test('a received B picture emphasizes its existing B badge while A remains unava
   await picker(page).getByRole('button', { name: 'Select', exact: true }).click();
   await defaults.locator('[data-defaults-save]').click();
   const inherited = app.inspector.locator('[data-look-binding="two:l-1"]');
-  await expect(inherited.locator('img')).toBeVisible();
+  await expect(inherited.locator('img, video')).toHaveCount(0);
+  await expect(inherited.locator('[data-source-audio-meter]')).toBeVisible();
+  await expect(inherited.locator('[data-source-presence-server="A"]')).toHaveAttribute(
+    'data-source-presence-state',
+    'missing',
+  );
   await expect(inherited.locator('[data-source-presence-server="B"]')).toHaveAttribute(
-    'data-source-preview-provider',
-    '',
-  );
-  await expect(inherited.locator('[data-source-presence-server="A"]')).not.toHaveAttribute(
-    'data-source-preview-provider',
-    '',
-  );
-  await expect(inherited.locator('[data-source-presence-server="A"]')).toHaveCSS(
-    'border-top-color',
-    'rgba(0, 0, 0, 0)',
-  );
-  expect(
-    await inherited
-      .locator('[data-source-presence-server="B"]')
-      .evaluate((element) => getComputedStyle(element).borderTopColor),
-  ).toBe(
-    await inherited
-      .locator('[data-source-presence-server="B"]')
-      .evaluate((element) => getComputedStyle(element).color),
+    'data-source-presence-state',
+    'present',
   );
   await inherited.click();
   const reopened = picker(page).locator('.cg-vlist-action-row', {
@@ -289,7 +253,7 @@ test('a received B picture emphasizes its existing B badge while A remains unava
   );
   await expect(reopened.locator('[data-source-preview-provider]')).toHaveCount(1);
   await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(inherited.locator('[data-source-preview-provider]')).toHaveCount(1);
+  await expect(inherited.locator('[data-source-preview-provider]')).toHaveCount(0);
 });
 
 test('only the decoded picture provider is outlined through an identical-image A/B handoff', async ({

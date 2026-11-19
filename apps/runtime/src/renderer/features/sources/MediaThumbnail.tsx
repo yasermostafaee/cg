@@ -13,7 +13,7 @@ export type MediaThumbnailLoader = ((id: string) => Promise<string | null>) & {
   origin?: (id: string) => PreviewEngine | undefined;
 };
 
-/** Reuse bounded poster reads for one source field and its visible modal cards. */
+/** Reuse bounded poster reads across the source dialog's visible cards. */
 export function createMediaThumbnailLoader(channel?: number): MediaThumbnailLoader {
   const cache = new Map<string, Promise<string | null>>();
   const origins = new Map<string, PreviewEngine>();

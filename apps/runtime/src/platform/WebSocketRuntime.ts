@@ -224,6 +224,8 @@ const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'bro
 
 const WS_OPEN = 1;
 const REQUEST_TIMEOUT_MS = 8000;
+// Media preview can resolve a server, read and prepare its proxy, then verify the result.
+const MEDIA_PREVIEW_OPEN_TIMEOUT_MS = 75_000;
 // Same-release Bridges can omit these features without affecting standard playout.
 const OPTIONAL_CHANNELS = new Set([
   ipcChannels.RehearseEnterPreviewChannel.name,
@@ -2437,7 +2439,11 @@ export class WebSocketRuntime implements RuntimeBridge {
     mediaOpen: async (req) => {
       if (await this.#optionalChannelMissing(ipcChannels.SourceMediaOpenChannel.name))
         return { state: 'unsupported' };
-      const answer = await this.#invoke(ipcChannels.SourceMediaOpenChannel, req);
+      const answer = await this.#invoke(
+        ipcChannels.SourceMediaOpenChannel,
+        req,
+        MEDIA_PREVIEW_OPEN_TIMEOUT_MS,
+      );
       return {
         ...answer,
         ...(answer.host !== undefined && isLoopbackHost(answer.host)

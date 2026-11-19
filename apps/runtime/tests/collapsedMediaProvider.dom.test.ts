@@ -123,43 +123,42 @@ async function decode(field: HTMLElement): Promise<void> {
 }
 
 it.each([false, true])(
-  'outlines only the decoded media poster provider (inherited: %s)',
+  'does not fetch a closed media binding picture (inherited: %s)',
   async (inherited) => {
     const field = await render('md-clip-a', inherited);
-    expect(
-      field.querySelector('[data-media-thumbnail][data-input-thumbnail-compact]'),
-    ).not.toBeNull();
+    expect(field.querySelector('img, video, [data-source-audio-meter]')).toBeNull();
     expect(providers(field)).toEqual([]);
-    await decode(field);
-    expect(providers(field)).toEqual(['B']);
     expect(field.querySelectorAll('[data-source-presence-state="present"]')).toHaveLength(2);
-    expect(field.querySelector('video, [data-source-audio-meter]')).toBeNull();
-    expect(mediaOpen).not.toHaveBeenCalled();
-    expect(mediaThumbnail).toHaveBeenCalledTimes(1);
+    expect(mediaThumbnail).not.toHaveBeenCalled();
     const panel = await openPicker(field);
     expect(panel.querySelector('[data-picker-media="md-clip-a"]')).not.toBeNull();
+    const choice = panel.querySelector<HTMLElement>('[data-picker-choice]')!;
     await flush();
-    // Its default bar, result tile and closed field reuse the same poster request.
+    await decode(choice);
+    expect(providers(choice)).toEqual(['B']);
     expect(mediaThumbnail).toHaveBeenCalledTimes(1);
     await closePicker();
-    expect(providers(field)).toEqual(['B']);
+    expect(providers(field)).toEqual([]);
     expect(mediaOpen).not.toHaveBeenCalled();
   },
 );
 
-it('clears the old provider on source, channel and same-id definition changes', async () => {
+it('clears the modal poster provider on source, channel and same-id definition changes', async () => {
   const field = await render();
-  await decode(field);
-  expect(providers(field)).toEqual(['B']);
+  const panel = await openPicker(field);
+  const choice = panel.querySelector<HTMLElement>('[data-picker-choice]')!;
+  await flush();
+  await decode(choice);
+  expect(providers(choice)).toEqual(['B']);
   mediaThumbnail.mockResolvedValue({ ok: true, dataUrl: JPEG, engine: 'A' });
   await render('md-clip-b');
-  expect(providers(field)).toEqual([]);
-  await decode(field);
-  expect(providers(field)).toEqual(['A']);
+  expect(providers(choice)).toEqual([]);
+  await decode(choice);
+  expect(providers(choice)).toEqual(['A']);
   await render('md-clip-b', false, 2);
-  expect(providers(field)).toEqual([]);
-  await decode(field);
-  expect(providers(field)).toEqual(['A']);
+  expect(providers(choice)).toEqual([]);
+  await decode(choice);
+  expect(providers(choice)).toEqual(['A']);
   await act(async () =>
     emitCatalog({
       ...catalog,
@@ -171,18 +170,19 @@ it('clears the old provider on source, channel and same-id definition changes', 
     }),
   );
   await flush();
-  expect(providers(field)).toEqual([]);
-  await decode(field);
-  expect(providers(field)).toEqual(['A']);
-  expect(mediaThumbnail.mock.calls.map(([request]) => request)).toEqual([
-    { id: 'md-clip-a', channel: 1 },
+  expect(providers(choice)).toEqual([]);
+  await decode(choice);
+  expect(providers(choice)).toEqual(['A']);
+  expect(
+    mediaThumbnail.mock.calls.map(([request]) => request).filter(({ id }) => id === 'md-clip-b'),
+  ).toEqual([
     { id: 'md-clip-b', channel: 1 },
     { id: 'md-clip-b', channel: 2 },
     { id: 'md-clip-b', channel: 2 },
   ]);
 });
 
-it('discards a late poster from a previous channel and never invents an engine', async () => {
+it('discards a late modal poster from a previous channel and never invents an engine', async () => {
   let late: ((value: { ok: true; dataUrl: string; engine: 'B' }) => void) | undefined;
   mediaThumbnail.mockImplementationOnce(
     () =>
@@ -191,26 +191,19 @@ it('discards a late poster from a previous channel and never invents an engine',
       }),
   );
   const field = await render();
+  const panel = await openPicker(field);
+  const choice = panel.querySelector<HTMLElement>('[data-picker-choice]')!;
   mediaThumbnail.mockResolvedValue({ ok: true, dataUrl: JPEG });
   await render('md-clip-a', false, 2);
-  await decode(field);
-  expect(providers(field)).toEqual([]);
+  await decode(choice);
+  expect(providers(choice)).toEqual([]);
   await act(async () => late?.({ ok: true, dataUrl: JPEG, engine: 'B' }));
   await flush();
-  expect(providers(field)).toEqual([]);
-  expect(field.querySelectorAll('img')).toHaveLength(1);
-  await act(async () => field.querySelector('img')?.dispatchEvent(new Event('error')));
-  expect(field.querySelector('img')).toBeNull();
-  expect(providers(field)).toEqual([]);
-});
-
-it('keeps availability independent when the official poster is missing', async () => {
-  mediaThumbnail.mockResolvedValue({ ok: false });
-  const field = await render();
-  expect(field.querySelectorAll('[data-source-presence-state="present"]')).toHaveLength(2);
-  expect(field.querySelector('img')).toBeNull();
-  expect(providers(field)).toEqual([]);
-  expect(mediaOpen).not.toHaveBeenCalled();
+  expect(providers(choice)).toEqual([]);
+  expect(choice.querySelectorAll('img')).toHaveLength(1);
+  await act(async () => choice.querySelector('img')?.dispatchEvent(new Event('error')));
+  expect(choice.querySelector('img')).toBeNull();
+  expect(providers(choice)).toEqual([]);
 });
 
 it('cannot relabel a new B poster when an evicted older A read finishes', async () => {

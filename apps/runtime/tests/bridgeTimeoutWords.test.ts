@@ -28,21 +28,26 @@ afterEach(() => {
  * (`CENTRAL-BRIDGE-01`: one that named none would be another release, and nothing would be sent) —
  * and then nothing at all.
  */
-function silentBridge(): WebSocketLike {
+function silentBridge(mediaAnswer?: ipc.MediaPlaybackPreview): WebSocketLike {
   const listeners = new Map<string, ((ev?: unknown) => void)[]>();
   return {
     readyState: 1,
     send(data: string) {
       const frame = JSON.parse(data) as { id: string; channel?: string };
-      if (frame.channel !== ipc.BridgeCapabilitiesChannel.name) return; // silence
+      const isHandshake = frame.channel === ipc.BridgeCapabilitiesChannel.name;
+      if (!isHandshake && (frame.channel !== ipc.SourceMediaOpenChannel.name || !mediaAnswer))
+        return;
       const response = {
         type: 'response',
         id: frame.id,
-        payload: currentBridgeCapabilities(),
+        payload: isHandshake ? currentBridgeCapabilities() : mediaAnswer,
       };
-      setTimeout(() => {
-        for (const l of listeners.get('message') ?? []) l({ data: JSON.stringify(response) });
-      }, 0);
+      setTimeout(
+        () => {
+          for (const l of listeners.get('message') ?? []) l({ data: JSON.stringify(response) });
+        },
+        isHandshake ? 0 : 12_000,
+      );
     },
     close() {
       /* nothing to tear down */
@@ -62,8 +67,10 @@ function silentBridge(): WebSocketLike {
  * way through the advance, and measure the handshake rather than the wait. The answer is in once
  * `auth.capabilities()` holds it.
  */
-async function live(): Promise<WebSocketRuntime> {
-  const rt = new WebSocketRuntime('ws://fake', { createWebSocket: () => silentBridge() });
+async function live(mediaAnswer?: ipc.MediaPlaybackPreview): Promise<WebSocketRuntime> {
+  const rt = new WebSocketRuntime('ws://fake', {
+    createWebSocket: () => silentBridge(mediaAnswer),
+  });
   const start = Date.now();
   while (rt.link.status() !== 'live' || rt.auth.capabilities() === null) {
     if (Date.now() - start > 5000) throw new Error('never live');
@@ -73,6 +80,19 @@ async function live(): Promise<WebSocketRuntime> {
 }
 
 describe('C2 — the bridge not answering, in the operator’s words', () => {
+  it('keeps the first Play request pending through slow proxy preparation', async () => {
+    const answer = { state: 'preparing', engine: 'B' } as const;
+    runtime = await live(answer);
+    vi.useFakeTimers();
+    const pending = runtime.sourcePreviews.mediaOpen!({
+      channel: 1,
+      sourceId: 'md-clip',
+      prepare: true,
+    }).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await pending).toEqual(answer);
+  });
+
   it('a timed-out request says "The bridge did not answer in time." — the channel name is on the object, never in the message', async () => {
     runtime = await live();
     vi.useFakeTimers();

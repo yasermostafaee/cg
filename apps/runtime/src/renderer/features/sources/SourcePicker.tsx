@@ -33,7 +33,7 @@ import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/VirtualList.js';
-import { inputAudioSource } from './InputAudioMeter.js';
+import { InputAudioMeter, inputAudioSource } from './InputAudioMeter.js';
 import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import { InputViewSwitch, type InputView } from './InputViewSwitch.js';
@@ -129,12 +129,14 @@ export function ChoiceLabel({
   choice,
   meterChannel,
   mediaThumbnail,
+  showPicture = true,
   presence = null,
   presenceAccessible = true,
 }: {
   choice: SourceChoice;
   meterChannel?: number | undefined;
   mediaThumbnail?: MediaThumbnailLoader | undefined;
+  showPicture?: boolean;
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
 }): JSX.Element {
@@ -157,7 +159,7 @@ export function ChoiceLabel({
         </bdi>
         {')'}
       </span>
-      {input !== undefined && (
+      {input !== undefined && showPicture && (
         <InputThumbnail
           source={input}
           channel={meterChannel}
@@ -165,6 +167,9 @@ export function ChoiceLabel({
           compact
           onPreviewEngineChange={(engine) => publish(input.id, engine)}
         />
+      )}
+      {input !== undefined && !showPicture && (
+        <InputAudioMeter sourceId={sourceId} channel={meterChannel} name={name} />
       )}
       {source?.origin === 'media' && mediaThumbnail !== undefined && (
         <MediaThumbnail
@@ -268,8 +273,7 @@ export function SourcePicker({
   const posterIdentity = JSON.stringify(
     currentSourceCatalog().sources.find((source) => source.id === selectedSource),
   );
-  // The closed binding and its modal share cached poster reads. A route or binding
-  // change gets a fresh cache; late reads from the old route cannot label new posters.
+  // Keep the modal's poster cache across reopenings. A route or binding change gets a fresh cache.
   const loadThumbnail = useMemo(
     () => createMediaThumbnailLoader(thumbnailChannel),
     [thumbnailChannel, selectedSource, posterIdentity, previewRoute],
@@ -305,7 +309,7 @@ export function SourcePicker({
             <ChoiceLabel
               choice={choice}
               meterChannel={thumbnailChannel}
-              mediaThumbnail={loadThumbnail}
+              showPicture={false}
               presence={selectedPresence}
               presenceAccessible={false}
             />
@@ -314,7 +318,6 @@ export function SourcePicker({
           <SourceLabel
             sourceId={value}
             meterChannel={thumbnailChannel}
-            mediaThumbnail={loadThumbnail}
             presence={selectedPresence}
             presenceAccessible={false}
             fallback={choices[0] !== undefined ? choiceText(choices[0]) : 'None'}

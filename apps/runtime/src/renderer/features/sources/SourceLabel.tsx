@@ -5,11 +5,8 @@ import type { SourceDefinition, SourcePresenceView } from '@cg/shared-ipc';
 import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
-import { inputAudioSource } from './InputAudioMeter.js';
-import { InputThumbnail } from './InputThumbnail.js';
-import { MediaThumbnail, type MediaThumbnailLoader } from './MediaThumbnail.js';
+import { InputAudioMeter } from './InputAudioMeter.js';
 import { SourcePresenceBadges } from './SourcePresenceBadges.js';
-import { usePreviewOrigins } from './usePreviewOrigins.js';
 import {
   currentSourceCatalog,
   seenMediaItem,
@@ -87,7 +84,6 @@ export function SourceLabel({
   fallback = 'None',
   meta = true,
   meterChannel,
-  mediaThumbnail,
   presence = null,
   presenceAccessible = true,
 }: {
@@ -98,12 +94,10 @@ export function SourceLabel({
   /** A media item's length after its name. */
   meta?: boolean | undefined;
   meterChannel?: number | undefined;
-  mediaThumbnail?: MediaThumbnailLoader | undefined;
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
-  const { origins, publish } = usePreviewOrigins();
   const source = labelledSource(sourceId);
   if (source === null) {
     return (
@@ -118,7 +112,6 @@ export function SourceLabel({
     );
   }
   const media = source.origin === 'media';
-  const input = meterChannel !== undefined && sourceId ? inputAudioSource(sourceId) : undefined;
   return (
     <span
       className="cg-source-label"
@@ -137,28 +130,13 @@ export function SourceLabel({
       {media && meta && source.durationMs !== undefined && (
         <span className="cg-source-label__meta">{formatMediaDuration(source.durationMs)}</span>
       )}
-      {input !== undefined && (
-        <InputThumbnail
-          source={input}
-          channel={meterChannel}
-          meterChannel={meterChannel}
-          compact
-          onPreviewEngineChange={(engine) => publish(input.id, engine)}
-        />
-      )}
-      {media && sourceId && mediaThumbnail !== undefined && (
-        <MediaThumbnail
-          id={sourceId}
-          load={mediaThumbnail}
-          compact
-          onPreviewEngineChange={(engine) => publish(sourceId, engine)}
-        />
+      {!media && sourceId && meterChannel !== undefined && (
+        <InputAudioMeter sourceId={sourceId} channel={meterChannel} name={source.name} />
       )}
       <SourcePresenceBadges
         presence={presence}
         sourceId={sourceId}
         accessible={presenceAccessible}
-        previewEngine={sourceId ? origins.get(sourceId) : undefined}
       />
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>
