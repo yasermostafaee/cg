@@ -114,6 +114,129 @@ function frameGraphic(): Promise<Uint8Array> {
   });
 }
 
+test('per-plate fallback previews survive save and reopen with an independent on-air toggle', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  const directory = testInfo.outputPath('bridge');
+  fs.mkdirSync(directory, { recursive: true });
+  const oscPort = await freeUdpPort();
+  const engine = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 15,
+    channels: 1,
+  });
+  let bridge: BridgeHandle | undefined;
+  try {
+    bridge = await createBridge({
+      port: 0,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: engine.amcpPort, oscPort } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      fixedLayers: { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } },
+      sourceCatalog: catalog,
+      stackPath: path.join(directory, 'stack.json'),
+      templatesDir: path.join(directory, 'templates'),
+    });
+    const runtime = bridge.runtime;
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'New live layout', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: 'New live layout' });
+    const background = (dialog: Locator) =>
+      dialog.getByRole('region', { name: 'Fallback background' });
+    const onAir = (dialog: Locator) =>
+      background(dialog).getByRole('checkbox', { name: 'Show fallback on air', exact: true });
+    const fallback = (dialog: Locator, plate: number) =>
+      dialog.locator(`[data-frame-number="${plate}"] [data-layout-plate-fallback]`);
+    const editPlate = async (dialog: Locator, plate: number): Promise<void> => {
+      await dialog.getByRole('button', { name: `Edit plate ${plate}`, exact: true }).click();
+      if (!(await background(dialog).isVisible())) {
+        await dialog.getByText('Advanced plate controls', { exact: true }).click();
+      }
+    };
+
+    await editor.getByRole('textbox', { name: 'Layout name' }).fill('Fallback test');
+    const add = editor.getByRole('button', { name: 'Add plate', exact: true });
+    await add.click();
+    await add.click();
+    await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
+    await editPlate(editor, 1);
+    await expect(onAir(editor)).not.toBeChecked();
+    await expect(fallback(editor, 1)).toHaveCount(0);
+    await background(editor).getByRole('button', { name: 'Bars', exact: true }).click();
+    await expect(fallback(editor, 1)).toHaveAttribute('data-layout-plate-fallback', 'bars');
+    await expect(fallback(editor, 1)).toHaveCSS('background-image', /linear-gradient/);
+    await background(editor).getByRole('button', { name: 'Solid colour', exact: true }).click();
+    await background(editor).getByLabel('Fallback colour').fill('#316A72');
+    await expect(onAir(editor)).toBeChecked();
+    await onAir(editor).uncheck();
+    await expect(fallback(editor, 1)).toHaveCSS('background-color', 'rgb(49, 106, 114)');
+    await editor.getByRole('button', { name: 'Add mask window', exact: true }).click();
+    await expect(fallback(editor, 1)).toHaveCSS('clip-path', /url/);
+    await expect(fallback(editor, 1).locator('clipPath rect')).toHaveAttribute('width', '0.5');
+
+    await editPlate(editor, 2);
+    const poster = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 18;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#DC7010';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png').split(',')[1]!;
+    });
+    await background(editor)
+      .getByLabel('Fallback image file')
+      .setInputFiles({
+        name: 'plate-poster.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(poster, 'base64'),
+      });
+    await expect(background(editor).getByText('plate-poster.png', { exact: true })).toBeVisible();
+    await expect(onAir(editor)).toBeChecked();
+    await expect(fallback(editor, 2).locator('img')).toHaveJSProperty('naturalWidth', 32);
+    await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
+    await expect(editor).toBeHidden();
+
+    const stored = runtime.templateList(1).find(({ name }) => name === 'Fallback test');
+    expect(stored?.controlLiveLayout?.frames[0]).toMatchObject({
+      fallback: { kind: 'color', color: '#316a72' },
+      showFallback: false,
+    });
+    expect(stored?.controlLiveLayout?.frames[1]?.fallback).toEqual({
+      kind: 'image',
+      name: 'plate-poster.png',
+      mime: 'image/png',
+    });
+    expect(stored?.liveSources?.looks?.[0]?.fallbacks).toEqual([
+      stored?.controlLiveLayout?.frames[1]?.id,
+    ]);
+
+    await page.getByRole('button', { name: 'Open templates', exact: true }).click();
+    const library = page.getByRole('dialog', { name: 'Templates · CH 1' });
+    await library.getByRole('button', { name: 'Select Fallback test', exact: true }).click();
+    await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    const restored = page.getByRole('dialog', { name: 'Edit live layout' });
+    await editPlate(restored, 1);
+    await expect(onAir(restored)).not.toBeChecked();
+    await expect(fallback(restored, 1)).toHaveCSS('background-color', 'rgb(49, 106, 114)');
+    await expect(fallback(restored, 1)).toHaveCSS('clip-path', /url/);
+    await editPlate(restored, 2);
+    await expect(onAir(restored)).toBeChecked();
+    await expect(background(restored).getByText('plate-poster.png', { exact: true })).toBeVisible();
+    await expect(fallback(restored, 2).locator('img')).toHaveJSProperty('naturalWidth', 32);
+  } finally {
+    await bridge?.close();
+    await engine.stop();
+  }
+});
+
 test('R-120 authors, focuses, returns and prepares a second layout while the first is on air', async ({
   page,
 }) => {

@@ -1,4 +1,12 @@
-import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { Maximize2 } from 'lucide-react';
 import {
   DEFAULT_LIVE_CROP_FOCUS,
@@ -28,6 +36,7 @@ import {
   type Resolution,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
+import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import type { BroadcastGuideProfile } from '@cg/ui';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -183,11 +192,63 @@ function CropDragSurface({
   );
 }
 
+function ShotFallback({
+  fallback,
+  mask,
+  file,
+}: {
+  fallback: NonNullable<ControlLiveLayoutFrame['fallback']>;
+  mask: ControlLiveLayoutFrame['liveMask'];
+  file: Blob | undefined;
+}): JSX.Element {
+  const clipId = 'layout-fallback-' + useId().replace(/:/g, '');
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    if (file === undefined) {
+      setUrl(undefined);
+      return;
+    }
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return (
+    <div
+      className="cg-live-layout-shot-fallback"
+      data-layout-plate-fallback={fallback.kind}
+      aria-hidden="true"
+      style={{
+        ...(fallback.kind === 'color' && { backgroundColor: fallback.color }),
+        ...(fallback.kind === 'bars' && { backgroundImage: smpteBarsGradient() }),
+        ...(mask !== undefined && { clipPath: `url(#${clipId})` }),
+      }}
+    >
+      {mask !== undefined && (
+        <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+          <clipPath id={clipId} clipPathUnits="objectBoundingBox">
+            {livePlateMaskRegions(mask).map(({ x, y, width, height }) => (
+              <rect
+                key={`${x}:${y}:${width}:${height}`}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+              />
+            ))}
+          </clipPath>
+        </svg>
+      )}
+      {fallback.kind === 'image' && url !== undefined && <img src={url} alt="" />}
+    </div>
+  );
+}
+
 function ShotInput({
   source,
   input,
   frame,
   fallback,
+  hasFallback,
   pictureBox,
   cropFocus,
 }: {
@@ -195,6 +256,7 @@ function ShotInput({
   input: ControlLiveLayoutFrame;
   frame: LiveSourceRect;
   fallback: string;
+  hasFallback: boolean;
   pictureBox?: LiveSourceRect | undefined;
   cropFocus?: LiveCropFocus | undefined;
 }): JSX.Element {
@@ -210,13 +272,14 @@ function ShotInput({
     const label = largestLivePlateMaskRegion(mask);
     return (
       <>
-        {windows.map((window, index) => (
-          <div
-            key={index}
-            className="cg-live-layout-shot-placeholder"
-            style={cssRect(window, box)}
-          />
-        ))}
+        {!hasFallback &&
+          windows.map((window, index) => (
+            <div
+              key={index}
+              className="cg-live-layout-shot-placeholder"
+              style={cssRect(window, box)}
+            />
+          ))}
         {label !== null && (
           <div
             className="cg-live-layout-shot-label"
@@ -414,6 +477,7 @@ export function LiveLayoutEditorPreview({
   selectedFrameId,
   focused,
   backgroundUrl,
+  fallbackFiles,
   sourceFrames,
   showMeters,
   guideProfile,
@@ -429,6 +493,7 @@ export function LiveLayoutEditorPreview({
   selectedFrameId: string;
   focused: string | undefined;
   backgroundUrl: string | undefined;
+  fallbackFiles: ReadonlyMap<string, Blob>;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
   showMeters: boolean;
   guideProfile?: BroadcastGuideProfile | undefined;
@@ -638,6 +703,11 @@ export function LiveLayoutEditorPreview({
             focused === undefined
               ? { ...authoredInput, fitMode: controlLiveLayoutPlateFit(preset, authoredInput) }
               : authoredInput;
+          const fallback =
+            importedPlate === undefined
+              ? (input.fallback ??
+                (input.showFallback === true ? { kind: 'bars' as const } : undefined))
+              : undefined;
           const canCrop =
             previewInput.fitMode === 'cover' &&
             previewInput.liveMask === undefined &&
@@ -668,6 +738,13 @@ export function LiveLayoutEditorPreview({
               }
             >
               <div className="cg-live-layout-shot-source">
+                {fallback !== undefined && (
+                  <ShotFallback
+                    fallback={fallback}
+                    mask={input.liveMask}
+                    file={fallbackFiles.get(id)}
+                  />
+                )}
                 <ShotInput
                   source={preview}
                   input={previewInput}
@@ -675,6 +752,7 @@ export function LiveLayoutEditorPreview({
                   pictureBox={pictureBox}
                   cropFocus={cropFocus}
                   fallback={`Plate ${number}`}
+                  hasFallback={fallback !== undefined}
                 />
               </div>
               {showMeters && activeShot && sourceId !== undefined && (

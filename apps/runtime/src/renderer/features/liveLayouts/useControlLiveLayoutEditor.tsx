@@ -21,6 +21,7 @@ interface EditorRequest {
   background?: Blob;
   fonts?: ReadonlyMap<string, Blob>;
   attachments?: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
+  fallbackFiles?: ReadonlyMap<string, Blob>;
   mode: 'create' | 'edit' | 'duplicate';
   expectedSource?: string;
 }
@@ -66,7 +67,8 @@ export function useControlLiveLayoutEditor(
         const { bytes, sha256: expectedSource } = await readSavedControlLiveLayoutPackage(
           template.controlLiveLayoutSource,
         );
-        const { layout, asset, fonts, attachments } = await readControlLiveLayout(bytes);
+        const { layout, asset, fonts, attachments, fallbackFiles } =
+          await readControlLiveLayout(bytes);
         const initial = duplicate
           ? {
               ...layout,
@@ -79,6 +81,7 @@ export function useControlLiveLayoutEditor(
           initial,
           fonts,
           attachments,
+          fallbackFiles,
           ...(asset === undefined ? {} : { background: asset }),
           mode: duplicate ? 'duplicate' : 'edit',
           ...(duplicate ? {} : { expectedSource }),
@@ -98,9 +101,16 @@ export function useControlLiveLayoutEditor(
     background: Blob | undefined,
     fonts: ReadonlyMap<string, Blob>,
     attachments: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
+    fallbackFiles: ReadonlyMap<string, Blob>,
   ): Promise<void> => {
     if (request === null) return;
-    const bytes = await compileControlLiveLayout(layout, background, fonts, attachments);
+    const bytes = await compileControlLiveLayout(
+      layout,
+      background,
+      fonts,
+      attachments,
+      fallbackFiles,
+    );
     const saved = await importTemplateFromBytes(window.cg, bytes, {
       channel: request.channel,
       consoleVersion: APP_VERSION,
@@ -125,6 +135,7 @@ export function useControlLiveLayoutEditor(
           initial={request.initial}
           initialFonts={request.fonts}
           initialAttachments={request.attachments}
+          initialFallbackFiles={request.fallbackFiles}
           {...(request.background === undefined ? {} : { initialBackground: request.background })}
           mode={request.mode}
           onClose={close}

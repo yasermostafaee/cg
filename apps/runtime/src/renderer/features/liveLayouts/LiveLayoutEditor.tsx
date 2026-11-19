@@ -55,6 +55,7 @@ import { liveLayoutArtwork } from '../../theme.js';
 import {
   CONTROL_LIVE_LAYOUT_BACKGROUND_ACCEPT,
   readControlLiveLayoutBackgroundFile,
+  readControlLiveLayoutFallbackFile,
   readControlLiveLayoutFontFile,
 } from './controlLiveLayoutCompiler.js';
 import { usePvwSourceFrames } from '../monitors/usePvwSourceFrames.js';
@@ -87,12 +88,14 @@ interface LiveLayoutEditorProps {
   initialBackground?: Blob | undefined;
   initialFonts?: ReadonlyMap<string, Blob> | undefined;
   initialAttachments?: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource> | undefined;
+  initialFallbackFiles?: ReadonlyMap<string, Blob> | undefined;
   mode: 'create' | 'edit' | 'duplicate';
   onSave: (
     layout: ControlLiveLayout,
     background: Blob | undefined,
     fonts: ReadonlyMap<string, Blob>,
     attachments: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
+    fallbackFiles: ReadonlyMap<string, Blob>,
   ) => Promise<void>;
   onClose: () => void;
 }
@@ -166,6 +169,7 @@ export function LiveLayoutEditor({
   initialBackground,
   initialFonts,
   initialAttachments,
+  initialFallbackFiles,
   mode,
   onSave,
   onClose,
@@ -182,6 +186,9 @@ export function LiveLayoutEditor({
   );
   const [attachmentAssets, setAttachmentAssets] = useState(
     () => initialAttachments ?? new Map<string, ControlLiveLayoutFrameAttachmentSource>(),
+  );
+  const [fallbackFiles, setFallbackFiles] = useState<ReadonlyMap<string, Blob>>(
+    () => initialFallbackFiles ?? new Map(),
   );
   const [presetId, setPresetId] = useState<string | undefined>(layout.defaultPresetId || undefined);
   const [frameId, setFrameId] = useState(() => {
@@ -208,11 +215,13 @@ export function LiveLayoutEditor({
   const [readingMedia, setReadingMedia] = useState(false);
   const [readingFont, setReadingFont] = useState(false);
   const [readingAttachment, setReadingAttachment] = useState(false);
+  const [readingFallback, setReadingFallback] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const saveInFlight = useRef(false);
   const mediaRead = useRef(0);
   const fontRead = useRef(0);
   const attachmentRead = useRef(0);
+  const fallbackRead = useRef<{ id: string }>();
   const mediaPick = useRef<HTMLInputElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const presetName = useRef<HTMLInputElement>(null);
@@ -263,6 +272,7 @@ export function LiveLayoutEditor({
       mediaRead.current += 1;
       fontRead.current += 1;
       attachmentRead.current += 1;
+      fallbackRead.current = undefined;
     },
     [],
   );
@@ -465,6 +475,11 @@ export function LiveLayoutEditor({
     if (frame === undefined || (mode !== 'create' && layout.frames.length <= 1)) return;
     const frames = layout.frames.filter(({ id }) => id !== frame.id);
     const next = frames[Math.min(layout.frames.indexOf(frame), frames.length - 1)];
+    if (fallbackRead.current?.id === frame.id) {
+      fallbackRead.current = undefined;
+      setReadingFallback(false);
+    }
+    removeFallbackFile(frame.id);
     setCropEditFrameId(undefined);
     setFocusId(undefined);
     setFrameId(next?.id);
@@ -696,6 +711,41 @@ export function LiveLayoutEditor({
     }
   }
 
+  function removeFallbackFile(id: string): void {
+    setFallbackFiles((current) => {
+      if (!current.has(id)) return current;
+      const remaining = new Map(current);
+      remaining.delete(id);
+      return remaining;
+    });
+  }
+
+  async function pickFallback(file: File): Promise<void> {
+    if (frame === undefined) return;
+    const id = frame.id;
+    const request = { id };
+    fallbackRead.current = request;
+    setReadingFallback(true);
+    setRefusal(undefined);
+    try {
+      const fallback = await readControlLiveLayoutFallbackFile(file);
+      if (fallbackRead.current !== request) return;
+      setFallbackFiles((current) => new Map(current).set(id, file));
+      updateFrame((candidate) => ({ ...candidate, fallback }));
+    } catch (cause) {
+      if (fallbackRead.current === request) {
+        setRefusal(
+          cause instanceof Error ? cause.message : 'The fallback image could not be read.',
+        );
+      }
+    } finally {
+      if (fallbackRead.current === request) {
+        fallbackRead.current = undefined;
+        setReadingFallback(false);
+      }
+    }
+  }
+
   async function addFont(
     file: File,
     scope: 'shared' | 'frame',
@@ -747,7 +797,14 @@ export function LiveLayoutEditor({
   }
 
   async function save(): Promise<void> {
-    if (!canSave || saveInFlight.current || readingMedia || readingFont || readingAttachment)
+    if (
+      !canSave ||
+      saveInFlight.current ||
+      readingMedia ||
+      readingFont ||
+      readingAttachment ||
+      readingFallback
+    )
       return;
     const draft = ControlLiveLayoutSchema.safeParse({
       ...layout,
@@ -762,7 +819,7 @@ export function LiveLayoutEditor({
     saveInFlight.current = true;
     setBusy(true);
     try {
-      await onSave(draft.data, asset, fontAssets, attachmentAssets);
+      await onSave(draft.data, asset, fontAssets, attachmentAssets, fallbackFiles);
     } catch (cause) {
       setRefusal(cause instanceof Error ? cause.message : 'The layout could not be saved.');
     } finally {
@@ -788,7 +845,14 @@ export function LiveLayoutEditor({
           <ModalAction
             actionRole="primary"
             onClick={() => void save()}
-            disabled={!canSave || busy || readingMedia || readingFont || readingAttachment}
+            disabled={
+              !canSave ||
+              busy ||
+              readingMedia ||
+              readingFont ||
+              readingAttachment ||
+              readingFallback
+            }
           >
             <Icon icon={Check} size={15} /> {busy ? 'Saving…' : 'Save layout'}
           </ModalAction>
@@ -975,6 +1039,7 @@ export function LiveLayoutEditor({
                 selectedFrameId={frame.id}
                 focused={focusId}
                 backgroundUrl={assetUrl}
+                fallbackFiles={fallbackFiles}
                 sourceFrames={sourceFrames}
                 showMeters={showPreviewMeters}
                 guideProfile={showSafeGuides ? safeGuideProfile : undefined}
@@ -1321,6 +1386,10 @@ export function LiveLayoutEditor({
                 />
                 <LiveLayoutEditorFrameOptions
                   frame={frame}
+                  fallbackImage={{
+                    reading: readingFallback,
+                    onPick: (file) => void pickFallback(file),
+                  }}
                   presetOverrides={
                     preset === undefined || !preset.frameIds.includes(frame.id)
                       ? undefined
@@ -1385,6 +1454,8 @@ export function LiveLayoutEditor({
                     setMaskEditFrameId(editing ? frame.id : undefined);
                   }}
                   onChange={(patch) => {
+                    if (patch.fallback !== undefined && patch.fallback.kind !== 'image')
+                      removeFallbackFile(frame.id);
                     if (patch.liveMask !== undefined || patch.fitMode === 'contain')
                       setCropEditFrameId(undefined);
                     updateFrame((candidate) => ({ ...candidate, ...patch }));

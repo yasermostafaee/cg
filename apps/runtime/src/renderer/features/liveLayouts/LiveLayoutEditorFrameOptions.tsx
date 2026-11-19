@@ -1,10 +1,11 @@
-import { useId } from 'react';
-import { Info, Move, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { useId, useRef } from 'react';
+import { ImagePlus, Info, Move, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX,
   DEFAULT_LIVE_FIT_MODE,
   LIVE_REVEAL_MAX_RECTS,
   LiveRevealRectSchema,
+  controlLiveLayoutShowFallback,
   type ControlLiveLayoutFrame,
   type ControlLiveLayoutPlateOverride,
   type LiveCropFocus,
@@ -13,8 +14,11 @@ import {
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { ColorInput } from '../../ui/ColorInput.js';
+import { FileInput } from '../../ui/FileInput.js';
 import { Icon } from '../../ui/Icon.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 import { liveLayoutArtwork } from '../../theme.js';
+import { CONTROL_LIVE_LAYOUT_FALLBACK_ACCEPT } from './controlLiveLayoutCompiler.js';
 import { LiveLayoutEditorCropControls } from './LiveLayoutEditorCropControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import { LiveLayoutEditorPlatePresentation } from './LiveLayoutEditorPlatePresentation.js';
@@ -44,6 +48,7 @@ const MASK_FIELDS = [
 
 export function LiveLayoutEditorFrameOptions({
   frame,
+  fallbackImage,
   presetOverrides,
   borderVisibility,
   crop,
@@ -55,6 +60,7 @@ export function LiveLayoutEditorFrameOptions({
   onChange,
 }: {
   frame: ControlLiveLayoutFrame;
+  fallbackImage: { reading: boolean; onPick: (file: File) => void };
   presetOverrides?:
     | {
         id: string;
@@ -92,12 +98,14 @@ export function LiveLayoutEditorFrameOptions({
   onChange: (patch: Partial<ControlLiveLayoutFrame>) => void;
 }): JSX.Element {
   const id = useId();
+  const fallbackPick = useRef<HTMLInputElement>(null);
   const fit = frame.fitMode ?? DEFAULT_LIVE_FIT_MODE;
   const resize = frame.operatorPlacement ?? 'free';
   const mask = frame.liveMask;
   const border = frame.border ?? DEFAULT_BORDER;
   const windows = mask?.rects ?? [];
   const activeWindow = windows[activeIndex];
+  const fallback = frame.fallback;
 
   function addWindow(): void {
     if (windows.length >= LIVE_REVEAL_MAX_RECTS) return;
@@ -191,6 +199,80 @@ export function LiveLayoutEditorFrameOptions({
             ))}
           </div>
         </div>
+        <section className="cg-live-layout-frame-option-group" aria-label="Fallback background">
+          <span>Fallback background</span>
+          <div className="cg-live-layout-frame-option-buttons">
+            <Button
+              active={fallback?.kind === 'bars'}
+              aria-pressed={fallback?.kind === 'bars'}
+              disabled={fallbackImage.reading}
+              onClick={() => onChange({ fallback: { kind: 'bars' } })}
+            >
+              Bars
+            </Button>
+            <Button
+              active={fallback?.kind === 'color'}
+              aria-pressed={fallback?.kind === 'color'}
+              disabled={fallbackImage.reading}
+              onClick={() =>
+                onChange({
+                  fallback: {
+                    kind: 'color',
+                    color: fallback?.kind === 'color' ? fallback.color : '#000000',
+                  },
+                })
+              }
+            >
+              Solid colour
+            </Button>
+            <Button
+              active={fallback?.kind === 'image'}
+              aria-pressed={fallback?.kind === 'image'}
+              disabled={fallbackImage.reading}
+              onClick={() => fallbackPick.current?.click()}
+            >
+              <Icon icon={ImagePlus} size={14} />
+              Image…
+            </Button>
+            <FileInput
+              ref={fallbackPick}
+              aria-label="Fallback image file"
+              accept={CONTROL_LIVE_LAYOUT_FALLBACK_ACCEPT}
+              hidden
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = '';
+                if (file !== undefined) fallbackImage.onPick(file);
+              }}
+            />
+          </div>
+          {fallback?.kind === 'color' && (
+            <ColorInput
+              className="cg-field"
+              aria-label="Fallback colour"
+              value={fallback.color.slice(0, 7)}
+              onChange={(color) => onChange({ fallback: { kind: 'color', color } })}
+            />
+          )}
+          {fallback?.kind === 'image' && <IsolatedName>{fallback.name}</IsolatedName>}
+          <label
+            className="cg-live-layout-frame-option-check"
+            htmlFor={id + '-fallback-on-air'}
+            title="Show the selected background on air when the input is empty or leaves space in the plate."
+          >
+            <Checkbox
+              id={id + '-fallback-on-air'}
+              checked={controlLiveLayoutShowFallback(frame)}
+              onChange={(showFallback) =>
+                onChange({
+                  showFallback,
+                  ...(showFallback && fallback === undefined && { fallback: { kind: 'bars' } }),
+                })
+              }
+            />
+            Show fallback on air
+          </label>
+        </section>
         <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
           <span>Border</span>
           <div className="cg-live-layout-plate-border-fields">

@@ -330,6 +330,19 @@
   pointer-events: none;
 }
 
+.cg-live-layout-shot-fallback {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.cg-live-layout-shot-fallback > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 .cg-live-layout-shot[data-editing] {
   outline: 2px solid var(--r-accent);
   outline-offset: 2px;
