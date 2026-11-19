@@ -135,7 +135,7 @@ export interface ShellLayout {
    *     shows the Playout's own return (`C-016`, 2026-09-24) — and `C-016`'s own acceptance
    *     says the panel is **OFF by default and toggleable**, which is this default. Hidden
    *     also means the bridge pulls NOTHING from the Playout's feed: the picture is requested
-   *     only while the pane renders, and the strip does not render while hidden.
+   *     only while the pane is visible. A hidden strip can retain a local PVW rehearsal.
    *   - PVW (`PreviewPanel` → `RehearsalStage`) is a LOCAL BROWSER RENDER of the rehearsing
    *     rows through `@cg/template-runtime` in a `srcdoc` frame — `R-022`, "nothing is ever
    *     sent to CasparCG". It is the console's BELIEF, not the channel.

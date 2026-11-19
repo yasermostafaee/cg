@@ -42,8 +42,11 @@ function stubPage(marker: string): string {
         if (stage) stage.setAttribute('data-applied', options && options.search);
       }
     };
-    window.play = function () {}; window.update = function () {};
-    window.next = function () {}; window.stop = function () {};
+    const stage = document.querySelector('.cg-stage');
+    window.play = function () { stage.dataset.rehearsalPage = 'playing'; };
+    window.update = function () {};
+    window.next = function () { stage.dataset.rehearsalPage = 'next'; };
+    window.stop = function () { stage.dataset.rehearsalPage = 'stopped'; };
   </script>
 </body></html>`;
 }
@@ -84,6 +87,29 @@ async function rehearseRow(page: Page, layer: number): Promise<void> {
 test.beforeEach(async ({ app }) => {
   await app.showMonitors();
 });
+
+test('hiding and showing monitors preserves the running rehearsal page', async ({ app }) => {
+  const { page } = app;
+  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-hide-show'));
+  await stubRetainedPage(page);
+  await rehearseRow(page, layer);
+  const controls = page.locator('[data-pvw-controls]');
+  const graphic = frames(page).first().contentFrame().locator('.cg-stage');
+  await controls.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(graphic).toHaveAttribute('data-rehearsal-page', 'playing');
+  await controls.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(graphic).toHaveAttribute('data-rehearsal-page', 'next');
+
+  await page.getByRole('button', { name: 'Hide monitors', exact: true }).click();
+  await expect(frames(page)).toBeHidden();
+  await app.showMonitors();
+  await expect(frames(page)).toBeVisible();
+  await expect(graphic).toHaveAttribute('data-rehearsal-page', 'next');
+
+  await controls.getByRole('button', { name: 'STOP', exact: true }).click();
+  await expect(graphic).toHaveAttribute('data-rehearsal-page', 'stopped');
+});
+
 test('every rehearsing row gets a frame, stacked by the REAL CasparCG layer', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });

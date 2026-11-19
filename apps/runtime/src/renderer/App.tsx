@@ -338,6 +338,9 @@ export function App(): JSX.Element {
    * a fullscreen Layers list hides the strip as it always did.
    */
   const monitorsVisible = layout.focus !== 'layers' && (layout.monitorsShown || monitorFocused);
+  const hasPreviewRows = rehearsals.some(
+    ({ channel }) => viewChannel === null || channel === viewChannel,
+  );
 
   /*
    * THE INSPECTOR IS OPEN IF, AND ONLY IF, SOMETHING IS SELECTED.
@@ -539,15 +542,15 @@ export function App(): JSX.Element {
                 it cannot vouch for a live picture; PREVIEW is `PreviewPanel`, a
                 LOCAL browser render of every rehearsing row (R-022), with no link
                 to be down. Neither is "black and labelled NOT CONNECTED".
-                ⚠ The strip is not rendered while hidden, and that is load-bearing
-                for PROGRAM: its picture request IS the bridge's reason to read the
-                Playout's feed, so a hidden strip pulls nothing. */}
-                {monitorsVisible && (
+                The hidden strip retains local rehearsal pages while PREVIEW has rows.
+                Its picture subscriptions and PROGRAM returns are released while hidden. */}
+                {(monitorsVisible || hasPreviewRows) && (
                   <>
                     <div
                       /* The toggle's `aria-controls` target and the specs' anchor. */
                       id="monitor-strip"
-                      data-monitor-strip=""
+                      data-monitor-strip={monitorsVisible ? '' : undefined}
+                      hidden={!monitorsVisible}
                       style={
                         /*
                           BOTH branches bound the width (`minWidth: 0` + a clip).
@@ -559,30 +562,33 @@ export function App(): JSX.Element {
                           right edge of the viewport, leaving no way back out of a
                           fullscreen whose focus is persisted across reloads.
                         */
-                        monitorFocused
-                          ? {
-                              display: 'flex',
-                              flex: 1,
-                              minHeight: 0,
-                              minWidth: 0,
-                              overflow: 'hidden',
-                              ...(showMonitorLayerCompanion
-                                ? { gridColumn: '1', gridRow: '1' }
-                                : {}),
-                            }
-                          : {
-                              display: 'flex',
-                              height: `${String(layout.monitorPx)}px`,
-                              flexShrink: 0,
-                              minWidth: 0,
-                              overflow: 'hidden',
-                            }
+                        !monitorsVisible
+                          ? undefined
+                          : monitorFocused
+                            ? {
+                                display: 'flex',
+                                flex: 1,
+                                minHeight: 0,
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                ...(showMonitorLayerCompanion
+                                  ? { gridColumn: '1', gridRow: '1' }
+                                  : {}),
+                              }
+                            : {
+                                display: 'flex',
+                                height: `${String(layout.monitorPx)}px`,
+                                flexShrink: 0,
+                                minWidth: 0,
+                                overflow: 'hidden',
+                              }
                       }
                     >
                       {/* R-022 — PVW follows the selection when the selected row is
                         rehearsing, so the preview and the Inspector agree about
                         which graphic the operator is working on. */}
                       <MonitorStrip
+                        visible={monitorsVisible}
                         companionMode={monitorCompanionMode}
                         hasSelectedLayer={selected !== null}
                         playoutSignInUrl={
@@ -596,7 +602,7 @@ export function App(): JSX.Element {
                     </div>
                     {/* The ordinary strip is resizable. A maximized monitor gets the
                         space left by its compact companion row. */}
-                    {!monitorFocused && (
+                    {monitorsVisible && !monitorFocused && (
                       <ShellDivider
                         orientation="horizontal"
                         value={layout.monitorPx}

@@ -19,6 +19,7 @@ import { Columns3, Monitor, PanelBottom } from 'lucide-react';
 export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 
 interface Props {
+  visible: boolean;
   companionMode: MonitorCompanionMode;
   hasSelectedLayer: boolean;
   playoutSignInUrl?: string | null | undefined;
@@ -48,6 +49,7 @@ interface Props {
  * which box that is belongs here.
  */
 export function MonitorStrip({
+  visible: stripVisible,
   companionMode,
   hasSelectedLayer,
   playoutSignInUrl,
@@ -72,8 +74,8 @@ export function MonitorStrip({
   const { items } = useStackSnapshot();
   // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
   const onAirRows = airTally(onChannel(items, viewChannel)).onAir;
-  const showPvw = focus !== 'pgm';
-  const showPgm = focus !== 'pvw';
+  const showPvw = stripVisible && focus !== 'pgm';
+  const showPgm = stripVisible && focus !== 'pvw';
   /*
     🔴 `RELEASE-0113-01` / `R-104` — THIS channel's validated N → M backup line. It is also the
     identity of B's programme resource: if M or the backup host changes, the old viewer is replaced
@@ -255,7 +257,7 @@ export function MonitorStrip({
         The preview renders every rehearsal. The selection scopes the controls
         for a Control-authored layout when more than one layout is on Preview.
       */}
-      {/* Keep the local rehearsal page mounted while fullscreen PGM hides this pane. */}
+      {/* Keep the local rehearsal page while the strip or fullscreen PGM hides this pane. */}
       <PreviewPanel
         hidden={!showPvw}
         companionActions={showPvw ? companionActions : undefined}
