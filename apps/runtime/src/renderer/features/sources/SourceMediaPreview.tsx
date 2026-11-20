@@ -161,7 +161,11 @@ interface FileSourceMediaPreviewProps extends SourceMediaPreviewProps {
 
 const MEDIA_LEASE_REFRESH_MS = 15_000;
 const LOCAL_ORIGINAL_STARTUP_MS = 8_000;
-const MAX_PROXY_PREPARATION_MS = 20 * 60_000;
+const PROXY_PREPARATION_BUDGET_MS = {
+  // An earlier proxy can use the encoder for 20 minutes before this clip gets a turn.
+  'waiting-for-capacity': 25 * 60_000,
+  encoding: 20 * 60_000,
+};
 
 function matchesReadyPreview(
   player: HTMLVideoElement,
@@ -229,7 +233,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     let queuedProbe: string | undefined;
     let localOriginalRejected = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let preparingSince: number | null = null;
+    let preparationStartedAt: Partial<Record<keyof typeof PROXY_PREPARATION_BUDGET_MS, number>> =
+      {};
     let pollDelay = 1_000;
     const stopped = (): boolean => currentIntent.current === 'stopped';
     const close = (session: MediaPlaybackPreview | null): void => {
@@ -244,7 +249,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       clearTimeout(timer);
       close(currentPreview.current);
       currentPreview.current = null;
-      preparingSince = null;
+      preparationStartedAt = {};
     };
     const failPlayer = (): void => {
       video.current?.pause();
@@ -338,19 +343,26 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           currentIntent.current = 'paused';
           setIntent('paused');
         }
-        if (result.state === 'preparing' && currentIntent.current === 'playing') {
-          preparingSince ??= performance.now();
-          if (performance.now() - preparingSince >= MAX_PROXY_PREPARATION_MS) {
+        if (result.state === 'preparing' && currentIntent.current === 'playing' && !playQueued()) {
+          const phase = result.preparationPhase ?? 'encoding';
+          const now = performance.now();
+          const started = (preparationStartedAt[phase] ??= now);
+          const remaining = PROXY_PREPARATION_BUDGET_MS[phase] - (now - started);
+          if (remaining <= 0) {
             stopLease();
-            setPlayerError('Preview preparation timed out. Try again.');
+            setPlayerError(
+              phase === 'waiting-for-capacity'
+                ? 'Timed out waiting for proxy capacity. Try again.'
+                : 'Preview preparation timed out. Try again.',
+            );
             currentIntent.current = 'paused';
             setIntent('paused');
             return;
           }
-          timer = setTimeout(() => void read(), pollDelay);
+          timer = setTimeout(() => void read(), Math.min(pollDelay, remaining));
           pollDelay = Math.min(5_000, pollDelay * 2);
         } else if (result.previewId !== undefined) {
-          preparingSince = null;
+          preparationStartedAt = {};
           pollDelay = 1_000;
           timer = setTimeout(() => void read(), MEDIA_LEASE_REFRESH_MS);
         }
@@ -555,7 +567,11 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     if (playerError !== null) message = playerError;
     else if (preview === null) message = 'Loading preview…';
     else if (preview.state === 'preparing' && intent === 'playing') {
-      message = preview.message ?? 'Preparing preview…';
+      message =
+        preview.message ??
+        (preview.preparationPhase === 'waiting-for-capacity'
+          ? 'Waiting for proxy capacity…'
+          : 'Preparing preview…');
     } else if (preview.state === 'unavailable' || preview.state === 'error') {
       message = preview.message ?? 'Preview unavailable';
     } else if (loading) message = 'Loading…';

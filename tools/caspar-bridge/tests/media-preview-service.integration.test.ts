@@ -532,16 +532,23 @@ it('keeps a second media selection pending while proxy capacity is busy and wait
     });
   const busy = await openNext();
   expect(busy.state).toBe('preparing');
+  expect(busy.preparationPhase).toBe('waiting-for-capacity');
   expect(busy.message).toContain('queue is busy');
   expect(busy.previewId).toBeDefined();
   expect((await fetch(f.url(first.videoUrl))).status).toBe(403);
   expect((await fetch(f.url(busy.posterUrl))).status).toBe(200);
   f.setPreparationStatus(202);
   f.advance(2_999);
-  expect((await openNext(busy.previewId)).message).toBe(busy.message);
+  expect(await openNext(busy.previewId)).toMatchObject({
+    message: busy.message,
+    preparationPhase: 'waiting-for-capacity',
+  });
   expect(f.preparations()).toBe(1);
   f.advance(1);
-  expect((await openNext(busy.previewId)).state).toBe('preparing');
+  expect(await openNext(busy.previewId)).toMatchObject({
+    state: 'preparing',
+    preparationPhase: 'encoding',
+  });
   const ready = await openNext(busy.previewId);
   expect(ready.state).toBe('ready');
   expect(ready.previewId).toBe(busy.previewId);

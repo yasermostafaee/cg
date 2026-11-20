@@ -106,10 +106,12 @@ const mediaPlayback = z
     engine: z.enum(['A', 'B']).optional(),
     host: z.string().max(256).optional(),
     message: z.string().max(300).optional(),
+    preparationPhase: z.enum(['waiting-for-capacity', 'encoding']).optional(),
     /** A verified A/B source handoff permits one bounded fresh preview acquisition. */
     recovery: z.literal('target-changed').optional(),
   })
-  .refine((value) => value.recovery === undefined || value.state === 'unavailable');
+  .refine((value) => value.recovery === undefined || value.state === 'unavailable')
+  .refine((value) => value.preparationPhase === undefined || value.state === 'preparing');
 export type MediaPlaybackPreview = z.infer<typeof mediaPlayback>;
 
 export const SourceMediaOpenChannel = defineChannel(

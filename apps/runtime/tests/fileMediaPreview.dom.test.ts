@@ -249,6 +249,7 @@ it('retains one explicit list Play request through a delayed proxy without anoth
         ...ready(),
         state: 'preparing',
         videoUrl: undefined,
+        preparationPhase: 'waiting-for-capacity',
         message: 'The media proxy queue is busy. Waiting for capacity.',
       }),
     );
@@ -259,6 +260,67 @@ it('retains one explicit list Play request through a delayed proxy without anoth
     expect(view.host.querySelector('video')?.hidden).toBe(false);
     expect(view.take).not.toHaveBeenCalled();
     expect(view.update).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it('keeps one Play request through a long wait for capacity and gives encoding its own budget', async () => {
+  const player = mockPlayer();
+  let reply: MediaPlaybackPreview = {
+    ...ready(),
+    state: 'preparing',
+    videoUrl: undefined,
+    preparationPhase: 'waiting-for-capacity',
+  };
+  const mediaOpen = vi.fn(async () => reply);
+  const view = await mount(mediaOpen, false, undefined, 1);
+  try {
+    await act(async () => vi.advanceTimersByTimeAsync(21 * 60_000));
+    expect(view.host.textContent).toContain('Waiting for proxy capacity…');
+    expect(view.host.querySelector('img')?.src).toBe(reply.posterUrl);
+    expect(view.mediaClose).not.toHaveBeenCalled();
+
+    reply = { ...reply, preparationPhase: 'encoding' };
+    await act(async () => vi.advanceTimersByTimeAsync(19 * 60_000));
+    expect(view.host.textContent).toContain('Preparing preview…');
+    expect(view.mediaClose).not.toHaveBeenCalled();
+
+    reply = ready();
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(player.play).toHaveBeenCalledOnce();
+    expect(view.take).not.toHaveBeenCalled();
+    expect(view.update).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  ['waiting-for-capacity', 25 * 60_000, 'Timed out waiting for proxy capacity.'],
+  ['encoding', 20 * 60_000, 'Preview preparation timed out.'],
+] as const)('stops polling when the %s budget expires', async (phase, budget, message) => {
+  mockPlayer();
+  const mediaOpen = vi.fn(
+    async (): Promise<MediaPlaybackPreview> => ({
+      ...ready(),
+      state: 'preparing',
+      videoUrl: undefined,
+      preparationPhase: phase,
+    }),
+  );
+  const view = await mount(mediaOpen, false, undefined, 1);
+  try {
+    await act(async () => vi.advanceTimersByTimeAsync(budget - 1));
+    expect(view.button('Pause preview')).not.toBeNull();
+    expect(view.mediaClose).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(view.button('Play preview')).not.toBeNull();
+    expect(view.host.textContent).toContain(message);
+    expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
+    const reads = mediaOpen.mock.calls.length;
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(mediaOpen).toHaveBeenCalledTimes(reads);
   } finally {
     await view.close();
   }

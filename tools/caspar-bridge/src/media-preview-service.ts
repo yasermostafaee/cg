@@ -56,7 +56,10 @@ const manifestSchema = z.object({
 });
 type Manifest = z.infer<typeof manifestSchema>;
 const preparationErrorSchema = z.object({ error: z.string() });
-const CAPACITY_MESSAGE = 'The media proxy queue is busy. Waiting for capacity.';
+const WAITING_FOR_CAPACITY = {
+  preparationPhase: 'waiting-for-capacity',
+  message: 'The media proxy queue is busy. Waiting for capacity.',
+} as const;
 
 interface Preview {
   id: string;
@@ -508,7 +511,7 @@ export class MediaPreviewService {
   #view(
     preview: Preview,
     state: MediaPlaybackPreview['state'],
-    message?: string,
+    details: Pick<MediaPlaybackPreview, 'preparationPhase' | 'message'> = {},
   ): MediaPlaybackPreview {
     const { manifest, target } = preview;
     if (manifest === null) return { state: 'unavailable' };
@@ -531,7 +534,7 @@ export class MediaPreviewService {
       posterUrl: url('poster'),
       engine: target.engine,
       host: target.host,
-      ...(message === undefined ? {} : { message }),
+      ...details,
     };
   }
 
@@ -578,7 +581,7 @@ export class MediaPreviewService {
       if (preview.tryLocalOriginal) return this.#view(preview, 'ready');
       if (manifest.browserMode === 'proxy' && manifest.proxy.state === 'notPrepared' && prepare) {
         if (this.#now() < preview.proxyRetryAt)
-          return this.#view(preview, 'preparing', CAPACITY_MESSAGE);
+          return this.#view(preview, 'preparing', WAITING_FOR_CAPACITY);
         const prepared = await fetch(new URL(manifest.prepareUrl, target.origin), {
           method: 'POST',
           headers: { authorization: `Bearer ${target.bearer}`, 'content-type': 'application/json' },
@@ -605,11 +608,9 @@ export class MediaPreviewService {
           preview.target = current;
           const result = await this.#readManifest(preview, false);
           if (result.state === 'preparing' && preview.manifest?.proxy.state === 'notPrepared') {
-            return this.#view(
-              preview,
-              'error',
-              'The source server could not confirm proxy preparation.',
-            );
+            return this.#view(preview, 'error', {
+              message: 'The source server could not confirm proxy preparation.',
+            });
           }
           return result;
         }
@@ -617,21 +618,23 @@ export class MediaPreviewService {
         // then retries the same authenticated item only when the server's cooldown has passed.
         if (busy) {
           preview.proxyRetryAt = proxyRetryAt(prepared, this.#now());
-          return this.#view(preview, 'preparing', CAPACITY_MESSAGE);
+          return this.#view(preview, 'preparing', WAITING_FOR_CAPACITY);
         }
         if (!accepted) {
           const message =
             prepared.status === 401 || prepared.status === 403
               ? 'The source server refused access to prepare this media preview.'
               : preparationFailure(refusal?.success ? refusal.data.error : undefined);
-          return this.#view(preview, 'error', message);
+          return this.#view(preview, 'error', { message });
         }
         manifest.proxy.state = 'preparing';
       }
       const ready = manifest.browserMode === 'direct' || manifest.proxy.state === 'ready';
       if (ready) return this.#view(preview, 'ready');
       if (manifest.proxy.state === 'error')
-        return this.#view(preview, 'error', preparationFailure(manifest.proxy.error));
+        return this.#view(preview, 'error', { message: preparationFailure(manifest.proxy.error) });
+      if (manifest.proxy.state === 'preparing')
+        return this.#view(preview, 'preparing', { preparationPhase: 'encoding' });
       return this.#view(preview, 'preparing');
     } catch {
       this.#close(preview);
