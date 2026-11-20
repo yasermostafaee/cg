@@ -5524,11 +5524,18 @@ input[type='checkbox']:disabled:checked {
   overflow-wrap: anywhere;
 }
 
+.cg-rail-foot__release {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--r-space-1) var(--r-space-2);
+  margin-top: var(--r-space-2);
+}
+
 .cg-rail-foot__version {
   display: flex;
   align-items: baseline;
   gap: var(--r-space-2);
-  margin-top: var(--r-space-2);
   color: var(--r-text-secondary);
   font-size: var(--r-text-sm);
 }
@@ -5536,6 +5543,12 @@ input[type='checkbox']:disabled:checked {
 .cg-rail-foot__version strong {
   color: var(--r-text);
   font: var(--r-weight-semibold) var(--r-text-md) var(--r-font-mono);
+}
+
+.cg-rail-foot__build {
+  color: var(--r-text-muted);
+  font: var(--r-text-xs) var(--r-font-mono);
+  white-space: nowrap;
 }
 
 /* The rail's two washes, in this frame's own family (the mint — see the token home's A4 note). */

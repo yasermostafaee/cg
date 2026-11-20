@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { LoaderCircle, Maximize2, Pause, Play, Square, Volume2, VolumeX, X } from 'lucide-react';
@@ -45,6 +46,16 @@ interface PreviewRequest {
   startedAt: number | null;
 }
 
+interface PreviewTransport {
+  positionMs: number;
+  durationMs: number;
+  seekEndMs: number;
+  seekDisabled?: boolean;
+  onSeek: (positionMs: number) => void;
+  controls: ReactNode;
+  message?: string;
+}
+
 function MediaPreviewSurface({
   name,
   description,
@@ -52,7 +63,7 @@ function MediaPreviewSurface({
   file,
   picture,
   loading,
-  children,
+  transport,
 }: {
   name: string;
   description: string;
@@ -60,7 +71,7 @@ function MediaPreviewSurface({
   file?: boolean;
   picture: ReactNode;
   loading: string | undefined;
-  children: ReactNode;
+  transport?: PreviewTransport | undefined;
 }): JSX.Element {
   const surface = useRef<HTMLElement>(null);
   const fullscreenButton = useRef<HTMLButtonElement>(null);
@@ -94,6 +105,27 @@ function MediaPreviewSurface({
   }, []);
 
   const fullscreenLabel = expanded ? 'Close fullscreen preview' : 'Fullscreen preview';
+  const fullscreenToggle = document.fullscreenEnabled && (
+    <Button
+      ref={fullscreenButton}
+      variant="icon"
+      className="cg-source-media-preview__fullscreen"
+      title={fullscreenLabel}
+      aria-label={fullscreenLabel}
+      onClick={() => {
+        const element = surface.current;
+        if (element === null) return;
+        setFullscreenError(false);
+        const request =
+          document.fullscreenElement === element
+            ? document.exitFullscreen()
+            : element.requestFullscreen();
+        void request.catch(() => setFullscreenError(true));
+      }}
+    >
+      <Icon icon={expanded ? X : Maximize2} size={16} />
+    </Button>
+  );
   return (
     <section
       ref={surface}
@@ -115,35 +147,60 @@ function MediaPreviewSurface({
             {loading}
           </span>
         )}
-        {document.fullscreenEnabled && (
-          <Button
-            ref={fullscreenButton}
-            variant="icon"
-            className="cg-source-media-preview__fullscreen"
-            title={fullscreenLabel}
-            aria-label={fullscreenLabel}
-            onClick={() => {
-              const element = surface.current;
-              if (element === null) return;
-              setFullscreenError(false);
-              const request =
-                document.fullscreenElement === element
-                  ? document.exitFullscreen()
-                  : element.requestFullscreen();
-              void request.catch(() => setFullscreenError(true));
-            }}
-          >
-            <Icon icon={expanded ? X : Maximize2} size={18} />
-          </Button>
-        )}
+        {transport === undefined && fullscreenToggle}
         {fullscreenError && (
           <span className="cg-source-media-preview__fullscreen-error" role="status">
             Fullscreen is unavailable.
           </span>
         )}
       </div>
-      {children}
+      {transport !== undefined && (
+        <MediaPreviewTransport {...transport} fullscreenToggle={fullscreenToggle} />
+      )}
     </section>
+  );
+}
+
+function MediaPreviewTransport({
+  positionMs,
+  durationMs,
+  seekEndMs,
+  seekDisabled,
+  onSeek,
+  controls,
+  message,
+  fullscreenToggle,
+}: PreviewTransport & { fullscreenToggle: ReactNode }): JSX.Element {
+  const elapsed = formatMediaDuration(Math.floor(positionMs / 1_000) * 1_000);
+  const total = durationMs > 0 ? formatMediaDuration(durationMs) : '–:––';
+  const played = seekEndMs > 0 ? Math.min(100, Math.max(0, (positionMs / seekEndMs) * 100)) : 0;
+  return (
+    <div className="cg-source-media-preview__transport" dir="ltr">
+      <RangeInput
+        className="cg-source-media-preview__seek"
+        style={{ '--preview-played': `${played}%` } as CSSProperties}
+        aria-label="Preview position"
+        aria-valuetext={elapsed}
+        min={0}
+        max={Math.max(0, seekEndMs)}
+        step={1}
+        value={positionMs}
+        disabled={seekDisabled}
+        onChange={(event) => onSeek(event.currentTarget.valueAsNumber)}
+      />
+      <div className="cg-source-media-preview__toolbar">
+        <div className="cg-source-media-preview__controls">{controls}</div>
+        <span className="cg-source-media-preview__time">
+          <span>{elapsed}</span> <span>/ {total}</span>
+        </span>
+        {fullscreenToggle}
+      </div>
+      {message && (
+        <span className="cg-source-media-preview__status" role="status">
+          {message}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -714,76 +771,64 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           )}
         </>
       }
-    >
-      <div className="cg-source-media-preview__transport">
-        <div className="cg-source-media-preview__controls">
-          <Button
-            ref={playbackButton}
-            variant="icon"
-            className="cg-source-media-preview__play"
-            title={intent === 'playing' ? 'Pause preview' : 'Play preview'}
-            aria-label={intent === 'playing' ? 'Pause preview' : 'Play preview'}
-            disabled={!foreground}
-            onClick={setPlayback}
-          >
-            <Icon icon={intent === 'playing' ? Pause : Play} size={19} />
-          </Button>
-          <Button
-            variant="icon"
-            title="Stop preview"
-            aria-label="Stop preview"
-            onClick={stop}
-            disabled={intent === 'stopped'}
-          >
-            <Icon icon={Square} size={14} />
-          </Button>
-          <Button
-            variant="icon"
-            title={muted ? 'Listen to preview' : 'Mute preview'}
-            aria-label={muted ? 'Listen to preview' : 'Mute preview'}
-            aria-pressed={!muted}
-            disabled={!foreground}
-            onClick={() => setMuted((value) => !value)}
-          >
-            <Icon icon={muted ? VolumeX : Volume2} size={15} />
-          </Button>
-          <RangeInput
-            className="cg-source-media-preview__volume"
-            aria-label="Preview volume"
-            aria-valuetext={`${volume}%`}
-            title={`Preview volume · ${volume}%`}
-            min={0}
-            max={100}
-            step={1}
-            value={volume}
-            disabled={!foreground}
-            onChange={(event) => setVolume(event.currentTarget.valueAsNumber)}
-          />
-        </div>
-        <RangeInput
-          aria-label="Preview position"
-          aria-valuetext={formatMediaDuration(positionMs)}
-          min={0}
-          max={Math.max(0, duration)}
-          step={1}
-          value={positionMs}
-          disabled={!foreground || duration <= 0}
-          onChange={(event) => {
-            position.current = event.currentTarget.valueAsNumber;
-            setPositionMs(position.current);
-            if (video.current !== null) video.current.currentTime = position.current / 1_000;
-          }}
-        />
-        <span className="cg-source-media-preview__time">
-          {formatMediaDuration(positionMs)} / {formatMediaDuration(duration)}
-        </span>
-        {!loading && (
-          <span className="cg-source-media-preview__status" role="status">
-            {message}
-          </span>
-        )}
-      </div>
-    </MediaPreviewSurface>
+      transport={{
+        positionMs,
+        durationMs: duration,
+        seekEndMs: duration,
+        seekDisabled: !foreground || duration <= 0,
+        onSeek: (nextPosition) => {
+          position.current = nextPosition;
+          setPositionMs(nextPosition);
+          if (video.current !== null) video.current.currentTime = nextPosition / 1_000;
+        },
+        ...(!loading && { message }),
+        controls: (
+          <>
+            <Button
+              ref={playbackButton}
+              variant="icon"
+              title={intent === 'playing' ? 'Pause preview' : 'Play preview'}
+              aria-label={intent === 'playing' ? 'Pause preview' : 'Play preview'}
+              disabled={!foreground}
+              onClick={setPlayback}
+            >
+              <Icon icon={intent === 'playing' ? Pause : Play} size={16} />
+            </Button>
+            <Button
+              variant="icon"
+              title="Stop preview"
+              aria-label="Stop preview"
+              onClick={stop}
+              disabled={intent === 'stopped'}
+            >
+              <Icon icon={Square} size={16} />
+            </Button>
+            <Button
+              variant="icon"
+              title={muted ? 'Listen to preview' : 'Mute preview'}
+              aria-label={muted ? 'Listen to preview' : 'Mute preview'}
+              aria-pressed={!muted}
+              disabled={!foreground}
+              onClick={() => setMuted((value) => !value)}
+            >
+              <Icon icon={muted ? VolumeX : Volume2} size={16} />
+            </Button>
+            <RangeInput
+              className="cg-source-media-preview__volume"
+              aria-label="Preview volume"
+              aria-valuetext={`${volume}%`}
+              title={`Preview volume · ${volume}%`}
+              min={0}
+              max={100}
+              step={1}
+              value={volume}
+              disabled={!foreground}
+              onChange={(event) => setVolume(event.currentTarget.valueAsNumber)}
+            />
+          </>
+        ),
+      }}
+    />
   );
 }
 
@@ -952,53 +997,43 @@ function SampledSourceMediaPreview({
           />
         )
       }
-    >
-      {enabled && (
-        <div className="cg-source-media-preview__transport">
-          <div className="cg-source-media-preview__controls">
-            <Button
-              ref={playbackButton}
-              variant="icon"
-              className="cg-source-media-preview__play"
-              title={playing ? 'Pause preview' : 'Play preview'}
-              aria-label={playing ? 'Pause preview' : 'Play preview'}
-              onClick={() =>
-                playing
-                  ? start(positionMs, false)
-                  : start(positionMs === end ? 0 : positionMs, true)
-              }
-            >
-              <Icon icon={playing ? Pause : Play} size={19} />
-            </Button>
-            <Button
-              variant="icon"
-              title="Stop preview"
-              aria-label="Stop preview"
-              onClick={stop}
-              disabled={status === 'idle'}
-            >
-              <Icon icon={Square} size={14} />
-            </Button>
-          </div>
-          <RangeInput
-            aria-label="Preview position"
-            aria-valuetext={formatMediaDuration(positionMs)}
-            min={0}
-            max={end}
-            step={1}
-            value={positionMs}
-            onChange={(event) => start(event.currentTarget.valueAsNumber, playing)}
-          />
-          <span className="cg-source-media-preview__time">
-            {formatMediaDuration(positionMs)} / {formatMediaDuration(end + 1)}
-          </span>
-          {status === 'unavailable' && (
-            <span className="cg-source-media-preview__status" role="status">
-              Preview unavailable
-            </span>
-          )}
-        </div>
-      )}
-    </MediaPreviewSurface>
+      transport={
+        enabled
+          ? {
+              positionMs,
+              durationMs: end + 1,
+              seekEndMs: end,
+              onSeek: (nextPosition) => start(nextPosition, playing),
+              ...(status === 'unavailable' && { message: 'Preview unavailable' }),
+              controls: (
+                <>
+                  <Button
+                    ref={playbackButton}
+                    variant="icon"
+                    title={playing ? 'Pause preview' : 'Play preview'}
+                    aria-label={playing ? 'Pause preview' : 'Play preview'}
+                    onClick={() =>
+                      playing
+                        ? start(positionMs, false)
+                        : start(positionMs === end ? 0 : positionMs, true)
+                    }
+                  >
+                    <Icon icon={playing ? Pause : Play} size={16} />
+                  </Button>
+                  <Button
+                    variant="icon"
+                    title="Stop preview"
+                    aria-label="Stop preview"
+                    onClick={stop}
+                    disabled={status === 'idle'}
+                  >
+                    <Icon icon={Square} size={16} />
+                  </Button>
+                </>
+              ),
+            }
+          : undefined
+      }
+    />
   );
 }

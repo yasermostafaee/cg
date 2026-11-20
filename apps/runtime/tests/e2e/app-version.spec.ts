@@ -85,6 +85,17 @@ test('B1 — Station setup reads "Version <release>" at the foot of its rail, in
   await expect(line).toBeVisible();
   await expect(line).toHaveAttribute('title', new RegExp(`^${VERSION.replaceAll('.', '\\.')} · `));
 
+  const build = dialog.getByTestId('app-build');
+  const buildId = (await line.getAttribute('title'))?.split(' · ')[1];
+  if (buildId === 'nogit') {
+    await expect(build).toHaveCount(0);
+  } else {
+    await expect(build).toHaveText(`Build ${buildId}`);
+    await expect(build).toBeVisible();
+    const fontSize = (element: Element) => Number.parseFloat(getComputedStyle(element).fontSize);
+    expect(await build.evaluate(fontSize)).toBeLessThan(await line.evaluate(fontSize));
+  }
+
   // In the rail, below the station card, and wholly inside the dialog's frame.
   const [lineBox, cardBox, railBox, dialogBox] = await Promise.all([
     line.boundingBox(),

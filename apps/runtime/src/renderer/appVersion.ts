@@ -10,5 +10,8 @@
  */
 export const APP_VERSION: string = __CG_BUILD__.version;
 
+/** The short revision for Station setup, when the build has repository metadata. */
+export const APP_BUILD_ID = __CG_BUILD__.sha === 'nogit' ? undefined : __CG_BUILD__.sha;
+
 /** The exact build behind the version, for the line's `title`: `0.9.0 · 5f3c2a1 · 2026-09-29`. */
 export const APP_BUILD = `${__CG_BUILD__.version} · ${__CG_BUILD__.sha} · ${__CG_BUILD__.builtAt}`;

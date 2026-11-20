@@ -46,6 +46,21 @@ const onAir = (id: string): StackItemState =>
   }) as unknown as StackItemState;
 
 describe('§2 — the rail: nothing is hidden, and no refusal stands in front of another section', () => {
+  it('names the console release and its build in the Station setup rail', async () => {
+    stationSetupStub();
+    const dialog = await renderStationSetup({ section: 'channel' });
+    const rail = dialog.querySelector('[data-setup-rail]');
+    expect(rail?.querySelector('[data-testid="app-version"]')?.textContent).toBe(
+      `Version ${__CG_BUILD__.version}`,
+    );
+    const build = rail?.querySelector('[data-testid="app-build"]');
+    if (__CG_BUILD__.sha === 'nogit') {
+      expect(build).toBeNull();
+    } else {
+      expect(build?.textContent?.trim()).toBe(`Build ${__CG_BUILD__.sha}`);
+    }
+  });
+
   it('the rail lists every section, in the owner’s order, under its group', async () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'channel' });

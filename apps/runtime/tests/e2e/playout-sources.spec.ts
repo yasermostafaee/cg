@@ -951,7 +951,12 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   await expect(inline.getByRole('button', { name: 'Pause preview' })).toBeVisible();
   await expect(inline.locator('img')).toBeVisible();
   await inline.getByRole('button', { name: 'Pause preview' }).click();
-  await inline.getByRole('slider', { name: 'Preview position' }).press('End');
+  const inlineSeek = inline.getByRole('slider', { name: 'Preview position' });
+  await inlineSeek.press('End');
+  await expect(inlineSeek).toHaveCSS('--preview-played', '100%');
+  const inlineTime = inline.locator('.cg-source-media-preview__time');
+  await expect(inlineTime).toBeVisible();
+  await expect(inlineTime).toHaveText(/^0:4[12]\s*\/\s*0:42$/);
   await expect(inline.getByRole('button', { name: 'Play preview' })).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'Select', exact: true })).toBeDisabled();
   const choice = tile.locator('[data-picker-media]');
@@ -1625,6 +1630,28 @@ test('Media file preview decodes the original network Range stream on one Play',
     const preview = panel.locator('[data-media-file-preview]');
     const video = preview.locator('video');
     const poster = preview.locator('img');
+    const seek = preview.getByRole('slider', { name: 'Preview position' });
+    const time = preview.locator('.cg-source-media-preview__time');
+    const transport = preview.locator('.cg-source-media-preview__transport');
+    await expect(time).toBeVisible();
+    await expect(time).toHaveText(/^0:00\s*\/\s*0:42$/);
+    await expect(seek).toHaveClass(/\bcg-source-media-preview__seek\b/);
+    await expect(seek).toHaveCSS('--preview-played', '0%');
+    await expect(seek).toHaveCSS('--preview-played-ink', '#ff514d');
+    await expect(seek).toHaveCSS('--preview-track-height', '3px');
+    const buttons = await transport.getByRole('button').evaluateAll((elements) =>
+      elements.map((element) => {
+        const { width, height } = element.getBoundingClientRect();
+        return { width, height };
+      }),
+    );
+    expect(buttons).toHaveLength(4);
+    for (const { width, height } of buttons) {
+      expect(width).toBeGreaterThanOrEqual(32);
+      expect(height).toBeGreaterThanOrEqual(32);
+      expect(width).toBeCloseTo(buttons[0]!.width);
+      expect(height).toBeCloseTo(buttons[0]!.height);
+    }
     await expect(preview.getByRole('status')).toHaveText('Loading preview…');
     await expect(preview.getByRole('status')).toBeVisible();
     await expect.poll(() => state().then((value) => value.sessions.length)).toBe(1);
@@ -1652,8 +1679,10 @@ test('Media file preview decodes the original network Range stream on one Play',
     const beforeFullscreenTime = await video.evaluate(
       (element) => (element as HTMLVideoElement).currentTime,
     );
-    await preview.getByRole('button', { name: 'Fullscreen preview', exact: true }).click();
+    await transport.getByRole('button', { name: 'Fullscreen preview', exact: true }).click();
     await expect(preview.locator('video')).toBeVisible();
+    await expect(time).toBeVisible();
+    await expect(time).toHaveText(/^0:\d{2}\s*\/\s*0:10$/);
     await expect
       .poll(() => preview.evaluate((element) => document.fullscreenElement === element))
       .toBe(true);
@@ -1697,9 +1726,9 @@ test('Media file preview decodes the original network Range stream on one Play',
     await volume.press('ArrowRight');
     await expect(volume).toHaveAttribute('aria-valuetext', '1%');
     await expect(video).toHaveJSProperty('volume', 0.01);
-    const seek = preview.getByRole('slider', { name: 'Preview position' });
     const bounds = await seek.boundingBox();
     if (bounds === null) throw new Error('the file preview must expose a seek bar');
+    expect(bounds.height).toBeGreaterThanOrEqual(20);
     const y = bounds.y + bounds.height / 2;
     await page.mouse.move(bounds.x + bounds.width / 4, y);
     await page.mouse.down();
@@ -1709,9 +1738,19 @@ test('Media file preview decodes the original network Range stream on one Play',
     await expect
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
       .toBeGreaterThan(duration / 2);
+    await expect(time).toHaveText(/^0:0[6-8]\s*\/\s*0:10$/);
+    await expect
+      .poll(() =>
+        seek.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).getPropertyValue('--preview-played')),
+        ),
+      )
+      .toBeGreaterThan(50);
     const readsBeforeStop = posterReads;
     await preview.getByRole('button', { name: 'Stop preview' }).click();
     await expect(seek).toHaveValue('0');
+    await expect(seek).toHaveCSS('--preview-played', '0%');
+    await expect(time).toHaveText(/^0:00\s*\/\s*0:10$/);
     await expect(poster).toBeVisible();
     expect(posterReads).toBe(readsBeforeStop);
     expect((await state()).closes).toHaveLength(1);

@@ -50,6 +50,10 @@
         {
           "fa": "در Choose a source میزان صدای پیش‌نمایش ویدئو را در خود کارت یا حالت تمام‌صفحه تنظیم کنید. نشان تیکِ گزینهٔ انتخاب‌شده در Grid و List واضح‌تر است.",
           "en": "Adjust video preview volume in the card or in fullscreen. The selected item in Choose a source has a clearer checkmark in Grid and List."
+        },
+        {
+          "fa": "پلیر مدیا در کارت، لیست و تمام‌صفحه نوار زمان قرمز باریک، زمان سپری‌شده و مدت کل، و دکمه‌های هم‌اندازه دارد. شناسهٔ کوتاه Build کنار شمارهٔ نسخه در Station setup دیده می‌شود.",
+          "en": "The media player in Grid, List and fullscreen has a thin red seek bar, elapsed and total time, and matching buttons. Station setup shows the short Build ID beside the release version."
         }
       ],
       "fixes": [

@@ -49,7 +49,7 @@ import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldVal
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
-import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
+import { APP_BUILD, APP_BUILD_ID, APP_VERSION } from '../../appVersion.js';
 import historyUrl from '../../../../../../docs/release/index.html?url';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import {
@@ -1447,6 +1447,7 @@ export function StationSetupDialog({
               version={{
                 release: APP_VERSION,
                 build: APP_BUILD,
+                buildId: APP_BUILD_ID,
                 onOpenHistory: () => setHistoryOpen(true),
               }}
             />

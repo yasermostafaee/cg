@@ -373,14 +373,12 @@ export function RailStationCard({
   label: string;
   name: string;
   host: string | null;
-  /**
-   * 🔴 `CLIENT-TEST-RELEASE-01` B1 — the app's release version, in one line under the station, and
-   * the exact build (`0.9.0 · 5f3c2a1 · 2026-09-29`) in its `title`. A fact, so a `Tag`.
-   */
+  /** The console release and its build, shown together under the station. */
   version?:
     | {
         readonly release: string;
         readonly build: string;
+        readonly buildId?: string | undefined;
         readonly onOpenHistory?: () => void;
       }
     | undefined;
@@ -401,9 +399,16 @@ export function RailStationCard({
         </span>
       </div>
       {version !== undefined && (
-        <Tag className="cg-rail-foot__version" title={version.build} data-testid="app-version">
-          <span>Version</span> <strong>{version.release}</strong>
-        </Tag>
+        <div className="cg-rail-foot__release">
+          <Tag className="cg-rail-foot__version" title={version.build} data-testid="app-version">
+            <span>Version</span> <strong>{version.release}</strong>
+          </Tag>
+          {version.buildId !== undefined && (
+            <bdi className="cg-rail-foot__build" dir="ltr" data-testid="app-build">
+              Build {version.buildId}
+            </bdi>
+          )}
+        </div>
       )}
       {version?.onOpenHistory !== undefined && (
         <Button variant="neutral" className="cg-rail-foot__history" onClick={version.onOpenHistory}>

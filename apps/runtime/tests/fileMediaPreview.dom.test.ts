@@ -976,9 +976,12 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
       video.currentTime = 2.5;
       video.dispatchEvent(new Event('timeupdate'));
     });
-    expect(
-      view.host.querySelector<HTMLInputElement>('[aria-label="Preview position"]')?.value,
-    ).toBe('2500');
+    const seek = view.host.querySelector<HTMLInputElement>('[aria-label="Preview position"]');
+    const time = view.host.querySelector('.cg-source-media-preview__time');
+    expect(seek?.value).toBe('2500');
+    expect(seek?.getAttribute('aria-valuetext')).toBe('0:02');
+    expect(seek?.style.getPropertyValue('--preview-played')).toBe('25%');
+    expect(time?.textContent).toBe('0:02 / 0:10');
     await act(async () => view.button('Listen to preview').click());
     expect(video.muted).toBe(false);
     await act(async () => view.button('Pause preview').click());
@@ -987,6 +990,8 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
     expect(view.mediaClose).toHaveBeenCalledTimes(1);
     expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
     expect(video.currentTime).toBe(0);
+    expect(seek?.style.getPropertyValue('--preview-played')).toBe('0%');
+    expect(time?.textContent).toBe('0:00 / 0:10');
     expect(video.hidden).toBe(true);
     expect(view.host.querySelector('.cg-source-media-preview__picture img')).toBe(poster);
     expect((poster as HTMLImageElement).hidden).toBe(false);
