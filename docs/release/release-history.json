@@ -54,6 +54,10 @@
         {
           "fa": "پلیر مدیا در کارت، لیست و تمام‌صفحه نوار زمان قرمز باریک، زمان سپری‌شده و مدت کل، و دکمه‌های هم‌اندازه دارد. شناسهٔ کوتاه Build کنار شمارهٔ نسخه در Station setup دیده می‌شود.",
           "en": "The media player in Grid, List and fullscreen has a thin red seek bar, elapsed and total time, and matching buttons. Station setup shows the short Build ID beside the release version."
+        },
+        {
+          "fa": "در Connection، میزبان و پورت گرافیکِ مدیریت‌شده توسط CG Bridge با مقدار واقعی و به‌صورت فقط‌خواندنی نمایش داده می‌شوند.",
+          "en": "In Connection, the graphics host and port managed by CG Bridge show their active values as read-only fields."
         }
       ],
       "fixes": [

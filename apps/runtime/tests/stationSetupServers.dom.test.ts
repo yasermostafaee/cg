@@ -443,39 +443,67 @@ describe('Station setup — Servers (R-010)', () => {
     expect('templateServePort' in payload).toBe(false);
   });
 
-  it('C-024: a flag in force is NAMED on the field it masks, the stored value is struck through, and the input stays EDITABLE', async () => {
-    stub({
+  it('shows the effective Bridge-managed graphics address and preserves the saved address when applying', async () => {
+    const { setConfig } = stub({
       serveInfo: {
         ...SETUP_SERVE_INFO,
         serveHost: '10.0.0.7',
-        flagOverrides: { serveHost: '10.0.0.7' },
+        port: 7911,
+        flagOverrides: { serveHost: '10.0.0.7', port: 0 },
+        candidates: ['192.168.21.10'],
       },
-      config: { ...SETUP_CONFIG, templateServeHost: '192.168.21.93' },
+      config: { ...SETUP_CONFIG, templateServeHost: '192.168.21.93', templateServePort: 9011 },
     });
     const el = await renderStationSetup({ section: 'servers' });
-    const masked = el.querySelector('[data-testid="serve-host-masked"]');
-    expect(masked).not.toBeNull();
-    expect(masked?.textContent).toContain('10.0.0.7');
-    expect(masked?.textContent).toContain('--template-serve-host');
-    expect(masked?.textContent).toContain('not in force');
-    // The STORED value is the one struck through — never the one in force.
-    const struck = el.querySelector<HTMLElement>(
-      '[data-testid="serve-host-masked"] span:nth-child(3)',
+    expect(
+      el.querySelector('[data-setup-field="serve-host"] [data-setup-readonly]')?.textContent,
+    ).toBe('10.0.0.7');
+    expect(
+      el.querySelector('[data-setup-field="serve-port"] [data-setup-readonly]')?.textContent,
+    ).toBe('7911');
+    const advanced = el.querySelector('[data-setup-advanced]');
+    expect(advanced?.querySelector('[aria-label="Graphics host"]')).toBeNull();
+    expect(advanced?.querySelector('[aria-label="Graphics port"]')).toBeNull();
+    expect(advanced?.querySelector('[data-serve-candidates]')).toBeNull();
+    expect(advanced?.textContent).not.toMatch(
+      /--template-serve|ephemeral|not in force|overridden|192\.168\.21\.93|9011/,
     );
-    expect(struck?.textContent).toBe('192.168.21.93');
-    expect(struck?.style.textDecoration).toContain('line-through');
+    expect(applyButton(el).disabled).toBe(true);
 
-    const input = el.querySelector<HTMLInputElement>('input[aria-label="Graphics host"]');
-    expect(input).not.toBeNull();
-    expect(input?.disabled).toBe(false);
-    expect(input?.value).toBe('192.168.21.93');
+    await setSetupInput(el, 'Primary host', '192.0.2.11');
+    await act(async () => applyButton(el).click());
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateServeHost: '192.168.21.93',
+        templateServePort: 9011,
+      }),
+    );
   });
 
-  it('C-024: with NO flag set, nothing is masked — a derived host is not an override', async () => {
+  it('shows a Bridge-managed port without locking the independently editable graphics host', async () => {
+    stub({
+      serveInfo: {
+        ...SETUP_SERVE_INFO,
+        port: 7911,
+        flagOverrides: { port: 7911 },
+      },
+    });
+    const el = await renderStationSetup({ section: 'servers' });
+    expect(
+      el.querySelector('[data-setup-field="serve-port"] [data-setup-readonly]')?.textContent,
+    ).toBe('7911');
+    await setSetupInput(el, 'Graphics host', '192.0.2.10');
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Graphics host"]')?.value).toBe(
+      '192.0.2.10',
+    );
+    expect(applyButton(el).disabled).toBe(false);
+  });
+
+  it('C-024: without Bridge management, a derived host and automatic port stay editable', async () => {
     stub({ serveInfo: { ...SETUP_SERVE_INFO, serveHost: '127.0.0.1' } });
     const el = await renderStationSetup({ section: 'servers' });
-    expect(el.querySelector('[data-testid="serve-host-masked"]')).toBeNull();
-    expect(el.querySelector('[data-testid="serve-port-masked"]')).toBeNull();
+    expect(el.querySelector('[data-setup-field="serve-host"] input')).not.toBeNull();
+    expect(el.querySelector('[data-setup-field="serve-port"] input')).not.toBeNull();
   });
 
   it('C-024: candidates are offered as CANDIDATES, and picking one fills the field', async () => {

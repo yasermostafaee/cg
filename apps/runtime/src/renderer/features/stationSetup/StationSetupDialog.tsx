@@ -41,7 +41,7 @@ import { useProgramMonitorPreferences } from '../monitors/useProgramMonitorPrefe
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
 import { isOnAirStatus } from '@cg/shared-schema';
-import { STATION_SETUP_PX, colors, cssVars } from '../../theme.js';
+import { STATION_SETUP_PX, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -235,24 +235,6 @@ const styles = {
    * reference's `.field` replaces. Leaving them would leave a second way to spell a labelled
    * control in the one file that just stopped having one.
    */
-  /*
-    `C-024` — THE MASKING TREATMENT, AND WHY IT IS NOT GREY.
-
-    Grey is this app's DISABLED signal. Spending it here would say "you cannot change this",
-    which is false: the stored value is exactly what takes over at the next boot without the
-    flag, so it must stay editable and legible. A strike-through says "NOT IN FORCE RIGHT NOW"
-    while keeping the text readable.
-  */
-  maskedNote: {
-    fontSize: '0.78rem',
-    color: colors.textMuted,
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '0.35rem',
-    alignItems: 'baseline',
-  },
-  maskedStored: { textDecoration: 'line-through' },
-  inForce: { color: colors.text, fontWeight: 700 },
 } as const;
 
 interface EndpointDraft {
@@ -919,6 +901,20 @@ export function StationSetupDialog({
       ? requestedRestoreSeconds
       : savedRestoreSeconds;
 
+  const managedGraphicsHost =
+    serveInfo?.flagOverrides?.serveHost === undefined ? undefined : serveInfo.serveHost;
+  const managedGraphicsPort =
+    serveInfo?.flagOverrides?.port === undefined
+      ? undefined
+      : serveInfo.port === 0
+        ? 'Automatic'
+        : String(serveInfo.port);
+  // Keep the saved values when applying other settings while Bridge manages these fields.
+  const configuredGraphicsHost =
+    managedGraphicsHost === undefined ? serveHost : (loaded?.templateServeHost ?? '');
+  const configuredGraphicsPort =
+    managedGraphicsPort === undefined ? servePort : (loaded?.templateServePort?.toString() ?? '');
+
   const validated = useMemo((): ConnectionConfig | string => {
     const a = parseEndpoint(primary, PRIMARY_DEFAULTS);
     if (typeof a === 'string') return `Primary: ${a}`;
@@ -939,9 +935,9 @@ export function StationSetupDialog({
       had the identical split the primary one did. Blank is legal here and means "derive it".
     */
     // `SERVERS-SIMPLIFY-01` (T3) — the field's own words: its `Host` and `Port`, as the field's error says them.
-    const serveProblem = hostError(serveHost, { label: 'Host', blankAllowed: true });
+    const serveProblem = hostError(configuredGraphicsHost, { label: 'Host', blankAllowed: true });
     if (serveProblem !== null) return serveProblem;
-    const port = servePort.trim();
+    const port = configuredGraphicsPort.trim();
     const portProblem = portError(port, { min: 0, label: 'Port', blankAllowed: true });
     if (portProblem !== null) return portProblem;
     if (playoutStation && quickRestoreError !== null) return quickRestoreError;
@@ -951,7 +947,7 @@ export function StationSetupDialog({
       autoFailoverEnabled: directConnection
         ? autoFailover
         : (loaded?.autoFailoverEnabled ?? autoFailover),
-      templateServeHost: serveHost,
+      templateServeHost: configuredGraphicsHost,
       ...(port.length > 0 ? { templateServePort: Number(port) } : {}),
       ...(quickRestoreSeconds !== undefined && { quickRestoreSeconds }),
     };
@@ -961,8 +957,8 @@ export function StationSetupDialog({
     backup,
     strategy,
     autoFailover,
-    serveHost,
-    servePort,
+    configuredGraphicsHost,
+    configuredGraphicsPort,
     directConnection,
     loaded,
     playoutStation,
@@ -978,12 +974,6 @@ export function StationSetupDialog({
       : []),
   ];
 
-  /*
-    `C-024` — THE MASK COMES FROM THE BRIDGE, NEVER FROM COMPARING VALUES. Inferring "a flag
-    must be set" from `serveInfo.serveHost !== serveHost` fires on every fresh install.
-  */
-  const flagServeHost = serveInfo?.flagOverrides?.serveHost;
-  const flagServePort = serveInfo?.flagOverrides?.port;
   const serveCandidates = serveInfo?.candidates ?? [];
 
   /*
@@ -1003,7 +993,7 @@ export function StationSetupDialog({
         ]
       : [];
   const graphicsActions =
-    serveInfo?.elsewhere === true && holdsStationAdmin
+    serveInfo?.elsewhere === true && holdsStationAdmin && managedGraphicsHost === undefined
       ? {
           graphics: (
             <Button
@@ -1918,11 +1908,10 @@ export function StationSetupDialog({
                           (§10.3) — and why their placeholders say so. */}
                       <SetupField
                         label="Host"
-                        {...(holdsStationAdmin
-                          ? {}
-                          : {
-                              readOnlyValue: serveHost === '' ? 'derived automatically' : serveHost,
-                            })}
+                        readOnlyValue={
+                          managedGraphicsHost ??
+                          (holdsStationAdmin ? undefined : serveHost || 'derived automatically')
+                        }
                         id="serve-host"
                         error={hostError(serveHost, { label: 'Host', blankAllowed: true })}
                         {...(serveCandidates.length > 0
@@ -1968,12 +1957,10 @@ export function StationSetupDialog({
                       </SetupField>
                       <SetupField
                         label="Port"
-                        {...(holdsStationAdmin
-                          ? {}
-                          : {
-                              readOnlyValue:
-                                servePort === '' ? 'assigned automatically' : servePort,
-                            })}
+                        readOnlyValue={
+                          managedGraphicsPort ??
+                          (holdsStationAdmin ? undefined : servePort || 'assigned automatically')
+                        }
                         id="serve-port"
                         error={portError(servePort, { min: 0, label: 'Port', blankAllowed: true })}
                       >
@@ -1989,29 +1976,6 @@ export function StationSetupDialog({
                       </SetupField>
                     </div>
                   </section>
-                  {flagServeHost === undefined ? null : (
-                    <div style={styles.maskedNote} data-testid="serve-host-masked">
-                      <span style={styles.inForce}>In force: {flagServeHost}</span>
-                      <span>(set by --template-serve-host)</span>
-                      <span style={styles.maskedStored}>
-                        {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
-                      </span>
-                      <span>
-                        not in force — overridden by --template-serve-host. It takes over at the
-                        next start without the flag, so it stays editable.
-                      </span>
-                    </div>
-                  )}
-                  {flagServePort === undefined ? null : (
-                    <div style={styles.maskedNote} data-testid="serve-port-masked">
-                      <span style={styles.inForce}>In force: {String(flagServePort)}</span>
-                      <span>(set by --template-serve-port)</span>
-                      <span style={styles.maskedStored}>
-                        {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
-                      </span>
-                      <span>not in force — overridden by --template-serve-port.</span>
-                    </div>
-                  )}
 
                   {playoutStation && holdsStationAdmin && (
                     <section className="cg-station-fields__group" aria-label="Graphics recovery">
@@ -2154,14 +2118,19 @@ export function StationSetupDialog({
                             that is another machine is not fixed by any address of CG Bridge's — it is
                             cleared, and detected again. Never "this machine": the owner read it as his PC.
                           */
+                          const fixManagedHost =
+                            result.templateServe?.flagOverrides?.serveHost !== undefined ||
+                            managedGraphicsHost !== undefined;
                           setRefusal(
-                            result.templateServe?.elsewhere === true
-                              ? `Applied, but ${engineName} would fetch graphics from ${result.templateServe.serveHost}, ` +
+                            fixManagedHost
+                              ? `${unreachable.join(', ')} cannot fetch graphics. Check the graphics address in CG Bridge setup.`
+                              : result.templateServe?.elsewhere === true
+                                ? `Applied, but ${engineName} would fetch graphics from ${result.templateServe.serveHost}, ` +
                                   `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
                                   `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
                                   `still report success. Press Detect automatically, then Apply again — CG ` +
                                   `Bridge does not need restarting.`
-                              : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
+                                : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
                                   `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
                                   `background, no text — and their CG ADD will still report success. Set the ` +
                                   `graphics Host under Advanced to CG Bridge's address as those servers see it, ` +
