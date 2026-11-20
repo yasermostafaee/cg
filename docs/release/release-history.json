@@ -66,9 +66,25 @@
         {
           "fa": "در CG Control ویندوز، تصویر و شنیدن صدای ورودی NDI در PVW و پنجرهٔ انتخاب مستقیماً از فرستنده دریافت می‌شود. NDI Runtime رسمی ۶۴ بیتی باید روی رایانهٔ CG Control نصب باشد.",
           "en": "CG Control on Windows receives NDI picture and preview audio directly in PVW and the source chooser. Install the official 64-bit NDI Runtime on the CG Control workstation."
+        },
+        {
+          "fa": "در New live layout، انتخاب‌گرهای رنگ جمع‌وجورند و پنل پلیت‌ها در عرض کم بازچینی می‌شود. دکمه‌های Safe Area و VU Meter به‌صورت آیکون نمایش داده می‌شوند.",
+          "en": "New live layout has compact color pickers and reflows the plate panel at narrow widths. Safe Area and VU Meter use icon buttons."
+        },
+        {
+          "fa": "پس‌زمینهٔ طرح و تصویر fallback در دکمه‌های انتخاب فایل بندانگشتی دارند. پیش‌نمایش طرح ذخیره‌شده در Templates هم تصویر fallback پلیت را نشان می‌دهد.",
+          "en": "Layout backgrounds and fallback pictures have thumbnails in the file pickers. Saved layout previews in Templates also show the plate's fallback picture."
         }
       ],
       "fixes": [
+        {
+          "fa": "عرض کادر و مقادیر برش با انتخاب پلیت یا پریست از تنظیمات همان پلیت خوانده می‌شوند.",
+          "en": "Border width and crop controls read the selected plate and preset's values."
+        },
+        {
+          "fa": "در گذار پریست روی سرور رزرو، حرکت کادر و تصویر با یک موعد محلی زمان‌بندی می‌شود. در حرکت هندسی، تصویر fallback همراه پلیت باقی می‌ماند.",
+          "en": "During preset transitions on the reserve engine, border artwork and picture motion use a shared local deadline. Fallback pictures remain with the plate during geometry-only motion."
+        },
         {
           "fa": "با برگشت به مقدار فعلی ورودی یا مدیا در پنجرهٔ انتخاب، دکمهٔ Select دوباره غیرفعال می‌شود.",
           "en": "Returning to the bound input or media in the source chooser disables Select again."
