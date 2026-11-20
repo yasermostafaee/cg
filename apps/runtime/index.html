@@ -16,13 +16,9 @@
       fonts survived the intersection because they ARE listed — media was the only
       class omitted, which is exactly why only video was invisible.
 
-      `data:` is what the exporter inlines; `'self'` covers same-origin media. NO
-      `blob:` — unlike the Designer (which plays video off object URLs) nothing in
-      this app creates one, so admitting it would widen the policy past the need.
-      ⚠ PARITY WITH THE DESIGNER IS NOT A REASON TO ADD IT (owner's call, 2026-08-12):
-      two apps are allowed to have different policies because they have different
-      needs. If a future change genuinely needs `blob:` here, that change adds it —
-      with a test that proves the need.
+      `data:` is what the exporter inlines. `'self'` covers same-origin media.
+      The live layout editor uses `blob:` to validate and preview local video backgrounds.
+      The background upload and thumbnail are covered by `tests/e2e/control-live-layout.spec.ts`.
       Pinned by `tests/e2e/pvw-video.spec.ts` in a REAL browser: jsdom does not
       enforce CSP, so no unit test can observe this.
 
@@ -43,7 +39,7 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: blob: http: https:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
       P-001 — NO FONT COMES OFF THE NETWORK. The UI's Vazirmatn faces are the ones this app

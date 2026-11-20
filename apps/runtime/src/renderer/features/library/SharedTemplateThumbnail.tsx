@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { SharedTemplateThumbnail as TemplateThumbnail } from '@cg/shared-ipc';
 import type * as StaticScene from '@cg/template-runtime/static-scene';
+import type { LayoutPosterPreviewLoader } from './layoutPosterPreviewLoader.js';
 
 export type SharedTemplatePreview = TemplateThumbnail | null;
 
@@ -8,20 +9,33 @@ type ScenePreview = Extract<TemplateThumbnail, { kind: 'scene' }>;
 
 function renderStill(
   { scene, images, imageMimes }: ScenePreview,
-  { BASELINE_CSS, buildThumbnailScene }: typeof StaticScene,
-): string | undefined {
+  { BASELINE_CSS, buildThumbnailScene, visibleInStill }: typeof StaticScene,
+  collectMissing: boolean,
+  resizedPosters?: ReadonlyMap<string, string>,
+): { html: string; missingPosters: string[] } | undefined {
   try {
     const doc = document.implementation.createHTMLDocument('');
     const container = buildThumbnailScene(scene, doc);
     const pictures = new Map(Object.entries(images ?? {}));
     const mimes = new Map(Object.entries(imageMimes ?? {}));
+    const missingPosters = new Set<string>();
     for (const image of container.querySelectorAll('img')) {
       const assetId = image.dataset['cgAssetId'] ?? '';
       const bytes = pictures.get(assetId);
-      if (bytes === undefined) {
-        image.remove();
-      } else {
+      const resized = resizedPosters?.get(assetId);
+      if (resized !== undefined) {
+        image.src = resized;
+      } else if (bytes !== undefined) {
         image.src = `data:${mimes.get(assetId) ?? 'image/png'};base64,${bytes}`;
+      } else {
+        if (
+          collectMissing &&
+          assetId !== '' &&
+          image.closest('[data-cg-live-fallback]') !== null &&
+          visibleInStill(image, container)
+        )
+          missingPosters.add(assetId);
+        image.remove();
       }
     }
     for (const media of container.querySelectorAll('video, audio')) media.remove();
@@ -52,7 +66,10 @@ function renderStill(
     `;
     doc.head.replaceChildren(policy, style);
     doc.body.replaceChildren(svg);
-    return `<!doctype html>${doc.documentElement.outerHTML}`;
+    return {
+      html: `<!doctype html>${doc.documentElement.outerHTML}`,
+      missingPosters: [...missingPosters],
+    };
   } catch {
     return undefined;
   }
@@ -61,28 +78,38 @@ function renderStill(
 export function SharedTemplateThumbnail({
   preview,
   fallback,
+  layoutSourceSha,
+  loadLayoutPosters,
 }: {
   preview: SharedTemplatePreview;
   fallback: ReactNode;
+  layoutSourceSha?: string | undefined;
+  loadLayoutPosters?: LayoutPosterPreviewLoader | undefined;
 }): JSX.Element {
   const [still, setStill] = useState<{ preview: ScenePreview; html: string }>();
   const [failedImage, setFailedImage] = useState<string>();
   useEffect(() => {
     if (preview?.kind !== 'scene') return;
-    let active = true;
+    const controller = new AbortController();
+    const { signal } = controller;
     // The scene renderer initializes its browser canvas dependencies on import.
     void import('@cg/template-runtime/static-scene').then(
-      (runtime) => {
-        if (!active) return;
-        const html = renderStill(preview, runtime);
-        if (html !== undefined) setStill({ preview, html });
+      async (runtime) => {
+        if (signal.aborted) return;
+        const canRecover = layoutSourceSha !== undefined && loadLayoutPosters !== undefined;
+        const still = renderStill(preview, runtime, canRecover);
+        if (still === undefined) return;
+        setStill({ preview, html: still.html });
+        if (!canRecover || still.missingPosters.length === 0) return;
+        const posters = await loadLayoutPosters(layoutSourceSha, still.missingPosters, signal);
+        if (signal.aborted || posters.size === 0) return;
+        const recovered = renderStill(preview, runtime, false, posters);
+        if (recovered !== undefined) setStill({ preview, html: recovered.html });
       },
       () => undefined,
     );
-    return () => {
-      active = false;
-    };
-  }, [preview]);
+    return () => controller.abort();
+  }, [preview, layoutSourceSha, loadLayoutPosters]);
   if (preview?.kind === 'image' && preview.base64 !== failedImage) {
     return (
       <img

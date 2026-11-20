@@ -1,0 +1,16 @@
+.cg-live-layout-asset-thumbnail {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 1.25rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface);
+}
+
+.cg-live-layout-asset-thumbnail > :is(img, video) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

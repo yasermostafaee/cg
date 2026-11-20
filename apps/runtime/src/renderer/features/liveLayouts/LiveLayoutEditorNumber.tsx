@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { NumericInput } from '../../ui/NumericInput.js';
 
@@ -22,6 +22,7 @@ export function LiveLayoutEditorNumber({
   onChange: (value: number) => void;
 }): JSX.Element {
   const [typed, setTyped] = useState<string>();
+  const typing = useRef(false);
   return (
     <label>
       {label}
@@ -32,9 +33,16 @@ export function LiveLayoutEditorNumber({
         decimal={decimal}
         disabled={disabled}
         scrub={{ step, min, max }}
-        onBlur={() => setTyped(undefined)}
+        onFocus={() => {
+          typing.current = true;
+        }}
+        onBlur={() => {
+          typing.current = false;
+          setTyped(undefined);
+        }}
         onValueChange={(text) => {
-          setTyped(text);
+          // Dragging adjusts the saved value without focusing the field for text entry.
+          if (typing.current) setTyped(text);
           const number = parseLocalizedNumber(text);
           if (
             number !== null &&

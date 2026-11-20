@@ -98,6 +98,8 @@ test('New live layout safe guides fit its active picture and share only view pre
     const stage = editor.locator('[data-layout-preview]');
     const toggle = editor.getByRole('button', { name: 'Safe areas', exact: true });
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toHaveText('');
+    await expect(toggle.locator('svg')).toHaveCount(1);
     await expect(stage.locator('[data-safe-area-guides]')).toHaveCount(0);
     const baseline = engine.receivedCommands().length;
     await toggle.click();

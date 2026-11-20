@@ -44,6 +44,7 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { SharedTemplateFolder } from '../library/SharedTemplateFolder.js';
 import { TemplatePickerThumbnail } from '../library/TemplatePickerThumbnail.js';
+import { createLayoutPosterPreviewLoader } from '../library/layoutPosterPreviewLoader.js';
 import {
   createCatalogueThumbnailLoader,
   type ThumbnailLoader,
@@ -610,6 +611,7 @@ export function useTemplatePicker(
       return undefined;
     return createCatalogueThumbnailLoader(channel);
   }, [templateThumbnailsAvailable, channel, catalogue]);
+  const loadLayoutPosters = useMemo(createLayoutPosterPreviewLoader, [loadThumbnail]);
   const unassigned = useCallback(
     (template: TemplateInfo): string[] =>
       channel === undefined
@@ -1707,6 +1709,12 @@ export function useTemplatePicker(
                             kind={kindOf(selected)}
                             slot="detail"
                             load={loadThumbnail}
+                            layoutSourceSha={
+                              selected.controlLiveLayout === undefined
+                                ? undefined
+                                : selected.controlLiveLayoutSource
+                            }
+                            loadLayoutPosters={loadLayoutPosters}
                           />
                         )}
                         <dl className="cg-tpl-kv">

@@ -5,4 +5,5 @@ export { applyFieldValues, applyScopedFieldValues } from './bindings.js';
 export { BASELINE_CSS } from './css.js';
 export { buildScene } from './scene-builder.js';
 export { buildThumbnailScene, vcgThumbnailFrame } from './thumbnail-scene.js';
+export { renderVcgThumbnail, thumbnailImageStill, visibleInStill } from './vcg-thumbnail.js';
 export type { FieldScope } from './types.js';

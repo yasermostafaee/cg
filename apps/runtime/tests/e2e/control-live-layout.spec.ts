@@ -2,6 +2,7 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { SourceCatalog } from '@cg/shared-ipc';
@@ -167,6 +168,40 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await add.click();
     await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
     await editPlate(editor, 1);
+
+    const borderWidth = editor.getByLabel('Border width (px)', { exact: true });
+    const plateBorder = (plate: number) =>
+      editor.locator(`[data-frame-number="${plate}"] .cg-live-layout-shot-border`);
+    await expect(borderWidth).toHaveValue('0');
+    await borderWidth.scrollIntoViewIfNeeded();
+    const widthBox = (await borderWidth.boundingBox())!;
+    await page.mouse.move(widthBox.x + widthBox.width / 2, widthBox.y + widthBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(widthBox.x + widthBox.width / 2 + 15, widthBox.y + widthBox.height / 2);
+    await page.mouse.up();
+    await expect(borderWidth).toHaveValue('15');
+    await expect(plateBorder(1)).toBeVisible();
+    await editPlate(editor, 2);
+    await expect(borderWidth).toHaveValue('0');
+    await expect(plateBorder(2)).toHaveCount(0);
+    await borderWidth.fill('8');
+    await expect(plateBorder(2)).toBeVisible();
+    await editPlate(editor, 1);
+    await expect(borderWidth).toHaveValue('15');
+
+    const inputFit = editor.getByLabel('Plate input fit', { exact: true });
+    const cropX = editor.getByLabel('Crop X (%)', { exact: true });
+    await inputFit.selectOption('cover');
+    await cropX.fill('35');
+    await editPlate(editor, 2);
+    await expect(inputFit).toHaveValue('');
+    await inputFit.selectOption('cover');
+    await expect(cropX).toHaveValue('50');
+    await inputFit.selectOption('');
+    await editPlate(editor, 1);
+    await expect(cropX).toHaveValue('35');
+    await inputFit.selectOption('');
+
     await expect(onAir(editor)).not.toBeChecked();
     await expect(fallback(editor, 1)).toHaveCount(0);
     await background(editor).getByRole('button', { name: 'Bars', exact: true }).click();
@@ -174,6 +209,12 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await expect(fallback(editor, 1)).toHaveCSS('background-image', /linear-gradient/);
     await background(editor).getByRole('button', { name: 'Solid colour', exact: true }).click();
     await background(editor).getByLabel('Fallback colour').fill('#316A72');
+    const borderSwatch = (await editor.getByLabel('Border color', { exact: true }).boundingBox())!;
+    const fallbackSwatch = (await background(editor).getByLabel('Fallback colour').boundingBox())!;
+    expect(borderSwatch.width).toBeLessThanOrEqual(48);
+    expect(fallbackSwatch.width).toBeLessThanOrEqual(48);
+    const platePanel = editor.getByRole('complementary', { name: 'Plates', exact: true });
+    expect(await platePanel.evaluate((node) => node.scrollWidth - node.clientWidth)).toBe(0);
     await expect(onAir(editor)).toBeChecked();
     await onAir(editor).uncheck();
     await expect(fallback(editor, 1)).toHaveCSS('background-color', 'rgb(49, 106, 114)');
@@ -182,14 +223,19 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await expect(fallback(editor, 1).locator('clipPath rect')).toHaveAttribute('width', '0.5');
 
     await editPlate(editor, 2);
-    const poster = await page.evaluate(() => {
+    const { poster, backdrop } = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
-      canvas.width = 32;
-      canvas.height = 18;
+      canvas.width = 1280;
+      canvas.height = 1024;
       const context = canvas.getContext('2d')!;
       context.fillStyle = '#DC7010';
       context.fillRect(0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/png').split(',')[1]!;
+      const poster = canvas.toDataURL('image/png').split(',')[1]!;
+      canvas.width = 32;
+      canvas.height = 18;
+      context.fillStyle = '#182c49';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return { poster, backdrop: canvas.toDataURL('image/png').split(',')[1]! };
     });
     await background(editor)
       .getByLabel('Fallback image file')
@@ -198,17 +244,60 @@ test('per-plate fallback previews survive save and reopen with an independent on
         mimeType: 'image/png',
         buffer: Buffer.from(poster, 'base64'),
       });
-    await expect(background(editor).getByText('plate-poster.png', { exact: true })).toBeVisible();
+    const fallbackImageButton = (dialog: Locator) =>
+      background(dialog).getByRole('button', { name: 'Image…', exact: true });
+    const fallbackThumbnail = fallbackImageButton(editor).locator('img');
+    await expect(fallbackImageButton(editor)).toHaveAttribute('title', 'plate-poster.png');
+    await expect(fallbackThumbnail).toBeVisible();
+    await expect(fallbackThumbnail).toHaveJSProperty('naturalWidth', 1280);
+    await expect(background(editor).getByText('plate-poster.png', { exact: true })).toHaveCount(0);
+    const chooseBackground = (dialog: Locator) =>
+      dialog.getByRole('button', { name: 'Choose background image or video' });
+    const backgroundMedia = editor.getByLabel('Background media file', { exact: true });
+    await backgroundMedia.setInputFiles(
+      fileURLToPath(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url)),
+    );
+    await expect(chooseBackground(editor)).toHaveAttribute('title', 'seek-safe-64x64.webm');
+    const videoThumbnail = chooseBackground(editor).locator('video');
+    await expect(videoThumbnail).toBeVisible();
+    await expect(videoThumbnail).toHaveJSProperty('videoWidth', 64);
+    await expect(videoThumbnail).toHaveJSProperty('paused', true);
+    await expect(editor.locator('[data-layout-preview] > video')).toHaveJSProperty(
+      'videoWidth',
+      64,
+    );
+    await backgroundMedia.setInputFiles({
+      name: 'layout-poster.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(backdrop, 'base64'),
+    });
+    await expect(videoThumbnail).toHaveCount(0);
+    const backgroundThumbnail = chooseBackground(editor).locator('img');
+    await expect(backgroundThumbnail).toBeVisible();
+    await expect(backgroundThumbnail).toHaveJSProperty('naturalWidth', 32);
     await expect(onAir(editor)).toBeChecked();
-    await expect(fallback(editor, 2).locator('img')).toHaveJSProperty('naturalWidth', 32);
+    await expect(fallback(editor, 2).locator('img')).toHaveJSProperty('naturalWidth', 1280);
+    // First save a package in the older format, before the embedded PNG was generated.
+    await page.evaluate(() => {
+      const encode = HTMLCanvasElement.prototype.toDataURL;
+      HTMLCanvasElement.prototype.toDataURL = function (...args) {
+        if (this.width === 320 && this.height === 180) {
+          HTMLCanvasElement.prototype.toDataURL = encode;
+          return 'data:,';
+        }
+        return encode.apply(this, args);
+      };
+    });
     await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
     await expect(editor).toBeHidden();
 
     const stored = runtime.templateList(1).find(({ name }) => name === 'Fallback test');
     expect(stored?.controlLiveLayout?.frames[0]).toMatchObject({
+      border: { width: 15 },
       fallback: { kind: 'color', color: '#316a72' },
       showFallback: false,
     });
+    expect(stored?.controlLiveLayout?.frames[1]?.border?.width).toBe(8);
     expect(stored?.controlLiveLayout?.frames[1]?.fallback).toEqual({
       kind: 'image',
       name: 'plate-poster.png',
@@ -221,6 +310,10 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await page.getByRole('button', { name: 'Open templates', exact: true }).click();
     const library = page.getByRole('dialog', { name: 'Templates · CH 1' });
     await library.getByRole('button', { name: 'Select Fallback test', exact: true }).click();
+    const detail = library.locator('[data-template-thumbnail="detail"]');
+    const still = detail.frameLocator('iframe[title="Template thumbnail"]');
+    const storedPoster = still.locator('[data-cg-live-fallback] img').filter({ visible: true });
+    await expect(storedPoster).toHaveJSProperty('naturalWidth', 225);
     await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
     const restored = page.getByRole('dialog', { name: 'Edit live layout' });
     await editPlate(restored, 1);
@@ -229,8 +322,34 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await expect(fallback(restored, 1)).toHaveCSS('clip-path', /url/);
     await editPlate(restored, 2);
     await expect(onAir(restored)).toBeChecked();
-    await expect(background(restored).getByText('plate-poster.png', { exact: true })).toBeVisible();
-    await expect(fallback(restored, 2).locator('img')).toHaveJSProperty('naturalWidth', 32);
+    await expect(fallbackImageButton(restored)).toHaveAttribute('title', 'plate-poster.png');
+    await expect(fallbackImageButton(restored).locator('img')).toBeVisible();
+    await expect(chooseBackground(restored)).toHaveAttribute('title', 'layout-poster.png');
+    await expect(chooseBackground(restored).locator('img')).toBeVisible();
+    await expect(fallback(restored, 2).locator('img')).toHaveJSProperty('naturalWidth', 1280);
+    await restored
+      .getByRole('textbox', { name: 'Layout name', exact: true })
+      .fill('Embedded preview');
+    await restored.getByRole('button', { name: 'Save layout', exact: true }).click();
+    await expect(restored).toBeHidden();
+    if (!(await library.isVisible()))
+      await page.getByRole('button', { name: 'Open templates', exact: true }).click();
+    await library.getByRole('button', { name: 'Select Embedded preview', exact: true }).click();
+    const embedded = detail.locator('img');
+    await expect(embedded).toHaveJSProperty('naturalWidth', 320);
+    expect(
+      await embedded.evaluate((image: HTMLImageElement) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image, 0, 0);
+        const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        return data.some(
+          (red, i) => i % 4 === 0 && red === 220 && data[i + 1] === 112 && data[i + 2] === 16,
+        );
+      }),
+    ).toBe(true);
   } finally {
     await bridge?.close();
     await engine.stop();
@@ -400,19 +519,23 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const rightMeter = editor
       .getByRole('button', { name: 'Edit plate 3', exact: true })
       .locator(verticalMeter);
-    const comboMeter = editor.getByRole('combobox', { name: 'Plate input' }).locator(verticalMeter);
+    const sourceCombo = editor.getByRole('combobox', { name: 'Plate input' });
+    const comboMeter = sourceCombo.locator(verticalMeter);
     await expect(meterToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(meterToggle).toHaveText('');
+    await expect(meterToggle.locator('svg')).toHaveCount(1);
     await expect(previewMeters).toHaveCount(0);
     for (const meter of [rightMeter, comboMeter]) {
       await expect(meter.locator('[data-input-meter-channel="L"]')).toBeVisible();
       await expect(meter.locator('[data-input-meter-channel="R"]')).toBeVisible();
-      const gap = await meter.evaluate((node) => {
-        const picture = node.previousElementSibling?.getBoundingClientRect();
-        if (picture === undefined) throw new Error('Input meter has no adjacent picture');
-        return node.getBoundingClientRect().left - picture.right;
-      });
-      expect(Math.abs(gap)).toBeLessThan(0.5);
     }
+    await expect(sourceCombo.locator('[data-input-thumbnail]')).toHaveCount(0);
+    const gap = await rightMeter.evaluate((node) => {
+      const picture = node.previousElementSibling?.getBoundingClientRect();
+      if (picture === undefined) throw new Error('Plate meter has no adjacent picture');
+      return node.getBoundingClientRect().left - picture.right;
+    });
+    expect(Math.abs(gap)).toBeLessThan(0.5);
     await meterToggle.click();
     await expect(meterToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(previewMeters).toHaveCount(3);
@@ -584,7 +707,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       mimeType: 'image/png',
       buffer: Buffer.from(png, 'base64'),
     });
-    await expect(editor.getByText('panel.png', { exact: true })).toBeVisible();
+    const backgroundImageButton = (dialog: Locator) =>
+      dialog.getByRole('button', { name: 'Choose background image or video' });
+    await expect(backgroundImageButton(editor)).toHaveAttribute('title', 'panel.png');
+    await expect(backgroundImageButton(editor).locator('img')).toBeVisible();
     await editor.getByText('Layout effects', { exact: true }).click();
     await editor.getByRole('combobox', { name: 'Motion', exact: true }).selectOption('linear');
     await editor.getByLabel('Focus duration (ms)', { exact: true }).fill('1000');
@@ -1184,7 +1310,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(copy.getByRole('textbox', { name: 'Layout name' })).toHaveValue(
       'Studio panel copy',
     );
-    await expect(copy.getByText('panel.png', { exact: true })).toBeVisible();
+    await expect(backgroundImageButton(copy)).toHaveAttribute('title', 'panel.png');
+    await expect(backgroundImageButton(copy).locator('img')).toBeVisible();
     await copy.getByText('Title style', { exact: true }).click();
     await expect(copy.getByLabel('Box width (%)', { exact: true })).toHaveValue('70');
     await expect(copy.getByLabel('Text vertical offset (px)', { exact: true })).toHaveValue('-5');
@@ -1298,7 +1425,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await copy.getByRole('button', { name: 'Three-up', exact: true }).click();
     await noBackground(copy).click();
     await expect(noBackground(copy)).toHaveAttribute('aria-pressed', 'true');
-    await expect(copy.getByText('panel.png', { exact: true })).toHaveCount(0);
+    await expect(backgroundImageButton(copy).locator('img')).toHaveCount(0);
     await expect(copiedStage).toHaveAttribute('data-transparent-background', '');
     await expect(copiedStage).toHaveCSS('background-image', /gradient/);
     await expect(copiedStage.locator(':scope > img, :scope > video')).toHaveCount(0);
@@ -1375,7 +1502,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       'data-transparent-background',
       '',
     );
-    await expect(lockedEdit.getByText('panel.png', { exact: true })).toHaveCount(0);
+    await expect(backgroundImageButton(lockedEdit).locator('img')).toHaveCount(0);
     await lockedEdit.getByRole('button', { name: 'Cancel', exact: true }).click();
     await library.getByRole('button', { name: 'Close', exact: true }).first().click();
 

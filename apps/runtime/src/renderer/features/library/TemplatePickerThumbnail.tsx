@@ -3,17 +3,22 @@ import { LayoutTemplate, Rows3 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
 import { SharedTemplateThumbnail, type SharedTemplatePreview } from './SharedTemplateThumbnail.js';
 import type { ThumbnailLoader } from './templateThumbnailLoader.js';
+import type { LayoutPosterPreviewLoader } from './layoutPosterPreviewLoader.js';
 
 export function TemplatePickerThumbnail({
   templateId,
   kind,
   slot,
   load,
+  layoutSourceSha,
+  loadLayoutPosters,
 }: {
   templateId: string;
   kind: 'graphic' | 'bed';
   slot: 'row' | 'detail';
   load: ThumbnailLoader<string> | undefined;
+  layoutSourceSha?: string | undefined;
+  loadLayoutPosters?: LayoutPosterPreviewLoader | undefined;
 }): JSX.Element {
   const tile = useRef<HTMLSpanElement>(null);
   const [result, setResult] = useState<{
@@ -68,6 +73,8 @@ export function TemplatePickerThumbnail({
     >
       <SharedTemplateThumbnail
         preview={preview}
+        layoutSourceSha={layoutSourceSha}
+        loadLayoutPosters={loadLayoutPosters}
         fallback={
           <Icon icon={kind === 'bed' ? Rows3 : LayoutTemplate} size={slot === 'row' ? 22 : 30} />
         }

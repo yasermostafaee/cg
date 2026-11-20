@@ -47,7 +47,7 @@ import {
   type TextElement,
 } from '@cg/shared-schema';
 import { buildVcgIndexHtml, cgCss, cgJs } from '@cg/single-file-export';
-import { pack, sha256Hex, unpack, verify } from '@cg/vcg-format';
+import { pack, sha256Hex, unpack, verify, type PackInput } from '@cg/vcg-format';
 import { uuid } from '../../lib/uuid.js';
 import { liveLayoutArtwork } from '../../theme.js';
 import {
@@ -924,7 +924,13 @@ export async function compileControlLiveLayout(
   } else if (minRuntimeVersion !== LIVE_PRESET_FIT_RUNTIME_VERSION && usedAttachmentIds.size > 0) {
     minRuntimeVersion = '1.2.7';
   }
-  const packageBytes = await pack({
+  const thumbnail =
+    fallbackImages.length > 0 && typeof document !== 'undefined'
+      ? await import('@cg/template-runtime/static-scene').then(({ renderVcgThumbnail }) =>
+          renderVcgThumbnail(scene, assetIndex, assets, cgCss),
+        )
+      : undefined;
+  const packInput: PackInput = {
     scene,
     manifestExtras: {
       id: scene.id,
@@ -946,7 +952,15 @@ export async function compileControlLiveLayout(
     cgCss,
     assets,
     fonts,
-  });
+  };
+  if (thumbnail !== undefined) {
+    const withThumbnail = await pack({
+      ...packInput,
+      thumbnails: new Map([['thumbnails/320.png', thumbnail]]),
+    });
+    if (withThumbnail.byteLength <= TEMPLATE_SOURCE_MAX_BYTES) return withThumbnail;
+  }
+  const packageBytes = await pack(packInput);
   if (packageBytes.byteLength > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
   return packageBytes;
 }

@@ -1,6 +1,7 @@
 // Public surface of @cg/vcg-format.
 
 export { pack } from './pack.js';
+export { readZipEntry } from './zip.js';
 export type { PackInput } from './pack.js';
 
 export {

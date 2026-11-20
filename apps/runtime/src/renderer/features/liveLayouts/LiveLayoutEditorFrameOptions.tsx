@@ -16,9 +16,9 @@ import { Checkbox } from '../../ui/Checkbox.js';
 import { ColorInput } from '../../ui/ColorInput.js';
 import { FileInput } from '../../ui/FileInput.js';
 import { Icon } from '../../ui/Icon.js';
-import { IsolatedName } from '../../ui/OperatorNames.js';
 import { liveLayoutArtwork } from '../../theme.js';
 import { CONTROL_LIVE_LAYOUT_FALLBACK_ACCEPT } from './controlLiveLayoutCompiler.js';
+import { LiveLayoutAssetThumbnail, useLiveLayoutAssetUrl } from './LiveLayoutAssetThumbnail.js';
 import { LiveLayoutEditorCropControls } from './LiveLayoutEditorCropControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import { LiveLayoutEditorPlatePresentation } from './LiveLayoutEditorPlatePresentation.js';
@@ -60,7 +60,7 @@ export function LiveLayoutEditorFrameOptions({
   onChange,
 }: {
   frame: ControlLiveLayoutFrame;
-  fallbackImage: { reading: boolean; onPick: (file: File) => void };
+  fallbackImage: { asset: Blob | undefined; reading: boolean; onPick: (file: File) => void };
   presetOverrides?:
     | {
         id: string;
@@ -106,6 +106,7 @@ export function LiveLayoutEditorFrameOptions({
   const windows = mask?.rects ?? [];
   const activeWindow = windows[activeIndex];
   const fallback = frame.fallback;
+  const fallbackUrl = useLiveLayoutAssetUrl(fallbackImage.asset);
 
   function addWindow(): void {
     if (windows.length >= LIVE_REVEAL_MAX_RECTS) return;
@@ -166,7 +167,13 @@ export function LiveLayoutEditorFrameOptions({
               inheritedFit={`Inherit · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
               onChange={presetOverrides.onChange}
             />
-            {crop !== undefined && <LiveLayoutEditorCropControls scope="plate" {...crop} />}
+            {crop !== undefined && (
+              <LiveLayoutEditorCropControls
+                key={`${presetOverrides.id}:${frame.id}:crop`}
+                scope="plate"
+                {...crop}
+              />
+            )}
           </div>
         )}
         <div
@@ -228,10 +235,15 @@ export function LiveLayoutEditorFrameOptions({
             <Button
               active={fallback?.kind === 'image'}
               aria-pressed={fallback?.kind === 'image'}
+              title={fallback?.kind === 'image' ? fallback.name : undefined}
               disabled={fallbackImage.reading}
               onClick={() => fallbackPick.current?.click()}
             >
-              <Icon icon={ImagePlus} size={14} />
+              {fallback?.kind === 'image' ? (
+                <LiveLayoutAssetThumbnail kind="image" src={fallbackUrl} />
+              ) : (
+                <Icon icon={ImagePlus} size={14} />
+              )}
               Image…
             </Button>
             <FileInput
@@ -254,7 +266,6 @@ export function LiveLayoutEditorFrameOptions({
               onChange={(color) => onChange({ fallback: { kind: 'color', color } })}
             />
           )}
-          {fallback?.kind === 'image' && <IsolatedName>{fallback.name}</IsolatedName>}
           <label
             className="cg-live-layout-frame-option-check"
             htmlFor={id + '-fallback-on-air'}
@@ -286,6 +297,7 @@ export function LiveLayoutEditorFrameOptions({
               />
             </div>
             <LiveLayoutEditorNumber
+              key={frame.id}
               label="Border width (px)"
               min={0}
               max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}

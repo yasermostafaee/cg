@@ -67,6 +67,7 @@ import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { sourcePresenceDescription } from '../sources/SourcePresenceBadges.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
+import { LiveLayoutAssetThumbnail, useLiveLayoutAssetUrl } from './LiveLayoutAssetThumbnail.js';
 import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
 import { LiveLayoutEditorFrameAttachments } from './LiveLayoutEditorFrameAttachments.js';
@@ -229,21 +230,17 @@ export function LiveLayoutEditor({
   const returnButton = useRef<HTMLButtonElement>(null);
   const focusOrigin = useRef<string>();
   const fieldsId = useId();
-  const [assetUrl, setAssetUrl] = useState<string>();
+  const assetUrl = useLiveLayoutAssetUrl(asset);
+  const backgroundMedia =
+    layout.background.kind === 'image' || layout.background.kind === 'video'
+      ? layout.background
+      : undefined;
   const frameSources = layout.frames.flatMap(({ sourceId }) =>
     sourceId === undefined ? [] : [sourceId],
   );
   const foreground = useModalForeground(preview);
   const sourceFrames = usePvwSourceFrames(channel, frameSources, foreground, 'editor', true);
   const sourcePresence = useSourcePresence(channel, frameSources);
-
-  useEffect(() => {
-    setAssetUrl(undefined);
-    if (asset === undefined) return;
-    const url = URL.createObjectURL(asset);
-    setAssetUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [asset]);
 
   useEffect(() => {
     let disposed = false;
@@ -892,12 +889,15 @@ export function LiveLayoutEditor({
             <Button
               variant="neutral"
               aria-label="Choose background image or video"
-              aria-pressed={
-                layout.background.kind === 'image' || layout.background.kind === 'video'
-              }
+              aria-pressed={backgroundMedia !== undefined}
+              title={backgroundMedia?.name}
               onClick={() => mediaPick.current?.click()}
             >
-              <Icon icon={ImagePlus} size={15} />
+              {backgroundMedia === undefined ? (
+                <Icon icon={ImagePlus} size={15} />
+              ) : (
+                <LiveLayoutAssetThumbnail kind={backgroundMedia.kind} src={assetUrl} />
+              )}
               {readingMedia ? 'Reading…' : 'Image or video'}
             </Button>
             {layout.background.kind === 'color' && (
@@ -906,11 +906,6 @@ export function LiveLayoutEditor({
                 onChange={(color) => setNonMediaBackground({ kind: 'color', color })}
                 aria-label="Background color"
               />
-            )}
-            {(layout.background.kind === 'image' || layout.background.kind === 'video') && (
-              <IsolatedName className="cg-live-layout-file" title={layout.background.name}>
-                {layout.background.name}
-              </IsolatedName>
             )}
             <FileInput
               hidden
@@ -999,12 +994,14 @@ export function LiveLayoutEditor({
                   aria-label="Layout safe guides"
                 >
                   <Button
-                    variant={showSafeGuides ? 'accent' : 'neutral'}
+                    variant="icon"
+                    className="cg-live-layout-preview-toggle"
+                    aria-label="Safe areas"
                     aria-pressed={showSafeGuides}
                     title={showSafeGuides ? 'Hide safe guides' : 'Show safe guides'}
                     onClick={() => setShowSafeGuides(!showSafeGuides)}
                   >
-                    <Icon icon={SquareDashed} size={15} /> Safe areas
+                    <Icon icon={SquareDashed} size={15} />
                   </Button>
                   <SafeGuideSettings
                     profile={safeGuideProfile}
@@ -1020,13 +1017,14 @@ export function LiveLayoutEditor({
                   </Button>
                 )}
                 <Button
-                  variant="neutral"
+                  variant="icon"
+                  className="cg-live-layout-preview-toggle"
+                  aria-label="VU meters"
                   aria-pressed={showPreviewMeters}
-                  active={showPreviewMeters}
                   title={showPreviewMeters ? 'Hide preview VU meters' : 'Show preview VU meters'}
                   onClick={() => setShowPreviewMeters((visible) => !visible)}
                 >
-                  <Icon icon={AudioLines} size={15} /> VU meters
+                  <Icon icon={AudioLines} size={15} />
                 </Button>
               </div>
             </div>
@@ -1387,6 +1385,7 @@ export function LiveLayoutEditor({
                 <LiveLayoutEditorFrameOptions
                   frame={frame}
                   fallbackImage={{
+                    asset: fallbackFiles.get(frame.id),
                     reading: readingFallback,
                     onPick: (file) => void pickFallback(file),
                   }}
