@@ -38,6 +38,10 @@
         {
           "fa": "در Choose a source دکمهٔ Play بزرگ‌تر است. پیش‌نمایش مدیا از آغاز آماده‌سازی نشانگر بارگذاری دارد و با دکمهٔ تمام‌صفحه بزرگ می‌شود. با × یا Esc به همان پخش در پنجره برگردید.",
           "en": "Choose a source has a larger Play button and an immediate media loading indicator. Expand the preview to fullscreen and return to the same playback with × or Escape."
+        },
+        {
+          "fa": "وقتی CG Control، Bridge و Playout روی یک میزبان‌اند، پیش‌نمایش ابتدا فایل اصلی را از Playout می‌خواند. اگر پلیر نتواند فایل را باز کند، همان درخواست پخش مسیر پروکسی را ادامه می‌دهد.",
+          "en": "When CG Control, Bridge and Playout share a host, media preview attempts the original file first. If the player cannot open it, the same Play action continues via proxy."
         }
       ],
       "fixes": [
@@ -48,6 +52,10 @@
         {
           "fa": "Play در Grid و List با اولین کلیک اجرا می‌شود، حتی وقتی کارت نیمه‌پیداست. CG برای پاسخ آماده‌سازی پروکسی صبر می‌کند و اگر پاسخِ آماده‌سازی در راه قطع شود، Bridge وضعیت همان پروکسی را دوباره می‌خواند.",
           "en": "Play works on the first click in Grid and List, including partly visible cards. CG waits for proxy preparation and Bridge checks the same proxy if the preparation response is interrupted."
+        },
+        {
+          "fa": "دکمهٔ Play هنگام فشردن در مرکز کارت Grid می‌ماند. انتظار برای ظرفیت صف و آماده‌سازی پروکسی هر کدام مهلت جدا دارند.",
+          "en": "Pressing the Grid Play button keeps it centered on the card. Waiting for queue capacity and preparing the proxy each have their own time budget."
         },
         {
           "fa": "Hide Monitors و Show Monitors پخش و صفحهٔ فعلی PVW را حفظ می‌کنند. هنگام پنهان بودن مانیتورها، دریافت تصویر آن‌ها متوقف می‌شود.",
