@@ -352,6 +352,8 @@ describe('D-201 — synchronized live-input foreground pass', () => {
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(true);
       advanceTo(20);
       expect(artwork.style.transform).toBe('matrix(1,0,0,1,0,0)');
+      advanceTo(230);
+      expect(Number(artwork.style.transform.split(',')[4])).toBeCloseTo(45.125);
       advanceTo(240);
       expect(artwork.style.transform).toBe('matrix(1,0,0,1,50,0)');
       expect(artwork.style.opacity).toBe('0.75');
@@ -364,9 +366,18 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
 
+      await send({ ...phase, easing: 'linear', mixerFrameMs: 40 });
+      advanceTo(519);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,0,0)');
+      advanceTo(520);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,20,0)');
+      advanceTo(550);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,20,0)');
+      advanceTo(880);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
       await send({ ...phase, delayMs: 0, durationMs: 0 });
       expect(artwork.style.opacity).toBe('0');
-      advanceTo(2_500);
+      advanceTo(3_000);
       expect(artwork.style.opacity).toBe('');
       expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
       await send(phase);
@@ -374,7 +385,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(artwork.style.opacity).toBe('');
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
-      advanceTo(3_000);
+      advanceTo(3_500);
       expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
       runtime.remove();
     },
@@ -648,7 +659,13 @@ describe('D-201 — synchronized live-input foreground pass', () => {
           {
             ...departingLayer,
             children: [
-              { ...plate, id: 'departing-a', routeKey: 'departing-a' },
+              {
+                ...plate,
+                id: 'departing-a',
+                routeKey: 'departing-a',
+                fallbackKind: 'image',
+                posterAssetId: 'arrival-poster',
+              },
               { ...plate, id: 'departing-b', routeKey: 'departing-b' },
               { ...departingTitle, id: 'departing-title' },
             ],
@@ -712,8 +729,10 @@ describe('D-201 — synchronized live-input foreground pass', () => {
         pending.clear();
         for (const raf of round) raf(time);
       };
+      const posterUrl = 'data:image/png;base64,AA==';
       const runtime = createRuntime(scene, {
         outputPass,
+        assetUrls: { 'arrival-poster': posterUrl },
         skipFontLoad: true,
         installGlobals: false,
         clock: {
@@ -887,6 +906,51 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       if (incomingTitle !== null) expect(getComputedStyle(incomingTitle).display).toBe('none');
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
+
+      const arrivingPoster = departing.querySelector<HTMLImageElement>(
+        '[data-cg-live-fallback="departing-a"] img',
+      );
+      const arrival: FrameTransitionPhase = {
+        authoredPreset: true,
+        durationMs: 400,
+        easing: 'linear',
+        frames: [],
+        opacityArtwork: [
+          {
+            key: 'solo-root/departing-box',
+            lookId: 'solo',
+            fromOpacity: 0,
+            toOpacity: 1,
+          },
+        ],
+      };
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            look: 'solo',
+            presetTransitionCommit: true,
+            frameTransition: {
+              ...arrival,
+              durationMs: 0,
+              opacityArtwork: arrival.opacityArtwork?.map((entry) => ({ ...entry, toOpacity: 0 })),
+            },
+          },
+        ),
+      );
+      expect(departing.style.opacity).toBe('0');
+      await runtime.update(withCgControl({}, { frameTransition: arrival }));
+      advanceTo(1_200);
+      expect(departing.style.opacity).toBe('0.5');
+      expect(arrivingPoster !== null).toBe(outputPass === 'background');
+      if (arrivingPoster !== null) {
+        expect(arrivingPoster.getAttribute('src')).toBe(posterUrl);
+        expect(arrivingPoster.closest('[data-cg-live-fallback]')?.hasAttribute(hiddenMarker)).toBe(
+          false,
+        );
+      }
+      advanceTo(1_400);
+      expect(departing.style.opacity).toBe('');
 
       const titleHold: FrameTransitionPhase = {
         authoredPreset: true,

@@ -877,15 +877,24 @@ export function LiveLayoutEditor({
             >
               None
             </Button>
-            <Button
-              variant="neutral"
-              aria-pressed={layout.background.kind === 'color'}
-              onClick={() =>
-                setNonMediaBackground({ kind: 'color', color: lastSolidColor.current })
-              }
-            >
-              Solid color
-            </Button>
+            <span className="cg-live-layout-solid-color">
+              <Button
+                variant="neutral"
+                aria-pressed={layout.background.kind === 'color'}
+                onClick={() =>
+                  setNonMediaBackground({ kind: 'color', color: lastSolidColor.current })
+                }
+              >
+                Solid color
+              </Button>
+              {layout.background.kind === 'color' && (
+                <ColorInput
+                  value={layout.background.color.slice(0, 7)}
+                  onChange={(color) => setNonMediaBackground({ kind: 'color', color })}
+                  aria-label="Background color"
+                />
+              )}
+            </span>
             <Button
               variant="neutral"
               aria-label="Choose background image or video"
@@ -900,13 +909,6 @@ export function LiveLayoutEditor({
               )}
               {readingMedia ? 'Reading…' : 'Image or video'}
             </Button>
-            {layout.background.kind === 'color' && (
-              <ColorInput
-                value={layout.background.color.slice(0, 7)}
-                onChange={(color) => setNonMediaBackground({ kind: 'color', color })}
-                aria-label="Background color"
-              />
-            )}
             <FileInput
               hidden
               ref={mediaPick}

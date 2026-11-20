@@ -142,12 +142,14 @@ export function createFramePlacementRenderer(
       const render = (time: number): void => {
         if (animation !== active) return;
         const elapsed = time - startAt;
+        const frameMs = phase.mixerFrameMs;
+        const sample = frameMs === undefined ? elapsed : Math.floor(elapsed / frameMs) * frameMs;
         const progress =
-          raf === undefined || (phase.durationMs === 0 && elapsed >= 0)
+          raf === undefined || elapsed >= phase.durationMs
             ? 1
             : elapsed <= 0
               ? 0
-              : Math.min(1, elapsed / phase.durationMs);
+              : sample / phase.durationMs;
         const eased = frameTransitionProgress(phase.easing, progress);
         for (const { wrapper, from, to, fromOpacity, toOpacity } of motion) {
           paint(wrapper, interpolateMatrix(from, to, eased));

@@ -53,6 +53,18 @@ function fieldAppearance(field: Locator): Promise<string[]> {
   });
 }
 
+async function expectAdjacentColorPicker(button: Locator, picker: Locator): Promise<void> {
+  await expect(picker).toBeVisible();
+  const buttonBounds = (await button.boundingBox())!;
+  const pickerBounds = (await picker.boundingBox())!;
+  const gap = pickerBounds.x - (buttonBounds.x + buttonBounds.width);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThanOrEqual(5);
+  expect(
+    Math.abs(buttonBounds.y + buttonBounds.height / 2 - pickerBounds.y - pickerBounds.height / 2),
+  ).toBeLessThan(1);
+}
+
 function frameGraphic(): Promise<Uint8Array> {
   const date = '2026-01-01T00:00:00.000Z';
   const scene: Scene = {
@@ -163,6 +175,14 @@ test('per-plate fallback previews survive save and reopen with an independent on
     };
 
     await editor.getByRole('textbox', { name: 'Layout name' }).fill('Fallback test');
+    const solidBackground = editor
+      .getByRole('group', { name: 'Background', exact: true })
+      .getByRole('button', { name: 'Solid color', exact: true });
+    await solidBackground.click();
+    await expectAdjacentColorPicker(
+      solidBackground,
+      editor.getByLabel('Background color', { exact: true }),
+    );
     const add = editor.getByRole('button', { name: 'Add plate', exact: true });
     await add.click();
     await add.click();
@@ -207,8 +227,14 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await background(editor).getByRole('button', { name: 'Bars', exact: true }).click();
     await expect(fallback(editor, 1)).toHaveAttribute('data-layout-plate-fallback', 'bars');
     await expect(fallback(editor, 1)).toHaveCSS('background-image', /linear-gradient/);
-    await background(editor).getByRole('button', { name: 'Solid colour', exact: true }).click();
-    await background(editor).getByLabel('Fallback colour').fill('#316A72');
+    const solidFallback = background(editor).getByRole('button', {
+      name: 'Solid colour',
+      exact: true,
+    });
+    const fallbackColor = background(editor).getByLabel('Fallback colour');
+    await solidFallback.click();
+    await expectAdjacentColorPicker(solidFallback, fallbackColor);
+    await fallbackColor.fill('#316A72');
     const borderSwatch = (await editor.getByLabel('Border color', { exact: true }).boundingBox())!;
     const fallbackSwatch = (await background(editor).getByLabel('Fallback colour').boundingBox())!;
     expect(borderSwatch.width).toBeLessThanOrEqual(48);

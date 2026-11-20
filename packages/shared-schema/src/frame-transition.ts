@@ -84,6 +84,8 @@ export const FrameTransitionPhaseSchema = z
     destinationLookId: z.string().min(1).optional(),
     durationMs: z.number().finite().min(0).max(2_000),
     delayMs: z.number().finite().min(0).max(250).optional(),
+    /** Native mixer frame interval for hardware-paced preset artwork. */
+    mixerFrameMs: z.number().finite().min(1).max(100).optional(),
     easing: EasingSchema,
     focusSlide: FocusSlideArtworkSchema.optional(),
     frames: z

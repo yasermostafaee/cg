@@ -24,6 +24,7 @@ import {
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
+  CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER,
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
@@ -446,6 +447,8 @@ async function bootControlFocus(
   bordered = false,
   promoteBeforeTake = false,
   withFallback = false,
+  plateCount: 2 | 3 = 3,
+  supportsMixerPacing = false,
 ) {
   const cameras = {
     'guest-1': 'src-a',
@@ -470,8 +473,8 @@ async function bootControlFocus(
     presets: [
       {
         id: focusPreset,
-        name: 'Three-up',
-        frameIds: [...focusFrameIds],
+        name: plateCount === 3 ? 'Three-up' : 'Two-up',
+        frameIds: focusFrameIds.slice(0, plateCount),
         arrangement: 'host-and-guests',
         horizontalGap: 24,
         verticalGap: 20,
@@ -495,7 +498,7 @@ async function bootControlFocus(
   }
   const rects = controlLiveLayoutRects(layout, layout.presets[0]!);
   const base = template(
-    focusFrameIds.map((id) => ({ id, rect: rects[id]! })),
+    focusFrameIds.map((id) => ({ id, rect: rects[id] ?? focusRect })),
     true,
   );
   const look = (id: string, membership: Record<string, PlateSpec['rect']>) => ({
@@ -539,7 +542,10 @@ async function bootControlFocus(
       })),
     }),
     assignments: { assignments: [] },
-    html: PRESET_TITLE_HOLD_HTML + CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
+    html:
+      PRESET_TITLE_HOLD_HTML +
+      CG_LIVE_FOCUS_SLIDE_PAGE_MARKER +
+      (supportsMixerPacing ? CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER : ''),
     ...(paired && { mirrorChannel: 2 }),
   });
   if (promoteBeforeTake) expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
@@ -548,26 +554,64 @@ async function bootControlFocus(
   return r;
 }
 
-it('advances the bordered interlaced artwork while keeping the native preset deadline', async () => {
-  const r = await bootControlFocus(false, false, 'motion', true);
-  const engine = mock!;
-  const mark = engine.receivedCommands().length;
-  expect(await r.setActiveLook('item-1', focusLooks[0]!, focusMotion)).toEqual({ ok: true });
-  const logs = engine.receivedCommands().slice(mark);
-  const move = logs.flatMap((write) => {
-    if (!write.line.startsWith('CG ') || !write.line.includes('delayMs')) return [];
-    const command = parseAmcpLine(write.line);
-    const fields = decodeCgData(command!.args[3]!).data;
-    const phase = fields === null ? undefined : readCgControl(JSON.parse(fields))?.frameTransition;
-    return phase?.frames.some(({ from, to }) => from.width !== to.width)
-      ? [{ ...write, phase }]
-      : [];
-  });
-  expect(move).toHaveLength(2);
-  expect(move.every(({ phase }) => phase.delayMs === 0)).toBe(true);
-  const nativeCommit = logs.find(({ line, at }) => line === 'MIXER 1 COMMIT' && at >= move[1]!.at);
-  expect(nativeCommit?.at).toBeGreaterThanOrEqual(move[0]!.at + 25);
-});
+it.each([false, true])(
+  'paces interlaced native preset artwork on supporting resident pages for both outputs (%s)',
+  async (supportsMixerPacing) => {
+    const r = await bootControlFocus(
+      true,
+      false,
+      'motion',
+      true,
+      false,
+      false,
+      3,
+      supportsMixerPacing,
+    );
+    await expect
+      .poll(() => r.channelSettingsState().observed.find(({ channel }) => channel === 1)?.mode)
+      .toBe('1080i5000');
+    const engines = [
+      [mock!, 1],
+      [backup!, 2],
+    ] as const;
+    const marked = engines.map(([engine, channel]) => ({
+      engine,
+      channel,
+      mark: engine.receivedCommands().length,
+    }));
+    expect(await r.setActiveLook('item-1', focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+
+    for (const { engine, channel, mark } of marked) {
+      const logs = engine.receivedCommands().slice(mark);
+      const move = logs.flatMap((write) => {
+        if (!write.line.startsWith('CG ') || !write.line.includes('delayMs')) return [];
+        const command = parseAmcpLine(write.line);
+        const fields = decodeCgData(command!.args[3]!).data;
+        const phase =
+          fields === null ? undefined : readCgControl(JSON.parse(fields))?.frameTransition;
+        return phase?.frames.some(({ from, to }) => from.width !== to.width)
+          ? [{ ...write, phase }]
+          : [];
+      });
+      expect(move).toHaveLength(2);
+      const mixerFrameMs = supportsMixerPacing ? 40 : undefined;
+      expect(move.map(({ phase }) => phase.mixerFrameMs)).toEqual([mixerFrameMs, mixerFrameMs]);
+      const nativeCommit = logs.find(
+        ({ line, at }) => line === `MIXER ${channel} COMMIT` && at >= move[1]!.at,
+      );
+      expect(nativeCommit).toBeDefined();
+      if (supportsMixerPacing) {
+        for (const { at, phase } of move) {
+          const artworkStart = at + (phase.delayMs ?? 0);
+          expect(artworkStart - nativeCommit!.at).toBeGreaterThan(15);
+          expect(artworkStart - nativeCommit!.at).toBeLessThan(70);
+        }
+      } else {
+        expect(move.map(({ phase }) => phase.delayMs)).toEqual([0, 0]);
+      }
+    }
+  },
+);
 
 it.each([false, true])(
   'keeps the authored fallback under an opaque preset move and holds it for native fade (%s)',
@@ -607,6 +651,87 @@ it.each([false, true])(
           liveFallback.plateIds.includes(retained),
       ),
     ).toBe(fade);
+  },
+);
+
+it.each([2, 3] as const)(
+  'reveals the arriving fallback with a one-to-%s preset effect and still holds it for a cut',
+  async (plateCount) => {
+    const runtime = await bootControlFocus(false, true, 'motion', true, false, true, plateCount);
+    const engine = mock!;
+    const arrivals = focusFrameIds.slice(1, plateCount);
+    const arrivalSlots = runtime
+      .liveLayers()
+      .get('item-1')!
+      .filter(({ sourceId }) => arrivals.some((id) => sourceId === id))
+      .map(({ slot }) => slot);
+    expect(arrivalSlots).toHaveLength(plateCount - 1);
+    const readControls = (from: number) =>
+      engine
+        .receivedCommands()
+        .slice(from)
+        .flatMap(({ line }) => {
+          if (!line.startsWith('CG ') || !line.includes(' UPDATE ')) return [];
+          const command = parseAmcpLine(line);
+          const fields = decodeCgData(command!.args[3]!).data;
+          const control = fields === null ? undefined : readCgControl(JSON.parse(fields));
+          return control === undefined ? [] : [control];
+        });
+    const begin = engine.receivedCommands().length;
+    expect(
+      await runtime.setActiveLook('item-1', focusPreset, {
+        ...focusMotion,
+        ...(plateCount === 3 && { enterDirection: 'down' }),
+      }),
+    ).toEqual({ ok: true });
+    const controls = readControls(begin);
+    const firstDestination = controls.find(({ look }) => look === focusPreset);
+    expect(firstDestination?.liveFallback).toBeUndefined();
+    expect(firstDestination?.frameTransition?.opacityArtwork).toEqual(
+      arrivals.map((id) => ({
+        key: focusPreset + '/' + id,
+        lookId: focusPreset,
+        fromOpacity: 0,
+        toOpacity: 0,
+      })),
+    );
+    const phase = controls.find(({ frameTransition }) =>
+      frameTransition?.opacityArtwork?.some(
+        ({ lookId, toOpacity }) => lookId === focusPreset && toOpacity === 1,
+      ),
+    )?.frameTransition;
+    expect(phase?.opacityArtwork).toEqual(
+      arrivals.map((id) => ({
+        key: focusPreset + '/' + id,
+        lookId: focusPreset,
+        fromOpacity: 0,
+        toOpacity: 1,
+      })),
+    );
+    expect(phase?.frames).toHaveLength(plateCount === 3 ? 2 : 0);
+    const lines = engine
+      .receivedCommands()
+      .slice(begin)
+      .map(({ line }) => line);
+    for (const { layer } of arrivalSlots) {
+      const hidden = lines.indexOf(`MIXER 1-${layer} OPACITY 0 0 linear DEFER`);
+      const reveal = lines.findIndex(
+        (line) =>
+          line.startsWith(`MIXER 1-${layer} OPACITY 1 `) && / [1-9]\d* linear DEFER$/.test(line),
+      );
+      expect(hidden).toBeGreaterThanOrEqual(0);
+      expect(reveal).toBeGreaterThan(hidden);
+    }
+
+    const cut = { motion: 'cut', fade: false, durationMs: 160 } as const;
+    expect(await runtime.setActiveLook('item-1', soloPreset, cut)).toEqual({ ok: true });
+    const cutStart = engine.receivedCommands().length;
+    expect(await runtime.setActiveLook('item-1', focusPreset, cut)).toEqual({ ok: true });
+    const cutLook = readControls(cutStart).find(({ look }) => look === focusPreset);
+    expect(cutLook?.liveFallback).toMatchObject({
+      phase: 'hold',
+      plateIds: expect.arrayContaining(arrivals),
+    });
   },
 );
 

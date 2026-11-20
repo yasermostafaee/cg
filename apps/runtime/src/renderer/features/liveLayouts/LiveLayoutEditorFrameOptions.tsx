@@ -217,21 +217,31 @@ export function LiveLayoutEditorFrameOptions({
             >
               Bars
             </Button>
-            <Button
-              active={fallback?.kind === 'color'}
-              aria-pressed={fallback?.kind === 'color'}
-              disabled={fallbackImage.reading}
-              onClick={() =>
-                onChange({
-                  fallback: {
-                    kind: 'color',
-                    color: fallback?.kind === 'color' ? fallback.color : '#000000',
-                  },
-                })
-              }
-            >
-              Solid colour
-            </Button>
+            <span className="cg-live-layout-solid-color">
+              <Button
+                active={fallback?.kind === 'color'}
+                aria-pressed={fallback?.kind === 'color'}
+                disabled={fallbackImage.reading}
+                onClick={() =>
+                  onChange({
+                    fallback: {
+                      kind: 'color',
+                      color: fallback?.kind === 'color' ? fallback.color : '#000000',
+                    },
+                  })
+                }
+              >
+                Solid colour
+              </Button>
+              {fallback?.kind === 'color' && (
+                <ColorInput
+                  className="cg-field"
+                  aria-label="Fallback colour"
+                  value={fallback.color.slice(0, 7)}
+                  onChange={(color) => onChange({ fallback: { kind: 'color', color } })}
+                />
+              )}
+            </span>
             <Button
               active={fallback?.kind === 'image'}
               aria-pressed={fallback?.kind === 'image'}
@@ -258,14 +268,6 @@ export function LiveLayoutEditorFrameOptions({
               }}
             />
           </div>
-          {fallback?.kind === 'color' && (
-            <ColorInput
-              className="cg-field"
-              aria-label="Fallback colour"
-              value={fallback.color.slice(0, 7)}
-              onChange={(color) => onChange({ fallback: { kind: 'color', color } })}
-            />
-          )}
           <label
             className="cg-live-layout-frame-option-check"
             htmlFor={id + '-fallback-on-air'}

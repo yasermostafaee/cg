@@ -67,6 +67,12 @@
   color: var(--r-text-secondary);
 }
 
+.cg-live-layout-solid-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .cg-live-layout-editor input[type='color'] {
   inline-size: 2rem;
   max-inline-size: 100%;
@@ -150,6 +156,7 @@
 }
 
 .cg-live-layout-background > .cg-btn[aria-pressed='true'],
+.cg-live-layout-solid-color > .cg-btn[aria-pressed='true'],
 .cg-live-layout-preset-choice[aria-pressed='true'],
 .cg-live-layout-frame-choice[aria-pressed='true'],
 .cg-live-layout-frame-position > .cg-btn[aria-pressed='true'],
@@ -163,6 +170,7 @@
 }
 
 .cg-live-layout-background > .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-live-layout-solid-color > .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-live-layout-preset-choice[aria-pressed='true']:hover:not(:disabled),
 .cg-live-layout-frame-choice[aria-pressed='true']:hover:not(:disabled),
 .cg-live-layout-frame-position > .cg-btn[aria-pressed='true']:hover:not(:disabled),

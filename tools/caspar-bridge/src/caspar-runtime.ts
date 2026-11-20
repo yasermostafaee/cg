@@ -24,6 +24,7 @@ import {
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
+  CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER,
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
@@ -574,7 +575,7 @@ interface LiveFrameEffect {
   readonly frames: FrameTransitionPhase['frames'];
   readonly plateIds: readonly string[];
   readonly authoredPreset?: true;
-  /** Authored underlays whose plate has no native picture or remains opaque throughout movement. */
+  /** Authored underlays kept with the artwork during an animated preset phase. */
   readonly movingFallbacks?: ReadonlySet<string>;
   readonly departure?: PresetArtworkEffect;
   readonly arrival?: PresetArtworkEffect;
@@ -13622,6 +13623,20 @@ export class CasparRuntime {
         );
         const departure = composed.departure;
         const arrival = composed.arrival;
+        // The arrival starts with its artwork at zero opacity and reveals it in the
+        // same phase as the native picture. Keep the authored underlay in that
+        // group so a missing signal cannot leave its plate empty until settle.
+        if (arrival !== undefined && info?.controlLiveLayout !== undefined) {
+          for (const id of arrival.plateIds) {
+            if (
+              toLook.fallbacks?.includes(id) === true &&
+              plan.placements.every(
+                ({ plateId, slot }) => plateId !== id || slot.layer > page.slot.layer,
+              )
+            )
+              movingFallbacks.add(id);
+          }
+        }
         const resolution = carrier.resolution;
         const channel = page.slot.channel;
         const exitSlide =
@@ -14220,15 +14235,26 @@ export class CasparRuntime {
     const mode = this.#channelSettings
       .state()
       .observed.find((read) => read.channel === channel)?.mode;
-    const advanceArtwork =
-      this.#lookMixerHoldMs === undefined &&
-      mode?.trim().toLowerCase() === '1080i5000' &&
+    const borderedArtwork =
       foreground !== undefined &&
       layout?.frames.some(
         (frame) =>
           movingFrames.has(frame.id) &&
           controlLiveLayoutPlateBorder(frame, layout.resolution) !== undefined,
-      ) === true
+      ) === true;
+    const interlacedPresetFrameMs =
+      borderedArtwork &&
+      this.#adapter.primarySession === page.session &&
+      this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary &&
+      mode?.trim().toLowerCase() === '1080i5000' &&
+      this.#hasFramePlacementMarker(page.version, CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER)
+        ? videoModeFramePeriodMs(mode)
+        : null;
+    // Keep the prior 1080i50 calibration for resident pages without mixer pacing.
+    const advanceArtwork =
+      this.#lookMixerHoldMs === undefined &&
+      mode?.trim().toLowerCase() === '1080i5000' &&
+      borderedArtwork
         ? this.#channelFrameMsFor(channel)
         : 0;
     const supportsTitleHold = this.#hasFramePlacementMarker(
@@ -14695,15 +14721,22 @@ export class CasparRuntime {
       // Each page receives the remaining allowance when its update is sent.
       const holdMs = phase.delayMs ?? 0;
       const startsAt = performance.now() + holdMs;
-      // Recorded 720p50 had -3..+2 px skew without compensation. At 1080i50,
-      // native and CEF ran at the same rate, but starting the artwork one frame
-      // earlier reduced the measured edge error from -33..-14 px to -8..+12 px.
-      // This offsets presentation latency; separate output clocks can still
-      // differ by a field. Keep native COMMIT on its existing deadline.
       const movingArtwork =
         phase.focusSlide !== undefined ||
         phase.frames.some(({ from, to }) => !sameMixerRect(from, to, 1e-8));
-      const artworkLead = phase.durationMs > 0 && movingArtwork ? advanceArtwork : 0;
+      const mixerFrameMs =
+        phase.authoredPreset === true &&
+        phase.focusSlide === undefined &&
+        phase.durationMs > 0 &&
+        movingArtwork &&
+        batch.staged === true
+          ? interlacedPresetFrameMs
+          : null;
+      // 1080i50 PGM capture shows paced CEF artwork exactly one mixer step early
+      // in both directions without the offset. Keep the native commit deadline.
+      const artworkOffset =
+        mixerFrameMs ?? (phase.durationMs > 0 && movingArtwork ? -advanceArtwork : 0);
+      const delayArtwork = phase.delayMs !== undefined || mixerFrameMs !== null;
       const build = (slot: CommandSlot, nativeStartsAt: number) =>
         this.#builder.update(
           slot,
@@ -14712,20 +14745,22 @@ export class CasparRuntime {
             {
               frameTransition: {
                 ...phase,
-                ...(phase.delayMs !== undefined && {
-                  delayMs: remainingFramePhaseDelay(nativeStartsAt - artworkLead),
+                ...(mixerFrameMs !== null && { mixerFrameMs }),
+                ...(delayArtwork && {
+                  delayMs: Math.min(250, remainingFramePhaseDelay(nativeStartsAt + artworkOffset)),
                 }),
               },
               ...(presetEffectId !== undefined && { presetEffectId }),
             },
           ),
         );
-      const deferPeer = animatePeer && batch.staged === true && phase.delayMs !== undefined;
+      const deferPeer = animatePeer && batch.staged === true && delayArtwork;
       const buildPrimary = (slot: CommandSlot) => build(slot, startsAt);
       const sent = await sendPages(buildPrimary, {
-        mirror: deferPeer ? false : phase.delayMs === undefined ? true : buildPrimary,
+        mirror: deferPeer ? false : delayArtwork ? buildPrimary : true,
       });
-      if (sent.ok && deferPeer) stagedPeerPhase = { holdMs, durationMs: phase.durationMs, build };
+      if (sent.ok && deferPeer)
+        stagedPeerPhase = { holdMs, durationMs: phase.durationMs + (mixerFrameMs ?? 0), build };
       return { ...sent, startsAt };
     };
     this.#frameTransitionInterrupts.set(itemId, cancel);
