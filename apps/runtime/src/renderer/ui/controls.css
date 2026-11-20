@@ -9434,7 +9434,8 @@ input[type='checkbox']:disabled:checked {
 .cg-picker-media-tile-picture > .cg-picker-preview-button {
   position: absolute;
   inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
+  /* Keep the button centered when its pressed state applies a transform. */
+  translate: -50% -50%;
   background: var(--r-monitor-bg);
   color: var(--r-text);
 }

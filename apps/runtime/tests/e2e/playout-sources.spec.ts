@@ -837,6 +837,40 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   expect((await readState()).inputChecks).toBe(0);
 });
 
+test('the grid Play button stays under the pointer while pressed', async ({ app }) => {
+  const { page } = app;
+  const defaults = await openDefaults(app);
+  const field = defaults.locator('[data-defaults-select="l-1"]');
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    await page.emulateMedia({ reducedMotion });
+    await field.click();
+    const panel = picker(page);
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
+    const play = panel.getByRole('button', { name: 'Preview · Studio 1', exact: true });
+    await expect(play).toBeVisible();
+    const resting = await play.boundingBox();
+    if (resting === null) throw new Error('Missing grid Play button');
+    const x = resting.x + resting.width / 2;
+    const y = resting.y + resting.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    try {
+      const pressed = await play.evaluate(async (button) => {
+        await Promise.allSettled(button.getAnimations().map((animation) => animation.finished));
+        const { x, y } = button.getBoundingClientRect();
+        return { x, y };
+      });
+      expect(Math.abs(pressed.x - resting.x), reducedMotion).toBeLessThanOrEqual(1);
+      expect(Math.abs(pressed.y - resting.y), reducedMotion).toBeLessThanOrEqual(2);
+    } finally {
+      await page.mouse.up();
+    }
+    await expect(panel.getByRole('button', { name: 'Pause preview' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  }
+});
+
 test('Media: play, pause, drag to seek and stop a preview without choosing the clip', async ({
   app,
 }) => {
