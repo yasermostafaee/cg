@@ -160,6 +160,7 @@ interface FileSourceMediaPreviewProps extends SourceMediaPreviewProps {
 }
 
 const MEDIA_LEASE_REFRESH_MS = 15_000;
+const LOCAL_ORIGINAL_STARTUP_MS = 8_000;
 const MAX_PROXY_PREPARATION_MS = 20 * 60_000;
 
 function matchesReadyPreview(
@@ -195,6 +196,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const playbackButton = useRef<HTMLButtonElement>(null);
   const [preview, setPreview] = useState<MediaPlaybackPreview | null>(null);
   const currentPreview = useRef<MediaPlaybackPreview | null>(null);
+  const playedLocalOriginalUrl = useRef<string>();
   const [positionMs, setPositionMs] = useState(0);
   const position = useRef(0);
   const positionHeld = useRef(false);
@@ -225,6 +227,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     let generation = 0;
     let queuedRead = false;
     let queuedProbe: string | undefined;
+    let localOriginalRejected = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let preparingSince: number | null = null;
     let pollDelay = 1_000;
@@ -289,6 +292,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           sourceId: id,
           ...(held?.previewId === undefined ? {} : { previewId: held.previewId }),
           prepare,
+          tryLocalOriginal: !localOriginalRejected,
         });
         if (!current()) {
           close(result);
@@ -304,6 +308,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             channel,
             sourceId: id,
             prepare: currentIntent.current === 'playing',
+            tryLocalOriginal: !localOriginalRejected,
           });
           if (!current()) {
             close(result);
@@ -316,6 +321,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           failPlayer();
           return;
         }
+        if (result.playbackMode === 'local-original' && localOriginalRejected) return;
         currentPreview.current = result;
         setPreview(result);
         if (result.durationMs !== undefined && result.durationMs > 0) {
@@ -371,6 +377,14 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     };
     refresh.current = () => void read();
     recover.current = () => {
+      if (currentPreview.current?.playbackMode === 'local-original') {
+        if (!localOriginalRejected) {
+          localOriginalRejected = true;
+          holdPosition();
+          void read();
+        }
+        return;
+      }
       const previewId = currentPreview.current?.previewId;
       if (previewId === undefined) {
         failPlayer();
@@ -447,6 +461,21 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   useEffect(() => {
     if (foreground && preview?.state === 'ready' && preview.videoUrl !== undefined) play();
   }, [foreground, play, preview?.state, preview?.videoUrl]);
+
+  const localOriginalUrl =
+    preview?.playbackMode === 'local-original' ? preview.videoUrl : undefined;
+  useEffect(() => {
+    if (!foreground || intent !== 'playing' || localOriginalUrl === undefined) return;
+    const timeout = setTimeout(() => {
+      if (
+        playedLocalOriginalUrl.current !== localOriginalUrl &&
+        currentPreview.current?.videoUrl === localOriginalUrl
+      ) {
+        recover.current?.();
+      }
+    }, LOCAL_ORIGINAL_STARTUP_MS);
+    return () => clearTimeout(timeout);
+  }, [foreground, intent, localOriginalUrl]);
 
   const startPlayback = useCallback((): void => {
     setPlayerError(null);
@@ -531,7 +560,11 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       message = preview.message ?? 'Preview unavailable';
     } else if (loading) message = 'Loading…';
   }
-  const origin = displayedEngine === undefined ? null : `Server ${displayedEngine}`;
+  const localFilePlaying = showVideo && preview?.playbackMode === 'local-original';
+  const origin =
+    displayedEngine === undefined
+      ? null
+      : `Server ${displayedEngine}${localFilePlaying ? ' · Local original file' : ''}`;
 
   return (
     <MediaPreviewSurface
@@ -583,8 +616,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
               onEmptied={() => setVideoOrigin(undefined)}
               onPlaying={(event) => {
                 setBuffering(false);
-                if (matchesReadyPreview(event.currentTarget, currentPreview.current))
+                if (matchesReadyPreview(event.currentTarget, currentPreview.current)) {
+                  if (currentPreview.current?.playbackMode === 'local-original') {
+                    playedLocalOriginalUrl.current = currentPreview.current.videoUrl;
+                  }
                   setVideoOrigin(currentPreview.current?.engine);
+                }
               }}
               onTimeUpdate={(event) => {
                 if (

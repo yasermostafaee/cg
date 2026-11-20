@@ -1494,7 +1494,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
       document.addEventListener('securitypolicyviolation', (event) => {
         state.violations.push(event.violatedDirective);
       });
-      window.cg.sourcePreviews.mediaOpen = async ({ previewId }) => {
+      window.cg.sourcePreviews.mediaOpen = async ({ previewId, tryLocalOriginal }) => {
         if (previewId !== undefined && state.sessionEngines[previewId] !== state.engine)
           return { state: 'unavailable', recovery: 'target-changed' };
         const id = previewId ?? crypto.randomUUID();
@@ -1506,6 +1506,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
         return {
           state: 'ready',
           previewId: id,
+          playbackMode: tryLocalOriginal === true ? 'local-original' : 'proxy',
           videoUrl: `${origin}/video?ticket=${id}`,
           posterUrl: `${origin}/poster?ticket=${id}`,
           durationMs: 10_000,
@@ -1567,6 +1568,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
       .toBeGreaterThan(0);
     expect(await video.evaluate((element) => (element as HTMLVideoElement).videoWidth)).toBe(64);
     expect(await video.evaluate((element) => (element as HTMLVideoElement).muted)).toBe(true);
+    await expect(preview.getByTitle('Server B · Local original file')).toBeVisible();
     await expect
       .poll(() => poster.evaluate((element) => (element as HTMLImageElement).naturalWidth))
       .toBe(64);

@@ -101,6 +101,7 @@ const mediaPlayback = z
     expiresAtMs: z.number().nonnegative().optional(),
     durationMs: z.number().nonnegative().optional(),
     videoUrl: z.string().max(2048).optional(),
+    playbackMode: z.enum(['original', 'local-original', 'proxy']).optional(),
     posterUrl: z.string().max(2048).optional(),
     engine: z.enum(['A', 'B']).optional(),
     host: z.string().max(256).optional(),
@@ -118,6 +119,7 @@ export const SourceMediaOpenChannel = defineChannel(
     sourceId,
     previewId: z.string().uuid().optional(),
     prepare: z.boolean().optional(),
+    tryLocalOriginal: z.boolean().optional(),
   }),
   mediaPlayback,
 );

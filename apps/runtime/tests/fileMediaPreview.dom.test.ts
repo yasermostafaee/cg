@@ -71,6 +71,72 @@ function ready(previewId = FIRST): MediaPlaybackPreview {
   };
 }
 
+it('plays the verified local original and renews it while paused', async () => {
+  mockPlayer();
+  const direct: MediaPlaybackPreview = { ...ready(), playbackMode: 'local-original' };
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValue(direct);
+  const view = await mount(mediaOpen, true);
+  try {
+    const original = view.host.querySelector('video')!;
+    expect(original.src).toBe(direct.videoUrl);
+    await act(async () => original.dispatchEvent(new Event('playing')));
+    await act(async () => vi.advanceTimersByTimeAsync(8_000));
+    expect(mediaOpen).toHaveBeenCalledOnce();
+    await act(async () => view.button('Pause preview').click());
+    await act(async () => vi.advanceTimersByTimeAsync(7_000));
+    expect(mediaOpen).toHaveBeenLastCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      previewId: FIRST,
+      prepare: false,
+      tryLocalOriginal: true,
+    });
+    expect(view.host.querySelector('video')).toBe(original);
+    expect(view.mediaClose).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(['decode error', 'startup timeout'])(
+  'falls back from a local original once after a %s without another Play',
+  async (failure) => {
+    mockPlayer();
+    const direct: MediaPlaybackPreview = { ...ready(), playbackMode: 'local-original' };
+    const proxy: MediaPlaybackPreview = {
+      ...ready(),
+      playbackMode: 'proxy',
+      videoUrl: direct.videoUrl?.replace('/file?', '/proxy?'),
+    };
+    const mediaOpen = vi
+      .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+      .mockResolvedValueOnce(direct)
+      .mockResolvedValue(proxy);
+    const view = await mount(mediaOpen, true);
+    try {
+      const original = view.host.querySelector('video')!;
+      if (failure === 'decode error')
+        await act(async () => original.dispatchEvent(new Event('error')));
+      else await act(async () => vi.advanceTimersByTimeAsync(8_000));
+      expect(mediaOpen).toHaveBeenCalledTimes(2);
+      expect(mediaOpen).toHaveBeenLastCalledWith({
+        channel: 1,
+        sourceId: 'md-film',
+        previewId: FIRST,
+        prepare: true,
+        tryLocalOriginal: false,
+      });
+      expect(view.host.querySelector('video')?.src).toBe(proxy.videoUrl);
+      expect(view.button('Pause preview')).not.toBeNull();
+      expect(view.mediaClose).not.toHaveBeenCalled();
+    } finally {
+      await view.close();
+    }
+  },
+);
+
 function mockPlayer() {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] });
@@ -210,6 +276,7 @@ it('reads a selected media preview without preparing it until Play', async () =>
       channel: 1,
       sourceId: 'md-film',
       prepare: false,
+      tryLocalOriginal: true,
     });
     await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(mediaOpen).toHaveBeenCalledOnce();
@@ -221,6 +288,7 @@ it('reads a selected media preview without preparing it until Play', async () =>
       sourceId: 'md-film',
       previewId: FIRST,
       prepare: true,
+      tryLocalOriginal: true,
     });
     expect(player.play).toHaveBeenCalledOnce();
   } finally {
@@ -249,6 +317,7 @@ it('keeps an explicit Play queued behind a failed passive preview read', async (
       channel: 1,
       sourceId: 'md-film',
       prepare: true,
+      tryLocalOriginal: true,
     });
     expect(player.play).toHaveBeenCalledOnce();
   } finally {
@@ -273,6 +342,7 @@ it('keeps a terminal proxy reason visible and only requests preparation again on
       sourceId: 'md-film',
       previewId: FIRST,
       prepare: false,
+      tryLocalOriginal: true,
     });
     expect(view.host.textContent).toContain(reason);
     expect(player.play).not.toHaveBeenCalled();
@@ -321,6 +391,7 @@ it('revalidates the held media on a verified role switch without waiting for its
       sourceId: 'md-film',
       previewId: FIRST,
       prepare: true,
+      tryLocalOriginal: true,
     });
     expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
     const resumed = view.host.querySelector('video')!;
@@ -730,7 +801,12 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
     expect(video.preload).toBe('metadata');
     await act(async () => poster?.dispatchEvent(new Event('load')));
     expect(view.host.textContent).toContain('Server B');
-    expect(mediaOpen).toHaveBeenCalledWith({ channel: 1, sourceId: 'md-film', prepare: false });
+    expect(mediaOpen).toHaveBeenCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      prepare: false,
+      tryLocalOriginal: true,
+    });
     await act(async () => view.button('Play preview').click());
     expect(player.play).toHaveBeenCalledOnce();
     expect(video.hidden).toBe(false);
@@ -760,6 +836,7 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
       channel: 1,
       sourceId: 'md-film',
       prepare: true,
+      tryLocalOriginal: true,
     });
     expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(SECOND).videoUrl);
     expect(view.thumbnails).not.toHaveBeenCalled();
@@ -845,6 +922,7 @@ it('polls proxy readiness with the same lease and stops polling when covered', a
       sourceId: 'md-film',
       previewId: FIRST,
       prepare: true,
+      tryLocalOriginal: true,
     });
     await view.show(true);
     expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
@@ -875,6 +953,7 @@ it('keeps the poster visible and permits preparation when a renewed proxy needs 
       sourceId: 'md-film',
       previewId: FIRST,
       prepare: true,
+      tryLocalOriginal: true,
     });
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(view.host.querySelector('video')?.hidden).toBe(false);
@@ -883,6 +962,7 @@ it('keeps the poster visible and permits preparation when a renewed proxy needs 
       sourceId: 'md-film',
       previewId: FIRST,
       prepare: true,
+      tryLocalOriginal: true,
     });
   } finally {
     await view.close();
