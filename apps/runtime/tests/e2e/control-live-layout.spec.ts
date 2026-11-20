@@ -353,6 +353,13 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await expect(chooseBackground(restored)).toHaveAttribute('title', 'layout-poster.png');
     await expect(chooseBackground(restored).locator('img')).toBeVisible();
     await expect(fallback(restored, 2).locator('img')).toHaveJSProperty('naturalWidth', 1280);
+    const layoutTitle = (dialog: Locator) =>
+      dialog.getByRole('textbox', { name: 'Title', exact: true });
+    await layoutTitle(restored).fill('Guest title');
+    await restored.getByRole('button', { name: 'Edit plate 1', exact: true }).click();
+    await layoutTitle(restored).fill('Studio title');
+    await restored.getByRole('button', { name: 'Add preset', exact: true }).click();
+    await restored.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Alternate');
     await restored
       .getByRole('textbox', { name: 'Layout name', exact: true })
       .fill('Embedded preview');
@@ -376,6 +383,65 @@ test('per-plate fallback previews survive save and reopen with an independent on
         );
       }),
     ).toBe(true);
+
+    await test.step('a loaded row inherits saved titles and shares its overrides across presets', async () => {
+      const template = runtime.templateList(1).find(({ name }) => name === 'Embedded preview');
+      if (template?.controlLiveLayout === undefined) throw new Error('Missing saved live layout');
+      const { defaultPresetId, presets } = template.controlLiveLayout;
+      const alternate = presets.find(({ name }) => name === 'Alternate');
+      if (alternate === undefined) throw new Error('Missing second preset');
+      await library.getByRole('button', { name: 'Close', exact: true }).first().click();
+      const loaded = await page.evaluate(
+        (templateId) =>
+          window.cg.fixedLayers.load({
+            channel: 1,
+            layer: 59,
+            itemId: 'caption-panel',
+            templateId,
+            fields: {},
+          }),
+        template.templateId,
+      );
+      expect(loaded).toMatchObject({ accepted: true });
+      const row = page.locator('[data-layer="59"]');
+      await row.click();
+      const inspector = page.getByRole('complementary', { name: 'Inspector' });
+      const titles = inspector.getByRole('textbox', { name: 'title', exact: true });
+      const studioTitle = titles.nth(0);
+      const guestTitle = titles.nth(1);
+      await expect(studioTitle).toHaveValue('Studio title');
+      await expect(guestTitle).toHaveValue('Guest title');
+      await guestTitle.fill('Row guest title');
+      await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+      await expect
+        .poll(() =>
+          JSON.stringify(
+            runtime.stackSnapshot(1).find(({ itemId }) => itemId === 'caption-panel')?.fields,
+          ),
+        )
+        .toContain('Row guest title');
+
+      await page.getByRole('button', { name: 'Open templates', exact: true }).click();
+      await library.getByRole('button', { name: 'Select Embedded preview', exact: true }).click();
+      await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
+      await restored.getByRole('button', { name: 'Edit plate 1', exact: true }).click();
+      await layoutTitle(restored).fill('Updated studio title');
+      await restored.getByRole('button', { name: 'Edit plate 2', exact: true }).click();
+      await layoutTitle(restored).fill('Updated guest title');
+      await restored.getByRole('button', { name: 'Save layout', exact: true }).click();
+      await expect(restored).toBeHidden();
+      if (await library.isVisible())
+        await library.getByRole('button', { name: 'Close', exact: true }).first().click();
+      await expect(studioTitle).toHaveValue('Updated studio title');
+      await expect(guestTitle).toHaveValue('Row guest title');
+      for (const presetId of [alternate.id, defaultPresetId]) {
+        const preset = inspector.locator(`[data-look-tab="${presetId}"]`);
+        await preset.click();
+        await expect(preset).toHaveAttribute('aria-pressed', 'true');
+        await expect(studioTitle).toHaveValue('Updated studio title');
+        await expect(guestTitle).toHaveValue('Row guest title');
+      }
+    });
   } finally {
     await bridge?.close();
     await engine.stop();

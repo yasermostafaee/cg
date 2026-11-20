@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { lookOperatorCropAllowed, lookPlateFits, lookPlateFocuses } from '@cg/shared-ipc';
+import {
+  controlLiveLayoutFieldDefaults,
+  lookOperatorCropAllowed,
+  lookPlateFits,
+  lookPlateFocuses,
+} from '@cg/shared-ipc';
 import {
   aggregateBoundCompositionFields,
   ControlLiveLayoutSchema,
@@ -29,6 +34,7 @@ import {
   readControlLiveLayout,
 } from '../src/renderer/features/liveLayouts/controlLiveLayoutCompiler.js';
 import { sharedFrameTitlesOf } from '../src/renderer/features/inspector/sharedFrameTitles.js';
+import { newItemFields } from '../src/renderer/features/library/newItemFields.js';
 import { produceTemplateDelivery } from '../src/renderer/features/library/templateDelivery.js';
 import {
   promoteFrameAttachments,
@@ -592,6 +598,27 @@ describe('CG Control authored live layouts', () => {
       name: 'frame-anchor',
       label: 'مجری',
     });
+  });
+
+  it('leaves authored captions inherited when loading a Control layout onto a row', async () => {
+    const base = layoutFixture();
+    const layout = {
+      ...base,
+      frames: base.frames.map((frame) =>
+        frame.id === 'frame-left'
+          ? { ...frame, additionalTexts: [{ id: 'role', text: 'کارشناس' }] }
+          : frame,
+      ),
+    };
+    const { template } = await produceTemplateDelivery(await compileControlLiveLayout(layout));
+    expect(controlLiveLayoutFieldDefaults(template)).toMatchObject({
+      'preset-wide': { 'frame-left': { title: 'مهمان اول', 'text-role': 'کارشناس' } },
+      'preset-pair': { 'frame-left': { title: 'مهمان اول', 'text-role': 'کارشناس' } },
+      [controlLiveLayoutFocusLookId('preset-wide', 'frame-left')]: {
+        'frame-left': { title: 'مهمان اول', 'text-role': 'کارشناس' },
+      },
+    });
+    expect(newItemFields(template)).toEqual({});
   });
 
   it('preserves the original title geometry for saved layouts without a title style', () => {

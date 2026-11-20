@@ -1,4 +1,8 @@
-import type { TemplateInfo } from '@cg/shared-ipc';
+import {
+  controlLiveLayoutFieldDefaults,
+  withoutInheritedControlLiveLayoutFields,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { defaultNestedValues, type FieldValues } from '@cg/shared-schema';
 import { uuid } from '../../lib/uuid.js';
 
@@ -20,7 +24,12 @@ import { uuid } from '../../lib/uuid.js';
  * the operator pressed.
  */
 export function newItemFields(template: TemplateInfo): FieldValues {
-  return defaultNestedValues({ fields: template.fields, groups: template.groups ?? [] });
+  const defaults = defaultNestedValues({ fields: template.fields, groups: template.groups ?? [] });
+  // Generated captions inherit their design until the operator edits this particular row.
+  return withoutInheritedControlLiveLayoutFields(
+    defaults,
+    controlLiveLayoutFieldDefaults(template),
+  );
 }
 
 /** A fresh stack item id — the same shape both creation paths use. */

@@ -99,6 +99,8 @@ import {
   lowBankEnd,
   requiredBankFor,
   sortBanks,
+  controlLiveLayoutFieldDefaults,
+  withoutInheritedControlLiveLayoutFields,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
   // the browser's MockRuntime can read the SAME map without dragging `node:net`
   // into the SPA bundle (see channelSettings.ts for the full reasoning).
@@ -4302,9 +4304,19 @@ export class CasparRuntime {
     // genuinely have no slot to name, and inventing one would be worse than the gap.
     detail.slot = slot;
     // `B-301` — every check passed: only now does the item exist.
+    const rowFields = this.#newRowFields(slot.channel, templateId, fields);
     const seq = this.#nextSeq();
-    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
-    return this.#loadOnto(itemId, templateId, fields, slot, seq);
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields: rowFields }, seq);
+    return this.#loadOnto(itemId, templateId, rowFields, slot, seq);
+  }
+
+  #newRowFields(channel: number, templateId: string, fields: FieldValues): FieldValues {
+    const template = this.#templates.getOn(channel, templateId);
+    if (template?.controlLiveLayout === undefined) return fields;
+    return withoutInheritedControlLiveLayoutFields(
+      fields,
+      controlLiveLayoutFieldDefaults(template),
+    );
   }
 
   /**
@@ -4464,8 +4476,9 @@ export class CasparRuntime {
       return { accepted: false, errorCode: 'slot-bound' };
     }
     // `B-301` — every check passed: only now does the item exist.
+    const rowFields = this.#newRowFields(slot.channel, templateId, fields);
     const seq = this.#nextSeq();
-    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields: rowFields }, seq);
     // NOTE: the state is published from `#loadOnto`, once the item→slot map is
     // set. A publish HERE would find only half the binding (the LayerManager's
     // template type, no itemId yet) and so publish `null` — the honest
@@ -4474,7 +4487,7 @@ export class CasparRuntime {
     // LIST-ONLY: the operator's LOAD binds the row and touches NO LAYER. See
     // `#loadOnto`'s `listOnly` note for why, and for why it rides the same
     // single boolean that B-100 pairs the CLEAR and the ADD on.
-    return this.#loadOnto(itemId, templateId, fields, slot, seq, true);
+    return this.#loadOnto(itemId, templateId, rowFields, slot, seq, true);
   }
 
   /**
@@ -22254,8 +22267,10 @@ export class CasparRuntime {
         message: 'This layout changed. Reopen it to edit the latest version.',
       };
     }
+    const previousCaptionDefaults = new Map<number, FieldValues>();
     for (const target of targets) {
-      if (this.#templates.getOn(target, templateId)?.controlLiveLayout === undefined) continue;
+      const existing = this.#templates.getOn(target, templateId);
+      if (existing?.controlLiveLayout === undefined) continue;
       if (
         this.stackSnapshot(target).some(
           (row) =>
@@ -22268,10 +22283,22 @@ export class CasparRuntime {
           message: 'Duplicate this layout to prepare a separate version while it is on air.',
         };
       }
+      if (template.controlLiveLayout !== undefined) {
+        previousCaptionDefaults.set(target, controlLiveLayoutFieldDefaults(existing));
+      }
     }
     const wasListed = targets.some((c) => this.#templates.hasOn(c, templateId));
     const { changed, versionId } = this.#templates.importOn(targets, template, html, meta);
     if (changed.length > 0) {
+      if (previousCaptionDefaults.size > 0) {
+        const nextDefaults = controlLiveLayoutFieldDefaults(template);
+        for (const target of changed) {
+          const previousDefaults = previousCaptionDefaults.get(target);
+          if (previousDefaults !== undefined) {
+            this.#rebaseControlLayoutCaptions(target, templateId, previousDefaults, nextDefaults);
+          }
+        }
+      }
       // R-028 (o1) — every browser converges on the same catalogue.
       this.templatesChanged.emit(this.#templates.listAll());
       this.templatesActed.emit({
@@ -22295,6 +22322,33 @@ export class CasparRuntime {
     return targets.length === 0
       ? { registered: false, templateId }
       : { registered: true, templateId, versionId };
+  }
+
+  #rebaseControlLayoutCaptions(
+    channel: number,
+    templateId: string,
+    previousDefaults: FieldValues,
+    nextDefaults: FieldValues,
+  ): void {
+    // Older consoles loaded authored captions as row values. Drop only seeds whose
+    // authored defaults changed so off-air rows pick up the revised template.
+    for (const row of this.stackSnapshot(channel)) {
+      if (row.templateId !== templateId || this.#slots.get(row.itemId)?.channel !== channel) {
+        continue;
+      }
+      const fields = withoutInheritedControlLiveLayoutFields(
+        row.fields,
+        previousDefaults,
+        nextDefaults,
+      );
+      if (fields === row.fields) continue;
+      const seq = this.#nextSeq();
+      this.#reconciler.applyIntent(
+        { kind: 'update', itemId: row.itemId, fields, mergeMode: 'replace' },
+        seq,
+      );
+      this.#reconciler.applyAck(seq, true);
+    }
   }
 
   async templateThumbnail(

@@ -2546,6 +2546,119 @@ it.each([
   },
 );
 
+it('rebases legacy seeded Control titles on an accepted layout edit and keeps row overrides', async () => {
+  function layout(title: string, credit: string, name: string): TemplateInfo {
+    return {
+      ...template([{ id: 'guest-1', rect: BOX }]),
+      controlLiveLayout: {
+        id: 'lower-third',
+        name: 'Panel',
+        resolution: SCENE,
+        frameRate: 25,
+        frames: [{ id: 'guest-1', title, sourceId: 'src-a' }],
+        presets: [
+          {
+            id: 'panel',
+            name: 'Panel',
+            frameIds: ['guest-1'],
+            arrangement: 'side-by-side',
+            horizontalGap: 0,
+            verticalGap: 0,
+            hiddenTitles: [],
+            hiddenFocusTitles: [],
+            reverse: false,
+          },
+        ],
+        defaultPresetId: 'panel',
+        background: { kind: 'color', color: '#102030' },
+        effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+      },
+      groups: [
+        {
+          instanceId: 'panel',
+          name: 'panel',
+          compositionId: 'panel-contents',
+          aggregate: {
+            fields: [],
+            groups: [
+              {
+                instanceId: 'guest-1',
+                name: 'guest-1',
+                compositionId: 'layout-frame-guest-1',
+                aggregate: {
+                  fields: Object.entries({ title, credit, name }).map(([id, value]) => ({
+                    id,
+                    label: id,
+                    type: 'text',
+                    default: value,
+                    required: false,
+                  })),
+                  groups: [],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  const before = layout('Original title', 'Original credit', 'Original name');
+  const r = await boot({ template: before, html: FRAME_HTML });
+  const itemId = 'layout-caption-row';
+  const overrides = {
+    headline: 'Other field',
+    panel: { 'guest-1': { credit: 'Operator credit', name: '' } },
+  };
+  const legacyFields = {
+    ...overrides,
+    panel: { 'guest-1': { ...overrides.panel['guest-1'], title: 'Original title' } },
+  };
+  const row = () => r.stackSnapshot().find((item) => item.itemId === itemId);
+  expect(await r.load(itemId, before.templateId, legacyFields)).toMatchObject({ accepted: true });
+  expect(row()?.fields).toEqual(overrides);
+
+  // Old persisted stacks still contain eagerly seeded values. Recreate one through Restore.
+  const retained = { ...retainedFromStackItem(row()!), fields: legacyFields };
+  expect(await r.remove(itemId)).toMatchObject({ accepted: true });
+  expect(await r.restore([RetainedStackItemSchema.parse(retained)])).toMatchObject({ restored: 1 });
+  expect(row()?.fields).toEqual(legacyFields);
+
+  const previousSource = r.templateList(1)[0]?.controlLiveLayoutSource;
+  if (previousSource === undefined) throw new Error('Missing original layout package');
+  const kept = r.templateSourcePut(Buffer.from('revised editable layout').toString('base64'));
+  if (kept.sha256 === undefined) throw new Error('Missing revised layout package');
+  const revised = {
+    ...layout('Revised title', 'Revised credit', 'Revised name'),
+    controlLiveLayoutSource: kept.sha256,
+  };
+  const revisedHtml = FRAME_HTML.replace('served', 'revised artwork');
+  const wireBeforeEdit = (await recvLines()).length;
+  expect(
+    r.templateImport(revised, revisedHtml, 1, {
+      sourceSha256: kept.sha256,
+      expectedControlLayoutSource: kept.sha256,
+    }).registered,
+  ).toBe(false);
+  expect(row()?.fields).toEqual(legacyFields);
+  expect(
+    r.templateImport(revised, revisedHtml, 1, {
+      sourceSha256: kept.sha256,
+      expectedControlLayoutSource: previousSource,
+    }).registered,
+  ).toBe(true);
+  expect(row()?.fields).toEqual(overrides);
+  expect(RetainedStackItemSchema.parse(retainedFromStackItem(row()!)).fields).toEqual(overrides);
+  expect((await recvLines()).slice(wireBeforeEdit)).toEqual([]);
+
+  const slot = row()?.slot;
+  if (slot === undefined) throw new Error('Missing target layer');
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const rendered = JSON.parse(mock?.lastCgAdd(slot)?.data ?? '{}') as typeof overrides;
+  expect(rendered).toMatchObject(overrides);
+  expect(rendered.panel['guest-1']).not.toHaveProperty('title');
+});
+
 it('R-108 keeps current programme frames during Reload defaults and uses the new authored geometry on Take', async () => {
   const old = template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true);
   const r = await boot({ template: old, html: FRAME_HTML });

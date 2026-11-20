@@ -29,7 +29,7 @@ import {
   type ImageFit,
   type StackItemState,
 } from '@cg/shared-schema';
-import { activeLookOf, type TemplateInfo } from '@cg/shared-ipc';
+import { activeLookOf, controlLiveLayoutFieldDefaults, type TemplateInfo } from '@cg/shared-ipc';
 import { airStateVisual, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
@@ -635,6 +635,8 @@ export function Inspector({
    *    `sequenceItemHeading` (`R-037`: `<composition> — item N`; `R-040`: a stub on a collision).
    */
   const fieldGroups = (resolvedInfo?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const inheritedFields =
+    resolvedInfo === null ? undefined : controlLiveLayoutFieldDefaults(resolvedInfo);
   const frameTitles = indexSharedFrameTitles(
     resolvedInfo?.sharedFrameTitles ?? currentLookup?.retained?.sharedFrameTitles ?? [],
     fieldGroups,
@@ -894,6 +896,7 @@ export function Inspector({
                   path={[group.name]}
                   item={item}
                   applied={item.fields}
+                  inheritedFields={inheritedFields}
                   frameTitles={frameTitles}
                 />
               ))}
@@ -1107,12 +1110,14 @@ function FieldGroup({
   path,
   item,
   applied,
+  inheritedFields,
   frameTitles,
 }: {
   group: CompositionFieldGroup;
   path: FieldPath;
   item: StackItemState;
   applied: FieldValues;
+  inheritedFields: FieldValues | undefined;
   frameTitles: SharedFrameTitleIndex;
 }): JSX.Element {
   const itemId = item.itemId;
@@ -1129,6 +1134,7 @@ function FieldGroup({
           path={[...path, f.id]}
           item={item}
           applied={valueAt(applied, [...path, f.id])}
+          inheritedFields={inheritedFields}
           titlePaths={frameTitles.get(JSON.stringify([...path, f.id]))}
         />
       ))}
@@ -1142,6 +1148,7 @@ function FieldGroup({
             path={[...path, child.name]}
             item={item}
             applied={applied}
+            inheritedFields={inheritedFields}
             frameTitles={frameTitles}
           />
         ))}
@@ -1157,6 +1164,7 @@ function FieldEditor({
   book = null,
   bookName,
   bookFit,
+  inheritedFields,
   titlePaths,
 }: {
   field: DynamicField | null;
@@ -1169,6 +1177,7 @@ function FieldEditor({
   bookName?: string | undefined;
   /** `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit (`TemplateInfo.pageLists[].fit`). */
   bookFit?: ImageFit | undefined;
+  inheritedFields?: FieldValues | undefined;
   titlePaths?: readonly FieldPath[] | undefined;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
@@ -1180,23 +1189,38 @@ function FieldEditor({
   // name), never by its field id.
   const isBook = field?.type === 'list' && field.pages === true;
   const label = isBook && field !== null ? bookTitle(field, bookName) : (field?.label ?? fieldId);
-  const value = effectiveValue(itemId, path, applied);
+  const inherited = valueAt(inheritedFields, path);
+  const baseline = applied === undefined ? inherited : applied;
+  const value = effectiveValue(itemId, path, baseline);
   const kind = field?.type ?? inferKind(value);
-  const dirty =
-    titlePaths?.some((target) => isFieldDirty(itemId, target, valueAt(item.fields, target))) ??
-    isFieldDirty(itemId, path, applied);
+  const appliedAt = (target: FieldPath): FieldValue | undefined => {
+    const saved = valueAt(item.fields, target);
+    return saved === undefined ? valueAt(inheritedFields, target) : saved;
+  };
+  const affectedPaths = titlePaths ?? [path];
+  const dirty = affectedPaths.some((target) =>
+    isFieldDirty(itemId, target, valueAt(item.fields, target)),
+  );
   const patternLine = fieldPatternRefusal(field, value);
+  const unstage = (): void => {
+    if (titlePaths === undefined) unstageField(itemId, path);
+    else unstageFieldBatch(itemId, titlePaths);
+  };
   const stage = (next: FieldValue): void => {
-    if (titlePaths === undefined) stageField(itemId, path, next);
-    else
+    // Returning to the displayed baseline must leave an inherited caption sparse.
+    if (
+      typeof inherited === 'string' &&
+      affectedPaths.every((target) => appliedAt(target) === next)
+    ) {
+      unstage();
+    } else if (titlePaths === undefined) {
+      stageField(itemId, path, next);
+    } else {
       stageFieldBatch(
         itemId,
         titlePaths.map((path) => ({ path, value: next })),
       );
-  };
-  const unstage = (): void => {
-    if (titlePaths === undefined) unstageField(itemId, path);
-    else unstageFieldBatch(itemId, titlePaths);
+    }
   };
   /*
    * R-018 + TEXT-FILE-OPT-01 — a field sources its value from a text file only when

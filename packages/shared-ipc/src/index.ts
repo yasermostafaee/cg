@@ -78,6 +78,7 @@ export * from './channels/sharedFonts.js';
 export * from './channels/export.js';
 export * from './channels/preview.js';
 export * from './channels/templates.js';
+export * from './control-live-layout-fields.js';
 export * from './channels/audit.js';
 export * from './channels/updates.js';
 // THE layer map — the three role bands and the guard over them. Exported BEFORE the
