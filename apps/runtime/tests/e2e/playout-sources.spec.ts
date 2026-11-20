@@ -910,16 +910,21 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   await panel.getByRole('tab', { name: /^Media/ }).click();
   await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
   await panel.getByRole('button', { name: 'Switch to list view', exact: true }).click();
-  await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
+  const search = panel.getByRole('textbox', { name: 'Search media' });
+  await search.fill('Studio');
   await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
   const play = panel.getByRole('button', { name: 'Play preview' });
   const pause = panel.getByRole('button', { name: 'Pause preview' });
   const stop = panel.getByRole('button', { name: 'Stop preview' });
   const seek = panel.getByRole('slider', { name: 'Preview position' });
   // The row's explicit Preview action starts playback; selection alone remains silent.
-  await expect(pause).toBeEnabled();
+  await expect(pause).toBeFocused();
   await expect.poll(async () => (await positions()).some((position) => position > 0)).toBe(true);
-  await pause.click();
+  await search.press('End');
+  await search.press('Space');
+  await expect(search).toHaveValue('Studio ');
+  await expect(pause).toBeEnabled();
+  await pause.press('Space');
   await expect(play).toBeEnabled();
   const playingPosition = Number(await seek.inputValue());
   expect(playingPosition).toBeGreaterThan(0);
@@ -950,7 +955,7 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   const inline = tile.getByRole('region', { name: 'Media preview' });
   await expect(inline.getByRole('button', { name: 'Pause preview' })).toBeVisible();
   await expect(inline.locator('img')).toBeVisible();
-  await inline.getByRole('button', { name: 'Pause preview' }).click();
+  await inline.getByRole('button', { name: 'Pause preview' }).press('Space');
   const inlineSeek = inline.getByRole('slider', { name: 'Preview position' });
   await inlineSeek.press('End');
   await expect(inlineSeek).toHaveCSS('--preview-played', '100%');
@@ -1700,19 +1705,41 @@ test('Media file preview decodes the original network Range stream on one Play',
     await expect
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
       .toBeGreaterThan(beforeFullscreenTime);
-    await preview.getByRole('button', { name: 'Close fullscreen preview' }).click();
+    const closeFullscreen = preview.getByRole('button', { name: 'Close fullscreen preview' });
+    await expect(closeFullscreen).toBeFocused();
+    const corner = await closeFullscreen.evaluate((button) => {
+      const frame = button.closest('section')!.getBoundingClientRect();
+      const control = button.getBoundingClientRect();
+      return { top: control.top - frame.top, right: frame.right - control.right };
+    });
+    expect(corner.top).toBeGreaterThanOrEqual(0);
+    expect(corner.top).toBeLessThanOrEqual(32);
+    expect(corner.right).toBeGreaterThanOrEqual(0);
+    expect(corner.right).toBeLessThanOrEqual(32);
+    await closeFullscreen.click();
     await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    const enterFullscreen = transport.getByRole('button', {
+      name: 'Fullscreen preview',
+      exact: true,
+    });
+    await expect(enterFullscreen).toBeFocused();
     await expect(panel).toBeVisible();
     expect(await video.evaluate((element, original) => element === original, player)).toBe(true);
     expect((await state()).sessions).toEqual(beforeFullscreen.sessions);
     expect((await state()).closes).toEqual(beforeFullscreen.closes);
-    await preview.getByRole('button', { name: 'Fullscreen preview', exact: true }).click();
-    await expect(preview.getByRole('button', { name: 'Close fullscreen preview' })).toBeFocused();
+    await enterFullscreen.click();
+    await expect(closeFullscreen).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(video).toHaveJSProperty('paused', true);
+    await expect(closeFullscreen).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(video).toHaveJSProperty('paused', false);
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect(panel).toBeVisible();
-    await preview.getByRole('button', { name: 'Pause preview' }).click();
-    expect(await video.evaluate((element) => (element as HTMLVideoElement).paused)).toBe(true);
+    await expect(enterFullscreen).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(video).toHaveJSProperty('paused', true);
     const pausedAt = await video.evaluate((element) => (element as HTMLVideoElement).currentTime);
     await page.waitForTimeout(150);
     expect(

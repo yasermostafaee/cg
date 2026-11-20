@@ -56,6 +56,10 @@
           "en": "The media player in Grid, List and fullscreen has a thin red seek bar, elapsed and total time, and matching buttons. Station setup shows the short Build ID beside the release version."
         },
         {
+          "fa": "در پلیر مدیا، Space پخش را موقتاً متوقف می‌کند یا از همان‌جا ادامه می‌دهد. میان‌برهای لایه‌ها در پنجرهٔ انتخاب منبع غیرفعال‌اند. دکمهٔ خروج از تمام‌صفحه در گوشهٔ بالا قرار دارد.",
+          "en": "Space toggles media preview playback. Layer shortcuts are inactive in the source picker. The full-screen close button is in the upper corner."
+        },
+        {
           "fa": "در Connection، میزبان و پورت گرافیکِ مدیریت‌شده توسط CG Bridge با مقدار واقعی و به‌صورت فقط‌خواندنی نمایش داده می‌شوند.",
           "en": "In Connection, the graphics host and port managed by CG Bridge show their active values as read-only fields."
         }

@@ -242,13 +242,28 @@
 }
 
 .cg-source-media-preview:fullscreen {
+  --preview-fullscreen-gutter: clamp(10px, 2vw, 28px);
+  position: relative;
   box-sizing: border-box;
   grid-template-rows: auto minmax(0, 1fr) auto;
   align-content: stretch;
   gap: 10px;
-  padding: clamp(10px, 2vw, 28px);
+  padding: var(--preview-fullscreen-gutter);
   background: var(--r-monitor-bg);
   color: var(--r-text);
+}
+
+.cg-source-media-preview:fullscreen .cg-source-media-preview__heading {
+  padding-inline-end: 40px;
+}
+
+.cg-source-media-preview:fullscreen
+  .cg-source-media-preview__toolbar
+  > .cg-source-media-preview__fullscreen {
+  position: absolute;
+  inset: var(--preview-fullscreen-gutter) var(--preview-fullscreen-gutter) auto auto;
+  z-index: 1;
+  margin: 0;
 }
 
 .cg-source-media-preview:fullscreen .cg-source-media-preview__picture {

@@ -52,6 +52,7 @@ interface PreviewTransport {
   seekEndMs: number;
   seekDisabled?: boolean;
   onSeek: (positionMs: number) => void;
+  onTogglePlayback?: (() => void) | undefined;
   controls: ReactNode;
   message?: string;
 }
@@ -77,6 +78,42 @@ function MediaPreviewSurface({
   const fullscreenButton = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [fullscreenError, setFullscreenError] = useState(false);
+  const togglePlayback = transport?.onTogglePlayback;
+
+  useEffect(() => {
+    if (togglePlayback === undefined) return;
+    const space = (event: KeyboardEvent): void => {
+      if (
+        event.key !== ' ' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      const element = surface.current;
+      if (element === null) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.closest('input:not([type="range"]), textarea, select, [role="textbox"]') !==
+            null ||
+          (!element.contains(target) &&
+            target.closest('button, a[href], [role="button"]') !== null))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) togglePlayback();
+    };
+    window.addEventListener('keydown', space, true);
+    return () => window.removeEventListener('keydown', space, true);
+  }, [togglePlayback]);
 
   useEffect(() => {
     const element = surface.current;
@@ -291,8 +328,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const unsupported = useRef(false);
 
   useEffect(() => {
-    if (inline) playbackButton.current?.focus();
-  }, [inline]);
+    if (inline || playRequest !== undefined) playbackButton.current?.focus({ preventScroll: true });
+  }, [inline, playRequest]);
 
   useEffect(() => {
     if (!foreground || channel === undefined || unsupported.current) return;
@@ -590,14 +627,14 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     if (!unsupported.current) startPlayback();
   }, [playRequest, startPlayback]);
 
-  const setPlayback = (): void => {
+  const togglePlayback = useCallback((): void => {
     if (currentIntent.current === 'playing') {
       setPlayerError(null);
       currentIntent.current = 'paused';
       setIntent('paused');
       video.current?.pause();
     } else startPlayback();
-  };
+  }, [startPlayback]);
 
   const stop = (): void => {
     currentIntent.current = 'stopped';
@@ -776,6 +813,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
         durationMs: duration,
         seekEndMs: duration,
         seekDisabled: !foreground || duration <= 0,
+        onTogglePlayback: foreground ? togglePlayback : undefined,
         onSeek: (nextPosition) => {
           position.current = nextPosition;
           setPositionMs(nextPosition);
@@ -789,8 +827,9 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
               variant="icon"
               title={intent === 'playing' ? 'Pause preview' : 'Play preview'}
               aria-label={intent === 'playing' ? 'Pause preview' : 'Play preview'}
+              aria-keyshortcuts="Space"
               disabled={!foreground}
-              onClick={setPlayback}
+              onClick={togglePlayback}
             >
               <Icon icon={intent === 'playing' ? Pause : Play} size={16} />
             </Button>
@@ -897,8 +936,8 @@ function SampledSourceMediaPreview({
   }, [src, decodedPicture, receivedOrigin, onPreviewEngineChange]);
   const playbackButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (inline) playbackButton.current?.focus();
-  }, [inline]);
+    if (inline || playRequest !== undefined) playbackButton.current?.focus({ preventScroll: true });
+  }, [inline, playRequest]);
 
   useEffect(() => {
     if (!foreground || poster !== undefined || currentPoster !== undefined) return;
@@ -950,11 +989,15 @@ function SampledSourceMediaPreview({
     };
   }, [channel, enabled, end, id, request, foreground]);
 
-  const start = (nextPosition: number, play: boolean): void => {
+  const start = useCallback((nextPosition: number, play: boolean): void => {
     setPositionMs(nextPosition);
     setStatus('loading');
     setRequest({ positionMs: nextPosition, startedAt: play ? performance.now() : null });
-  };
+  }, []);
+  const togglePlayback = useCallback((): void => {
+    const at = position.current;
+    start(!playing && at === end ? 0 : at, !playing);
+  }, [end, playing, start]);
   const consumedPlayRequest = useRef(playRequest);
   useEffect(() => {
     if (playRequest === undefined || playRequest === consumedPlayRequest.current) return;
@@ -1003,6 +1046,7 @@ function SampledSourceMediaPreview({
               positionMs,
               durationMs: end + 1,
               seekEndMs: end,
+              onTogglePlayback: foreground ? togglePlayback : undefined,
               onSeek: (nextPosition) => start(nextPosition, playing),
               ...(status === 'unavailable' && { message: 'Preview unavailable' }),
               controls: (
@@ -1012,11 +1056,8 @@ function SampledSourceMediaPreview({
                     variant="icon"
                     title={playing ? 'Pause preview' : 'Play preview'}
                     aria-label={playing ? 'Pause preview' : 'Play preview'}
-                    onClick={() =>
-                      playing
-                        ? start(positionMs, false)
-                        : start(positionMs === end ? 0 : positionMs, true)
-                    }
+                    aria-keyshortcuts="Space"
+                    onClick={togglePlayback}
                   >
                     <Icon icon={playing ? Pause : Play} size={16} />
                   </Button>
