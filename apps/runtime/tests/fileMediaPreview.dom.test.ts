@@ -92,6 +92,7 @@ it('plays the verified local original and renews it while paused', async () => {
       previewId: FIRST,
       prepare: false,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     expect(view.host.querySelector('video')).toBe(original);
     expect(view.mediaClose).not.toHaveBeenCalled();
@@ -100,11 +101,16 @@ it('plays the verified local original and renews it while paused', async () => {
   }
 });
 
-it.each(['decode error', 'startup timeout'])(
-  'falls back from a local original once after a %s without another Play',
-  async (failure) => {
+it.each([
+  ['local-original', 'decode error'],
+  ['local-original', 'startup timeout'],
+  ['network-original', 'decode error'],
+  ['network-original', 'startup timeout'],
+] as const)(
+  'falls back from %s once after a %s without another Play',
+  async (playbackMode, failure) => {
     mockPlayer();
-    const direct: MediaPlaybackPreview = { ...ready(), playbackMode: 'local-original' };
+    const direct: MediaPlaybackPreview = { ...ready(), playbackMode };
     const proxy: MediaPlaybackPreview = {
       ...ready(),
       playbackMode: 'proxy',
@@ -127,6 +133,7 @@ it.each(['decode error', 'startup timeout'])(
         previewId: FIRST,
         prepare: true,
         tryLocalOriginal: false,
+        tryNetworkOriginal: false,
       });
       expect(view.host.querySelector('video')?.src).toBe(proxy.videoUrl);
       expect(view.button('Pause preview')).not.toBeNull();
@@ -136,6 +143,93 @@ it.each(['decode error', 'startup timeout'])(
     }
   },
 );
+
+it('starts the network original only on Play and labels the received video', async () => {
+  const player = mockPlayer();
+  const direct: MediaPlaybackPreview = { ...ready(), playbackMode: 'network-original' };
+  const mediaOpen = vi.fn(async () => direct);
+  const view = await mount(mediaOpen);
+  try {
+    expect(view.host.querySelector('video')).toBeNull();
+    expect(view.host.querySelector('img')?.src).toBe(direct.posterUrl);
+    expect(mediaOpen).toHaveBeenCalledWith({
+      channel: 1,
+      sourceId: 'md-film',
+      prepare: false,
+      tryLocalOriginal: true,
+      tryNetworkOriginal: true,
+    });
+
+    await act(async () => view.button('Play preview').click());
+    const video = view.host.querySelector('video')!;
+    expect(video.src).toBe(direct.videoUrl);
+    expect(player.play).toHaveBeenCalledOnce();
+    await act(async () => video.dispatchEvent(new Event('playing')));
+    await act(async () => vi.advanceTimersByTimeAsync(8_000));
+    expect(view.host.textContent).toContain('Server B · Original file over network');
+    expect(mediaOpen).toHaveBeenCalledOnce();
+
+    await act(async () => view.button('Pause preview').click());
+    expect(view.host.querySelector('video')).toBe(video);
+  } finally {
+    await view.close();
+  }
+});
+
+it('keeps the preview-only volume and mute state across network-to-proxy fallback', async () => {
+  mockPlayer();
+  const direct: MediaPlaybackPreview = { ...ready(), playbackMode: 'network-original' };
+  const proxy: MediaPlaybackPreview = {
+    ...ready(),
+    playbackMode: 'proxy',
+    videoUrl: direct.videoUrl?.replace('/file?', '/proxy?'),
+  };
+  const mediaOpen = vi
+    .fn<NonNullable<RuntimeBridge['sourcePreviews']['mediaOpen']>>()
+    .mockResolvedValueOnce(direct)
+    .mockResolvedValueOnce({
+      ...proxy,
+      state: 'preparing',
+      preparationPhase: 'encoding',
+      videoUrl: undefined,
+    })
+    .mockResolvedValue(proxy);
+  const view = await mount(mediaOpen, true);
+  try {
+    const volume = view.host.querySelector<HTMLInputElement>('[aria-label="Preview volume"]')!;
+    const video = view.host.querySelector('video')!;
+    expect(volume.value).toBe('100');
+    expect(video.volume).toBe(1);
+    expect(video.muted).toBe(true);
+
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(volume, '35');
+      volume.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(volume.getAttribute('aria-valuetext')).toBe('35%');
+    expect(video.volume).toBe(0.35);
+    expect(video.muted).toBe(true);
+    await act(async () => view.button('Listen to preview').click());
+    expect(video.muted).toBe(false);
+
+    await act(async () => video.dispatchEvent(new Event('error')));
+    expect(view.host.querySelector('video')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    const fallback = view.host.querySelector('video')!;
+    expect(fallback.src).toBe(proxy.videoUrl);
+    expect(fallback.volume).toBe(0.35);
+    expect(fallback.muted).toBe(false);
+
+    await act(async () => view.button('Mute preview').click());
+    expect(fallback.muted).toBe(true);
+    expect(fallback.volume).toBe(0.35);
+    expect(view.take).not.toHaveBeenCalled();
+    expect(view.update).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
 
 function mockPlayer() {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -339,6 +433,7 @@ it('reads a selected media preview without preparing it until Play', async () =>
       sourceId: 'md-film',
       prepare: false,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(mediaOpen).toHaveBeenCalledOnce();
@@ -351,6 +446,7 @@ it('reads a selected media preview without preparing it until Play', async () =>
       previewId: FIRST,
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     expect(player.play).toHaveBeenCalledOnce();
   } finally {
@@ -380,6 +476,7 @@ it('keeps an explicit Play queued behind a failed passive preview read', async (
       sourceId: 'md-film',
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     expect(player.play).toHaveBeenCalledOnce();
   } finally {
@@ -405,6 +502,7 @@ it('keeps a terminal proxy reason visible and only requests preparation again on
       previewId: FIRST,
       prepare: false,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     expect(view.host.textContent).toContain(reason);
     expect(player.play).not.toHaveBeenCalled();
@@ -454,6 +552,7 @@ it('revalidates the held media on a verified role switch without waiting for its
       previewId: FIRST,
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
     const resumed = view.host.querySelector('video')!;
@@ -868,6 +967,7 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
       sourceId: 'md-film',
       prepare: false,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     await act(async () => view.button('Play preview').click());
     expect(player.play).toHaveBeenCalledOnce();
@@ -899,6 +999,7 @@ it('plays locally, releases Stop, retains the poster bitmap and opens a fresh le
       sourceId: 'md-film',
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     expect(view.host.querySelector('video')?.getAttribute('src')).toBe(ready(SECOND).videoUrl);
     expect(view.thumbnails).not.toHaveBeenCalled();
@@ -985,6 +1086,7 @@ it('polls proxy readiness with the same lease and stops polling when covered', a
       previewId: FIRST,
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     await view.show(true);
     expect(view.mediaClose).toHaveBeenCalledWith({ previewId: FIRST });
@@ -1016,6 +1118,7 @@ it('keeps the poster visible and permits preparation when a renewed proxy needs 
       previewId: FIRST,
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(view.host.querySelector('video')?.hidden).toBe(false);
@@ -1025,6 +1128,7 @@ it('keeps the poster visible and permits preparation when a renewed proxy needs 
       previewId: FIRST,
       prepare: true,
       tryLocalOriginal: true,
+      tryNetworkOriginal: true,
     });
   } finally {
     await view.close();

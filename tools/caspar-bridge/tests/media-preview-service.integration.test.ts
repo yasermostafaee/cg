@@ -287,13 +287,19 @@ async function fixture(
     },
     streams: () => streams,
     preparations: () => preparations,
-    open: (previewId?: string, prepare = true, tryLocalOriginal?: boolean) =>
+    open: (
+      previewId?: string,
+      prepare = true,
+      tryLocalOriginal?: boolean,
+      tryNetworkOriginal?: boolean,
+    ) =>
       service.open(owner, {
         channel: 1,
         sourceId: 'md-primary-a',
         prepare,
         ...(previewId === undefined ? {} : { previewId }),
         ...(tryLocalOriginal === undefined ? {} : { tryLocalOriginal }),
+        ...(tryNetworkOriginal === undefined ? {} : { tryNetworkOriginal }),
       }),
   };
 }
@@ -396,6 +402,77 @@ it('revokes original bytes and open streams when the same lease falls back to pr
   const ready = await f.open(opened.previewId, true, true);
   expect(ready).toMatchObject({ state: 'ready', playbackMode: 'proxy' });
   expect(ready.videoUrl).toContain('/proxy?ticket=');
+});
+
+it('streams authenticated original bytes to the network console if proxy encoding timed out', async () => {
+  const f = await fixture({ consolePeer: '192.0.2.44', httpPeer: '::ffff:192.0.2.44' });
+  f.setMode();
+  f.failProxy('mediaPreview.preparationTimedOut');
+  const opened = await f.open(undefined, true, true, true);
+  expect(opened).toMatchObject({ state: 'ready', playbackMode: 'network-original' });
+  expect(opened.videoUrl).toContain('/file?ticket=');
+  const response = await fetch(f.url(opened.videoUrl), { headers: { range: 'bytes=12-15' } });
+  expect(response.status).toBe(206);
+  expect(response.headers.get('content-range')).toBe(`bytes 12-15/${BYTES.length}`);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(BYTES.subarray(12, 16));
+  expect(f.preparations()).toBe(0);
+  expect(f.authorizations).toEqual(['Bearer independent-b', 'Bearer independent-b']);
+  f.readyProxy();
+  expect(await f.open(opened.previewId, false, true, true)).toMatchObject({
+    state: 'ready',
+    playbackMode: 'network-original',
+    videoUrl: opened.videoUrl,
+  });
+});
+
+it('uses a previously prepared proxy at acquisition on the network', async () => {
+  const f = await fixture({ consolePeer: '192.0.2.44', httpPeer: '192.0.2.44' });
+  f.setMode();
+  f.readyProxy();
+  expect(await f.open(undefined, true, true, true)).toMatchObject({
+    state: 'ready',
+    playbackMode: 'proxy',
+    videoUrl: expect.stringContaining('/proxy?ticket='),
+  });
+  expect(f.preparations()).toBe(0);
+});
+
+it('refuses a network original ticket used from another peer even with a forwarded header', async () => {
+  const f = await fixture({ consolePeer: '192.0.2.44', httpPeer: '192.0.2.45' });
+  f.setMode();
+  const opened = await f.open(undefined, true, true, true);
+  expect(opened).toMatchObject({ state: 'ready', playbackMode: 'network-original' });
+  const response = await fetch(f.url(opened.videoUrl), {
+    headers: { range: 'bytes=0-3', 'x-forwarded-for': '192.0.2.44' },
+  });
+  expect(response.status).toBe(403);
+  expect(f.authorizations).toEqual(['Bearer independent-b']);
+});
+
+it('cancels the network original stream and continues the same preview through proxy fallback', async () => {
+  const f = await fixture({ consolePeer: '192.0.2.44', httpPeer: '192.0.2.44' });
+  f.setMode();
+  const opened = await f.open(undefined, true, true, true);
+  f.setSlow();
+  const response = await fetch(f.url(opened.videoUrl));
+  const interrupted = expect(response.arrayBuffer()).rejects.toThrow();
+  expect(f.streams()).toBe(1);
+  expect(f.preparations()).toBe(0);
+  const downgraded = await f.open(opened.previewId, true, false, false);
+  expect(downgraded).toMatchObject({
+    state: 'preparing',
+    previewId: opened.previewId,
+    playbackMode: 'proxy',
+  });
+  await interrupted;
+  await waitUntil(() => f.streams() === 0, 'network original stream to close');
+  expect(f.preparations()).toBe(1);
+  expect((await fetch(f.url(opened.videoUrl))).status).toBe(403);
+  expect(await f.open(opened.previewId, true, true, true)).toMatchObject({
+    state: 'ready',
+    playbackMode: 'proxy',
+    videoUrl: expect.stringContaining('/proxy?ticket='),
+  });
 });
 
 it('prefers verified active topology over stale legacy selection for read previews', () => {

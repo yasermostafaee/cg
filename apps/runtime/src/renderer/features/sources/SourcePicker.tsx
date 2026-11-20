@@ -365,6 +365,14 @@ export function SourcePicker({
   );
 }
 
+function SourceSelectionCheck(): JSX.Element {
+  return (
+    <span className="cg-picker-selection-check" aria-hidden="true">
+      <Icon icon={Check} size={14} />
+    </span>
+  );
+}
+
 function PickerPanel({
   base,
   value,
@@ -433,7 +441,7 @@ function PickerPanel({
               data-picker-choice={c.value}
               onClick={() => chooseInput(c.value, c.names ?? '')}
             >
-              {value === c.value && <Icon icon={Check} size={13} />}
+              {value === c.value && <SourceSelectionCheck />}
               <ChoiceLabel
                 choice={c}
                 meterChannel={previewChannel}
@@ -671,7 +679,7 @@ function InputsTab({
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
-          {selected && <Icon icon={Check} size={14} />}
+          {selected && <SourceSelectionCheck />}
         </span>
       ),
     };
@@ -928,7 +936,7 @@ function mediaRow(
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
             )}
-            {selected && <Icon icon={Check} size={14} />}
+            {selected && <SourceSelectionCheck />}
           </span>
           <span className="cg-picker-media__facts">
             {facts.map((f, i) => (

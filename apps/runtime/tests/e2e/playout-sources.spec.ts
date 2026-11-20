@@ -1,6 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { promisify } from 'node:util';
 import { FRAME_A, FRAME_B } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
@@ -1462,10 +1464,42 @@ test('🔴 the owner’s take: a plate on an input and a plate on a media item �
   await expect(looks).not.toContainText('md-m-khabar');
 });
 
-test('Media file preview decodes a Range stream and keeps playback controls local to the picker', async ({
+test('Media file preview decodes the original network Range stream on one Play', async ({
   app,
-}) => {
-  const clip = await readFile(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url));
+}, testInfo) => {
+  const ffmpeg = process.env.CG_E2E_FFMPEG;
+  const fixture = ffmpeg
+    ? testInfo.outputPath('network-original.mkv')
+    : new URL('./fixtures/seek-safe-64x64.webm', import.meta.url);
+  if (ffmpeg && typeof fixture === 'string') {
+    // Keep the portable WebM fixture for CI. A native Edge smoke can generate the same
+    // H.264/AAC Matroska container that Playout conservatively classifies for proxy.
+    await mkdir(testInfo.outputDir, { recursive: true });
+    await promisify(execFile)(ffmpeg, [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=size=64x64:rate=10:duration=10',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:sample_rate=48000:duration=10',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-g',
+      '10',
+      '-c:a',
+      'aac',
+      fixture,
+    ]);
+  }
+  const clip = await readFile(fixture);
   const ranges: string[] = [];
   let posterReads = 0;
   const server = createServer((request, response) => {
@@ -1478,7 +1512,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
       response.end(FRAME_A);
       return;
     }
-    response.setHeader('Content-Type', 'video/webm');
+    response.setHeader('Content-Type', ffmpeg ? 'video/x-matroska' : 'video/webm');
     response.setHeader('Accept-Ranges', 'bytes');
     const range = request.headers.range;
     if (range !== undefined) {
@@ -1519,6 +1553,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
         sessions: [] as string[],
         closes: [] as string[],
         commands: 0,
+        proxyFallbacks: 0,
         violations: [] as string[],
         engine: 'B' as 'A' | 'B',
         sessionEngines: {} as Record<string, 'A' | 'B'>,
@@ -1528,7 +1563,8 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
       document.addEventListener('securitypolicyviolation', (event) => {
         state.violations.push(event.violatedDirective);
       });
-      window.cg.sourcePreviews.mediaOpen = async ({ previewId, tryLocalOriginal }) => {
+      window.cg.sourcePreviews.mediaOpen = async ({ previewId, tryNetworkOriginal }) => {
+        if (tryNetworkOriginal !== true) state.proxyFallbacks++;
         if (previewId !== undefined && state.sessionEngines[previewId] !== state.engine)
           return { state: 'unavailable', recovery: 'target-changed' };
         const id = previewId ?? crypto.randomUUID();
@@ -1540,7 +1576,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
         return {
           state: 'ready',
           previewId: id,
-          playbackMode: tryLocalOriginal === true ? 'local-original' : 'proxy',
+          playbackMode: tryNetworkOriginal === true ? 'network-original' : 'proxy',
           videoUrl: `${origin}/video?ticket=${id}`,
           posterUrl: `${origin}/poster?ticket=${id}`,
           durationMs: 10_000,
@@ -1572,6 +1608,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
                 sessions: string[];
                 closes: string[];
                 commands: number;
+                proxyFallbacks: number;
                 violations: string[];
               };
             }
@@ -1602,7 +1639,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
       .toBeGreaterThan(0);
     expect(await video.evaluate((element) => (element as HTMLVideoElement).videoWidth)).toBe(64);
     expect(await video.evaluate((element) => (element as HTMLVideoElement).muted)).toBe(true);
-    await expect(preview.getByTitle('Server B · Local original file')).toBeVisible();
+    await expect(preview.getByTitle('Server B · Original file over network')).toBeVisible();
     await expect
       .poll(() => poster.evaluate((element) => (element as HTMLImageElement).naturalWidth))
       .toBe(64);
@@ -1654,6 +1691,12 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     ).toBeCloseTo(pausedAt, 1);
     await preview.getByRole('button', { name: 'Listen to preview' }).click();
     expect(await video.evaluate((element) => (element as HTMLVideoElement).muted)).toBe(false);
+    const volume = preview.getByRole('slider', { name: 'Preview volume' });
+    await volume.press('Home');
+    await expect(video).toHaveJSProperty('volume', 0);
+    await volume.press('ArrowRight');
+    await expect(volume).toHaveAttribute('aria-valuetext', '1%');
+    await expect(video).toHaveJSProperty('volume', 0.01);
     const seek = preview.getByRole('slider', { name: 'Preview position' });
     const bounds = await seek.boundingBox();
     if (bounds === null) throw new Error('the file preview must expose a seek bar');
@@ -1696,6 +1739,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
       await expect(video).toBeVisible();
       await expect(video).toHaveJSProperty('paused', false);
       await expect(video).toHaveJSProperty('muted', false);
+      await expect(video).toHaveJSProperty('volume', 0.01);
       await expect(video).toHaveJSProperty('videoWidth', 64);
       await expect
         .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
@@ -1707,6 +1751,7 @@ test('Media file preview decodes a Range stream and keeps playback controls loca
     const final = await state();
     expect(final.closes).toEqual(final.sessions);
     expect(final.commands).toBe(0);
+    expect(final.proxyFallbacks).toBe(0);
     await expect(field).toHaveAttribute('data-picker-value', '');
   } finally {
     server.closeAllConnections();

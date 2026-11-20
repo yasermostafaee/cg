@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { LoaderCircle, Maximize2, Pause, Play, Square, Volume2, VolumeX, X } from 'lucide-react';
 import {
   MAX_MEDIA_PREVIEW_POSITION_MS,
@@ -160,12 +168,16 @@ interface FileSourceMediaPreviewProps extends SourceMediaPreviewProps {
 }
 
 const MEDIA_LEASE_REFRESH_MS = 15_000;
-const LOCAL_ORIGINAL_STARTUP_MS = 8_000;
+const ORIGINAL_ATTEMPT_STARTUP_MS = 8_000;
 const PROXY_PREPARATION_BUDGET_MS = {
   // An earlier proxy can use the encoder for 20 minutes before this clip gets a turn.
   'waiting-for-capacity': 25 * 60_000,
   encoding: 20 * 60_000,
 };
+
+function isOriginalAttempt(mode: MediaPlaybackPreview['playbackMode']): boolean {
+  return mode === 'local-original' || mode === 'network-original';
+}
 
 function matchesReadyPreview(
   player: HTMLVideoElement,
@@ -200,7 +212,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const playbackButton = useRef<HTMLButtonElement>(null);
   const [preview, setPreview] = useState<MediaPlaybackPreview | null>(null);
   const currentPreview = useRef<MediaPlaybackPreview | null>(null);
-  const playedLocalOriginalUrl = useRef<string>();
+  const playedOriginalAttemptUrl = useRef<string>();
   const [positionMs, setPositionMs] = useState(0);
   const position = useRef(0);
   const positionHeld = useRef(false);
@@ -210,6 +222,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   );
   const currentIntent = useRef(intent);
   const [muted, setMuted] = useState(true);
+  const [volume, setVolume] = useState(100);
   const [videoVisible, setVideoVisible] = useState(false);
   const [videoOrigin, setVideoOrigin] = useState<PreviewEngine>();
   const [posterOrigin, setPosterOrigin] = useState<PreviewEngine>();
@@ -231,7 +244,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     let generation = 0;
     let queuedRead = false;
     let queuedProbe: string | undefined;
-    let localOriginalRejected = false;
+    let originalAttemptRejected = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let preparationStartedAt: Partial<Record<keyof typeof PROXY_PREPARATION_BUDGET_MS, number>> =
       {};
@@ -297,7 +310,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           sourceId: id,
           ...(held?.previewId === undefined ? {} : { previewId: held.previewId }),
           prepare,
-          tryLocalOriginal: !localOriginalRejected,
+          tryLocalOriginal: !originalAttemptRejected,
+          tryNetworkOriginal: !originalAttemptRejected,
         });
         if (!current()) {
           close(result);
@@ -313,7 +327,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             channel,
             sourceId: id,
             prepare: currentIntent.current === 'playing',
-            tryLocalOriginal: !localOriginalRejected,
+            tryLocalOriginal: !originalAttemptRejected,
+            tryNetworkOriginal: !originalAttemptRejected,
           });
           if (!current()) {
             close(result);
@@ -326,7 +341,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           failPlayer();
           return;
         }
-        if (result.playbackMode === 'local-original' && localOriginalRejected) return;
+        if (isOriginalAttempt(result.playbackMode) && originalAttemptRejected) return;
         currentPreview.current = result;
         setPreview(result);
         if (result.durationMs !== undefined && result.durationMs > 0) {
@@ -389,9 +404,9 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     };
     refresh.current = () => void read();
     recover.current = () => {
-      if (currentPreview.current?.playbackMode === 'local-original') {
-        if (!localOriginalRejected) {
-          localOriginalRejected = true;
+      if (isOriginalAttempt(currentPreview.current?.playbackMode)) {
+        if (!originalAttemptRejected) {
+          originalAttemptRejected = true;
           holdPosition();
           void read();
         }
@@ -470,24 +485,31 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     });
   }, [foreground]);
 
+  // Network originals can be large. Keep the poster until the operator starts playback.
+  const videoUrl =
+    preview?.playbackMode === 'network-original' && intent !== 'playing' && !videoVisible
+      ? undefined
+      : preview?.videoUrl;
+  useLayoutEffect(() => {
+    if (video.current !== null) video.current.volume = volume / 100;
+  }, [videoUrl, volume]);
   useEffect(() => {
-    if (foreground && preview?.state === 'ready' && preview.videoUrl !== undefined) play();
-  }, [foreground, play, preview?.state, preview?.videoUrl]);
+    if (foreground && preview?.state === 'ready' && videoUrl !== undefined) play();
+  }, [foreground, play, preview?.state, videoUrl]);
 
-  const localOriginalUrl =
-    preview?.playbackMode === 'local-original' ? preview.videoUrl : undefined;
+  const originalAttemptUrl = isOriginalAttempt(preview?.playbackMode) ? videoUrl : undefined;
   useEffect(() => {
-    if (!foreground || intent !== 'playing' || localOriginalUrl === undefined) return;
+    if (!foreground || intent !== 'playing' || originalAttemptUrl === undefined) return;
     const timeout = setTimeout(() => {
       if (
-        playedLocalOriginalUrl.current !== localOriginalUrl &&
-        currentPreview.current?.videoUrl === localOriginalUrl
+        playedOriginalAttemptUrl.current !== originalAttemptUrl &&
+        currentPreview.current?.videoUrl === originalAttemptUrl
       ) {
         recover.current?.();
       }
-    }, LOCAL_ORIGINAL_STARTUP_MS);
+    }, ORIGINAL_ATTEMPT_STARTUP_MS);
     return () => clearTimeout(timeout);
-  }, [foreground, intent, localOriginalUrl]);
+  }, [foreground, intent, originalAttemptUrl]);
 
   const startPlayback = useCallback((): void => {
     setPlayerError(null);
@@ -576,11 +598,14 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       message = preview.message ?? 'Preview unavailable';
     } else if (loading) message = 'Loading…';
   }
-  const localFilePlaying = showVideo && preview?.playbackMode === 'local-original';
+  let playbackOrigin = '';
+  if (showVideo && preview?.playbackMode === 'local-original') {
+    playbackOrigin = ' · Local original file';
+  } else if (showVideo && preview?.playbackMode === 'network-original') {
+    playbackOrigin = ' · Original file over network';
+  }
   const origin =
-    displayedEngine === undefined
-      ? null
-      : `Server ${displayedEngine}${localFilePlaying ? ' · Local original file' : ''}`;
+    displayedEngine === undefined ? null : `Server ${displayedEngine}${playbackOrigin}`;
 
   return (
     <MediaPreviewSurface
@@ -591,12 +616,12 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       loading={loading ? message : undefined}
       picture={
         <>
-          {preview?.videoUrl !== undefined && (
+          {videoUrl !== undefined && (
             // Library preview manifests do not include caption assets.
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
               ref={video}
-              src={preview.videoUrl}
+              src={videoUrl}
               poster={posterUrl}
               muted={muted}
               preload="metadata"
@@ -633,8 +658,8 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
               onPlaying={(event) => {
                 setBuffering(false);
                 if (matchesReadyPreview(event.currentTarget, currentPreview.current)) {
-                  if (currentPreview.current?.playbackMode === 'local-original') {
-                    playedLocalOriginalUrl.current = currentPreview.current.videoUrl;
+                  if (isOriginalAttempt(currentPreview.current?.playbackMode)) {
+                    playedOriginalAttemptUrl.current = currentPreview.current?.videoUrl;
                   }
                   setVideoOrigin(currentPreview.current?.engine);
                 }
@@ -722,6 +747,18 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           >
             <Icon icon={muted ? VolumeX : Volume2} size={15} />
           </Button>
+          <RangeInput
+            className="cg-source-media-preview__volume"
+            aria-label="Preview volume"
+            aria-valuetext={`${volume}%`}
+            title={`Preview volume · ${volume}%`}
+            min={0}
+            max={100}
+            step={1}
+            value={volume}
+            disabled={!foreground}
+            onChange={(event) => setVolume(event.currentTarget.valueAsNumber)}
+          />
         </div>
         <RangeInput
           aria-label="Preview position"

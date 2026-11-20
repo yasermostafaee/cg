@@ -42,6 +42,14 @@
         {
           "fa": "وقتی CG Control، Bridge و Playout روی یک میزبان‌اند، پیش‌نمایش ابتدا فایل اصلی را از Playout می‌خواند. اگر پلیر نتواند فایل را باز کند، همان درخواست پخش مسیر پروکسی را ادامه می‌دهد.",
           "en": "When CG Control, Bridge and Playout share a host, media preview attempts the original file first. If the player cannot open it, the same Play action continues via proxy."
+        },
+        {
+          "fa": "از رایانهٔ جداگانه، پیش‌نمایش از پروکسی آماده یا فایل اصلی روی شبکه استفاده می‌کند. اگر پلیر نتواند فایل اصلی را باز کند، همان درخواست پخش مسیر پروکسی را ادامه می‌دهد.",
+          "en": "From a separate workstation, media preview uses a ready proxy or streams the original over the network. If the original cannot play, the same Play action continues via proxy."
+        },
+        {
+          "fa": "در Choose a source میزان صدای پیش‌نمایش ویدئو را در خود کارت یا حالت تمام‌صفحه تنظیم کنید. نشان تیکِ گزینهٔ انتخاب‌شده در Grid و List واضح‌تر است.",
+          "en": "Adjust video preview volume in the card or in fullscreen. The selected item in Choose a source has a clearer checkmark in Grid and List."
         }
       ],
       "fixes": [

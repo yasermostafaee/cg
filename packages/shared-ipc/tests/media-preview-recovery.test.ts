@@ -35,3 +35,12 @@ describe('media preview preparation phase', () => {
     ).toBe(false);
   });
 });
+
+it('carries a network original request and response without requiring the option for older clients', () => {
+  const legacy = { channel: 1, sourceId: 'md-film', tryLocalOriginal: true };
+  const request = { ...legacy, tryNetworkOriginal: true };
+  expect(SourceMediaOpenChannel.request.parse(legacy)).toEqual(legacy);
+  expect(SourceMediaOpenChannel.request.parse(request)).toEqual(request);
+  const response = { state: 'ready', playbackMode: 'network-original' };
+  expect(SourceMediaOpenChannel.response.parse(response)).toEqual(response);
+});

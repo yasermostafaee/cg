@@ -480,9 +480,9 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     expect(panel.querySelector('[data-picker-tab="media"]')).not.toBeNull();
     const selected = panel.querySelector('[data-picker-media="md-m-recent"]');
     expect(selected?.getAttribute('aria-selected')).toBe('true');
-    expect(panel.querySelector('[data-picker-choice=""]')?.getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    const inherited = panel.querySelector('[data-picker-choice=""]');
+    expect(inherited?.getAttribute('aria-pressed')).toBe('true');
+    expect(inherited?.querySelector('.cg-picker-selection-check')).toBeInstanceOf(HTMLSpanElement);
     expect(panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]')?.disabled).toBe(
       true,
     );
@@ -511,6 +511,12 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
         );
       const selected = panel.querySelector<HTMLElement>('[data-picker-media="md-m-0040"]');
       expect(selected?.getAttribute('aria-selected')).toBe('true');
+      expect(selected?.querySelector('.cg-picker-selection-check')).toBeInstanceOf(HTMLSpanElement);
+      expect(
+        panel.querySelector(
+          '[data-picker-media][aria-selected="false"] .cg-picker-selection-check',
+        ),
+      ).toBeNull();
       const list = panel.querySelector<HTMLElement>('[data-picker-list]');
       expect(list?.scrollTop).toBeGreaterThan(0);
       expect(list?.getAttribute('aria-activedescendant')).toBe(selected?.id);
@@ -537,13 +543,18 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
       await render({ choices: [{ value: '', label: 'Default', names: 'in-own2' }] }),
     );
     expect(panel.querySelector('[data-picker-tab="inputs"]')).not.toBeNull();
-    expect(
-      panel.querySelector('[data-picker-input="in-own2"]')?.getAttribute('aria-selected'),
-    ).toBe('true');
+    const selectedInput = '[data-picker-input="in-own2"]';
+    expect(panel.querySelector(selectedInput)?.getAttribute('aria-selected')).toBe('true');
+    expect(panel.querySelector(`${selectedInput} .cg-picker-selection-check`)).toBeInstanceOf(
+      HTMLSpanElement,
+    );
     await act(async () =>
       panel.querySelector<HTMLButtonElement>('[aria-label="Switch to list view"]')?.click(),
     );
     expect(panel.querySelector<HTMLElement>('[data-picker-list]')?.scrollTop).toBeGreaterThan(0);
+    expect(panel.querySelector(`${selectedInput} .cg-picker-selection-check`)).toBeInstanceOf(
+      HTMLSpanElement,
+    );
   });
 });
 
@@ -951,6 +962,10 @@ describe('the keyboard, and a choice returned ONCE', () => {
     expect(onChange).not.toHaveBeenCalled();
     await act(async () => alternate?.click());
     expect(alternate?.getAttribute('aria-selected')).toBe('true');
+    expect(alternate?.querySelector('.cg-picker-selection-check')).toBeInstanceOf(HTMLSpanElement);
+    expect(
+      panel.querySelector('[data-picker-input="in-studio1"] .cg-picker-selection-check'),
+    ).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 

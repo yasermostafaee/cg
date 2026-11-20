@@ -9388,6 +9388,19 @@ input[type='checkbox']:disabled:checked {
 .cg-picker-choice {
   justify-content: flex-start;
 }
+.cg-picker-selection-check {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: var(--r-radius-field);
+  background: var(--r-accent);
+  color: var(--r-ink-on-accent);
+}
+.cg-picker-selection-check svg {
+  stroke-width: 3;
+}
 .cg-picker-tab {
   display: flex;
   flex-direction: column;
@@ -9602,6 +9615,12 @@ input[type='checkbox']:disabled:checked {
   align-items: center;
   gap: var(--r-space-2);
   min-width: 0;
+}
+.cg-vlist-option > .cg-picker-row {
+  flex: 1;
+}
+.cg-picker-row > .cg-picker-selection-check {
+  margin-inline-start: auto;
 }
 .cg-picker-row__name {
   min-width: 0;
