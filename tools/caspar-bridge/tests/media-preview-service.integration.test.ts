@@ -15,6 +15,7 @@ import {
   mediaPreviewEngine,
   type MediaPreviewTarget,
 } from '../src/media-preview-service.js';
+import { playoutFetch } from '../src/playout-http.js';
 import { openClient } from './support/auth-harness.js';
 import {
   FAKE_MEDIA_IDS,
@@ -47,7 +48,9 @@ async function listen(server: http.Server): Promise<string> {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-async function fixture() {
+async function fixture(
+  options: { consolePeer?: string; playoutHost?: string; httpPeer?: string } = {},
+) {
   let mode: 'direct' | 'proxy' = 'direct';
   let proxyState = 'notPrepared';
   let proxyError: string | undefined;
@@ -164,9 +167,11 @@ async function fixture() {
     res.end(req.method === 'HEAD' ? undefined : BYTES.subarray(start, end + 1));
   });
   const origin = await listen(engine);
+  const targetUrl = new URL(origin);
+  if (options.playoutHost !== undefined) targetUrl.hostname = options.playoutHost;
   const tickets = new HttpTickets(() => now);
   const target: MediaPreviewTarget = {
-    origin,
+    origin: targetUrl.origin,
     code: 'local-b',
     mediaId: 'replica-b',
     fingerprint: FINGERPRINT,
@@ -174,10 +179,14 @@ async function fixture() {
     engine: 'B',
     host: '192.0.2.43',
   };
-  const owner = new AuthSession();
+  const owner = new AuthSession(options.consolePeer);
   const service = new MediaPreviewService({
     tickets,
     now: () => now,
+    fetch: (url, request) => {
+      const { pathname, search } = new URL(url);
+      return playoutFetch(new URL(pathname + search, origin), request);
+    },
     targetFor: async (_owner, channel, sourceId) => {
       if (targetGate !== null) {
         targetWaits++;
@@ -192,6 +201,9 @@ async function fixture() {
   });
   cleanups.push(async () => service.dispose());
   const relay = http.createServer((req, res) => {
+    if (options.httpPeer !== undefined) {
+      Object.defineProperty(req.socket, 'remoteAddress', { value: options.httpPeer });
+    }
     const url = new URL(req.url ?? '/', 'http://relay');
     const match = /^\/media-preview\/([\w-]+)\/(file|proxy|poster)$/.exec(url.pathname);
     const grant = tickets.redeem(
@@ -275,12 +287,13 @@ async function fixture() {
     },
     streams: () => streams,
     preparations: () => preparations,
-    open: (previewId?: string, prepare = true) =>
+    open: (previewId?: string, prepare = true, tryLocalOriginal?: boolean) =>
       service.open(owner, {
         channel: 1,
         sourceId: 'md-primary-a',
         prepare,
         ...(previewId === undefined ? {} : { previewId }),
+        ...(tryLocalOriginal === undefined ? {} : { tryLocalOriginal }),
       }),
   };
 }
@@ -316,6 +329,73 @@ it('relays engine-local verified bytes with Range, suffix Range, HEAD and If-Ran
   expect(changed.headers.get('etag')).toBe('"verified-bytes"');
   expect(Buffer.from(await changed.arrayBuffer())).toEqual(BYTES);
   expect(f.authorizations.every((value) => value === 'Bearer independent-b')).toBe(true);
+});
+
+it('tries canonical original bytes from verified local sockets with no proxy preparation', async () => {
+  const f = await fixture({ consolePeer: '::ffff:127.0.0.1' });
+  f.setMode();
+  const opened = await f.open(undefined, true, true);
+  expect(opened).toMatchObject({ state: 'ready', playbackMode: 'local-original' });
+  const response = await fetch(f.url(opened.videoUrl), { headers: { range: 'bytes=2-5' } });
+  expect(response.status).toBe(206);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(BYTES.subarray(2, 6));
+  expect(f.preparations()).toBe(0);
+  const renewed = await f.open(opened.previewId, false, true);
+  expect(renewed).toMatchObject({
+    state: 'ready',
+    playbackMode: 'local-original',
+    videoUrl: opened.videoUrl,
+  });
+});
+
+it.each([
+  { consolePeer: '192.0.2.44', playoutHost: undefined },
+  { consolePeer: '127.0.0.1', playoutHost: '192.0.2.43' },
+  { consolePeer: '127.0.0.1', playoutHost: 'localhost' },
+] as const)(
+  'preserves proxy behavior without both local literal addresses (%o)',
+  async (options) => {
+    const f = await fixture({
+      consolePeer: options.consolePeer,
+      ...(options.playoutHost === undefined ? {} : { playoutHost: options.playoutHost }),
+    });
+    f.setMode();
+    expect(await f.open(undefined, true, true)).toMatchObject({
+      state: 'preparing',
+      playbackMode: 'proxy',
+    });
+    expect(f.preparations()).toBe(1);
+  },
+);
+
+it('rejects a local-original ticket replayed on a nonlocal HTTP socket', async () => {
+  const f = await fixture({ consolePeer: '127.0.0.1', httpPeer: '192.0.2.44' });
+  f.setMode();
+  const opened = await f.open(undefined, true, true);
+  expect(opened).toMatchObject({ state: 'ready', playbackMode: 'local-original' });
+  const response = await fetch(f.url(opened.videoUrl), {
+    headers: { range: 'bytes=2-5', 'x-forwarded-for': '127.0.0.1' },
+  });
+  expect(response.status).toBe(403);
+  expect(f.authorizations).toEqual(['Bearer independent-b']);
+});
+
+it('revokes original bytes and open streams when the same lease falls back to proxy', async () => {
+  const f = await fixture({ consolePeer: '127.0.0.1' });
+  f.setMode();
+  const opened = await f.open(undefined, true, true);
+  f.setSlow();
+  const response = await fetch(f.url(opened.videoUrl));
+  expect(response.ok).toBe(true);
+  expect(f.streams()).toBe(1);
+  const fallback = await f.open(opened.previewId, true, false);
+  expect(fallback).toMatchObject({ state: 'preparing', playbackMode: 'proxy' });
+  expect(f.preparations()).toBe(1);
+  expect((await fetch(f.url(opened.videoUrl))).status).toBe(403);
+  await waitUntil(() => f.streams() === 0, 'the downgraded original stream to close');
+  const ready = await f.open(opened.previewId, true, true);
+  expect(ready).toMatchObject({ state: 'ready', playbackMode: 'proxy' });
+  expect(ready.videoUrl).toContain('/proxy?ticket=');
 });
 
 it('prefers verified active topology over stale legacy selection for read previews', () => {
@@ -705,6 +785,7 @@ it('opens a searched media item through the authenticated Bridge socket and HTTP
   const mediaId = FAKE_MEDIA_IDS.studio1;
   const fingerprint = fakeFingerprint(mediaId);
   const root = `/api/v1/channels/fake-programme/media-previews/${mediaId}`;
+  let browserMode: 'direct' | 'proxy' = 'direct';
   const playout = track(
     await startFakePlayout({
       verifyBearers: true,
@@ -716,7 +797,7 @@ it('opens a searched media item through the authenticated Bridge socket and HTTP
               mediaId,
               fingerprint,
               durationMs: 12_000,
-              browserMode: 'direct',
+              browserMode,
               proxy: { state: 'notPrepared' },
               fileUrl: `${root}/file?revision=${fingerprint}`,
               proxyUrl: `${root}/proxy?revision=${fingerprint}`,
@@ -769,7 +850,12 @@ it('opens a searched media item through the authenticated Bridge socket and HTTP
   });
   expect(answer.error).toBeUndefined();
   const opened = answer.payload as MediaPlaybackPreview;
-  expect(opened).toMatchObject({ state: 'ready', engine: 'A', durationMs: 12_000 });
+  expect(opened).toMatchObject({
+    state: 'ready',
+    engine: 'A',
+    durationMs: 12_000,
+    playbackMode: 'original',
+  });
   const response = await fetch(`http://127.0.0.1:${rig.handle.port}${opened.videoUrl!}`, {
     headers: { range: 'bytes=2-5' },
   });
@@ -780,6 +866,21 @@ it('opens a searched media item through the authenticated Bridge socket and HTTP
   ).toBeDefined();
   await client.ask('close', 'sourcePreviews.mediaClose', { previewId: opened.previewId });
   expect((await fetch(`http://127.0.0.1:${rig.handle.port}${opened.videoUrl!}`)).status).toBe(403);
+  browserMode = 'proxy';
+  const localAnswer = await client.ask('local-original', 'sourcePreviews.mediaOpen', {
+    channel: 1,
+    sourceId,
+    prepare: true,
+    tryLocalOriginal: true,
+  });
+  expect(localAnswer.error).toBeUndefined();
+  const local = localAnswer.payload as MediaPlaybackPreview;
+  expect(local).toMatchObject({ state: 'ready', engine: 'A', playbackMode: 'local-original' });
+  const original = await fetch(`http://127.0.0.1:${rig.handle.port}${local.videoUrl!}`, {
+    headers: { range: 'bytes=2-5' },
+  });
+  expect(original.status).toBe(206);
+  expect(Buffer.from(await original.arrayBuffer())).toEqual(BYTES.subarray(2, 6));
   expect(
     (await rig.lines())
       .slice(before)

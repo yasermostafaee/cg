@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isIP } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { z } from 'zod';
 import {
@@ -64,10 +66,11 @@ interface Preview {
   sourceId: string;
   target: MediaPreviewTarget;
   manifest: Manifest | null;
+  tryLocalOriginal: boolean;
   tickets: Record<Resource, string>;
   expiresAt: number;
   proxyRetryAt: number;
-  streams: Set<AbortController>;
+  streams: Map<AbortController, boolean>;
   abort: AbortController;
   work: Promise<MediaPlaybackPreview> | null;
 }
@@ -114,6 +117,33 @@ function verifiedHandoff(a: MediaPreviewTarget, b: MediaPreviewTarget): boolean 
 
 function rootPath(target: MediaPreviewTarget): string {
   return `/api/v1/channels/${encodeURIComponent(target.code)}/media-previews/${encodeURIComponent(target.mediaId)}`;
+}
+
+function literalAddress(address: string | null | undefined): string | undefined {
+  if (address == null) return undefined;
+  const host = address.startsWith('[') && address.endsWith(']') ? address.slice(1, -1) : address;
+  const family = isIP(host);
+  if (family === 4) return host;
+  if (family !== 6 || host.includes('%')) return undefined;
+  const ipv6 = new URL(`http://[${host}]`).hostname.slice(1, -1);
+  const [, upperHex, lowerHex] = /^::ffff:([0-9a-f]+):([0-9a-f]+)$/.exec(ipv6) ?? [];
+  if (upperHex === undefined || lowerHex === undefined) return ipv6;
+  const upper = Number.parseInt(upperHex, 16);
+  const lower = Number.parseInt(lowerHex, 16);
+  return [upper >> 8, upper & 255, lower >> 8, lower & 255].join('.');
+}
+
+function isLocalAddress(address: string | null | undefined): boolean {
+  const normalized = literalAddress(address);
+  if (normalized === undefined) return false;
+  if (normalized === '::1' || normalized.startsWith('127.')) return true;
+  return Object.values(networkInterfaces()).some((entries) =>
+    entries?.some(({ address }) => literalAddress(address) === normalized),
+  );
+}
+
+function isLocalPreview(owner: AuthSession, target: MediaPreviewTarget): boolean {
+  return isLocalAddress(owner.peerAddress) && isLocalAddress(new URL(target.origin).hostname);
 }
 
 function validManifest(target: MediaPreviewTarget, value: unknown): Manifest | null {
@@ -243,16 +273,19 @@ export class MediaPreviewService {
         sourceId: request.sourceId,
         target,
         manifest: null,
+        tryLocalOriginal: request.tryLocalOriginal === true && isLocalPreview(owner, target),
         tickets: { file: issue('file'), proxy: issue('proxy'), poster: issue('poster') },
         expiresAt: this.#now() + HTTP_TICKET_TTL_MS,
         proxyRetryAt: 0,
-        streams: new Set(),
+        streams: new Map(),
         abort: new AbortController(),
         work: null,
       };
       this.#previews.set(id, preview);
     } else {
       preview.target = target;
+      // A decode failure ends original playback for this lease, including late renewals.
+      if (request.tryLocalOriginal === false) this.#disableLocalOriginal(preview);
       const renewed = Object.values(preview.tickets).every((ticket) =>
         this.#options.tickets.renew(ticket),
       );
@@ -317,15 +350,21 @@ export class MediaPreviewService {
     if (req.aborted || res.destroyed) return;
     const resource = grant.resource;
     const manifest = preview.manifest;
-    if (
-      (resource === 'proxy' && manifest.proxy.state !== 'ready') ||
-      (resource === 'file' && manifest.browserMode !== 'direct')
-    ) {
+    const localOriginal = resource === 'file' && manifest.browserMode !== 'direct';
+    const allowLocalFile = (current: MediaPreviewTarget): boolean =>
+      preview.tryLocalOriginal &&
+      isLocalPreview(preview.owner, current) &&
+      isLocalAddress(req.socket.remoteAddress);
+    if (localOriginal && !allowLocalFile(target)) {
+      res.writeHead(403).end();
+      return;
+    }
+    if (resource === 'proxy' && manifest.proxy.state !== 'ready') {
       res.writeHead(409).end();
       return;
     }
     const controller = new AbortController();
-    preview.streams.add(controller);
+    preview.streams.set(controller, localOriginal);
     const abort = () => controller.abort();
     req.once('aborted', abort);
     res.once('close', abort);
@@ -335,7 +374,7 @@ export class MediaPreviewService {
       checking = true;
       void this.#currentTarget(preview)
         .then((current) => {
-          if (current === null) controller.abort();
+          if (current === null || (localOriginal && !allowLocalFile(current))) controller.abort();
         })
         .catch(() => controller.abort())
         .finally(() => {
@@ -473,11 +512,18 @@ export class MediaPreviewService {
   ): MediaPlaybackPreview {
     const { manifest, target } = preview;
     if (manifest === null) return { state: 'unavailable' };
-    const resource = manifest.browserMode === 'direct' ? 'file' : 'proxy';
+    const playbackMode =
+      manifest.browserMode === 'direct'
+        ? 'original'
+        : preview.tryLocalOriginal
+          ? 'local-original'
+          : 'proxy';
+    const resource = playbackMode === 'proxy' ? 'proxy' : 'file';
     const url = (kind: Resource) =>
       `${MEDIA_PREVIEW_HTTP_PREFIX}${preview.id}/${kind}?ticket=${preview.tickets[kind]}`;
     return {
       state,
+      playbackMode,
       previewId: preview.id,
       expiresAtMs: preview.expiresAt,
       ...(manifest.durationMs == null ? {} : { durationMs: manifest.durationMs }),
@@ -526,6 +572,10 @@ export class MediaPreviewService {
           previewId: preview.id,
         });
       preview.manifest = manifest;
+      if (preview.tryLocalOriginal && !isLocalPreview(preview.owner, target)) {
+        this.#disableLocalOriginal(preview);
+      }
+      if (preview.tryLocalOriginal) return this.#view(preview, 'ready');
       if (manifest.browserMode === 'proxy' && manifest.proxy.state === 'notPrepared' && prepare) {
         if (this.#now() < preview.proxyRetryAt)
           return this.#view(preview, 'preparing', CAPACITY_MESSAGE);
@@ -598,11 +648,19 @@ export class MediaPreviewService {
     }
   }
 
+  #disableLocalOriginal(preview: Preview): void {
+    if (!preview.tryLocalOriginal) return;
+    preview.tryLocalOriginal = false;
+    for (const [stream, localOriginal] of preview.streams) {
+      if (localOriginal) stream.abort();
+    }
+  }
+
   #close(preview: Preview): void {
     this.#previews.delete(preview.id);
     preview.abort.abort();
     for (const ticket of Object.values(preview.tickets)) this.#options.tickets.revoke(ticket);
-    for (const stream of preview.streams) stream.abort();
+    for (const stream of preview.streams.keys()) stream.abort();
     preview.streams.clear();
   }
 }
