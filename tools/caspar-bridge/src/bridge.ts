@@ -95,6 +95,10 @@ import {
   LivePreviewStatusChannel,
   LivePreviewStopChannel,
   SourceAudioLevelsChannel,
+  SourceNdiTargetsChannel,
+  type SourceNdiTarget,
+  type PlayoutInput,
+  canCheckLiveInput,
   PlayoutSourcePresenceChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
@@ -342,8 +346,11 @@ import type { readPlayoutPgmTopology } from './playout-pgm-topology.js';
 import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
 import type { SourcePreviewSelector } from './playout-source-previews.js';
 import { RoutedSourceReads } from './routed-source-reads.js';
+import { NdiInputSettings } from './ndi-input-settings.js';
 import {
   reservePreviewSelector,
+  needsNdiInputSettings,
+  sourceNdiTarget,
   sourcePictureFallbackEngine,
   sourceReadEngine,
   sourceReadTarget,
@@ -371,6 +378,7 @@ import {
 } from './backup-playlist-route.js';
 import {
   primaryInputPresence,
+  reserveLiveInputIdentity,
   reserveInputPresence,
   sourcePresenceInputsOf,
 } from './source-presence.js';
@@ -3604,6 +3612,87 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const selectedReadEngines = new WeakMap<AuthSession, Map<number, Map<string, PreviewEngine>>>();
   const targetSignature = (target: LivePreviewTarget): string =>
     JSON.stringify([target.origin, target.code, target.bearer]);
+  const ndiInputSettings = new NdiInputSettings();
+  const ndiTargets = async (
+    owner: AuthSession | null,
+    { channel, sourceIds }: ChannelRequest<typeof SourceNdiTargetsChannel>,
+  ): Promise<{ targets: SourceNdiTarget[] }> => {
+    const ids = [...new Set(sourceIds)];
+    const unresolved = () => ({
+      targets: ids.map((sourceId): SourceNdiTarget => ({ sourceId, kind: 'unknown' })),
+    });
+    if (owner === null || !previewPermitted(owner, channel)) return unresolved();
+    const config = runtime.config();
+    const engine = await preferredReadEngine(owner, channel);
+    if (engine === null || config !== runtime.config()) return unresolved();
+    const target = readTarget(engine, owner, channel);
+    if (target === null) return unresolved();
+    const token = owner.token;
+    const list =
+      engine === 'A'
+        ? await playoutSources?.inputsForPresence()
+        : await backupEngine
+            ?.readPlaylistInputs()
+            .then((read) => (read.kind === 'list' ? sourcePresenceInputsOf(read.body) : null));
+    const stillAuthorized = () => {
+      const current = readTarget(engine, owner, channel);
+      return (
+        current !== null &&
+        token === owner.token &&
+        config === runtime.config() &&
+        targetSignature(current) === targetSignature(target)
+      );
+    };
+    if (list == null || !stillAuthorized()) return unresolved();
+
+    const catalog = runtime.sourceCatalog();
+    const byId = new Map(catalog.sources.map((source) => [source.id, source]));
+    const standby = config.servers.B;
+    const requestInputs = (sourceId: string): PlayoutInput[] => {
+      const logicalId = playoutInputIdOf(sourceId);
+      const source = byId.get(sourceId);
+      if (logicalId === null || source === undefined || !canCheckLiveInput(source, channel)) {
+        return [];
+      }
+      if (engine === 'A') {
+        return list.inputs.filter(
+          (input) =>
+            input.id === logicalId &&
+            (input.casparHost === undefined || hostIsOurs(input.casparHost)),
+        );
+      }
+      if (standby === undefined) return [];
+      const { matches } = reserveLiveInputIdentity(
+        list,
+        {
+          channelCode: target.code,
+          host: standby.host,
+          apiHost: new URL(target.origin).hostname,
+          playlistChannel: null,
+        },
+        logicalId,
+      );
+      const output = matches[0]?.ownOutputOf;
+      if (
+        output !== undefined &&
+        hostJoinsStation(output.casparHost, [standby.host]) &&
+        output.casparChannel === backupChannels.channelOnB(channel)
+      ) {
+        return [];
+      }
+      return matches;
+    };
+    const requests = ids.map((sourceId) => ({ sourceId, inputs: requestInputs(sourceId) }));
+    const settings = requests.some(({ inputs }) => needsNdiInputSettings(inputs))
+      ? await ndiInputSettings.read(target)
+      : [];
+    if (!stillAuthorized() || runtime.sourceCatalog() !== catalog) return unresolved();
+    return {
+      targets: requests.map(({ sourceId, inputs }) =>
+        sourceNdiTarget(sourceId, engine, inputs, settings),
+      ),
+    };
+  };
   const readSelector = (
     engine: PreviewEngine,
     owner: AuthSession,
@@ -3935,6 +4024,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     issueTicket: (grant) => tickets.issue(grant),
     livePreview,
     sourcePreviews,
+    ndiTargets,
     mediaPreviews,
     sourceAudio,
     sourcePresence,
@@ -5525,6 +5615,10 @@ export function buildRoutes(
     issueTicket?: (grant: TicketGrant) => string;
     livePreview?: LivePreviewService;
     sourcePreviews?: Pick<RoutedSourceReads, 'pvw' | 'thumbnails' | 'drop'>;
+    ndiTargets?: (
+      owner: AuthSession | null,
+      request: ChannelRequest<typeof SourceNdiTargetsChannel>,
+    ) => Promise<{ targets: SourceNdiTarget[] }>;
     mediaThumbnail?: (
       owner: AuthSession | null,
       request: ChannelRequest<typeof SourcesMediaThumbnailChannel>,
@@ -6327,6 +6421,13 @@ export function buildRoutes(
           engines: b.config().servers.B === undefined ? ['A'] : ['A', 'B'],
           sources: {},
         },
+    ),
+    route(
+      SourceNdiTargetsChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof SourceNdiTargetsChannel>) =>
+        paths.ndiTargets?.(currentAuthSession(), req) ?? { targets: [] },
     ),
     route(
       SourcePreviewPvwChannel,

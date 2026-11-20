@@ -20,6 +20,7 @@
 
 mod layer_shortcuts;
 mod local_bridge;
+mod ndi_preview;
 mod playout;
 mod shell_log;
 
@@ -83,6 +84,7 @@ fn main() {
         // then — the address question, a page that failed to load — a close goes through).
         .manage(close_guard::Guard::default())
         .manage(layer_shortcuts::LayerAltF4::default())
+        .manage(ndi_preview::NdiPreviews::default())
         .setup(|app| {
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
@@ -101,7 +103,10 @@ fn main() {
             local_bridge_act,
             close_window::close_guard,
             close_window::close_request_seen,
-            close_window::close_window_now
+            close_window::close_window_now,
+            ndi_preview::ndi_preview_start,
+            ndi_preview::ndi_preview_poll,
+            ndi_preview::ndi_preview_stop
         ])
         // `R-094` — every close request: held and asked about while the console holds it. What
         // happened to each one is written to `shell.log`.
@@ -115,6 +120,7 @@ fn main() {
             close_window::on_page_load(webview, payload);
             if webview.label() == "main" && payload.event() == PageLoadEvent::Started {
                 webview.state::<layer_shortcuts::LayerAltF4>().set(false);
+                webview.state::<ndi_preview::NdiPreviews>().clear();
             }
             if payload.event() == PageLoadEvent::Finished {
                 shell_log::log(&format!("page loaded: {}", payload.url()));

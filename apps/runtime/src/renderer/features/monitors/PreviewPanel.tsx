@@ -13,6 +13,8 @@ import {
   Sparkles,
   Scan,
   SquareDashed,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import {
   lookOperatorFrames,
@@ -62,6 +64,7 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
+import { stopNdiAudio, toggleNdiAudio, useNdiAudioReceiver } from '../sources/directNdiPreview.js';
 import { FittedSafeAreaGuides } from './SafeAreaGuides.js';
 import { SafeGuideSettings } from './SafeGuideSettings.js';
 import { useSafeGuidePreferences } from './useSafeGuidePreferences.js';
@@ -769,6 +772,9 @@ export function PreviewPanel({
         <span className="cg-monitor-fact" data-rehearsal-caption="">
           {rehearsalCaption(renderableCount, subjects.length)}
         </span>
+        {!hidden && transport?.directNdiInputs !== undefined && (
+          <PreviewNdiAudio inputs={transport.directNdiInputs} />
+        )}
       </div>
       {selectedLayout?.controlLiveLayout !== undefined && (
         <ControlLayoutFocus
@@ -830,5 +836,51 @@ export function PreviewPanel({
         )}
       </div>
     </Panel>
+  );
+}
+
+function PreviewNdiAudio({
+  inputs,
+}: {
+  inputs: NonNullable<RehearsalTransport['directNdiInputs']>;
+}): JSX.Element | null {
+  const [selected, select] = useState<string>();
+  const input = inputs.find(({ id }) => id === selected) ?? inputs[0];
+  const receiver = input?.receiver;
+  const listening = useNdiAudioReceiver();
+  const audible = receiver !== undefined && receiver === listening;
+  useEffect(
+    () => () => {
+      if (receiver !== undefined) stopNdiAudio(receiver);
+    },
+    [receiver],
+  );
+  if (input === undefined) return null;
+  return (
+    <>
+      {inputs.length > 1 && (
+        <select
+          className="cg-pgm-audio-select"
+          aria-label="Preview input sound source"
+          value={input.id}
+          onChange={(event) => select(event.currentTarget.value)}
+        >
+          {inputs.map(({ id, name }) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+        </select>
+      )}
+      <Button
+        variant="ghost"
+        aria-label="Preview input sound"
+        aria-pressed={audible}
+        title={(audible ? 'Mute preview · ' : 'Listen to preview · ') + input.name}
+        onClick={() => toggleNdiAudio(input.receiver)}
+      >
+        <Icon icon={audible ? Volume2 : VolumeX} size={13} />
+      </Button>
+    </>
   );
 }

@@ -411,6 +411,71 @@ async function openDefaults(app: {
 
 const picker = (page: Page): Locator => page.getByRole('dialog', { name: 'Choose a source' });
 
+test('the input picker draws consecutive direct NDI frames and meters local PCM', async ({
+  app,
+}) => {
+  const { page } = app;
+  const defaults = await openDefaults(app);
+  const sourceId = 'in-studio-1';
+  await page.evaluate(
+    ({ sourceId, jpgA, jpgB }) => {
+      const previews = window.cg.sourcePreviews;
+      const localReads: string[] = [];
+      const oldReads: string[] = [];
+      const picture = (base64: string): Uint8Array =>
+        Uint8Array.from(atob(base64), (byte) => byte.charCodeAt(0));
+      previews.ndiTargets = async ({ sourceIds }) => ({
+        targets: sourceIds.map((id) =>
+          id === sourceId
+            ? { sourceId: id, kind: 'ndi', senderName: 'Test (Studio)', engine: 'A' }
+            : { sourceId: id, kind: 'other' },
+        ),
+      });
+      previews.openNdiStream = async (sender, onPacket) => {
+        localReads.push(sender);
+        const pcm = new Int16Array(3840).fill(16384);
+        onPacket({ kind: 'picture', bytes: picture(jpgA) });
+        const cursor = setInterval(() => {
+          onPacket({ kind: 'picture', bytes: picture(jpgB) });
+          onPacket({ kind: 'audio', bytes: new Uint8Array(pcm.buffer) });
+        }, 100);
+        return () => clearInterval(cursor);
+      };
+      const thumbnails = previews.thumbnails;
+      previews.thumbnails = (request) => {
+        if (request.sourceIds.includes(sourceId)) oldReads.push('thumbnails');
+        return thumbnails(request);
+      };
+      const levels = previews.audioLevels;
+      previews.audioLevels = async (request) => {
+        if (request.sourceIds.includes(sourceId)) oldReads.push('audioLevels');
+        return levels?.(request) ?? { readings: [] };
+      };
+      Object.assign(window, { ndiE2e: { localReads, oldReads } });
+    },
+    { sourceId, jpgA: FRAME_A.toString('base64'), jpgB: FRAME_B.toString('base64') },
+  );
+
+  await defaults.locator('[data-defaults-select="l-1"]').click();
+  const panel = picker(page);
+  const studio = panel.getByRole('region', { name: 'Direct NDI preview · Studio 1' });
+  await expect(studio.locator('canvas')).toBeVisible();
+  await expect(studio).toContainText('Direct NDI');
+  const tile = studio.locator('..');
+  await expect(tile.getByRole('img', { name: 'Studio 1 · Audio peak -6 dBFS' })).toBeVisible();
+  await studio.getByRole('button', { name: 'Listen to Studio 1' }).click();
+  await expect(studio.getByRole('button', { name: 'Listen to Studio 1' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(await page.evaluate(() => (window as unknown as { ndiE2e: unknown }).ndiE2e)).toEqual({
+    localReads: ['Test (Studio)'],
+    oldReads: [],
+  });
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(studio).toHaveCount(0);
+});
+
 test('reopening an inherited media source shows its selection without changing the binding or auditioning', async ({
   app,
 }) => {

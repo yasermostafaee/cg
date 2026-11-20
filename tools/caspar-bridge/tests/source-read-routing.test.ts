@@ -5,6 +5,7 @@ import {
   sourceReadEngine,
   sourcePictureFallbackEngine,
   sourceReadTarget,
+  sourceNdiTarget,
 } from '../src/source-read-routing.js';
 
 const scope = {
@@ -120,6 +121,37 @@ describe('read-only source preview routing', () => {
     expect(
       reservePreviewSelector(list, { ...scope, playlistChannel: 3 }, 'playlist-a', true),
     ).toBeNull();
+  });
+
+  it('uses only the uniquely matched D10 producer and keeps offline identities available', () => {
+    const direct = sourcePresenceInputsOf({ inputs: [{ ...ndi, available: false }] })?.inputs ?? [];
+    expect(sourceNdiTarget('in-logical-ndi', 'B', direct)).toEqual({
+      sourceId: 'in-logical-ndi',
+      kind: 'ndi',
+      engine: 'B',
+      senderName: 'NDI B',
+    });
+    expect(sourceNdiTarget('in-logical-ndi', 'B', [...direct, ...direct])).toEqual({
+      sourceId: 'in-logical-ndi',
+      kind: 'unknown',
+    });
+  });
+
+  it('rejects ambiguous holder settings and disallows arbitrary URLs or embedded credentials', () => {
+    const routed =
+      sourcePresenceInputsOf({
+        inputs: [{ ...ndi, producer: { kind: 'route', channel: 8, layer: 1 } }],
+      })?.inputs ?? [];
+    const result = (address: string) =>
+      sourceNdiTarget('in-logical-ndi', 'B', routed, [{ id: ndi.id, kind: 'ndi', address }]).kind;
+    expect(result('https://elsewhere.invalid/camera')).toBe('unknown');
+    expect(result('ndi://user@camera/name')).toBe('unknown');
+    expect(result('ndi://camera/%00')).toBe('unknown');
+    expect(result('Camera (شعر بانو)')).toBe('ndi');
+    const matching = { id: ndi.id, kind: 'ndi', address: 'Camera (News)' };
+    expect(sourceNdiTarget('in-logical-ndi', 'B', routed, [matching, matching]).kind).toBe(
+      'unknown',
+    );
   });
 
   it('tries an independently resolved B media target after A has no item, without forwarding A IDs', async () => {

@@ -69,6 +69,7 @@ import type {
   SourcePreviewThumbnailsChannel,
   SourceMediaOpenChannel,
   SourceMediaCloseChannel,
+  SourceNdiTargetsChannel,
   PlaylistGainGetChannel,
   PlaylistGainSetChannel,
   LivePreviewStatus,
@@ -363,6 +364,11 @@ export type AuthSessionState =
  *   until the link reconnects and resyncs.
  */
 export type BridgeLinkStatus = 'live' | 'offline-mock' | 'disconnected';
+
+export type NdiPreviewPacket =
+  | { kind: 'picture' | 'audio'; bytes: Uint8Array }
+  | { kind: 'no-signal' }
+  | { kind: 'error'; message: string };
 
 export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
@@ -865,6 +871,13 @@ export interface RuntimeBridge {
   };
 
   sourcePreviews: {
+    ndiTargets?(
+      req: ChannelRequest<typeof SourceNdiTargetsChannel>,
+    ): Promise<ChannelResponse<typeof SourceNdiTargetsChannel>>;
+    openNdiStream?(
+      senderName: string,
+      onPacket: (packet: NdiPreviewPacket) => void,
+    ): Promise<Unsubscribe>;
     mediaOpen?(
       req: ChannelRequest<typeof SourceMediaOpenChannel>,
     ): Promise<ChannelResponse<typeof SourceMediaOpenChannel>>;

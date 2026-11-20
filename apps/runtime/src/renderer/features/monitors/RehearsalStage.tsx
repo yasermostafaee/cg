@@ -40,7 +40,8 @@ import { PreviewFramePlacement } from './PreviewFramePlacement.js';
 import { PreviewMaskPlacement } from './PreviewMaskPlacement.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
-import { usePvwSourceFrames } from './usePvwSourceFrames.js';
+import { hasPvwSourcePicture, usePvwSourceFrames } from './usePvwSourceFrames.js';
+import type { NdiReceiver } from '../sources/directNdiPreview.js';
 import { hasPreviewCropReset, previewCropDraftOf } from '../inspector/draftStore.js';
 
 /**
@@ -306,10 +307,11 @@ export interface RehearsalTransport {
   panVisible: boolean;
   panAvailable: boolean;
   moveItemId: string | undefined;
+  directNdiInputs?: readonly { id: string; name: string; receiver: NdiReceiver }[];
 }
 
 const REHEARSAL_CAVEATS =
-  'The browser preview can differ from the programme output. Source pictures are silent snapshots; ' +
+  'The browser preview can differ from the programme output. Some source pictures are silent snapshots; ' +
   'a placeholder identifies a plate with no preview picture.';
 
 function plateInRaster(plate: PlatePlacement, raster: ChannelRaster): boolean {
@@ -526,13 +528,16 @@ export function RehearsalStage({
     [renderable, raster],
   );
   const channel = renderable[0]?.subject.channel;
-  const previewSourceIds = useMemo(() => {
+  const showingSourceIds = useMemo(() => {
     if (!playing || channel === undefined) return [];
-    const showing = placements.flatMap((plate) =>
+    return placements.flatMap((plate) =>
       plate.channel === channel && plate.sourceId !== null && plateInRaster(plate, raster)
         ? [plate.sourceId]
         : [],
     );
+  }, [channel, placements, playing, raster]);
+  const previewSourceIds = useMemo(() => {
+    if (!playing || channel === undefined) return [];
     const warming = renderable.flatMap(({ subject }) => {
       const { controlLiveLayout: layout, plateSources: bindings } = subject;
       if (layout === undefined || subject.channel !== channel) return [];
@@ -550,18 +555,35 @@ export function RehearsalStage({
         ),
       );
     });
-    return [...showing, ...warming];
-  }, [channel, placements, playing, raster, renderable]);
-  const sourceFrames = usePvwSourceFrames(channel, previewSourceIds, visible);
-  const hasSourcePicture = placements.some(
-    ({ sourceId }) => sourceId !== null && sourceFrames.get(sourceId)?.jpegBase64 !== undefined,
+    return [...showingSourceIds, ...warming];
+  }, [channel, showingSourceIds, playing, renderable]);
+  const sourceFrames = usePvwSourceFrames(
+    channel,
+    previewSourceIds,
+    visible,
+    'stage',
+    false,
+    showingSourceIds,
   );
+  const hasSourcePicture = placements.some(
+    ({ sourceId }) => sourceId !== null && hasPvwSourcePicture(sourceFrames.get(sourceId)),
+  );
+  const directNdiInputs = useMemo(() => {
+    const names = new Map(
+      placements.flatMap(({ sourceId, sourceName }) =>
+        sourceId !== null && sourceName !== null ? [[sourceId, sourceName] as const] : [],
+      ),
+    );
+    return [...sourceFrames].flatMap(([id, frame]) =>
+      frame.directNdi === undefined || frame.signal !== 'present'
+        ? []
+        : [{ id, name: names.get(id) ?? 'NDI input', receiver: frame.directNdi }],
+    );
+  }, [sourceFrames, placements]);
   const showLiveSourceNote =
     playing &&
     anyRegionTooSmallForCaveat(
-      placements.filter(
-        (plate) => sourceFrames.get(plate.sourceId ?? '')?.jpegBase64 === undefined,
-      ),
+      placements.filter((plate) => !hasPvwSourcePicture(sourceFrames.get(plate.sourceId ?? ''))),
       fit,
     );
   const scopedCropItems = new Set(
@@ -738,6 +760,7 @@ export function RehearsalStage({
       panVisible,
       panAvailable,
       moveItemId,
+      ...(directNdiInputs.length > 0 && { directNdiInputs }),
     });
     return () => {
       onTransport?.(null);
@@ -752,6 +775,7 @@ export function RehearsalStage({
     panVisible,
     panAvailable,
     moveItemId,
+    directNdiInputs,
   ]);
 
   if (renderable.length === 0) {

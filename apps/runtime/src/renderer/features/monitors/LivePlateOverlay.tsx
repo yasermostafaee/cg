@@ -4,11 +4,12 @@ import type { ChannelRaster } from '@cg/shared-ipc';
 import { largestLivePlateMaskRegion } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
-import { InputAudioMeter } from '../sources/InputAudioMeter.js';
+import { InputAudioMeter, InputAudioRails } from '../sources/InputAudioMeter.js';
+import { useNdiLevels, type NdiReceiver } from '../sources/directNdiPreview.js';
 import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
-import type { PvwSourceFrame } from './usePvwSourceFrames.js';
+import { hasPvwSourcePicture, type PvwSourceFrame } from './usePvwSourceFrames.js';
 
 /**
  * R-049/B-424 — mark each live plate while leaving its authored fallback visible.
@@ -182,6 +183,9 @@ function regionCaveat(
           ? 'Its audio is muted because this plate is not in the active look.'
           : 'Its audio is muted.';
   const fit = cropEdges === true ? ' Crop edges.' : '';
+  if (preview?.directNdi !== undefined && preview.signal === 'present') {
+    return 'Live source ' + plateId + ' — direct NDI.' + fit + ' ' + source + ' ' + sound;
+  }
   if (preview?.jpegBase64 !== undefined) {
     return `Live source ${plateId} — silent preview snapshots.${fit} ${source} ${sound}`;
   }
@@ -219,7 +223,7 @@ export function LivePlateOverlay({
         const assigned = p.sourceName !== null;
         const source = labelledSource(p.sourceId);
         const preview = p.sourceId === null ? undefined : sourceFrames?.get(p.sourceId);
-        const hasPicture = preview?.jpegBase64 !== undefined;
+        const hasPicture = hasPvwSourcePicture(preview);
         const audio = p.audio === undefined ? undefined : AUDIO_GLYPH[p.audio];
         const region = largestLivePlateMaskRegion(p.mask);
         const roomForLabel = regionFitsCaveat(p.width * (region?.width ?? 0) * fit);
@@ -265,16 +269,16 @@ export function LivePlateOverlay({
             }}
           >
             {region !== null && p.sourceId !== null && (
-              <InputAudioMeter
+              <PlateMeter
                 sourceId={p.sourceId}
                 channel={source?.unavailable === true ? undefined : channel}
                 name={source?.name ?? plateLabel}
-                edge
+                preview={preview}
                 style={
                   {
-                    '--cg-input-meter-track': `${4 * inv}px`,
-                    '--cg-input-meter-divider': `${inv}px`,
-                    '--cg-input-meter-max-width': `${96 * inv}px`,
+                    '--cg-input-meter-track': String(4 * inv) + 'px',
+                    '--cg-input-meter-divider': String(inv) + 'px',
+                    '--cg-input-meter-max-width': String(96 * inv) + 'px',
                   } as CSSProperties
                 }
               />
@@ -376,5 +380,45 @@ export function LivePlateOverlay({
         );
       })}
     </div>
+  );
+}
+
+function PlateMeter({
+  sourceId,
+  channel,
+  name,
+  preview,
+  style,
+}: {
+  sourceId: string;
+  channel: number | undefined;
+  name: string;
+  preview: PvwSourceFrame | undefined;
+  style: CSSProperties;
+}): JSX.Element {
+  if (preview?.isDirectNdi !== true)
+    return <InputAudioMeter sourceId={sourceId} channel={channel} name={name} edge style={style} />;
+  return <DirectNdiPlateMeter name={name} receiver={preview.directNdi} style={style} />;
+}
+
+function DirectNdiPlateMeter({
+  name,
+  receiver,
+  style,
+}: {
+  name: string;
+  receiver: NdiReceiver | undefined;
+  style: CSSProperties;
+}): JSX.Element {
+  const levels = useNdiLevels(receiver);
+  return (
+    <InputAudioRails
+      name={name}
+      state={levels === undefined ? 'unknown' : 'measured'}
+      levels={levels ?? []}
+      count={2}
+      edge
+      style={style}
+    />
   );
 }

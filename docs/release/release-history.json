@@ -62,9 +62,21 @@
         {
           "fa": "در Connection، میزبان و پورت گرافیکِ مدیریت‌شده توسط CG Bridge با مقدار واقعی و به‌صورت فقط‌خواندنی نمایش داده می‌شوند.",
           "en": "In Connection, the graphics host and port managed by CG Bridge show their active values as read-only fields."
+        },
+        {
+          "fa": "در CG Control ویندوز، تصویر و شنیدن صدای ورودی NDI در PVW و پنجرهٔ انتخاب مستقیماً از فرستنده دریافت می‌شود. NDI Runtime رسمی ۶۴ بیتی باید روی رایانهٔ CG Control نصب باشد.",
+          "en": "CG Control on Windows receives NDI picture and preview audio directly in PVW and the source chooser. Install the official 64-bit NDI Runtime on the CG Control workstation."
         }
       ],
       "fixes": [
+        {
+          "fa": "با برگشت به مقدار فعلی ورودی یا مدیا در پنجرهٔ انتخاب، دکمهٔ Select دوباره غیرفعال می‌شود.",
+          "en": "Returning to the bound input or media in the source chooser disables Select again."
+        },
+        {
+          "fa": "تنظیمات و فوتر وضعیت سرور فعال پخش و رزرو را براساس کانال انتخاب‌شده نشان می‌دهند. در اتصال از راه دور، آدرس سرور در کارت تنظیمات نمایش داده می‌شود.",
+          "en": "Station setup and the footer identify the active and standby Playout servers for the selected channel. The station card displays the remote server address."
+        },
         {
           "fa": "کمبوهای بسته نام منبع، وضعیت A/B و ویومتر ورودی‌های زنده را نشان می‌دهند. تصویر و پوستر در پنجره‌های پیش‌نمایش و PVW در دسترس‌اند.",
           "en": "Closed source fields show the source name, A/B availability and live input meters. Pictures and posters are available in preview dialogs and PVW."

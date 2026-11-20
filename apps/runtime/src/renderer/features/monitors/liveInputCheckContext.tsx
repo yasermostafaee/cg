@@ -14,8 +14,14 @@ import type { LivePreviewHandle, LivePreviewStatus, SourceDefinition } from '@cg
 import { useLink } from '../../hooks/useLink.js';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
+import { useSourcePreviewRoute } from '../../hooks/useProgramTopology.js';
 import { uuid } from '../../lib/uuid.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
+import {
+  canResolveNdi,
+  ndiPreviewAvailable,
+  resolvesToDirectNdi,
+} from '../sources/directNdiPreview.js';
 
 interface InputCheck {
   readonly surface: string;
@@ -56,6 +62,8 @@ export function LiveInputCheckProvider({
   const enabled = live && canOperate && auth.kind === 'signed-in' && !locked;
   const [check, setCheck] = useState<InputCheck | null>(null);
   const current = useRef<InputCheck | null>(null);
+  const checkingNdi = useRef<{ surface: string; sourceId: string } | null>(null);
+  const route = useSourcePreviewRoute(enabled ? (channel ?? undefined) : undefined);
   const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meter = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,6 +81,8 @@ export function LiveInputCheckProvider({
 
   const stop = useCallback(
     (surface: string, previewId?: string): void => {
+      if (previewId === undefined && checkingNdi.current?.surface === surface)
+        checkingNdi.current = null;
       const active = current.current;
       if (
         active === null ||
@@ -87,7 +97,7 @@ export function LiveInputCheckProvider({
     [clearTimers, publish],
   );
 
-  const start = useCallback(
+  const startPlayout = useCallback(
     (surface: string, target: number, source: SourceDefinition): void => {
       if (!enabled || target !== channel) return;
       const previous = current.current;
@@ -152,6 +162,31 @@ export function LiveInputCheckProvider({
     [channel, clearTimers, enabled, publish, stop],
   );
 
+  const start = useCallback(
+    (surface: string, target: number, source: SourceDefinition): void => {
+      if (!enabled || target !== channel) return;
+      if (!ndiPreviewAvailable() || !canResolveNdi(source, target)) {
+        checkingNdi.current = null;
+        startPlayout(surface, target, source);
+        return;
+      }
+      const pending = checkingNdi.current;
+      if (pending?.surface === surface && pending.sourceId === source.id) return;
+      const active = current.current;
+      if (active !== null && (active.surface !== surface || active.sourceId !== source.id))
+        stop(active.surface, active.view.previewId);
+      const request = { surface, sourceId: source.id };
+      checkingNdi.current = request;
+      void resolvesToDirectNdi(source, target).then((direct) => {
+        if (checkingNdi.current !== request) return;
+        checkingNdi.current = null;
+        if (direct) stop(surface);
+        else startPlayout(surface, target, source);
+      });
+    },
+    [channel, enabled, startPlayout, stop],
+  );
+
   const stall = useCallback(
     (previewId: string): void => {
       const active = current.current;
@@ -190,6 +225,12 @@ export function LiveInputCheckProvider({
     if (active !== null && (!enabled || active.view.channel !== channel))
       stop(active.surface, active.view.previewId);
   }, [channel, enabled, stop]);
+
+  useEffect(() => {
+    return () => {
+      checkingNdi.current = null;
+    };
+  }, [channel, enabled, route]);
 
   useEffect(() => {
     return () => {

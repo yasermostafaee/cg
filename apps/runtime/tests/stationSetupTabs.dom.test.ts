@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
+import type { PgmTopology } from '@cg/shared-ipc';
 import { STATION_SETUP_SECTIONS } from '../src/renderer/features/stationSetup/sections.js';
 import { clearPortals } from './support/dialog.js';
+import { signedInStub } from './support/authStub.js';
 import {
   renderStationSetup,
+  SETUP_CONFIG,
   selectSetupTab,
   setSetupInput,
   stationSetupStub,
@@ -59,6 +62,62 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
     } else {
       expect(build?.textContent?.trim()).toBe(`Build ${__CG_BUILD__.sha}`);
     }
+  });
+
+  it('shows the remote Playout host when A uses loopback on the engine machine', async () => {
+    stationSetupStub({ auth: signedInStub('Operator', [1]) });
+    vi.spyOn(window.cg.auth, 'capabilities').mockReturnValue({
+      ...window.cg.auth.capabilities()!,
+      signInUrl: 'http://192.0.2.32:8080/api/cg/sign-in',
+    });
+    const dialog = await renderStationSetup({ section: 'channel' });
+    expect(dialog.querySelector('.cg-rail-station__host')?.textContent).toBe('192.0.2.32');
+    expect(dialog.querySelector('[data-modal-subtitle]')?.textContent).toContain(
+      'Programme role unknown',
+    );
+  });
+
+  it('names the verified active Playout member even when A is the CG Bridge target', async () => {
+    stationSetupStub({
+      auth: signedInStub('Operator', [1]),
+      config: {
+        ...SETUP_CONFIG,
+        servers: {
+          ...SETUP_CONFIG.servers,
+          B: { host: '192.0.2.43', amcpPort: 5250, oscPort: 6250 },
+        },
+      },
+      health: {
+        primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
+        backup: { label: 'B', state: 'healthy', amcpAxisOk: true },
+        currentPrimary: 'A',
+        strategy: 'mirror-sync',
+      },
+    });
+    const topology: PgmTopology = {
+      channel: 1,
+      active: 'B',
+      members: [
+        { engine: 'A', name: 'Studio', physicalChannel: 1, resourceKey: 'a', meterEngine: 'A' },
+        {
+          engine: 'B',
+          name: 'Studio Reserve',
+          physicalChannel: 1,
+          resourceKey: 'b',
+          meterEngine: 'B',
+        },
+        { engine: 'C', name: 'Remote Studio', physicalChannel: null, resourceKey: 'c' },
+      ],
+    };
+    Object.assign(window.cg, { pgmReturn: { topology: () => Promise.resolve(topology) } });
+    const dialog = await renderStationSetup({ section: 'channel' });
+    const subtitle = dialog.querySelector('[data-modal-subtitle]');
+    expect(subtitle?.textContent).toContain('Programme · B active · A standby');
+    expect(subtitle?.querySelector('[title="Studio"]')?.textContent).toContain('A standby');
+    expect(subtitle?.querySelector('[title="Remote Studio"]')).toBeNull();
+    expect(dialog.querySelector('.cg-rail-station__avatar')?.textContent).toBe('B');
+    expect(dialog.querySelector('.cg-rail-station__name')?.textContent).toBe('Studio Reserve');
+    expect(dialog.querySelector('.cg-rail-station__host')?.textContent).toBe('192.0.2.43');
   });
 
   it('the rail lists every section, in the owner’s order, under its group', async () => {

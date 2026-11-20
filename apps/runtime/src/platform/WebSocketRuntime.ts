@@ -192,6 +192,7 @@ import {
 } from './playoutRefresh.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 import {
+  openNativeNdiStream,
   insideCgControl,
   localBridgeAct,
   localBridgeState,
@@ -2436,6 +2437,11 @@ export class WebSocketRuntime implements RuntimeBridge {
   };
 
   readonly sourcePreviews: RuntimeBridge['sourcePreviews'] = {
+    ...(insideCgControl() && { openNdiStream: openNativeNdiStream }),
+    ndiTargets: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.SourceNdiTargetsChannel.name))
+        ? { targets: [] }
+        : this.#invoke(ipcChannels.SourceNdiTargetsChannel, req),
     mediaOpen: async (req) => {
       if (await this.#optionalChannelMissing(ipcChannels.SourceMediaOpenChannel.name))
         return { state: 'unsupported' };

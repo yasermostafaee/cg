@@ -144,10 +144,17 @@ export function useProgramTopology(channel: number | null): Snapshot {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
+/** The verified Playout programme member for this channel, if one is known. */
+export function activeProgrammeMember(
+  topology: Snapshot,
+): PgmTopology['members'][number] | undefined {
+  if (topology?.active == null) return undefined;
+  return topology.members.find(({ engine }) => engine === topology.active);
+}
+
 /** Only compare the programme member that can change a preview's preferred route. */
 export function sourcePreviewRoute(topology: Snapshot): string | undefined {
-  if (topology?.active == null) return undefined;
-  const active = topology.members.find(({ engine }) => engine === topology.active);
+  const active = activeProgrammeMember(topology);
   return active === undefined ? undefined : JSON.stringify([active.engine, active.resourceKey]);
 }
 

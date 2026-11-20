@@ -727,6 +727,8 @@ export function App(): JSX.Element {
             engines={engines}
             backupChannels={backupChannels}
             connectionMode={capabilities?.mode}
+            programmeChannel={selectedChannel}
+            playoutSignInUrl={capabilities?.signInUrl}
           />
         )}
         <CommandToast />

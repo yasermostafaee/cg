@@ -66,6 +66,28 @@ export function primaryInputPresence(
     : playlistPresence(input, playlistChannel, list.hasEpoch);
 }
 
+/** Match identity separately from signal availability. An offline sender can return. */
+export function reserveLiveInputIdentity(
+  list: SourcePresenceInputs,
+  scope: ReserveInputScope,
+  logicalId: string,
+): { candidates: PlayoutInput[]; matches: PlayoutInput[] } {
+  const isLocal = hostIsOursFor(scope.apiHost, () => [scope.host]);
+  const candidates = list.inputs.filter(
+    ({ playlistOf, casparHost }) =>
+      playlistOf === undefined && (casparHost === undefined || isLocal(casparHost)),
+  );
+  const matches = candidates.filter(({ id, logicalMappings }) =>
+    logicalMappings === undefined
+      ? id === logicalId && !id.startsWith('replica-')
+      : logicalMappings.some(
+          (mapping) =>
+            mapping.channelCode === scope.channelCode && mapping.logicalInputId === logicalId,
+        ),
+  );
+  return { candidates, matches };
+}
+
 /** Pair by D10 logical ID or the reserve's mapped physical Playlist channel, never by name. */
 export function reserveInputPresence(
   list: SourcePresenceInputs | null,
@@ -86,17 +108,8 @@ export function reserveInputPresence(
     return playlistPresence(input, channel, list.hasEpoch);
   }
 
-  const candidates = list.inputs.filter(
-    ({ playlistOf, casparHost }) =>
-      playlistOf === undefined && (casparHost === undefined || isLocal(casparHost)),
-  );
-  const [input, duplicate] = candidates.filter(({ id, logicalMappings }) =>
-    logicalMappings === undefined
-      ? id === logicalId && !id.startsWith('replica-')
-      : logicalMappings.some(
-          (m) => m.channelCode === scope.channelCode && m.logicalInputId === logicalId,
-        ),
-  );
+  const { candidates, matches } = reserveLiveInputIdentity(list, scope, logicalId);
+  const [input, duplicate] = matches;
   if (duplicate !== undefined) return 'unknown';
   if (input !== undefined) return listedPresence(input);
   return list.complete && candidates.every(({ logicalMappings }) => logicalMappings !== undefined)

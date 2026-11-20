@@ -6,6 +6,7 @@ import * as dgram from 'node:dgram';
 import { createMock } from '@cg/amcp-mock';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
+  SourceNdiTargetsChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
   SourcesMediaSearchChannel,
@@ -234,8 +235,19 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
       const passiveB = new FakeSourcePreviews('reserve-local');
       const liveB = new FakeLivePreview();
       const meterSources: SourcePreviewSelector[][] = [];
+      const settingsReads = { A: 0, B: 0 };
       const a = track(
-        await startFakePlayout({ verifyBearers: true, sourcePreviews: passiveA.handle }),
+        await startFakePlayout({
+          verifyBearers: true,
+          sourcePreviews: passiveA.handle,
+          liveInputSettings: (_req, res) => {
+            settingsReads.A++;
+            send(res, 200, [
+              { id: 'li-input3', kind: 'ndi', address: 'HOLDER-A (Camera One)' },
+              { id: 'display-name-only', name: 'ورودی ۴', kind: 'ndi', address: 'A WRONG (Four)' },
+            ]);
+          },
+        }),
         (p) => p.stop(),
       );
       a.setChannels(FAKE_CATALOGUE.map((row) => ({ ...row, videoMode: '1080i5000' })));
@@ -249,6 +261,13 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
           verifyBearers: true,
           sourcePreviews: passiveB.handle,
           livePreview: liveB.handle,
+          liveInputSettings: (_req, res) => {
+            settingsReads.B++;
+            send(res, 200, [
+              { id: 'physical-holder-b', kind: 'ndi', address: 'ndi://HOLDER-B/Camera+Two' },
+              { id: 'li-input4', name: 'ورودی ۴', kind: 'ndi', address: 'A WRONG (Four)' },
+            ]);
+          },
           sourceAudio: async (req, res) => {
             const { sources } = await bodyOf<{ sources: SourcePreviewSelector[] }>(req);
             meterSources.push(sources);
@@ -299,6 +318,18 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
           producer: { kind: 'stream', url: 'udp://239.0.0.1:5555' },
           available: true,
           logicalMappings: [{ channelCode: 'reserve-local', logicalInputId: 'li-multicast' }],
+        },
+        {
+          id: 'physical-holder-b',
+          name: 'Holder B',
+          producer: { kind: 'route', channel: 4, layer: 12 },
+          logicalMappings: [{ channelCode: 'reserve-local', logicalInputId: 'li-input3' }],
+        },
+        {
+          id: 'physical-holder-missing-b',
+          name: 'ورودی ۴',
+          producer: { kind: 'route', channel: 4, layer: 13 },
+          logicalMappings: [{ channelCode: 'reserve-local', logicalInputId: 'li-input4' }],
         },
       ]);
       const directory = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-read-source-b-')), (p) =>
@@ -370,6 +401,40 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
         );
       }, 'A missing and independently mapped B present');
       const before = (await rig.lines()).length;
+      const routedId = inputSourceId('li-input3');
+      const missingId = inputSourceId('li-input4');
+      const ndiTargets = () =>
+        ask<ChannelResponse<typeof SourceNdiTargetsChannel>>(client, SourceNdiTargetsChannel.name, {
+          channel: 1,
+          sourceIds: [sourceId, LIVE, routedId, missingId],
+        });
+      for (let lookup = 0; lookup < 2; lookup++) {
+        expect(await ndiTargets()).toEqual({
+          targets: [
+            {
+              sourceId,
+              kind: 'ndi',
+              engine: active,
+              senderName: active === 'A' ? 'STUDIO-PC (Cam 1)' : 'B CAMERA',
+            },
+            { sourceId: LIVE, kind: 'other' },
+            {
+              sourceId: routedId,
+              kind: 'ndi',
+              engine: active,
+              senderName: active === 'A' ? 'HOLDER-A (Camera One)' : 'HOLDER-B (Camera Two)',
+            },
+            { sourceId: missingId, kind: 'unknown' },
+          ],
+        });
+      }
+      expect(settingsReads).toEqual(active === 'A' ? { A: 1, B: 0 } : { A: 0, B: 1 });
+      expect(passiveA.snapshots).toEqual([]);
+      expect(passiveB.snapshots).toEqual([]);
+      expect(passiveA.starts).toEqual([]);
+      expect(passiveB.starts).toEqual([]);
+      expect(liveB.starts).toEqual([]);
+      expect(meterSources).toEqual([]);
       expect((await thumbnails(client, [sourceId])).frames).toMatchObject([
         { sourceId, engine: 'B', signal: 'present', jpegBase64: FRAME_A.toString('base64') },
       ]);

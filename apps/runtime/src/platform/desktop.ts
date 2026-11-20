@@ -1,6 +1,10 @@
 import { closeGuardDoor, type CloseGuardDoor, type ShellInvoke } from '@cg/gesture';
 import type { PlayoutFetchLike, PlayoutResponseLike } from '@cg/shared-ipc';
-import type { LocalBridgeOutcome, LocalBridgeState } from '../shared/runtime-bridge.js';
+import type {
+  LocalBridgeOutcome,
+  LocalBridgeState,
+  NdiPreviewPacket,
+} from '../shared/runtime-bridge.js';
 
 /**
  * 🔴 CG Control's shell, from the console's side (ADR 0011; `CENTRAL-BRIDGE-01`).
@@ -151,4 +155,105 @@ export function nativePlayoutFetch(): PlayoutFetchLike | null {
     if (answer.kind === 'not-sent') throw new PlayoutNotSentError(answer.reason);
     throw new Error(answer.reason);
   };
+}
+
+const NDI_PACKET_HEADER_BYTES = 5;
+const NDI_PREVIEW_POLL_MS = 32;
+const ndiSessionTails = new Map<string, Promise<void>>();
+
+export function decodeNdiPreviewPackets(buffer: ArrayBuffer): NdiPreviewPacket[] {
+  const view = new DataView(buffer);
+  const packets: NdiPreviewPacket[] = [];
+  let offset = 0;
+  while (offset < buffer.byteLength) {
+    if (buffer.byteLength - offset < NDI_PACKET_HEADER_BYTES) {
+      throw new Error('Local NDI preview returned an incomplete packet.');
+    }
+    const kind = view.getUint8(offset);
+    const length = view.getUint32(offset + 1, true);
+    offset += NDI_PACKET_HEADER_BYTES;
+    if (length > buffer.byteLength - offset) {
+      throw new Error('Local NDI preview returned an incomplete packet.');
+    }
+    const bytes = new Uint8Array(buffer, offset, length);
+    offset += length;
+    if (kind === 1) packets.push({ kind: 'picture', bytes });
+    else if (kind === 2) packets.push({ kind: 'audio', bytes });
+    else if (kind === 3) packets.push({ kind: 'no-signal' });
+    else if (kind === 4) packets.push({ kind: 'error', message: new TextDecoder().decode(bytes) });
+    else throw new Error('Local NDI preview returned an unknown packet.');
+  }
+  return packets;
+}
+
+/** Pulls bounded data through the app's native IPC. Image and audio never visit CG Bridge. */
+export async function openNativeNdiStream(
+  senderName: string,
+  onPacket: (packet: NdiPreviewPacket) => void,
+): Promise<() => void> {
+  const door = tauri();
+  if (door === null) throw new Error('Direct NDI preview requires CG Control desktop.');
+  const previous = ndiSessionTails.get(senderName);
+  let release!: () => void;
+  const lifetime = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  ndiSessionTails.set(senderName, lifetime);
+  const finish = (): void => {
+    if (ndiSessionTails.get(senderName) === lifetime) ndiSessionTails.delete(senderName);
+    release();
+  };
+
+  // A view can close while Start is still in flight. Reserve the sender until Stop finishes.
+  await previous;
+  let id: number;
+  try {
+    const answer = await door.invoke('ndi_preview_start', { sender: senderName });
+    if (typeof answer !== 'number' || !Number.isSafeInteger(answer) || answer < 0) {
+      throw new Error('Could not open a local NDI preview.');
+    }
+    id = answer;
+  } catch (error) {
+    finish();
+    throw error;
+  }
+
+  let closed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(timer);
+    void door.invoke('ndi_preview_stop', { id }).then(finish, finish);
+  };
+
+  const read = async (): Promise<void> => {
+    if (closed) return;
+    try {
+      const data = await door.invoke('ndi_preview_poll', { id });
+      if (closed) return;
+      if (!(data instanceof ArrayBuffer)) {
+        throw new Error('Local NDI preview did not return media data.');
+      }
+      for (const packet of decodeNdiPreviewPackets(data)) {
+        if (closed) return;
+        onPacket(packet);
+        if (packet.kind === 'error') {
+          close();
+          return;
+        }
+      }
+    } catch (error) {
+      if (!closed) {
+        close();
+        onPacket({
+          kind: 'error',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (!closed) timer = setTimeout(() => void read(), NDI_PREVIEW_POLL_MS);
+  };
+  timer = setTimeout(() => void read(), 0);
+  return close;
 }

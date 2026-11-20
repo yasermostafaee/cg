@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
+import { wsFrameBytes } from '../ws-frame.js';
 
 const channel = z.number().int().positive();
 const sourceId = z.string().min(1).max(256);
@@ -41,6 +42,35 @@ export const SourcePreviewPvwChannel = defineChannel(
   'sourcePreviews.pvw',
   z.object({ channel, viewId: z.string().uuid(), sourceIds: z.array(sourceId).max(4) }),
   frames,
+);
+
+export const MAX_SOURCE_NDI_BATCH = 8;
+/** The advertised form is authoritative, including any spaces in the sender name. */
+export const SourceNdiSenderNameSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine(
+    (name) => name === name.trim() && !/[\p{Cc}\p{Cs}]/u.test(name) && wsFrameBytes(name) <= 255,
+  );
+
+const sourceNdiTarget = z.discriminatedUnion('kind', [
+  z.object({
+    sourceId,
+    kind: z.literal('ndi'),
+    senderName: SourceNdiSenderNameSchema,
+    engine: z.enum(['A', 'B']),
+  }),
+  z.object({ sourceId, kind: z.literal('other') }),
+  z.object({ sourceId, kind: z.literal('unknown') }),
+]);
+export type SourceNdiTarget = z.infer<typeof sourceNdiTarget>;
+
+/** Resolve console source IDs without accepting sender names or addresses from a caller. */
+export const SourceNdiTargetsChannel = defineChannel(
+  'sourcePreviews.ndiTargets',
+  z.object({ channel, sourceIds: z.array(sourceId).min(1).max(MAX_SOURCE_NDI_BATCH) }).strict(),
+  z.object({ targets: z.array(sourceNdiTarget).max(MAX_SOURCE_NDI_BATCH) }),
 );
 
 export const MAX_MEDIA_PREVIEW_POSITION_MS = 86_400_000;

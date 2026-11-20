@@ -48,7 +48,7 @@ import {
   paintPvwSourceTransition,
   type PvwInputEffect,
 } from './pvwPlatePictures.js';
-import type { PvwSourceFrame } from './usePvwSourceFrames.js';
+import { hasPvwSourcePicture, type PvwSourceFrame } from './usePvwSourceFrames.js';
 import type { RehearsalBook } from '../layers/bookOf.js';
 import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
 import { recordPreviewBookPage } from '../book/previewBookPage.js';
@@ -605,7 +605,7 @@ export function RehearsalFrame({
             )?.sourceId;
             if (sourceId == null) return true;
             const picture = sourceFramesRef.current.get(sourceId);
-            return picture?.jpegBase64 !== undefined && !!picture.width && !!picture.height;
+            return hasPvwSourcePicture(picture) && !!picture?.width && !!picture.height;
           },
           commit,
           settled: (commitTarget) => {

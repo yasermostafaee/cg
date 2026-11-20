@@ -53,3 +53,10 @@
   background: var(--r-monitor-bg);
   color: var(--r-text);
 }
+
+.cg-input-check-tile > .cg-direct-ndi-input-select {
+  position: absolute;
+  inset: 0;
+  border-color: transparent;
+  background: transparent;
+}

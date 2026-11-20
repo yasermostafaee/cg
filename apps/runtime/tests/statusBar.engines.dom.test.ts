@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BackupChannelsState, EngineLine, EngineSessions } from '@cg/shared-ipc';
+import type { BackupChannelsState, EngineLine, EngineSessions, PgmTopology } from '@cg/shared-ipc';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { EngineNameContext, PLAYOUT_ENGINE_NAME } from '../src/renderer/ui/engineWording.js';
 
@@ -29,7 +29,11 @@ afterEach(async () => {
   container = null;
 });
 
-function stubBridge(link: 'live' | 'disconnected', currentPrimary: 'A' | 'B' = 'A'): void {
+function stubBridge(
+  link: 'live' | 'disconnected',
+  currentPrimary: 'A' | 'B' = 'A',
+  topology: PgmTopology | null = null,
+): void {
   const health = {
     primary: {
       label: currentPrimary,
@@ -57,6 +61,7 @@ function stubBridge(link: 'live' | 'disconnected', currentPrimary: 'A' | 'B' = '
       health: () => Promise.resolve(health),
       onHealthChanged: () => () => undefined,
     },
+    pgmReturn: { topology: () => Promise.resolve(topology) },
     auth: {
       state: () => ({ kind: 'off' as const }),
       onStateChanged: () => () => undefined,
@@ -74,6 +79,7 @@ async function render(
   engineName = 'CasparCG',
   backupChannels?: BackupChannelsState,
   connectionMode: 'playout' | 'off' | undefined = 'off',
+  programmeChannel?: number,
 ): Promise<HTMLElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -87,6 +93,7 @@ async function render(
         createElement(StatusBar, {
           engines,
           connectionMode,
+          ...(programmeChannel === undefined ? {} : { programmeChannel }),
           ...(backupChannels === undefined ? {} : { backupChannels }),
         }),
       ),
@@ -152,14 +159,45 @@ describe('RELEASE-0112-01 — the status bar’s engine chips', () => {
 
   it('keeps the server names in station order when B becomes the primary graphics target', async () => {
     stubBridge('live', 'B');
-    const el = await render(null, PLAYOUT_ENGINE_NAME, undefined, 'playout');
+    const el = await render(null);
     const status = el.textContent ?? '';
 
     expect(status).toContain('Server A · CG standby · HEALTHY');
     expect(status).toContain('Server B · CG active · HEALTHY');
     expect(status.indexOf('Server A')).toBeLessThan(status.indexOf('Server B'));
+  });
+
+  it('uses the verified Playout programme role even when CG Bridge sends commands to A', async () => {
+    stubBridge('live', 'A', {
+      channel: 1,
+      active: 'B',
+      members: [
+        { engine: 'A', name: 'Studio', physicalChannel: 1, resourceKey: 'a' },
+        { engine: 'B', name: 'Studio Reserve', physicalChannel: 1, resourceKey: 'b' },
+        { engine: 'C', name: 'Remote Studio', physicalChannel: null, resourceKey: 'c' },
+      ],
+    });
+    const el = await render(null, PLAYOUT_ENGINE_NAME, undefined, 'playout', 1);
+    const status = el.textContent ?? '';
+    expect(status).toContain('Server A · HEALTHY');
+    expect(status).toContain('Server B · HEALTHY');
+    expect(status).not.toMatch(/CG active|CG standby/);
+    const programmeRole = el.querySelector('[data-programme-role="B"]');
+    expect(programmeRole?.textContent).toBe('PGM CH 1 · B active · A standby');
+    expect(programmeRole?.getAttribute('title')).toBe(
+      'Active B: Studio Reserve\nStandby A: Studio',
+    );
     expect(el.querySelector('[title="CG Bridge command strategy"]')).toBeNull();
     expect(el.querySelector('button[aria-label="Manual CG failover"]')).toBeNull();
+  });
+
+  it('does not promote the CG Bridge target when no Playout role is verified', async () => {
+    stubBridge('live', 'B');
+    const el = await render(null, PLAYOUT_ENGINE_NAME, undefined, 'playout', 2);
+    expect(el.querySelector('[data-programme-role="unknown"]')?.textContent).toBe(
+      'PGM CH 2 · role unknown',
+    );
+    expect(el.textContent).not.toContain('CG active');
   });
 
   it('names incomplete target setup before a switch while leaving acceptance to the Bridge', async () => {

@@ -12,8 +12,8 @@ fn main() {
     //   - `close_guard`, `close_request_seen`, `close_window_now` (`R-094`): the window's close,
     //     held for the console to answer (CG Designer's `src/close_window.rs`, shared).
     // `set_playout_address` and `open_bridge_log` are gone with the bridge this app no longer runs.
-    tauri_build::try_build(
-        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
             "playout_post",
             "keyboard_language",
             "set_layer_alt_f4",
@@ -23,7 +23,10 @@ fn main() {
             "close_guard",
             "close_request_seen",
             "close_window_now",
-        ])),
-    )
+            "ndi_preview_start",
+            "ndi_preview_poll",
+            "ndi_preview_stop",
+        ]),
+    ))
     .expect("tauri-build failed");
 }

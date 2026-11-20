@@ -261,10 +261,11 @@ export function SourcePicker({
     setDraft(null);
     setOpen(false);
   }, []);
+  const hasSelectionChange = draft !== null && draft !== value;
   const select = (): void => {
-    if (draft === null) return;
+    if (draft === null || draft === value) return;
     close();
-    if (draft !== value) onChange(draft);
+    onChange(draft);
   };
   const thumbnailChannel = previewChannel ?? channel;
   const previewRoute = useSourcePreviewRoute(thumbnailChannel);
@@ -343,7 +344,7 @@ export function SourcePicker({
               <ModalAction actionRole="cancel" onClick={close}>
                 Cancel
               </ModalAction>
-              <ModalAction actionRole="primary" disabled={draft === null} onClick={select}>
+              <ModalAction actionRole="primary" disabled={!hasSelectionChange} onClick={select}>
                 Select
               </ModalAction>
             </>

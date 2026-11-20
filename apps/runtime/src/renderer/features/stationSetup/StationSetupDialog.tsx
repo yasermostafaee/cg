@@ -34,10 +34,13 @@ import {
   type TemplateServeInfo,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
+import { playoutOriginForLoopback } from '../../../platform/bridgeUrl.js';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { engineNameForMode, playoutEngineWording } from '../../ui/engineWording.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useProgramMonitorPreferences } from '../monitors/useProgramMonitorPreferences.js';
+import { programmeServerDisplayName } from '../monitors/programmeServerDisplayName.js';
+import { activeProgrammeMember, useProgramTopology } from '../../hooks/useProgramTopology.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
 import { isOnAirStatus } from '@cg/shared-schema';
@@ -601,6 +604,42 @@ export function StationSetupDialog({
   const playoutStation = capabilities?.mode === 'playout';
   const directConnection = capabilities?.mode === 'off';
   const engineName = engineNameForMode(capabilities?.mode);
+  const link = useLink();
+  const topology = useProgramTopology(
+    open && playoutStation && link !== 'disconnected' && link !== 'offline-mock' ? channel : null,
+  );
+  const programmeActive = activeProgrammeMember(topology);
+  const programmeStandbys =
+    programmeActive === undefined
+      ? []
+      : (topology?.members ?? []).filter(
+          ({ engine, physicalChannel }) =>
+            engine !== programmeActive.engine && physicalChannel !== null,
+        );
+  // A topology member needs a verified CG mapping before showing a CG-configured address.
+  const configuredRailEngine = playoutStation ? 'A' : (health?.currentPrimary ?? 'A');
+  const railEngine = programmeActive?.engine ?? configuredRailEngine;
+  const railMapping =
+    programmeActive === undefined ? configuredRailEngine : programmeActive.meterEngine;
+  const railHost =
+    railMapping === undefined
+      ? null
+      : (loaded?.servers[railMapping]?.host ??
+        (programmeActive === undefined ? loaded?.servers.A.host : undefined) ??
+        null);
+  const railPlayoutOrigin =
+    playoutStation && railMapping === 'A' && railHost !== null
+      ? playoutOriginForLoopback(railHost, capabilities?.signInUrl)
+      : null;
+  const railName =
+    programmeActive === undefined
+      ? engineName
+      : programmeServerDisplayName(programmeActive, capabilities?.signInUrl);
+  const railDisplayHost =
+    railPlayoutOrigin === null ? railHost : new URL(railPlayoutOrigin).hostname;
+  const railNameContainsHost =
+    railDisplayHost !== null &&
+    (railName === railDisplayHost || railName.endsWith(` (${railDisplayHost})`));
   const graphicsAddressLabel = `Where ${engineName} fetches graphics`;
   /** `T3` — `Advanced` (the graphics address and the redundancy): `null` — as the station has it. */
   const [advancedOpen, setAdvancedOpen] = useState<boolean | null>(null);
@@ -644,7 +683,6 @@ export function StationSetupDialog({
     A is `127.0.0.1`, `Apply servers` sent `192.168.21.93`. The suspected path of the owner's `.93` into `.32`.
   */
   const loadedFrom = useRef<string | null>(null);
-  const link = useLink();
   const wasLive = useRef(link === 'live');
   const footerSlot = holdsStationAdmin ? footerSlotEl : null;
   /** §6 — the backup server's own small second dialog. */
@@ -1359,20 +1397,6 @@ export function StationSetupDialog({
       title="Station setup"
       /* `REPAIR-03` B, audit row 72 — the reference draws an emblem in this head. */
       emblem={Settings}
-      /*
-        `RUNTIME-REDESIGN-01` Phase 7 — the reference's `.settings-subtitle` (`Channel 1 · News ·
-        Primary A`): the channel this dialog's per-channel tab reports, and which server is
-        primary. No channel NAME here yet: when this was built the bridge published none and none
-        was invented (A3). ⚠ `CHANNEL-AUTHORITY-01` — the discovery call now carries the Playout's
-        catalogue name (`useSelectedChannel().names`, what the channel strip shows); this subtitle
-        does not read it, and adding it is a separate, visual item rather than a silent one here.
-
-        ⭐ `MULTI-CHANNEL-01` §2 H — IT READS IT NOW: `Channel 2 · کانال دوم (تست CG) · Primary A`,
-        the reference's own shape. The name is the SAME one the strip shows for the selected channel
-        (one map, `names`), it is operator data in its own `<bdi>` with the separators outside it
-        (golden rule 11), and with no catalogue — auth OFF, the Playout unreachable — the line is
-        exactly what it was.
-      */
       subtitle={
         <>
           {/* `UI-POLISH-01` G — the output dot, before the channel's name, as on the strip. */}
@@ -1384,7 +1408,29 @@ export function StationSetupDialog({
               <bdi data-setup-channel-name="">{channelNames.get(channel)}</bdi>
             </>
           )}
-          {health !== null && <> · Primary {health.currentPrimary}</>}
+          {playoutStation ? (
+            <>
+              {' · '}
+              {programmeActive === undefined ? (
+                'Programme role unknown'
+              ) : (
+                <>
+                  Programme · <span title={railName}>{programmeActive.engine} active</span>
+                  {programmeStandbys.map((member) => (
+                    <span
+                      key={member.engine}
+                      title={programmeServerDisplayName(member, capabilities?.signInUrl)}
+                    >
+                      {' · '}
+                      {member.engine} standby
+                    </span>
+                  ))}
+                </>
+              )}
+            </>
+          ) : (
+            health !== null && <> · Primary {health.currentPrimary}</>
+          )}
         </>
       }
       ariaLabel="Station setup"
@@ -1417,22 +1463,15 @@ export function StationSetupDialog({
           idPrefix="station"
           orientation="vertical"
           /*
-            The rail's foot — OUR primary server and OUR host, from what the bridge says is
-            stored and which server is currently primary. Never the prototype's sample address
-            (§0), and nothing at all until the bridge has answered.
+            The rail follows the verified programme member in a Playout station and the CG
+            command target in a standalone station. The configured station is the default card
+            while the programme role is unknown.
           */
           foot={
             <RailStationCard
-              label={health?.currentPrimary ?? 'A'}
-              // T2 — the engine by its name; its chip still says which one, A or B.
-              name={engineName}
-              host={
-                loaded === null
-                  ? null
-                  : health?.currentPrimary === 'B' && loaded.servers.B !== undefined
-                    ? loaded.servers.B.host
-                    : loaded.servers.A.host
-              }
+              label={railEngine}
+              name={railName}
+              host={railNameContainsHost ? null : railDisplayHost}
               /* `CLIENT-TEST-RELEASE-01` B1 — the one line in CG Control that names its release. */
               version={{
                 release: APP_VERSION,

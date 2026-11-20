@@ -23,7 +23,9 @@ import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useLock, useLockCoverage } from '../../hooks/useLock.js';
+import { activeProgrammeMember, useProgramTopology } from '../../hooks/useProgramTopology.js';
 import { EngageLockDialog } from '../lock/EngageLockDialog.js';
+import { programmeServerDisplayName } from '../monitors/programmeServerDisplayName.js';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -352,7 +354,12 @@ export function StatusBar({
   engines,
   backupChannels,
   connectionMode,
+  programmeChannel,
+  playoutSignInUrl,
 }: {
+  /** The selected console channel whose programme role Playout reports. */
+  programmeChannel?: number;
+  playoutSignInUrl?: string | null | undefined;
   /** The bridge's advertised mode, shared with Station setup; Playout owns its server selection. */
   connectionMode?: AuthCapabilities['mode'] | undefined;
   /**
@@ -369,7 +376,7 @@ export function StatusBar({
 }): JSX.Element {
   const engine = useEngineName();
   const playoutLinked = engine === PLAYOUT_ENGINE_NAME;
-  const programmeScope = playoutLinked ? ' Apasai Playout switches programme separately.' : '';
+  const playoutConnection = connectionMode === 'playout';
   const directConnection = connectionMode === 'off';
   const health = useConnections();
   // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
@@ -383,6 +390,41 @@ export function StatusBar({
   const simulated = link === 'offline-mock';
   // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
   const stale = link === 'disconnected';
+  const topology = useProgramTopology(
+    playoutConnection && !stale && !simulated ? (programmeChannel ?? null) : null,
+  );
+  const programmeActive = activeProgrammeMember(topology);
+  const programmeStandbys =
+    programmeActive === undefined
+      ? []
+      : (topology?.members ?? []).filter(
+          ({ engine, physicalChannel }) =>
+            engine !== programmeActive.engine && physicalChannel !== null,
+        );
+  const programmeRole =
+    playoutConnection && !stale && !simulated && programmeChannel !== undefined ? (
+      <Tag
+        className="cg-pill"
+        title={
+          programmeActive === undefined
+            ? 'Playout has not verified the programme role for this channel.'
+            : [
+                `Active ${programmeActive.engine}: ${programmeServerDisplayName(programmeActive, playoutSignInUrl)}`,
+                ...programmeStandbys.map(
+                  (member) =>
+                    `Standby ${member.engine}: ${programmeServerDisplayName(member, playoutSignInUrl)}`,
+                ),
+              ].join('\n')
+        }
+        data-programme-role={programmeActive?.engine ?? 'unknown'}
+        style={programmeActive === undefined ? styles.stale : styles.primary}
+      >
+        PGM CH {programmeChannel}
+        {programmeActive === undefined ? ' · role unknown' : ` · ${programmeActive.engine} active`}
+        {programmeStandbys.length > 0 &&
+          ` · ${programmeStandbys.map(({ engine }) => engine).join('/')} standby`}
+      </Tag>
+    ) : null;
   /**
    * §7 — the link pill's second hop, resolved HERE from the health this component
    * already holds, and handed down. One subscription, one reading: the pill saying
@@ -403,6 +445,7 @@ export function StatusBar({
         <Tag className="cg-pill" style={stale ? styles.stale : undefined}>
           {stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…'}
         </Tag>
+        {programmeRole}
       </footer>
     );
   }
@@ -533,19 +576,25 @@ export function StatusBar({
                   ? staleTitle(server.state)
                   : deaf
                     ? AMCP_ONLY_TITLE
-                    : `Server ${server.label} is the ${active ? 'primary' : 'standby'} target for CG Bridge commands.` +
-                      programmeScope
+                    : `Server ${server.label} is the ${active ? 'primary' : 'standby'} target for CG Bridge commands.`
               }
             >
-              <span style={healthDotStyle(label)}>{active && !stale ? '●' : '○'}</span>{' '}
-              <span style={active && !stale && !deaf ? styles.primary : styles.backup}>
+              <span style={healthDotStyle(label)}>
+                {(playoutConnection || active) && !stale ? '●' : '○'}
+              </span>{' '}
+              <span
+                style={
+                  (playoutConnection || active) && !stale && !deaf ? styles.primary : styles.backup
+                }
+              >
                 Server {server.label}
-                {stale ? '' : active ? ' · CG active' : ' · CG standby'}
+                {playoutConnection || stale ? '' : active ? ' · CG active' : ' · CG standby'}
               </span>
               {' · '}
               <span style={label.style}>{label.text}</span>
             </Tag>
           ))}
+          {programmeRole}
           {health.backup === undefined && (
             <Tag className="cg-pill">
               <span style={styles.backup}>No CG backup</span>

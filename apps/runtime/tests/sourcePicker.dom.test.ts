@@ -470,6 +470,28 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     expect(other.querySelector('[data-picker-tab="inputs"]')).not.toBeNull();
   });
 
+  it.each([
+    ['in-studio1', '[data-picker-input="in-newscam"]', '[data-picker-input="in-studio1"]'],
+    ['md-m-0001', '[data-picker-media="md-m-0002"]', '[data-picker-media="md-m-0001"]'],
+    ['', '[data-picker-input="in-newscam"]', '[data-picker-choice=""]'],
+  ])(
+    'disables Select after returning to the bound value %s',
+    async (value, different, original) => {
+      const onChange = vi.fn();
+      const panel = await openPicker(await render({ value, onChange }));
+      await settle();
+      const select = panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]')!;
+      expect(select.disabled).toBe(true);
+      await act(async () => panel.querySelector<HTMLElement>(different)!.click());
+      expect(select.disabled).toBe(false);
+      await act(async () => panel.querySelector<HTMLElement>(original)!.click());
+      expect(select.disabled).toBe(true);
+      await act(async () => select.click());
+      expect(panel.isConnected).toBe(true);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
   it('opens on inherited media with its effective source highlighted and preserves inheritance until Select', async () => {
     const onChange = vi.fn();
     const field = await render({
@@ -1048,9 +1070,15 @@ describe('the keyboard, and a choice returned ONCE', () => {
   it('choosing the value already bound returns nothing — only a change is a choice', async () => {
     const onChange = vi.fn();
     const field = await render({ value: 'in-studio1', onChange });
-    await choosePickerOption(field, 'in-studio1');
+    const panel = await openPicker(field);
+    await act(async () =>
+      panel.querySelector<HTMLElement>('[data-picker-input="in-studio1"]')!.click(),
+    );
+    expect(panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]')?.disabled).toBe(
+      true,
+    );
     expect(onChange).not.toHaveBeenCalled();
-    // Control: another input IS returned.
+    await closePicker();
     await choosePickerOption(field, 'in-newscam');
     expect(onChange).toHaveBeenCalledWith('in-newscam');
   });

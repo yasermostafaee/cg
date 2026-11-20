@@ -27,7 +27,13 @@ export function fullJpegRect(picture: FitRect, activeRect: FitRect): FitRect {
 
 function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSourceFrame>) {
   const frame = plate.sourceId === null ? undefined : frames.get(plate.sourceId);
-  if (frame?.jpegBase64 === undefined || !frame.width || !frame.height) return undefined;
+  if (
+    frame === undefined ||
+    (frame.jpegBase64 === undefined && frame.directNdi === undefined) ||
+    !frame.width ||
+    !frame.height
+  )
+    return undefined;
   const fit = fitPictureToBox(
     plate,
     frame.geometry?.sourceAspect ?? frame.width / frame.height,
@@ -42,7 +48,9 @@ function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSource
         : fullJpegRect(fit.picture, frame.geometry.activeRect),
     sourceId: frame.sourceId,
     jpegBase64: frame.jpegBase64,
-    geometryRevision: frame.geometry?.revision ?? '',
+    directNdi: frame.directNdi,
+    geometryRevision:
+      frame.geometry?.revision ?? (frame.directNdi === undefined ? '' : 'direct-ndi'),
   };
 }
 
@@ -63,10 +71,54 @@ function pictureWindows(plate: PlatePlacement): readonly FitRect[] {
     : livePlateMaskRegions(plate.mask).map((rect) => liveRevealSceneRect(plate, rect));
 }
 
-function paintSnapshot(image: HTMLImageElement, picture: Picture, window: FitRect): void {
-  placeWithin(image, picture.jpeg, window);
-  const url = `data:image/jpeg;base64,${picture.jpegBase64}`;
-  if (image.getAttribute('src') !== url) image.src = url;
+type PicturePixels = HTMLImageElement | HTMLCanvasElement;
+const ndiCanvases = new WeakMap<
+  HTMLCanvasElement,
+  { receiver: NonNullable<Picture['directNdi']>; detach: () => void }
+>();
+
+function newPixels(doc: Document, picture: Picture): PicturePixels {
+  const pixels =
+    picture.directNdi === undefined ? doc.createElement('img') : doc.createElement('canvas');
+  if (pixels.tagName === 'IMG') {
+    const image = pixels as HTMLImageElement;
+    image.alt = '';
+    image.draggable = false;
+  }
+  pixels.style.cssText = 'position:absolute;display:block;max-width:none;max-height:none';
+  return pixels;
+}
+
+function paintPixels(pixels: PicturePixels, picture: Picture, window: FitRect): void {
+  placeWithin(pixels, picture.jpeg, window);
+  const receiver = picture.directNdi;
+  if (pixels.tagName === 'CANVAS') {
+    const canvas = pixels as HTMLCanvasElement;
+    const current = ndiCanvases.get(canvas);
+    if (receiver !== undefined && current?.receiver !== receiver) {
+      current?.detach();
+      ndiCanvases.set(canvas, { receiver, detach: receiver.attach(canvas) });
+    }
+  } else if (picture.jpegBase64 !== undefined) {
+    const image = pixels as HTMLImageElement;
+    const url = 'data:image/jpeg;base64,' + picture.jpegBase64;
+    if (image.getAttribute('src') !== url) image.src = url;
+  }
+}
+
+function copyCanvas(from: HTMLCanvasElement | null, to: HTMLCanvasElement | null): void {
+  if (from === null || to === null || from.width === 0 || from.height === 0) return;
+  to.width = from.width;
+  to.height = from.height;
+  to.getContext('2d')?.drawImage(from, 0, 0);
+}
+
+function removePicture(part: HTMLElement): void {
+  for (const canvas of part.querySelectorAll('canvas')) {
+    ndiCanvases.get(canvas)?.detach();
+    ndiCanvases.delete(canvas);
+  }
+  part.remove();
 }
 
 function sameBox(node: HTMLElement, plate: PlatePlacement): boolean {
@@ -107,7 +159,7 @@ export function followPvwPresetPictures(
   ).flatMap((part) => {
     const node = part.parentElement;
     const artwork = node?.closest<HTMLElement>('[data-cg-frame-artwork]');
-    const image = part.querySelector('img');
+    const image = part.querySelector('img, canvas') as PicturePixels | null;
     const id = node?.dataset['cgLiveSource'];
     const windowIndex = paintedPictures.get(part)?.windowIndex;
     if (
@@ -260,7 +312,7 @@ export function paintPvwSourceTransition(
       setTimeout(() => {
         if (pendingInputPicture.get(part) !== request) return;
         pendingInputPicture.delete(part);
-        part.remove();
+        removePicture(part);
       }, 2_500);
     }
   }
@@ -271,6 +323,7 @@ export function paintPvwSourceTransition(
       ? []
       : incoming.map(({ part, node }) => {
           const copy = part.cloneNode(true) as HTMLElement;
+          copyCanvas(part.querySelector('canvas'), copy.querySelector('canvas'));
           delete copy.dataset['cgPvwPicturePart'];
           copy.dataset['cgPvwSourceDissolve'] = '';
           return { copy, node };
@@ -289,6 +342,7 @@ export function paintPvwSourceTransition(
         change.plate,
         plates,
         before.picture,
+        change.part.querySelector('canvas'),
         frames,
         effect,
         active,
@@ -321,6 +375,7 @@ function startPvwSlide(
   plate: PlatePlacement,
   plates: readonly PlatePlacement[],
   before: Picture,
+  beforeCanvas: HTMLCanvasElement | null,
   frames: ReadonlyMap<string, PvwSourceFrame>,
   effect: InputTransition,
   active: { current: PvwInputEffect | undefined },
@@ -356,17 +411,16 @@ function startPvwSlide(
     layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none';
     const part = doc.createElement('div');
     part.style.cssText = 'position:absolute;overflow:hidden';
-    const image = doc.createElement('img');
-    image.alt = '';
-    image.draggable = false;
-    image.style.cssText = 'position:absolute;display:block;max-width:none;max-height:none';
+    const image = newPixels(doc, picture);
     part.append(image);
     layer.append(part);
     viewport.append(layer);
     const paint = (value: Picture): void => {
       placeWithin(part, value.visible, viewportRect);
-      paintSnapshot(image, value, value.visible);
+      paintPixels(image, value, value.visible);
     };
+    if (role === 'outgoing' && image.tagName === 'CANVAS')
+      copyCanvas(beforeCanvas, image as HTMLCanvasElement);
     paint(picture);
     return { layer, paint };
   };
@@ -379,7 +433,7 @@ function startPvwSlide(
     if (viewport.parentElement === null) return;
     for (const animation of animations) animation.cancel();
     for (const [part, value] of hidden) part.style.visibility = value;
-    viewport.remove();
+    removePicture(viewport);
     if (active.current?.cancel === cancel) active.current = undefined;
   };
   const refresh: NonNullable<PvwInputEffect['refresh']> = (nextPlates, nextFrames) => {
@@ -431,7 +485,7 @@ export function paintPvwPlatePictures(
     ]),
   );
   if (frames.size === 0) {
-    for (const part of retained.values()) if (pending?.has(part) !== true) part.remove();
+    for (const part of retained.values()) if (pending?.has(part) !== true) removePicture(part);
     return;
   }
   const nodes = Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-live-source]'));
@@ -455,18 +509,14 @@ export function paintPvwPlatePictures(
       prior.dataset['geometryRevision'] === fit.geometryRevision;
     const part = reusable ? prior : doc.createElement('div');
     if (!reusable) {
-      prior?.remove();
+      if (prior !== undefined) removePicture(prior);
       part.dataset['cgPvwPicturePart'] = key;
       part.dataset['cgPvwPictureKind'] = kind;
       part.dataset['sourceId'] = fit.sourceId;
       part.dataset['geometryRevision'] = fit.geometryRevision;
       part.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none';
       part.setAttribute('aria-hidden', 'true');
-      const image = doc.createElement('img');
-      image.alt = '';
-      image.draggable = false;
-      image.style.cssText = 'position:absolute;display:block;max-width:none;max-height:none';
-      part.append(image);
+      part.append(newPixels(doc, fit));
       node.append(part);
     }
     pendingInputPicture.delete(part);
@@ -477,9 +527,9 @@ export function paintPvwPlatePictures(
     });
     retained.delete(key);
     placeWithin(part, visible, plate);
-    const image = part.querySelector('img');
+    const image = part.querySelector('img, canvas') as PicturePixels | null;
     if (image === null) return;
-    paintSnapshot(image, fit, visible);
+    paintPixels(image, fit, visible);
   }
 
   for (const plate of plates) {
@@ -517,5 +567,5 @@ export function paintPvwPlatePictures(
       );
     }
   }
-  for (const part of retained.values()) if (pending?.has(part) !== true) part.remove();
+  for (const part of retained.values()) if (pending?.has(part) !== true) removePicture(part);
 }

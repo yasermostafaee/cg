@@ -1657,6 +1657,18 @@ class FakePlayoutServer implements FakePlayout {
           return;
         }
         if (
+          options.liveInputSettings !== undefined &&
+          req.method === 'GET' &&
+          req.url === '/api/v1/settings/live-inputs'
+        ) {
+          if (!(await this.#ownBearer(req))) {
+            sendError(res, 'invalid_token');
+            return;
+          }
+          options.liveInputSettings(req, res);
+          return;
+        }
+        if (
           options.sourcePreviews !== undefined &&
           /^\/api\/v1\/channels\/[^/]+\/source-previews(?:[/?]|$)/.test(req.url ?? '')
         ) {
@@ -2733,6 +2745,8 @@ export interface FakePlayoutOptions {
   readonly verifyBearers?: boolean;
   /** C-023 lease-contract fixture, reached after this fake verifies the CG bearer. */
   readonly livePreview?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
+  /** Saved physical input settings, after this fake verifies the node's own bearer. */
+  readonly liveInputSettings?: (req: http.IncomingMessage, res: http.ServerResponse) => void;
   /** C-023 independent silent source observations, after this fake verifies the CG bearer. */
   readonly sourcePreviews?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   /** Independent .16 file/proxy preview, after this fake verifies its own bearer. */

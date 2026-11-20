@@ -191,6 +191,14 @@ export class PgmAudioPlayer {
     this.#scheduledAny = true;
   }
 
+  /** Native preview supplies framed stereo PCM directly, without a WAV fetch. */
+  ingestStereoPacket(bytes: Uint8Array): void {
+    const pcm = bytes.subarray(0, bytes.byteLength - (bytes.byteLength % FRAME_BYTES));
+    if (pcm.length === 0) return;
+    if (this.#onPeaks !== undefined) this.#measurePeaks(pcm, this.#onPeaks);
+    this.schedule(pcm);
+  }
+
   /** A new connection: the buffer starts again from 30 ms. */
   resetConnection(): void {
     this.#resetPlayback();
@@ -319,8 +327,8 @@ export class PgmAudioPlayer {
       if (this.#failures > 0) this.#failures = 0;
       this.#setState('playing');
       const pcm = bytes.subarray(0, whole);
-      if (canMeasure && this.#onPeaks !== undefined) this.#measurePeaks(pcm, this.#onPeaks);
-      this.schedule(pcm);
+      if (canMeasure) this.ingestStereoPacket(pcm);
+      else this.schedule(pcm);
     }
   }
 }

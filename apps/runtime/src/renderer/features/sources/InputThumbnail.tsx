@@ -1,6 +1,6 @@
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { VideoOff } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { VideoOff, Volume2, VolumeX } from 'lucide-react';
 import {
   sourcePreviewable,
   sourceShowableOn,
@@ -12,7 +12,20 @@ import { Icon } from '../../ui/Icon.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
 import { LiveInputCheckTile } from '../monitors/LiveInputCheckTile.js';
 import { useLiveInputCheck, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
-import { InputAudioMeter } from './InputAudioMeter.js';
+import { InputAudioMeter, InputAudioRails } from './InputAudioMeter.js';
+import {
+  canResolveNdi,
+  confirmedNdiTarget,
+  ndiPreviewAvailable,
+  stopNdiAudio,
+  toggleNdiAudio,
+  useNdiAudioReceiver,
+  useNdiLevels,
+  useNdiPicture,
+  useNdiReceivers,
+  useNdiTargets,
+  type NdiReceiver,
+} from './directNdiPreview.js';
 import { subscribeInputThumbnail } from './inputThumbnailDemand.js';
 import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 
@@ -53,6 +66,23 @@ export function InputThumbnail({
   const pictureRequestKey =
     previewChannel === undefined ? undefined : `${previewChannel}:${sourceId}`;
   const checkable = inputCheck !== undefined;
+  const [inView, setInView] = useState(false);
+  const ndiCandidate =
+    !compact &&
+    previewChannel !== undefined &&
+    canResolveNdi(source, previewChannel) &&
+    ndiPreviewAvailable();
+  const ndiTargets = useNdiTargets(
+    previewChannel,
+    ndiCandidate ? [sourceId] : [],
+    foreground && inView,
+  );
+  const target = ndiTargets.get(sourceId);
+  const direct = confirmedNdiTarget(target);
+  const waitForNdi = ndiCandidate && (!inView || target?.kind === 'pending');
+  const knownNdi = ndiCandidate && source.producer.kind === 'ndi' && target?.kind !== 'other';
+  const directChosen = direct !== undefined || waitForNdi || knownNdi;
+  const directReceiver = useNdiReceivers(ndiTargets, foreground && inView).get(sourceId);
   const control = useLiveInputCheck();
   const check = control?.check;
   const active =
@@ -91,7 +121,7 @@ export function InputThumbnail({
     answeredPictureKey !== pictureRequestKey;
 
   useEffect(() => {
-    if (picture === null || active) setDecodedOrigin(undefined);
+    if (picture === null || active || directChosen) setDecodedOrigin(undefined);
     else if (
       decodedOrigin?.sourceId === sourceId &&
       decodedOrigin.src === picture &&
@@ -105,11 +135,19 @@ export function InputThumbnail({
         ...(frame?.engine === undefined ? {} : { engine: frame.engine }),
       });
     }
-    if (!active)
+    if (!active && !directChosen)
       onPreviewEngineChange?.(
         picture !== null && decodedOrigin?.sourceId === sourceId ? decodedOrigin.engine : undefined,
       );
-  }, [active, picture, decodedOrigin, sourceId, onPreviewEngineChange, frame?.engine]);
+  }, [
+    active,
+    directChosen,
+    picture,
+    decodedOrigin,
+    sourceId,
+    onPreviewEngineChange,
+    frame?.engine,
+  ]);
 
   useEffect(() => {
     if (snapshot === undefined || !foreground || active) return;
@@ -125,7 +163,27 @@ export function InputThumbnail({
     const tile = element.current;
     if (
       !foreground ||
+      !ndiCandidate ||
+      tile === null ||
+      typeof IntersectionObserver === 'undefined'
+    )
+      return;
+    const observer = new IntersectionObserver((entries) =>
+      setInView(entries.at(-1)?.isIntersecting === true),
+    );
+    observer.observe(tile);
+    return () => {
+      observer.disconnect();
+      setInView(false);
+    };
+  }, [foreground, ndiCandidate, sourceId]);
+
+  useEffect(() => {
+    const tile = element.current;
+    if (
+      !foreground ||
       !canRequestPicture ||
+      directChosen ||
       previewChannel === undefined ||
       active ||
       tile === null
@@ -164,6 +222,7 @@ export function InputThumbnail({
     };
   }, [
     active,
+    directChosen,
     foreground,
     previewChannel,
     sourceId,
@@ -172,6 +231,19 @@ export function InputThumbnail({
     pictureRequestKey,
   ]);
 
+  if (directChosen) {
+    return (
+      <DirectNdiInputTile
+        attach={attach}
+        sourceName={sourceDisplayName(source.name, 'input')}
+        receiver={directReceiver}
+        engine={direct?.engine}
+        connecting={waitForNdi || (direct !== undefined && directReceiver === undefined)}
+        onPreviewEngineChange={onPreviewEngineChange}
+        onPick={onCheck === undefined ? undefined : () => onCheck(source)}
+      />
+    );
+  }
   if (active && check != null && control !== null) {
     return (
       <LiveInputCheckTile
@@ -267,6 +339,115 @@ export function InputThumbnail({
         }
         channel={meterChannel}
         name={sourceDisplayName(source.name, 'input')}
+      />
+    </span>
+  );
+}
+
+function DirectNdiInputTile({
+  attach,
+  sourceName,
+  receiver,
+  engine,
+  connecting,
+  onPreviewEngineChange,
+  onPick,
+}: {
+  attach: (tile: HTMLElement | null) => void;
+  sourceName: string;
+  receiver: NdiReceiver | undefined;
+  engine: PreviewEngine | undefined;
+  connecting: boolean;
+  onPreviewEngineChange: PreviewOriginChanged | undefined;
+  onPick: (() => void) | undefined;
+}): JSX.Element {
+  const picture = useNdiPicture(receiver);
+  const levels = useNdiLevels(receiver);
+  const listening = useNdiAudioReceiver();
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const live = receiver !== undefined && picture.state === 'live';
+  const audible = receiver !== undefined && receiver === listening;
+  const caption = live
+    ? 'Direct NDI'
+    : connecting || (receiver !== undefined && picture.state === 'connecting')
+      ? 'Waiting for NDI'
+      : picture.state === 'no-signal'
+        ? 'No NDI signal'
+        : picture.state === 'error'
+          ? (picture.message ?? 'Direct NDI unavailable')
+          : 'Direct NDI unavailable';
+  useEffect(() => {
+    const part = canvas.current;
+    if (receiver === undefined || part === null) return;
+    return receiver.attach(part);
+  }, [receiver]);
+  useEffect(() => {
+    onPreviewEngineChange?.(live ? engine : undefined);
+  }, [engine, live, onPreviewEngineChange]);
+  useEffect(
+    () => () => {
+      if (receiver !== undefined) stopNdiAudio(receiver);
+    },
+    [receiver],
+  );
+
+  const onActionKey = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+  };
+  return (
+    <span className="cg-input-picture-meter" data-direct-ndi-input="">
+      <span
+        ref={attach}
+        className="cg-input-thumbnail cg-input-check-tile"
+        data-input-thumbnail="direct"
+        role="region"
+        aria-label={`Direct NDI preview · ${sourceName}`}
+        title={picture.state === 'error' ? caption : undefined}
+      >
+        <canvas
+          ref={canvas}
+          hidden={!live}
+          className="cg-input-check-tile__picture"
+          aria-hidden="true"
+        />
+        {!live && <span className="cg-input-check-tile__placeholder">{caption}</span>}
+        {onPick !== undefined && (
+          <Button
+            variant="ghost"
+            className="cg-direct-ndi-input-select"
+            aria-label={'Select input · ' + sourceName}
+            onClick={onPick}
+            onKeyDown={onActionKey}
+          >
+            {null}
+          </Button>
+        )}
+        <span className="cg-input-check-tile__top">
+          {live && <span className="cg-input-check-tile__status">{caption}</span>}
+          <span className="cg-input-check-tile__actions">
+            <Button
+              variant="icon"
+              aria-label={`Listen to ${sourceName}`}
+              aria-pressed={audible}
+              disabled={!live}
+              title={audible ? 'Mute input preview' : 'Listen to input preview'}
+              onKeyDown={onActionKey}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (receiver !== undefined) toggleNdiAudio(receiver);
+              }}
+            >
+              <Icon icon={audible ? Volume2 : VolumeX} size={14} />
+            </Button>
+          </span>
+        </span>
+      </span>
+      <InputAudioRails
+        name={sourceName}
+        count={2}
+        levels={levels ?? []}
+        state={levels === undefined ? 'unknown' : 'measured'}
+        preview
       />
     </span>
   );

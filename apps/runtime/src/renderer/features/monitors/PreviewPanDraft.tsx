@@ -13,6 +13,7 @@ import type { PreviewPlateCropTarget, SourcePreviewFrame } from '@cg/shared-ipc'
 import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import type { NdiReceiver } from '../sources/directNdiPreview.js';
 import {
   appliedPracticeCropOf,
   draftsVersion,
@@ -32,7 +33,8 @@ export interface PreviewPanPlacement extends PlatePlacement {
 }
 
 interface SourcePicture {
-  jpegBase64: string;
+  jpegBase64?: string;
+  directNdi?: NdiReceiver;
   aspect: number;
   geometry: SourcePreviewFrame['geometry'];
 }
@@ -41,10 +43,12 @@ function previewPicture(
   frame: PvwSourceFrame | undefined,
   sourceId: string | null,
 ): SourcePicture | undefined {
-  if (frame?.jpegBase64 === undefined || frame.snapshotOnly || frame.sourceId !== sourceId)
-    return undefined;
+  if (frame === undefined || frame.snapshotOnly || frame.sourceId !== sourceId) return undefined;
   const aspect = frame.geometry?.sourceAspect ?? (frame.width ?? 0) / (frame.height ?? 0);
   if (!Number.isFinite(aspect) || aspect <= 0) return undefined;
+  if (frame.directNdi !== undefined && frame.signal === 'present')
+    return { directNdi: frame.directNdi, aspect, geometry: undefined };
+  if (frame.jpegBase64 === undefined) return undefined;
   return { jpegBase64: frame.jpegBase64, aspect, geometry: frame.geometry };
 }
 
@@ -297,6 +301,12 @@ function PreviewPanDraft({
     if (!blocked && !sameLiveCropFocus(next, stagedFocus)) onFocusChange(next);
   };
   const source = useRef<HTMLSpanElement>(null);
+  const directCanvas = useRef<HTMLCanvasElement>(null);
+  const ndi = sourcePicture?.directNdi;
+  useEffect(() => {
+    const canvas = directCanvas.current;
+    return ndi !== undefined && canvas !== null ? ndi.attach(canvas) : undefined;
+  }, [ndi]);
   const start = useRef<PointerOrigin | null>(null);
   const cancelDrag = (pointerId: number): void => {
     if (start.current?.pointerId !== pointerId) return;
@@ -478,22 +488,28 @@ function PreviewPanDraft({
             height: `${(picture.height / height) * 100}%`,
           }}
         >
-          <span
-            className="cg-pan-draft__source"
-            style={{
-              ...(jpeg === undefined || preview === undefined || sourcePicture === undefined
-                ? { inset: 0, backgroundImage: smpteBarsGradient() }
-                : {
-                    left: preview.x,
-                    top: preview.y,
-                    width: preview.width,
-                    height: preview.height,
-                    backgroundImage: `url(data:image/jpeg;base64,${sourcePicture.jpegBase64})`,
-                    backgroundSize: `${jpeg.width}px ${jpeg.height}px`,
-                    backgroundPosition: `${jpeg.x}px ${jpeg.y}px`,
-                  }),
-            }}
-          />
+          {ndi !== undefined ? (
+            <canvas ref={directCanvas} className="cg-pan-draft__source" style={preview} />
+          ) : (
+            <span
+              className="cg-pan-draft__source"
+              style={{
+                ...(jpeg === undefined ||
+                preview === undefined ||
+                sourcePicture?.jpegBase64 === undefined
+                  ? { inset: 0, backgroundImage: smpteBarsGradient() }
+                  : {
+                      left: preview.x,
+                      top: preview.y,
+                      width: preview.width,
+                      height: preview.height,
+                      backgroundImage: `url(data:image/jpeg;base64,${sourcePicture.jpegBase64})`,
+                      backgroundSize: `${jpeg.width}px ${jpeg.height}px`,
+                      backgroundPosition: `${jpeg.x}px ${jpeg.y}px`,
+                    }),
+              }}
+            />
+          )}
           <span
             className="cg-pan-draft__matte"
             style={{

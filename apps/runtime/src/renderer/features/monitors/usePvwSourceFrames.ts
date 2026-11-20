@@ -1,11 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { playoutMediaIdOf, type SourcePreviewFrame } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
 import { uuid } from '../../lib/uuid.js';
 import { subscribeInputThumbnail } from '../sources/inputThumbnailDemand.js';
 import { PvwMediaPosters } from './pvwMediaPosters.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
+import {
+  canResolveNdi,
+  confirmedNdiTarget,
+  ndiPreviewAvailable,
+  useNdiReceivers,
+  useNdiTargets,
+  type NdiReceiver,
+} from '../sources/directNdiPreview.js';
+import { currentSourceCatalog, subscribeSources } from '../sources/sourceStore.js';
 
-export type PvwSourceFrame = SourcePreviewFrame & { snapshotOnly?: true };
+export type PvwSourceFrame = SourcePreviewFrame & {
+  snapshotOnly?: true;
+  directNdi?: NdiReceiver;
+  isDirectNdi?: true;
+};
+
+export function hasPvwSourcePicture(frame: PvwSourceFrame | undefined): boolean {
+  return (
+    frame?.jpegBase64 !== undefined ||
+    (frame?.directNdi !== undefined && frame.signal === 'present')
+  );
+}
 
 type ReadFrames = RuntimeBridge['sourcePreviews']['pvw'];
 type Frames = ReadonlyMap<string, PvwSourceFrame>;
@@ -267,12 +288,62 @@ export function usePvwSourceFrames(
   enabled = true,
   mode: Reader['mode'] = 'stage',
   retainWhilePaused = false,
+  liveSources: readonly string[] = [],
 ): Frames {
   const pvw = window.cg?.sourcePreviews?.pvw;
-  const sourceKey = JSON.stringify([...new Set(visibleSources)].slice(0, MAX_SOURCES));
+  const foreground = useModalForeground();
+  const catalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
+  const candidates = useMemo(() => {
+    if (channel === undefined || !ndiPreviewAvailable() || mode !== 'stage') return [];
+    const shown = new Set(visibleSources);
+    return catalog.sources.filter(
+      (source) => shown.has(source.id) && canResolveNdi(source, channel),
+    );
+  }, [channel, mode, visibleSources, catalog]);
+  const targets = useNdiTargets(
+    channel,
+    candidates.map(({ id }) => id),
+    enabled && foreground,
+  );
+  const liveKey = JSON.stringify(liveSources);
+  const liveTargets = useMemo(() => {
+    const wanted = new Set(JSON.parse(liveKey) as string[]);
+    return new Map([...targets].filter(([id]) => wanted.has(id)));
+  }, [liveKey, targets]);
+  const directReceivers = useNdiReceivers(liveTargets, enabled && foreground);
+  const directIds = useMemo(
+    () =>
+      new Set(
+        candidates.flatMap((source) => {
+          const target = targets.get(source.id);
+          return !foreground ||
+            (source.producer.kind === 'ndi' && target?.kind !== 'other') ||
+            target?.kind === 'ndi' ||
+            target?.kind === 'pending'
+            ? [source.id]
+            : [];
+        }),
+      ),
+    [candidates, foreground, targets],
+  );
+  const sourceKey = JSON.stringify(
+    [...new Set(visibleSources)].filter((id) => !directIds.has(id)).slice(0, MAX_SOURCES),
+  );
   const sourceIds = useMemo(() => JSON.parse(sourceKey) as string[], [sourceKey]);
   const [snapshot, setSnapshot] = useState<Snapshot>(EMPTY_SNAPSHOT);
   const previousApi = useRef<ReadFrames>();
+  const [directRevision, publishDirect] = useState(0);
+  useEffect(() => {
+    if (directReceivers.size === 0) return;
+    const refresh = (): void => publishDirect((revision) => revision + 1);
+    const stops = [...new Set(directReceivers.values())].map((receiver) =>
+      receiver.subscribe(refresh),
+    );
+    refresh();
+    return () => {
+      for (const stop of stops) stop();
+    };
+  }, [directReceivers]);
 
   useEffect(() => {
     if (!enabled || pvw === undefined || channel === undefined || sourceIds.length === 0) return;
@@ -318,13 +389,36 @@ export function usePvwSourceFrames(
     };
   }, [enabled, pvw, channel, sourceIds, mode, retainWhilePaused]);
 
-  return useMemo(() => {
+  const passiveFrames = useMemo(() => {
     if (snapshot.channel !== channel || sourceIds.length === 0) return EMPTY_FRAMES;
     return new Map(
       sourceIds.flatMap((id) => {
         const frame = snapshot.frames.get(id);
-        return frame === undefined ? [] : [[id, frame]];
+        return frame === undefined ? [] : [[id, frame] as const];
       }),
     );
   }, [snapshot, channel, sourceIds]);
+  return useMemo(() => {
+    if (directIds.size === 0) return passiveFrames;
+    const frames = new Map(passiveFrames);
+    for (const id of directIds) {
+      const target = confirmedNdiTarget(targets.get(id));
+      const receiver = directReceivers.get(id);
+      const picture = receiver?.picture();
+      frames.set(id, {
+        sourceId: id,
+        isDirectNdi: true,
+        ...(target !== undefined && { engine: target.engine }),
+        ...(receiver !== undefined && { directNdi: receiver }),
+        signal:
+          picture?.state === 'live'
+            ? 'present'
+            : picture?.state === 'no-signal'
+              ? 'absent'
+              : 'unknown',
+        ...(picture?.state === 'live' && { width: picture.width, height: picture.height }),
+      });
+    }
+    return frames;
+  }, [directIds, directReceivers, targets, directRevision, passiveFrames]);
 }
