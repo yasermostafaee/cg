@@ -574,6 +574,8 @@ interface LiveFrameEffect {
   readonly frames: FrameTransitionPhase['frames'];
   readonly plateIds: readonly string[];
   readonly authoredPreset?: true;
+  /** Authored underlays whose plate has no native picture or remains opaque throughout movement. */
+  readonly movingFallbacks?: ReadonlySet<string>;
   readonly departure?: PresetArtworkEffect;
   readonly arrival?: PresetArtworkEffect;
   readonly moveFrames?: number;
@@ -703,6 +705,7 @@ interface ProvisionalPresetSeat {
 }
 
 interface PresetFrameEffect extends LiveMixerTransitionGuard {
+  readonly movingFallbacks?: ReadonlySet<string>;
   readonly run: () => Promise<FrameEffectReply>;
   readonly tellLook: (
     fits: Readonly<Record<string, CgPlateFit>>,
@@ -6757,7 +6760,10 @@ export class CasparRuntime {
     const departure = effect.departure;
     const departureRecords = departure?.records ?? [];
     const hidden = [
-      ...new Set([...effect.plateIds, ...departureRecords.map(({ sourceId }) => sourceId)]),
+      ...new Set([
+        ...effect.plateIds.filter((id) => !effect.movingFallbacks?.has(id)),
+        ...departureRecords.map(({ sourceId }) => sourceId),
+      ]),
     ];
     const hide = {
       hideFallbackPlateIds: hidden,
@@ -13494,7 +13500,8 @@ export class CasparRuntime {
       )
         return undefined;
     }
-    const carrier = this.#templates.infoOf(page.version)?.liveSources;
+    const info = this.#templates.infoOf(page.version);
+    const carrier = info?.liveSources;
     const fromLook = carrier?.looks?.find(({ id }) => id === fromLookId);
     if (carrier === undefined || fromLook === undefined) return undefined;
 
@@ -13514,6 +13521,7 @@ export class CasparRuntime {
     const toRects = framePlacementRects(carrier, toLook.id, placements);
     const frames: FrameTransitionPhase['frames'] = [];
     const plateIds: string[] = [];
+    const movingFallbacks = new Set<string>();
     const changes = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
     for (const [plateId, fromFrame] of Object.entries(fromLook.transitionFrames ?? {})) {
       const toFrame = toLook.transitionFrames?.[plateId];
@@ -13529,7 +13537,11 @@ export class CasparRuntime {
         continue;
       const group = visible.filter((record) => record.sourceId === plateId);
       const targets = plan.placements.filter((seat) => seat.plateId === plateId);
-      if (group.length === 0 || group.length !== targets.length) continue;
+      const authoredFallback =
+        info?.controlLiveLayout !== undefined && fromLook.fallbacks?.includes(plateId) === true;
+      const fallbackOnly =
+        authoredFallback && toLook.fallbacks?.includes(plateId) === true && group.length === 0;
+      if (group.length !== targets.length || (group.length === 0 && !fallbackOnly)) continue;
       const fits = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
       for (const record of group) {
         const before = previousSeats.get(liveSeatId(record));
@@ -13573,6 +13585,16 @@ export class CasparRuntime {
         toOpacity: 1,
       });
       plateIds.push(plateId);
+      // An opaque native producer sits above this artwork. During a native fade its
+      // underlay would show through and change the dissolve, so preserve it only for
+      // geometry (or when the picture is supplied solely by the authored page).
+      if (
+        fallbackOnly ||
+        (authoredFallback &&
+          !transition.fade &&
+          group.every(({ slot }) => slot.layer > page.slot.layer))
+      )
+        movingFallbacks.add(plateId);
       for (const [record, fit] of fits) changes.set(record, fit);
     }
     if (frames.length > 128) return undefined;
@@ -13587,6 +13609,7 @@ export class CasparRuntime {
         preSeated,
         visible,
         changes,
+        info?.controlLiveLayout !== undefined,
       );
       if (
         composed !== undefined &&
@@ -13640,6 +13663,7 @@ export class CasparRuntime {
             frames,
             plateIds,
             authoredPreset: true,
+            movingFallbacks,
             destinationLookId: toLook.id,
             moveFrames: periods.move,
             ...(departure !== undefined && {
@@ -13668,6 +13692,7 @@ export class CasparRuntime {
       frames,
       plateIds,
       authoredPreset: true,
+      movingFallbacks,
       ...(departure !== undefined && { departure }),
       ...(supportsArtwork && { destinationLookId: toLook.id }),
     });
@@ -14054,15 +14079,18 @@ export class CasparRuntime {
     preSeated: ReadonlyMap<string, SeatResult> | undefined,
     visible: readonly LiveLayerRecord[],
     changes: ReadonlyMap<LiveLayerRecord, LivePlatePlacement['fit']>,
+    controlLayout: boolean,
   ): Pick<LiveFrameEffect, 'arrival' | 'departure'> | undefined {
+    const eligible = (look: TemplateLook, route: string): boolean =>
+      !plan.unresolved.has(route) || (controlLayout && look.fallbacks?.includes(route) === true);
     const outgoing = new Set(
       Object.keys(from.rects).filter(
-        (route) => to.rects[route] === undefined && !plan.unresolved.has(route),
+        (route) => to.rects[route] === undefined && eligible(from, route),
       ),
     );
     const incoming = new Set(
       Object.keys(to.rects).filter(
-        (route) => from.rects[route] === undefined && !plan.unresolved.has(route),
+        (route) => from.rects[route] === undefined && eligible(to, route),
       ),
     );
     const exitGroups = presetArtworkEffectGroups(from, outgoing);
@@ -14449,13 +14477,35 @@ export class CasparRuntime {
           signal,
         })
       ).ok;
-    const queuePeer = (line: string | (() => string), target?: LiveLayerRecord | CommandSlot) => {
+    interface PeerFramePhase {
+      readonly holdMs: number;
+      readonly durationMs: number;
+      readonly build: (slot: CommandSlot, startsAt: number) => string;
+    }
+    let stagedPeerPhase: PeerFramePhase | undefined;
+    let peerMotionEndsAt = 0;
+    let peerFallbackRelease: Extract<CgLiveFallback, { phase: 'release' }> | undefined;
+    const queuePeer = (
+      line: string | (() => string),
+      target?: LiveLayerRecord | CommandSlot,
+      phase?: PeerFramePhase,
+    ) => {
       if (!animatePeer || !mirrorForward || peerFailed) return;
       if (target !== undefined && 'sourceId' in target && !peerProducers.has(target)) return;
-      const signal = AbortSignal.any([cancel.signal, AbortSignal.timeout(peerDeadline)]);
+      const signal = AbortSignal.any([
+        cancel.signal,
+        AbortSignal.timeout(peerDeadline + (phase?.holdMs ?? 0)),
+      ]);
+      const canWrite = () => !peerFailed && current() && peerHasPages() && !signal.aborted;
       peerTail = peerTail
         .then(async () => {
-          if (peerFailed || !current() || !peerHasPages() || signal.aborted) {
+          if (phase !== undefined || (target !== undefined && !('sourceId' in target))) {
+            // A late reserve start must still reach its endpoint before the next
+            // update replaces its artwork. Its next mixer batch can stage meanwhile.
+            const remaining = remainingFramePhaseDelay(peerMotionEndsAt);
+            if (remaining > 0) await waitForTimer(remaining, undefined, { signal });
+          }
+          if (!canWrite()) {
             peerFailed = true;
             return;
           }
@@ -14468,7 +14518,7 @@ export class CasparRuntime {
             peerStaged = true;
           } else if (target !== undefined) {
             peerPageAttempts.add(target);
-          } else if (!peerStaged) {
+          } else if (!peerStaged && phase === undefined) {
             return;
           }
           if (!peerArmed) {
@@ -14479,7 +14529,32 @@ export class CasparRuntime {
             this.#rememberInputReplicaMixer(effectPeer.session, channel, pendingPeer);
             peerArmed = true;
           }
+          if (phase !== undefined) {
+            // The primary accepted this phase. Give the peer's page writes and mixer
+            // commit their own deadline after its staged mixer commands have answered.
+            const startsAt = performance.now() + phase.holdMs;
+            for (const slot of pageSlots) {
+              if (!canWrite()) {
+                peerFailed = true;
+                return;
+              }
+              peerPageAttempts.add(slot);
+              if (!(await sendPeer(phase.build(slot, startsAt), signal))) {
+                peerFailed = true;
+                return;
+              }
+            }
+            if (!peerStaged) return;
+            const remaining = remainingFramePhaseDelay(startsAt);
+            if (remaining > 0) await waitForTimer(remaining, undefined, { signal });
+            if (!canWrite()) {
+              peerFailed = true;
+              return;
+            }
+          }
           peerFailed = !(await sendPeer(typeof line === 'string' ? line : line(), signal));
+          if (!peerFailed && phase !== undefined)
+            peerMotionEndsAt = performance.now() + phase.durationMs;
           if (!peerFailed && target === undefined) peerStaged = false;
         })
         .catch(() => {
@@ -14488,7 +14563,11 @@ export class CasparRuntime {
     };
     const batch: MixerBatch = {
       ...phaseTarget,
-      replicaCommit: () => queuePeer(this.#builder.mixerCommit(channel)),
+      replicaCommit: () => {
+        const phase = stagedPeerPhase;
+        stagedPeerPhase = undefined;
+        queuePeer(this.#builder.mixerCommit(channel), undefined, phase);
+      },
     };
     const peerNeedsRepair = () =>
       effectPeer !== undefined &&
@@ -14585,8 +14664,13 @@ export class CasparRuntime {
     };
     const sendPages = async (
       build: (slot: CommandSlot) => string,
-      rollback = false,
-      refreshPeerLine = false,
+      {
+        rollback = false,
+        mirror = true,
+      }: {
+        rollback?: boolean;
+        mirror?: boolean | ((slot: CommandSlot) => string);
+      } = {},
     ): Promise<FrameEffectReply> => {
       let failed: FrameEffectReply | undefined;
       for (const slot of pageSlots) {
@@ -14601,15 +14685,16 @@ export class CasparRuntime {
           failed ??= { ...sent, ok: false };
           if (!rollback) break;
         }
-        if (sent.ok && sent.onPrimary && !rollback)
-          queuePeer(refreshPeerLine ? () => build(slot) : line, slot);
+        if (sent.ok && sent.onPrimary && !rollback && mirror !== false)
+          queuePeer(typeof mirror === 'function' ? () => mirror(slot) : line, slot);
       }
       return failed ?? { ok: true };
     };
     const sendPhase = async (phase: FrameTransitionPhase): Promise<FramePhaseReply> => {
       // Spend the paint allowance once across both HTML pages and mixer COMMIT.
       // Each page receives the remaining allowance when its update is sent.
-      const startsAt = performance.now() + (phase.delayMs ?? 0);
+      const holdMs = phase.delayMs ?? 0;
+      const startsAt = performance.now() + holdMs;
       // Recorded 720p50 had -3..+2 px skew without compensation. At 1080i50,
       // native and CEF ran at the same rate, but starting the artwork one frame
       // earlier reduced the measured edge error from -33..-14 px to -8..+12 px.
@@ -14618,28 +14703,29 @@ export class CasparRuntime {
       const movingArtwork =
         phase.focusSlide !== undefined ||
         phase.frames.some(({ from, to }) => !sameMixerRect(from, to, 1e-8));
-      const pageStartsAt =
-        phase.durationMs > 0 && movingArtwork ? startsAt - advanceArtwork : startsAt;
-      const sent = await sendPages(
-        (slot) =>
-          this.#builder.update(
-            slot,
-            withCgControl(
-              {},
-              {
-                frameTransition: {
-                  ...phase,
-                  ...(phase.delayMs !== undefined && {
-                    delayMs: remainingFramePhaseDelay(pageStartsAt),
-                  }),
-                },
-                ...(presetEffectId !== undefined && { presetEffectId }),
+      const artworkLead = phase.durationMs > 0 && movingArtwork ? advanceArtwork : 0;
+      const build = (slot: CommandSlot, nativeStartsAt: number) =>
+        this.#builder.update(
+          slot,
+          withCgControl(
+            {},
+            {
+              frameTransition: {
+                ...phase,
+                ...(phase.delayMs !== undefined && {
+                  delayMs: remainingFramePhaseDelay(nativeStartsAt - artworkLead),
+                }),
               },
-            ),
+              ...(presetEffectId !== undefined && { presetEffectId }),
+            },
           ),
-        false,
-        phase.delayMs !== undefined,
-      );
+        );
+      const deferPeer = animatePeer && batch.staged === true && phase.delayMs !== undefined;
+      const buildPrimary = (slot: CommandSlot) => build(slot, startsAt);
+      const sent = await sendPages(buildPrimary, {
+        mirror: deferPeer ? false : phase.delayMs === undefined ? true : buildPrimary,
+      });
+      if (sent.ok && deferPeer) stagedPeerPhase = { holdMs, durationMs: phase.durationMs, build };
       return { ...sent, startsAt };
     };
     this.#frameTransitionInterrupts.set(itemId, cancel);
@@ -14649,6 +14735,7 @@ export class CasparRuntime {
     return {
       hiddenSlots,
       current,
+      ...(effect.movingFallbacks !== undefined && { movingFallbacks: effect.movingFallbacks }),
       ...(paired && {
         terminalTarget: { primaryOnly: page.session, primaryQueue: page.session.queue },
       }),
@@ -14660,6 +14747,7 @@ export class CasparRuntime {
           tell: (phase) => sendPhase({ ...phase, ...priorTitleHold }),
         }),
       tellLook: async (fits, fallback) => {
+        if (fallback?.phase === 'hold') peerFallbackRelease = { phase: 'release', id: fallback.id };
         const arrival = effect.arrival;
         if (arrival === undefined)
           return sendPages((slot) =>
@@ -14753,7 +14841,7 @@ export class CasparRuntime {
         mirrorForward = false;
         let restored = stillOwnsOutput(true);
         if (restored && pageAttempted) {
-          const old = await sendPages(restoreLook, true);
+          const old = await sendPages(restoreLook, { rollback: true });
           restored = old.ok;
         }
         for (const record of touched) {
@@ -15014,6 +15102,16 @@ export class CasparRuntime {
               }
             }
             replicaSettled = true;
+            if (peerFallbackRelease !== undefined && ownsReplica()) {
+              // The backup got the hold with its look. Release it only once the
+              // same resident backup has accepted the final native geometry.
+              await sendReplica(
+                this.#builder.update(
+                  page.slot,
+                  withCgControl({}, { liveFallback: peerFallbackRelease }),
+                ),
+              );
+            }
           } finally {
             // Another delta cannot be based on a reserve that missed this settled state.
             if (!replicaSettled && page.mirror === replica) delete page.mirror;
@@ -15677,7 +15775,9 @@ export class CasparRuntime {
             const animated = await effect.run();
             if (!animated.ok) return animated;
           }
-          const plateIds = this.#lookFallbacksToHold(itemId, look, plan);
+          const plateIds = this.#lookFallbacksToHold(itemId, look, plan).filter(
+            (id) => !effect?.movingFallbacks?.has(id),
+          );
           let hold: CgLiveFallback | undefined;
           if (plateIds.length > 0) {
             const id = randomBytes(16).toString('hex');

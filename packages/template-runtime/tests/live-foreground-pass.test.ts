@@ -843,6 +843,29 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       advanceTo(800);
       expect(artwork.style.transform).toBe('matrix(0.5,0,0,0.75,520,60)');
 
+      // An authored underlay omitted from the hold list moves with the artwork.
+      // The foreground pass continues to contain no fallback that could cover the input.
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              ...phase,
+              authoredPreset: true,
+              hideFallbackPlateIds: [],
+              frames: phase.frames.map((frame) => ({ ...frame, toOpacity: 1 })),
+            },
+          },
+        ),
+      );
+      advanceTo(1_000);
+      expect(artwork.style.transform).toBe('matrix(0.75,0,0,0.875,260,30)');
+      expect(artwork.style.opacity).toBe('');
+      if (fallback !== null) {
+        expect(fallback.hasAttribute(hiddenMarker)).toBe(false);
+        expect(getComputedStyle(fallback).display).not.toBe('none');
+      }
+
       await runtime.update(
         withCgControl(
           {},

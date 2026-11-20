@@ -445,6 +445,7 @@ async function bootControlFocus(
   switchMode: ControlLiveLayout['effects']['switch']['mode'] = 'motion',
   bordered = false,
   promoteBeforeTake = false,
+  withFallback = false,
 ) {
   const cameras = {
     'guest-1': 'src-a',
@@ -461,6 +462,10 @@ async function bootControlFocus(
       title: id,
       sourceId: cameras[id],
       ...(bordered && { border: { color: '#0099ff', width: 5 } }),
+      ...(withFallback && {
+        fallback: { kind: 'color' as const, color: '#e05020' },
+        showFallback: true,
+      }),
     })),
     presets: [
       {
@@ -498,6 +503,7 @@ async function bootControlFocus(
     name: id,
     entered: { mode: 'cut' as const },
     rects: membership,
+    ...(withFallback && { fallbacks: Object.keys(membership) }),
     transitionFrames: Object.fromEntries(
       Object.keys(membership).map((frameId) => [
         frameId,
@@ -561,6 +567,87 @@ it('advances the bordered interlaced artwork while keeping the native preset dea
   expect(move.every(({ phase }) => phase.delayMs === 0)).toBe(true);
   const nativeCommit = logs.find(({ line, at }) => line === 'MIXER 1 COMMIT' && at >= move[1]!.at);
   expect(nativeCommit?.at).toBeGreaterThanOrEqual(move[0]!.at + 25);
+});
+
+it.each([false, true])(
+  'keeps the authored fallback under an opaque preset move and holds it for native fade (%s)',
+  async (fade) => {
+    const runtime = await bootControlFocus(false, false, 'motion', true, false, true);
+    const engine = mock!;
+    const mark = engine.receivedCommands().length;
+    const destination = focusLooks[0]!;
+    expect(await runtime.setActiveLook('item-1', destination, { ...focusMotion, fade })).toEqual({
+      ok: true,
+    });
+    const retained = focusFrameIds[0];
+    const controls = engine
+      .receivedCommands()
+      .slice(mark)
+      .flatMap(({ line }) => {
+        if (!line.startsWith('CG ') || !line.includes(' UPDATE ')) return [];
+        const command = parseAmcpLine(line);
+        const fields = decodeCgData(command!.args[3]!).data;
+        const control = fields === null ? undefined : readCgControl(JSON.parse(fields));
+        return control === undefined ? [] : [control];
+      });
+    const phases = controls.flatMap(({ frameTransition }) =>
+      frameTransition?.frames.some(({ from, to }) => from.width !== to.width)
+        ? [frameTransition]
+        : [],
+    );
+    expect(phases.length).toBeGreaterThan(0);
+    expect(
+      phases.every((phase) => (phase.hideFallbackPlateIds?.includes(retained) === true) === fade),
+    ).toBe(true);
+    expect(
+      controls.some(
+        ({ look, liveFallback }) =>
+          look === destination &&
+          liveFallback?.phase === 'hold' &&
+          liveFallback.plateIds.includes(retained),
+      ),
+    ).toBe(fade);
+  },
+);
+
+it('releases a preset fallback hold on the same verified reserve page after native settlement', async () => {
+  const runtime = await bootControlFocus(true, false, 'motion', true, false, true);
+  const a = mock!;
+  const b = backup!;
+  const startA = a.receivedCommands().length;
+  const startB = b.receivedCommands().length;
+  const destination = focusLooks[0]!;
+  expect(
+    await runtime.setActiveLook('item-1', destination, { ...focusMotion, fade: true }),
+  ).toEqual({ ok: true });
+
+  const backdropUpdates = (engine: MockHandle, start: number, channel: number) =>
+    engine
+      .receivedCommands()
+      .slice(start)
+      .flatMap(({ line, at }) => {
+        if (!line.startsWith(`CG ${channel}-10 UPDATE `)) return [];
+        const data = decodeCgData(parseAmcpLine(line)!.args[3]!).data;
+        const control = data === null ? undefined : readCgControl(JSON.parse(data));
+        return control === undefined ? [] : [{ at, control }];
+      });
+  const updatesA = backdropUpdates(a, startA, 1);
+  const updatesB = backdropUpdates(b, startB, 2);
+  const hold = updatesA.find(({ control }) => control.liveFallback?.phase === 'hold');
+  const heldOnB = updatesB.find(({ control }) => control.liveFallback?.phase === 'hold');
+  const releasedOnB = updatesB.find(({ control }) => control.liveFallback?.phase === 'release');
+  expect(hold?.control.liveFallback?.id).toBeTruthy();
+  expect(heldOnB?.control.liveFallback).toEqual(hold?.control.liveFallback);
+  expect(releasedOnB?.control.liveFallback).toEqual({
+    phase: 'release',
+    id: hold?.control.liveFallback?.id,
+  });
+  expect(releasedOnB?.at).toBeGreaterThan(
+    b
+      .receivedCommands()
+      .slice(startB)
+      .findLast(({ line }) => line === 'MIXER 2 COMMIT')!.at,
+  );
 });
 
 it('moves between bound Control Focus frames and restores the exact prior arrangement', async () => {
@@ -2870,7 +2957,7 @@ it('animates the retained authored seat in both directions and cuts the new plat
   }
 });
 
-it('tweens a fit-only preset change and shares the artwork start allowance across both pages and engines', async () => {
+it('keeps a fit-only preset phase aligned on each engine when the primary acknowledgement is delayed', async () => {
   const base = presetEffectTemplate();
   const live = base.liveSources!;
   const [solo, duo] = live.looks!;
@@ -2909,12 +2996,22 @@ it('tweens a fit-only preset change and shares the artwork start allowance acros
   const reserveBefore = b.receivedCommands().length;
   const initialFill = a.layerState({ channel: 1, layer: native })?.fill;
   const normalCg = defaultHandlers().get('CG')!;
+  const normalMixer = defaultHandlers().get('MIXER')!;
   let delayed = false;
+  let primaryCommitAcceptedAt = 0;
   a.setHandler('CG', async (request, context, connection) => {
     const reply = normalCg(request, context, connection);
     if (!delayed && request.raw.startsWith('CG 1-10 UPDATE ') && request.raw.includes('delayMs')) {
       delayed = true;
       await new Promise<void>((resolve) => setTimeout(resolve, 90));
+    }
+    return reply;
+  });
+  a.setHandler('MIXER', async (request, context, connection) => {
+    const reply = normalMixer(request, context, connection);
+    if (primaryCommitAcceptedAt === 0 && request.raw === 'MIXER 1 COMMIT') {
+      await new Promise<void>((resolve) => setTimeout(resolve, 90));
+      primaryCommitAcceptedAt = performance.now();
     }
     return reply;
   });
@@ -2952,7 +3049,21 @@ it('tweens a fit-only preset change and shares the artwork start allowance acros
   const reserve = firstPhase(b, reserveBefore, 2);
   expect(active.delays[0]! - active.delays[1]!).toBeGreaterThan(70);
   expect(active.commit.at - active.writes[1]!.at).toBeLessThan(active.delays[0]! - 35);
-  expect(reserve.delays[0]!).toBeLessThan(active.delays[0]! - 70);
+  expect(primaryCommitAcceptedAt).toBeGreaterThan(active.commit.at);
+  expect(reserve.writes[0]!.at).toBeGreaterThanOrEqual(primaryCommitAcceptedAt);
+  expect(reserve.delays[0]!).toBeGreaterThan(170);
+  for (const [index, write] of reserve.writes.entries()) {
+    expect(reserve.commit.at - write.at).toBeGreaterThanOrEqual(reserve.delays[index]! - 15);
+    expect(reserve.commit.at - write.at).toBeLessThan(reserve.delays[index]! + 45);
+  }
+  const settledReserveLook = b
+    .receivedCommands()
+    .slice(reserveBefore)
+    .find(
+      ({ line }) => line.startsWith('CG 2-10 UPDATE ') && line.includes('\\"look\\":\\"duo\\"'),
+    );
+  expect(settledReserveLook).toBeDefined();
+  expect(settledReserveLook!.at - reserve.commit.at).toBeGreaterThanOrEqual(110);
   const coverFill = a.layerState({ channel: 1, layer: native })?.fill;
   expect(coverFill).not.toEqual(initialFill);
   expect(b.layerState({ channel: 2, layer: native })?.fill).toEqual(coverFill);
