@@ -5213,7 +5213,8 @@ of the selected channel. Identify the verified active engine and listen to a sin
 Send CG commands to the active engine after its external-graphics transfer contract is verified.
 The opt-in static HTML pilot routes Control's Play, Update, Stop and Clear through complete,
 prepared channel layouts. It verifies the owner, journals the request and recovers the
-applied template state after a Bridge restart. Acceptance on a real Playout pair remains open.
+applied template state after a Bridge restart. The static HTML pilot passed on a real licensed
+.26 pair, including the reserve's render before and after ownership transfer.
 
 **Acceptance:**
 

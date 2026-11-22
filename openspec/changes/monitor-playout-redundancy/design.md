@@ -154,8 +154,10 @@ Static, self-contained HTML exports declare absolute resume support. The rendere
 full field state, loads fonts and images, and shows the settled graphic. On restart Bridge
 reconciles any pending command and reads the applied layout before restoring confirmed row
 data and visibility. The pilot excludes timed scenes, page sequences, live layouts and media.
-An isolated Playout pair must still prove that an owner-only request produces the graphic on
-the reserve and that the same instance survives transfer.
+The licensed .26 test pair applied one owner-only Play to A and rendered the same graphic on
+B. A handoff preserved the instance and the visible caption. Control sent Update to B, recovered
+the updated row after a Bridge restart and removed it on both members through Stop and Clear.
+The test read raw AMCP for observation from B and captured the two Engines' own PGM feeds.
 
 Launch the isolated Bridge with `--managed-cg-pilot <group.json> --state-home <directory>`.
 The profile contains `groupId`, the Control `channel`, and a list of `members` with
