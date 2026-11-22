@@ -48,8 +48,12 @@
       matched the initial frame pixel for pixel and Stop removed the graphic.
 - [x] Read the test pair's External CG v2 capabilities on Playout .26. Both PGM returns are live,
       the layout request schema matches .22, and both channels report `cg.channelNotMigrated`.
+- [x] Start two isolated full Engine .26 hosts from the supplied installer and verify the
+      first-run, administrator session and CG license endpoints. Both hosts report Missing
+      CG licensing and reject the CG operator session with `403 cg_not_licensed`.
 - [ ] Capture B's real programme output after an owner-only Play and after transfer on an
-      isolated compatible Playout Engine/Core pair.
+      isolated licensed Playout Engine/Core pair. Live test A accepted a system administrator
+      session. B's administrator session is unavailable, so neither station channel was migrated.
 - [ ] Verify recovery from a documented pre-admission refusal and establish journal retention.
 - [ ] Verify whole-layout state and a mirrored media plate with the real CG Bridge and the
       managed contract on an isolated channel.
