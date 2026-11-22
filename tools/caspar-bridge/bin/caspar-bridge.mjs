@@ -37,6 +37,8 @@
 //   caspar-bridge --state-home "C:\Users\op\AppData\Local\CG Control Dev"
 //                                                     # DESKTOP-APPS-01: every default below resolves under
 //                                                     #   <state-home>\.cg-runtime\ instead of ~/.cg-runtime\
+//   caspar-bridge --managed-cg-pilot C:\cg-lab\group.json --state-home C:\cg-lab\state
+//                                                     # External CG v2 on one isolated test channel
 //   caspar-bridge --console-dir C:\cg\console --console-port 5175
 //                                                     # DESKTOP-APPS-01: serve a built console on its own
 //                                                     #   loopback origin (never the template port) — the
@@ -123,6 +125,7 @@ import {
   defaultPlayoutConfigPath,
   findPerUserStates,
   importStateOnce,
+  loadManagedCgPilotConfig,
   loadPersistedConnection,
   loadServiceConfig,
   parseReservedLayersFlag,
@@ -159,6 +162,26 @@ if (args['set-playout-address'] === undefined) {
   console.error(
     `[caspar-bridge] bridge ${bridgeVersion()} starting (node ${process.version}, pid ${String(process.pid)})`,
   );
+}
+
+// Validate the isolated pilot before any service, firewall or import operation can run.
+let managedCgLaunch;
+if (args['managed-cg-pilot'] !== undefined) {
+  try {
+    managedCgLaunch = managedCgPilotFromArgs(args);
+    args['state-home'] = managedCgLaunch.stateHome;
+    args.host = '127.0.0.1';
+    args.auth = 'off';
+    console.error(
+      '[caspar-bridge] External CG v2 pilot on channel ' + String(managedCgLaunch.pilot.channel),
+    );
+  } catch (err) {
+    console.error(
+      '[caspar-bridge] ' +
+        (err instanceof Error ? err.message : 'Invalid managed CG pilot configuration.'),
+    );
+    process.exit(1);
+  }
 }
 
 /*
@@ -691,7 +714,7 @@ for (const flag of ['osc-port', 'backup-osc-port']) {
   }
 }
 const connection =
-  hasPrimaryFlags || hasBackupFlags
+  hasPrimaryFlags || hasBackupFlags || managedCgLaunch !== undefined
     ? {
         servers: {
           A: {
@@ -716,7 +739,7 @@ const connection =
             : {}),
         },
         strategy: 'mirror-sync',
-        autoFailoverEnabled: true,
+        autoFailoverEnabled: managedCgLaunch === undefined,
       }
     : undefined;
 /*
@@ -843,6 +866,10 @@ const bridgeOptions = {
   ...(bridgeSessionPath !== undefined ? { bridgeSessionPath } : {}),
   ...(backupPlayoutAddress !== undefined ? { backupPlayoutAddress } : {}),
   fixedLayersPath,
+  ...(managedCgLaunch !== undefined && {
+    fixedLayers: managedCgLaunch.fixedLayers,
+    managedCgPilot: managedCgLaunch.pilot,
+  }),
   reservedLayers,
   reservedLayersPath,
   templatesDir,
@@ -859,7 +886,7 @@ const bridgeOptions = {
   templateServe,
   ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
   playout: playoutFlags,
-  playoutConfigPath,
+  ...(managedCgLaunch === undefined && { playoutConfigPath }),
   /*
     `DESKTOP-APPS-01` — an installed station that may still be in first-run. Takes no value; only
     the desktop app passes it. Absent = every dev bridge, exactly as before.
@@ -1310,6 +1337,49 @@ function describeStack({ path: file, source, restored, skipped, unusable }) {
     (notes.length > 0 ? ` - ${notes.join(', ')}` : '') +
     ' - each is decided at the first connection (INFO)'
   );
+}
+
+function managedCgPilotFromArgs(flags) {
+  const pilotFlags = new Set([
+    'managed-cg-pilot',
+    'state-home',
+    'host',
+    'port',
+    'auth',
+    'caspar-host',
+    'amcp-port',
+    'osc-port',
+    'backup-host',
+    'backup-amcp-port',
+    'backup-osc-port',
+    'template-serve-host',
+    'template-serve-port',
+    'console-dir',
+    'console-port',
+    'exit-on-stdin-close',
+  ]);
+  for (const [flag, value] of Object.entries(flags)) {
+    if (!pilotFlags.has(flag)) {
+      throw new Error(
+        'Managed CG pilot cannot be combined with service or station-override flags.',
+      );
+    }
+    if (flag !== 'exit-on-stdin-close' && (typeof value !== 'string' || value.trim() === '')) {
+      throw new Error('Managed CG pilot needs a value for --' + flag + '.');
+    }
+  }
+  const config = flags['managed-cg-pilot'];
+  const stateHome = flags['state-home'];
+  if (typeof config !== 'string' || typeof stateHome !== 'string') {
+    throw new Error('Managed CG pilot needs a configuration file and an explicit --state-home.');
+  }
+  if (flags.host !== undefined && flags.host !== '127.0.0.1') {
+    throw new Error('Managed CG pilot Control must bind to 127.0.0.1.');
+  }
+  if (flags.auth !== undefined && flags.auth !== 'off') {
+    throw new Error('Managed CG pilot uses local Control and separate Engine operator sessions.');
+  }
+  return loadManagedCgPilotConfig(config, stateHome);
 }
 
 function parseArgs(argv) {

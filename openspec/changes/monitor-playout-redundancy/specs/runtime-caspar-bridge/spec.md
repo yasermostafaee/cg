@@ -48,3 +48,17 @@ writes until a matching terminal decision is recovered for that command.
   and reads or reconciles that command's receipt without submitting a new layout
 - **WHEN** a matching applied or rolled-back decision is verified **THEN** the executor can
   accept the next full layout with fresh ownership and a fresh ID
+
+### Requirement: The static HTML pilot restores the applied template state
+
+The opt-in Bridge pilot SHALL use the managed layout API for Play, Update, Stop and Clear
+of supported static HTML templates. It SHALL preserve other applied layers and confirm the
+selected row from Playout's applied state. Raw Caspar commands SHALL be limited to observation
+for the pilot.
+
+#### Scenario: The Bridge restarts after an applied update
+
+- **WHEN** the Bridge restarts with a retained matching template and a confirmed applied layout
+- **THEN** Control restores the row's data and on-air status from that layout
+- **AND** the exported HTML can apply the same complete state on a fresh renderer without
+  replaying the entrance

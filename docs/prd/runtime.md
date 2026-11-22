@@ -5211,9 +5211,9 @@ is no verified ownership map.
 **What:** Show separate PGM pictures and signals for the configured engine and up to three reserves
 of the selected channel. Identify the verified active engine and listen to a single programme return.
 Send CG commands to the active engine after its external-graphics transfer contract is verified.
-The first integration stage accepts a complete, prepared channel layout. It verifies the owner
-and keeps the original request in a durable command journal. Operator command dispatch and
-absolute template recovery require separate integration and station acceptance.
+The opt-in static HTML pilot routes Control's Play, Update, Stop and Clear through complete,
+prepared channel layouts. It verifies the owner, journals the request and recovers the
+applied template state after a Bridge restart. Acceptance on a real Playout pair remains open.
 
 **Acceptance:**
 
@@ -5222,6 +5222,8 @@ absolute template recovery require separate integration and station acceptance.
 - WHEN ownership is unknown THEN show no active designation and keep Follow silent.
 - WHEN the operator selects a verified B return or Follow resolves to it THEN the PGM meter shows that return's levels. A return without Playout meter telemetry uses its own stereo PCM peaks. The operator can show or hide the meter independently of listening. While shown, missing data leaves an empty meter scale.
 - WHEN an opt-in channel is served by External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
+- WHEN the Bridge restarts with an applied static graphic THEN Control restores its confirmed
+  data and on-air state. A freshly prepared renderer shows the applied data without playing the entrance.
 - WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
 - WHEN a backup is healthy but a row has media or live inputs unavailable there THEN Layers keeps
   the template name and a short backup status. Inspector expands to show the affected inputs and reasons.

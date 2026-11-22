@@ -4,6 +4,7 @@ import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
+  managedStaticResumePageMarker,
   CG_LIVE_NATIVE_BORDER_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
@@ -474,10 +475,11 @@ function buildSingleFileHtml(parts: HtmlParts): string {
     cgJsLottieIife !== undefined ? `<script>${cgJsLottieIife}</script>\n    ` : '';
   const w = String(scene.resolution.width);
   const h = String(scene.resolution.height);
+  const managedResume = managedStaticResumePageMarker(scene, cgJsIife);
   return `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="utf-8" />${managedResume === '' ? '' : '\n    ' + managedResume}
     ${CG_LIVE_POSITION_PAGE_MARKER}
     ${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}
     ${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}

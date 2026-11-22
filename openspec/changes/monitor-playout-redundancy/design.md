@@ -144,10 +144,26 @@ non-terminal receipt on the original Engine. A matching applied or rolled-back d
 the reservation. Timeouts, conflicting results and absent receipts keep the reservation.
 
 The test fixture serves two independent HTTP origins with different channel codes and physical
-numbers. Before enabling the managed path, integrate whole-channel state, prepare and verify
-assets on every member, and implement absolute HTML state for exported scenes. The write guard
-must also cover raw AMCP at enqueue/dispatch, including replay and recovery. Confirm refusal
-and ambiguous-result recovery semantics on the installed Engine before enabling the station.
+numbers. The isolated Bridge pilot uses a separate state directory, a fixed logical channel
+and one operator session per Engine. Control's Play, Update, Stop and Clear use the existing
+Bridge routes. The executor builds a full layout from the applied snapshot, preserving layers
+and template identities outside the selected row. Raw AMCP is restricted to observation at
+the transport, including reconnect and restart.
+
+Static, self-contained HTML exports declare absolute resume support. The renderer applies the
+full field state, loads fonts and images, and shows the settled graphic. On restart Bridge
+reconciles any pending command and reads the applied layout before restoring confirmed row
+data and visibility. The pilot excludes timed scenes, page sequences, live layouts and media.
+An isolated Playout pair must still prove that an owner-only request produces the graphic on
+the reserve and that the same instance survives transfer.
+
+Launch the isolated Bridge with `--managed-cg-pilot <group.json> --state-home <directory>`.
+The profile contains `groupId`, the Control `channel`, and a list of `members` with
+`origin`, `engineId`, `channelCode`, `nativeChannel` and `operatorTokenEnv`. Set each named
+variable to that member's operator session before launch. The profile uses the bank in
+`<directory>/external-cg-pilot/<groupId>/.cg-runtime/bridge-fixed-layers.json` when present.
+Choose a visible row within the lab group's permitted HTML layers. Use a template server
+address each Engine can reach and a fresh static export from Designer.
 
 ## Legacy reserve observations after the D11 fix
 

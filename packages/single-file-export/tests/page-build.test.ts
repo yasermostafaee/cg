@@ -10,6 +10,8 @@ import {
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+  CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
   type Scene,
 } from '@cg/shared-schema';
 import { sha256Hex } from '@cg/vcg-format';
@@ -42,10 +44,10 @@ const SCENE = {
   metadata: { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
 } as unknown as Scene;
 
-/** The shell alone: every runtime input empty, so only what this package writes is hashed. */
+/** The shell with a stable capability probe in place of the actual runtime bundle. */
 async function exportedShell(): Promise<string> {
   const { html } = await new ExporterSingleFile({
-    cgJsIife: '',
+    cgJsIife: '/* ' + CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION + ' */',
     cgJsLottieIife: '',
     cgCss: '',
     fontsCss: '',
@@ -77,13 +79,17 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 16,
-      shell: 'da4d66e4eb99319b4994621e37c5e18d4c9ce5cd86d79694cb4b792d6bb312ba',
+      revision: 17,
+      shell: '29deef2dce472bcab34f916da1f009594ef36c8171dbee28240665a383a2e159',
     });
   });
 
   it('the shell hash is deterministic (the pin above can hold)', async () => {
     expect(await shellHash()).toBe(await shellHash());
+  });
+
+  it('advertises the managed resume capability in the first 1024 bytes of an eligible export', async () => {
+    expect((await exportedShell()).slice(0, 1024)).toContain(CG_MANAGED_STATIC_RESUME_PAGE_MARKER);
   });
 
   it('keeps the live frame capability markers in the first 1024 bytes of export', async () => {

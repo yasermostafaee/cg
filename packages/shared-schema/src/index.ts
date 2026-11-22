@@ -17,6 +17,7 @@ export * from './file-source-content.js';
 export * from './bindings.js';
 export * from './live-source.js';
 export * from './control-payload.js';
+export * from './managed-static-resume.js';
 export * from './visibility.js';
 export * from './arrangements.js';
 export * from './looks.js';

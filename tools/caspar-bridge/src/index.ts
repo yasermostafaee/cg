@@ -41,6 +41,8 @@ export type {
   ManagedCgOutcome,
 } from './managed-cg-commands.js';
 export { ManagedCgJournal } from './managed-cg-journal.js';
+export { loadManagedCgPilotConfig } from './managed-cg-pilot-config.js';
+export type { LoadedManagedCgPilot } from './managed-cg-pilot-config.js';
 export type { ManagedLayoutLayer, ManagedResult, ManagedTemplate } from './managed-cg-contract.js';
 export type { AuthGateState, BridgeHandle, BridgeOptions, StackProvenance } from './bridge.js';
 // `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack store (its record is

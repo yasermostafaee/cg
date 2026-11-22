@@ -11,8 +11,8 @@ import { cgCss, cgJsIife, cgJsLottieIife } from './cg-runtime.js';
  *
  * Bumping it makes every CG Control on the next release rebuild every page it can.
  */
-// Rebuild retained pages for effect-scoped release of native border suppression.
-export const EXPORTER_SHELL_REVISION = 16;
+// Rebuild eligible retained pages with their managed static resume marker.
+export const EXPORTER_SHELL_REVISION = 17;
 
 /**
  * 🔴 `PAGE-REBUILD-01` — **THE FINGERPRINT OF EVERYTHING A PAGE IS BUILT FROM BESIDE ITS OWN

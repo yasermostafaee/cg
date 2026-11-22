@@ -19,6 +19,8 @@ import {
   type ServerSessionState,
 } from '@cg/caspar-client';
 import {
+  CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+  FieldValuesSchema,
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
@@ -252,6 +254,9 @@ import {
   type StationStray,
 } from '@cg/shared-ipc';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { ManagedObservationTransport, type ManagedCgPilot } from './managed-cg-pilot.js';
+import { ManagedCgStack, type ManagedHtmlLayer } from './managed-cg-stack.js';
+import type { ManagedTemplate } from './managed-cg-contract.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as waitForTimer } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
@@ -2997,6 +3002,8 @@ export class CasparRuntime {
    */
   #backupChannels: BackupChannelMap = NO_BACKUP_CHANNELS;
   /** `B-316` — TEST-ONLY, see the constructor option: hand server B the station's line untranslated. */
+  readonly #managedCg: (ManagedCgPilot & { stack: ManagedCgStack }) | undefined;
+  #managedBusy = false;
   readonly #serverBVerbatim: boolean;
   /** `B-316` — server B refusals already logged (one line per kind and channel). */
   readonly #serverBRefusalsSaid = new Set<string>();
@@ -3005,6 +3012,7 @@ export class CasparRuntime {
     config: ConnectionConfig,
     serveOverride: TemplateServeOverride = {},
     options: {
+      managedCgPilot?: ManagedCgPilot;
       intentTimeoutMs?: number;
       sweepMs?: number;
       occupancyStaleMs?: number;
@@ -3204,6 +3212,9 @@ export class CasparRuntime {
     } = {},
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
+    this.#managedCg = options.managedCgPilot === undefined
+      ? undefined
+      : { ...options.managedCgPilot, stack: new ManagedCgStack(options.managedCgPilot.commands) };
     this.#playoutLinked = options.playoutLinked === true;
     this.#standalone = options.standalone === true;
     this.#reservedLayers = options.reservedLayers ?? [];
@@ -3345,7 +3356,7 @@ export class CasparRuntime {
       strategy: config.strategy,
       sessions: this.#sessions,
       initialPrimary: 'A',
-      autoFailoverEnabled: !this.#playoutLinked && config.autoFailoverEnabled,
+      autoFailoverEnabled: this.#managedCg === undefined && !this.#playoutLinked && config.autoFailoverEnabled,
       // 🔴 `B-316` — every road to server B asks this, and only this.
       serverBLine: (line) => this.#serverBLine(line),
       allowReserveLine: (session, line) => this.#allowReserveLine(session, line),
@@ -3377,6 +3388,7 @@ export class CasparRuntime {
           the core's own default per-client subscription goes there and is left alone.
         */
         oscSubscribe: true,
+        ...(this.#managedCg !== undefined && { createAmcp: () => new ManagedObservationTransport() }),
         // `CENTRAL-BRIDGE-01` (`C-047`) — the start check's `INFO` reads, before `healthy`.
         onHandshake: (read, info) => this.#startCheckRead(name, read, info),
         resyncDurationMs: RESYNC_MS,
@@ -3449,7 +3461,7 @@ export class CasparRuntime {
             this.#mirroredLiveSeats.delete(adoptionKey(event));
         }
         if (this.#adapter.currentPrimary !== label) return;
-        for (const event of events) this.#reconciler.applyOsc(event);
+        if (this.#managedCg === undefined) for (const event of events) this.#reconciler.applyOsc(event);
       });
       /*
         🔴 `RELEASE-091-01` (DELTA B, B2) — **OUR OWN ACKNOWLEDGED `CLEAR` IS THE EVIDENCE THE LAYER
@@ -3568,6 +3580,7 @@ export class CasparRuntime {
             if (readFrom === label) this.#modeReadFrom.delete(channel);
           }
         }
+        if (this.#managedCg !== undefined) return;
         if (this.#adapter.currentPrimary !== label) {
           if (to === 'healthy') void this.#retirePendingPresetBorders(session);
           return;
@@ -4396,6 +4409,9 @@ export class CasparRuntime {
     fields: FieldValues,
     detail: AuditDetail,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    if (this.#managedCg !== undefined && (this.#managedBusy || this.#reconciler.get(itemId) !== null)) {
+      return { accepted: false, errorCode: 'managed-cg-row-held' };
+    }
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     /*
@@ -4442,7 +4458,7 @@ export class CasparRuntime {
     const rowFields = this.#newRowFields(slot.channel, templateId, fields);
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields: rowFields }, seq);
-    return this.#loadOnto(itemId, templateId, rowFields, slot, seq);
+    return this.#loadOnto(itemId, templateId, rowFields, slot, seq, this.#managedCg !== undefined);
   }
 
   #newRowFields(channel: number, templateId: string, fields: FieldValues): FieldValues {
@@ -4496,6 +4512,13 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    const pilot = this.#managedCg;
+    if (pilot !== undefined && slot.channel !== pilot.channel) {
+      return { accepted: false, errorCode: 'managed-cg-channel' };
+    }
+    if (pilot !== undefined && (this.#managedBusy || this.#reconciler.get(itemId) !== null)) {
+      return { accepted: false, errorCode: 'managed-cg-row-held' };
+    }
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     // 🔴 `B-301` — the checks run FIRST and a refusal creates nothing (see `#loadImpl`): the intent is
@@ -4705,7 +4728,7 @@ export class CasparRuntime {
     // indistinguishable from our own). Purely additive: the load proceeds
     // exactly as before either way. Unknown occupancy (tap silent/stale)
     // deliberately does NOT warn — observed occupancy only (design §3).
-    if (!adopted) this.#detectOwnedOccupancy(slot, itemId);
+    if (!adopted && this.#managedCg === undefined) this.#detectOwnedOccupancy(slot, itemId);
 
     // B-082 — a load is NOT an on-air action, so a dead link is not a load FAILURE.
     // With no reachable server there is simply nothing to pre-roll: skip the `CG ADD`
@@ -4919,7 +4942,9 @@ export class CasparRuntime {
     // backup up, clearing the flag here would UN-demote B-086's `unverified`
     // rows back to a confident red ON AIR that nothing verifies. Lifting the
     // flag stays where it belongs — the healthy transition.
-    if (this.#adapter.primarySession.state !== 'healthy') this.#reconciler.setLinkDown(true);
+    if (this.#managedCg === undefined && this.#adapter.primarySession.state !== 'healthy') {
+      this.#reconciler.setLinkDown(true);
+    }
 
     let restored = 0;
     const skipped: RestoreSkip[] = [];
@@ -5257,7 +5282,7 @@ export class CasparRuntime {
        * refused. A second copy of the predicate inside `#decidePendingRestores` is the
        * kind of drift golden rule 6 exists to prevent.
        */
-      if (source === 'startup' && isRestorable(item.state) && slot !== null) {
+      if (this.#managedCg === undefined && source === 'startup' && isRestorable(item.state) && slot !== null) {
         this.#pendingRestore.set(item.itemId, {
           slot,
           templateId: item.templateId,
@@ -5291,6 +5316,10 @@ export class CasparRuntime {
         [],
         false,
       );
+    }
+    if (this.#managedCg !== undefined) {
+      await this.#managedCg.stack.recoverPending().catch(() => undefined);
+      await this.#refreshManagedRows();
     }
     if (source === 'startup') this.#setRestoreReport(skipped, migrated);
     // `R-100` — every picture no restored row names is deleted (nothing is recent after a start).
@@ -7495,6 +7524,205 @@ export class CasparRuntime {
     return null;
   }
 
+  #managedTemplate(
+    item: StackItemState,
+    slot: CommandSlot,
+  ): { versionId: string; key: string; sha256: string } | undefined {
+    const version =
+      this.#templates.heldVersion(item.itemId) ??
+      this.#templates.versionOn(slot.channel, item.templateId);
+    const html = version === null ? null : this.#templates.htmlOf(version);
+    const key = version === null ? null : this.#templates.serveKeyOf(version);
+    const head = html?.match(/<head>[\s\S]*?<\/head>/i)?.[0];
+    if (
+      version === null ||
+      html === null ||
+      key === null ||
+      !head?.includes(CG_MANAGED_STATIC_RESUME_PAGE_MARKER)
+    ) {
+      return undefined;
+    }
+    return { versionId: version, key, sha256: createHash('sha256').update(html).digest('hex') };
+  }
+
+  #settleManagedRow(
+    itemId: string,
+    layer: ManagedHtmlLayer | undefined,
+    absent: 'keep' | 'clear' = 'keep',
+    stagedFields?: FieldValues,
+  ): void {
+    this.#reconciler.setUnverifiable(itemId, false);
+    const item = this.#reconciler.get(itemId);
+    if (item === null) return;
+    const data = layer === undefined ? stagedFields : FieldValuesSchema.parse(layer.data ?? {});
+    if (data !== undefined && !isDeepStrictEqual(data, item.fields)) {
+      const seq = this.#nextSeq();
+      this.#reconciler.applyIntent(
+        { kind: 'update', itemId, fields: data, mergeMode: 'replace' },
+        seq,
+      );
+      this.#reconciler.applyAck(seq, true);
+    }
+    const kind =
+      layer === undefined
+        ? absent === 'clear' || isOnAirStatus(item)
+          ? 'out'
+          : undefined
+        : layer.visibility === 'stopped'
+          ? 'stop'
+          : 'take';
+    if (kind !== undefined) {
+      const seq = this.#nextSeq();
+      this.#reconciler.applyIntent({ kind, itemId }, seq);
+      this.#reconciler.applyAck(seq, true);
+    }
+    this.#markDirty(itemId);
+  }
+
+  async #refreshManagedRows(): Promise<void> {
+    const pilot = this.#managedCg;
+    if (pilot === undefined) return;
+    const rows = this.#reconciler.snapshot().flatMap((item) => {
+      const slot = this.#slots.get(item.itemId);
+      return slot?.channel === pilot.channel
+        ? [{ rowId: item.itemId, layer: slot.layer, item, slot }]
+        : [];
+    });
+    if (rows.length === 0) return;
+    try {
+      const mapped = await pilot.stack.inspectRows(rows);
+      rows.forEach(({ rowId, item, slot }, index) => {
+        const layer = mapped[index];
+        const template = layer === undefined ? undefined : this.#managedTemplate(item, slot);
+        if (layer !== undefined && template?.sha256 !== layer.template.version) {
+          this.#reconciler.setUnverifiable(rowId, true);
+          return;
+        }
+        if (template !== undefined) this.#templates.hold(rowId, template.versionId);
+        this.#settleManagedRow(rowId, layer);
+      });
+    } catch {
+      for (const { rowId } of rows) this.#reconciler.setUnverifiable(rowId, true);
+    }
+  }
+
+  async #applyManaged(
+    itemId: string,
+    operation: 'take' | 'update' | 'stop' | 'out',
+    update?: { fields: FieldValues; mergeMode: 'merge' | 'replace' },
+  ): Promise<TakeVerdict> {
+    const pilot = this.#managedCg;
+    const slot = this.#slots.get(itemId);
+    if (pilot === undefined || slot?.channel !== pilot.channel) {
+      return {
+        accepted: false,
+        errorCode: 'managed-cg-channel',
+        message: 'This row is outside the managed channel.',
+      };
+    }
+    if (this.#managedBusy) return { accepted: false, errorCode: 'managed-cg-busy' };
+    this.#managedBusy = true;
+    try {
+      const recovered = await pilot.stack.recoverPending();
+      if (recovered?.status === 'pending') {
+        return {
+          accepted: false,
+          errorCode: 'managed-cg-pending',
+          message: 'Playout has not confirmed the preceding command.',
+        };
+      }
+      if (recovered !== undefined) await this.#refreshManagedRows();
+      const item = this.#reconciler.get(itemId);
+      if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+      const withFields = operation === 'take' || operation === 'update';
+      const template = withFields ? this.#managedTemplate(item, slot) : undefined;
+      if (withFields && template === undefined) {
+        return {
+          accepted: false,
+          errorCode: 'managed-cg-static-only',
+          message: 'Reimport a static template with managed recovery support.',
+        };
+      }
+      let manifest: ManagedTemplate | undefined;
+      if (operation === 'take' && template !== undefined) {
+        if (!this.#templateServer.listening) {
+          return {
+            accepted: false,
+            errorCode: 'managed-cg-unavailable',
+            message: 'The template server is unavailable.',
+          };
+        }
+        manifest = {
+          entryPath: 'index.html',
+          version: template.sha256,
+          resumeWithoutReplay: true,
+          assets: [
+            {
+              path: 'index.html',
+              uri: this.#templateServer.urlFor(template.key),
+              sha256: template.sha256,
+              contentType: 'text/html',
+            },
+          ],
+        };
+        await pilot.commands.prepareTemplate(manifest);
+      }
+      let data = withFields ? item.fields : undefined;
+      if (update !== undefined) {
+        const info = this.#templateOfItem(itemId, item.templateId);
+        const refusal = operatorFieldUpdateRefusal(
+          info,
+          item.fields,
+          update.fields,
+          update.mergeMode,
+        );
+        if (refusal !== undefined) return { accepted: false, ...refusal };
+        data =
+          update.mergeMode === 'replace' ? update.fields : { ...item.fields, ...update.fields };
+      }
+      const result = await pilot.stack.apply({
+        operation,
+        rowId: itemId,
+        layer: slot.layer,
+        ...(manifest !== undefined && { template: manifest }),
+        ...(template !== undefined && {
+          expectedData: item.fields,
+          expectedTemplateVersion: template.sha256,
+        }),
+        ...(data !== undefined && { data }),
+      });
+      if (result.status === 'pending') {
+        this.#reconciler.setUnverifiable(itemId, true);
+        return {
+          accepted: false,
+          errorCode: 'managed-cg-pending',
+          message: 'Playout has not confirmed this command.',
+        };
+      }
+      if (result.status === 'rolledBack') {
+        return {
+          accepted: false,
+          errorCode: 'managed-cg-rolled-back',
+          message: 'Playout restored the preceding layout.',
+        };
+      }
+      if (template !== undefined && result.layer !== undefined)
+        this.#templates.hold(itemId, template.versionId);
+      if (operation === 'out') this.#templates.release(itemId);
+      this.#settleManagedRow(itemId, result.layer, operation === 'out' ? 'clear' : 'keep', data);
+      return { accepted: true };
+    } catch (error) {
+      return {
+        accepted: false,
+        errorCode: 'managed-cg-unavailable',
+        message:
+          error instanceof Error ? error.message : 'Playout did not confirm the managed layout.',
+      };
+    } finally {
+      this.#managedBusy = false;
+    }
+  }
+
   async take(itemId: string): Promise<TakeVerdict> {
     const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
       this.#takeImpl(itemId),
@@ -7916,6 +8144,7 @@ export class CasparRuntime {
      * mutate nothing, and retiring a parked restore is a mutation.
      */
     if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+    if (this.#managedCg !== undefined) return this.#applyManaged(itemId, 'take');
     if (this.standaloneCoreChannels() !== null) {
       for (const channel of this.channelsForItem(itemId)) {
         const message = this.standaloneChannelRefusal(channel);
@@ -8973,6 +9202,14 @@ export class CasparRuntime {
     position?: Position,
     inputTransition?: InputTransition,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    if (this.#managedCg !== undefined) {
+      return this.#audited('update', this.#itemDetail(itemId), async () => {
+        if (lookBindings !== undefined || position !== undefined || inputTransition !== undefined) {
+          return { accepted: false, errorCode: 'managed-cg-static-only', message: 'The managed pilot supports static template fields.' };
+        }
+        return this.#applyManaged(itemId, 'update', { fields, mergeMode });
+      });
+    }
     const apply = () =>
       position === undefined
         ? this.#updateImpl(itemId, fields, mergeMode, lookBindings, inputTransition)
@@ -9566,6 +9803,7 @@ export class CasparRuntime {
   }
 
   async #stopItemImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    if (this.#managedCg !== undefined) return this.#applyManaged(itemId, 'stop');
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -9657,6 +9895,7 @@ export class CasparRuntime {
    * gate is the UI's to hold and this path stays a thin verb.
    */
   async nextItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    if (this.#managedCg !== undefined) return { accepted: false, errorCode: 'managed-cg-static-only' };
     return this.#audited('next', this.#itemDetail(itemId), () => this.#nextItemImpl(itemId));
   }
 
@@ -10202,6 +10441,7 @@ export class CasparRuntime {
   }
 
   async #outImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    if (this.#managedCg !== undefined) return this.#applyManaged(itemId, 'out');
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -10395,6 +10635,12 @@ export class CasparRuntime {
     validate: () => readonly LayerSlot[],
     replaceShortcutsOn?: number,
   ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string; layer?: number } {
+    if (this.#managedCg !== undefined) {
+      return {
+        ok: false,
+        message: 'The External CG pilot uses a fixed channel and layer bank.',
+      };
+    }
     // A profile replaces the destination's entire shortcut settings, including absent fields.
     const banks = next.map((bank) =>
       bank.channel === replaceShortcutsOn ? bank : this.#withRetainedBankShortcuts(bank),
@@ -24029,6 +24275,11 @@ export class CasparRuntime {
    * no per-tick logging.
    */
   #sweepOccupancy(): void {
+    if (this.#managedCg !== undefined) {
+      this.#publishFixedStateIfChanged();
+      this.#publishPlayoutStateIfChanged();
+      return;
+    }
     // R-021 stage 2a — the per-slot fixed state publishes from THIS tick
     // (same occupancy sample, no second timer), and deliberately BEFORE the
     // healthy guard: on a disconnect the next tick honestly re-publishes every
@@ -24690,10 +24941,15 @@ export class CasparRuntime {
     if (items.some((item) => this.#removeRefusal(item.itemId) !== null)) {
       return { ok: false, removed: 0, errorCode: REMOVE_ON_AIR_CODE };
     }
+    let removed = 0;
     for (const item of items) {
-      await this.remove(item.itemId);
+      const result = await this.remove(item.itemId);
+      if (this.#managedCg !== undefined && !result.accepted) {
+        return { ok: false, removed, ...(result.errorCode !== undefined && { errorCode: result.errorCode }) };
+      }
+      removed += 1;
     }
-    return { ok: true, removed: items.length };
+    return { ok: true, removed };
   }
 
   /**
@@ -24825,10 +25081,12 @@ export class CasparRuntime {
           this.#slots.get(i.itemId) !== undefined &&
           (channel === undefined || this.#withinChannel(i.itemId, channel)),
       );
+    let stopped = 0;
     for (const item of stoppable) {
-      await this.stopItem(item.itemId);
+      const result = await this.stopItem(item.itemId);
+      if (this.#managedCg === undefined || result.accepted) stopped += 1;
     }
-    return { ok: true, stopped: stoppable.length };
+    return { ok: stopped === stoppable.length, stopped };
   }
 
   /**
@@ -24951,6 +25209,10 @@ export class CasparRuntime {
       return { accepted: false, errorCode: refusal.errorCode, message: refusal.message };
     }
     const slot = this.#slots.get(itemId);
+    if (this.#managedCg !== undefined && slot !== undefined) {
+      const managed = await this.#applyManaged(itemId, 'out');
+      if (!managed.accepted) return managed;
+    }
     const controlPage = this.#controlLayoutPage(itemId);
     // Keep the row available for retry if a restored page cannot be checked or removed.
     if (this.#restoredForegrounds.has(itemId)) {
@@ -25019,6 +25281,7 @@ export class CasparRuntime {
       // survives on the primary is the R-009 sweep's to surface (as a
       // regular, clearable orphan) once the primary is observable again.
       this.#resolveOwnedOccupancy(slot);
+      if (this.#managedCg !== undefined) return { accepted: true };
       const { ok, onPrimary, errorCode } = await this.#send(
         this.#builder.out(slot),
         this.#nextSeq(),
@@ -25071,6 +25334,12 @@ export class CasparRuntime {
    * expose it.
    */
   async setConfig(next: ConnectionConfig): Promise<SetConfigResult> {
+    if (this.#managedCg !== undefined) {
+      return {
+        ok: false,
+        message: 'Connection settings are fixed by the External CG pilot configuration.',
+      };
+    }
     // 0. SERIALIZE (fix-setconfig-serve-restart) — two applies interleaving
     //    was the regression's root cause: the second read the mid-teardown
     //    `listening=false`, skipped the serve restart, and could leave the
@@ -25435,6 +25704,7 @@ export class CasparRuntime {
    * switch for direct stations; refused when Playout owns redundancy or no backup is declared.
    */
   async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
+    if (this.#managedCg !== undefined) return { ok: false, newPrimary: this.#adapter.currentPrimary };
     const ok = !this.#playoutLinked && (await this.#adapter.failover('manual'));
     const newPrimary = this.#adapter.currentPrimary;
     // B-141 — `server` records which machine is primary AFTER the switch, which

@@ -533,7 +533,7 @@ export class Exporter {
     }
 
     this.progress.emit({ step: 'template', progress: 0.3 });
-    const indexHtml = buildVcgIndexHtml(scene, assetIndex, fontIndex, includePlayer);
+    const indexHtml = buildVcgIndexHtml(scene, assetIndex, fontIndex, includePlayer, this.#cgJs);
     const thumbnail = await renderVcgThumbnail(scene, assetIndex, assetsMap, this.#cgCss);
 
     const nowIso = new Date().toISOString();

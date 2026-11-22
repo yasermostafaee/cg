@@ -12,8 +12,10 @@ return of each of those engines and identify the control owner when the status c
 - Keep the existing monitor path available for legacy Playout and Bridge configurations.
 - Implement active-only command delivery for complete, prepared layouts through the External
   CG v2 API. Store the exact request before sending it and resolve uncertain outcomes by receipt.
-- Integrate the transport with the opt-in channel's stack and template state. Accept it after
-  a transfer test with the real CG Bridge, Control and compatible Playout builds.
+- Connect Play, Update, Stop and Clear to the opt-in static HTML pilot. Restore Control rows
+  from Playout's applied state and allow a fresh HTML renderer to resume that state.
+- Verify that Playout prepares the reserve and transfers the graphic on a real isolated
+  Engine/Core pair before station use.
 
 ## Capabilities
 

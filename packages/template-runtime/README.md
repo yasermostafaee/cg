@@ -1181,6 +1181,19 @@ hook with the row's position. The hook reuses `applyOutputPosition` on the curre
 field application. Paired foreground pages receive the position through the
 same control-envelope forwarding used for other updates.
 
+### External CG v2 static recovery
+
+The full output adapter exposes `window.apasaiCg.applyState` for resumable static scenes.
+Eligibility and the emitted HTML marker come from the shared schema. Both exporters check
+the runtime bundle capability before advertising recovery.
+
+The managed callback builds fresh DOM from the authored scene and absolute field data. It
+prepares the required fonts and decodes images off screen, then publishes visibility and
+the complete field pose in one browser task. Playout applies the layer transform. A failed
+prepare leaves the previous view in place. The managed page does not enter a legacy play or
+start a timeline. Timed content, authored keyframes, looks, and page changes require a
+separate resume contract.
+
 ## Extension points — "how do I add X"
 
 > Every change here should also add/extend the matching unit tests in

@@ -29,6 +29,7 @@ import {
   readCgControl,
   sequenceStepsByOperator,
   stripCgControl,
+  supportsManagedStaticResume,
   type CgControl,
   type CgLiveFallback,
   type CgPage,
@@ -110,6 +111,7 @@ function resolveScopeValues(values: NestedFieldValues, path: string): NestedFiel
   return cur;
 }
 import { ensureBaselineCss } from './css.js';
+import { createManagedStaticStage } from './managed-static-stage.js';
 import { ensureStepCss, STEP_ROOT_DATASET, stepAttribute, stepPlanOf } from './step-css.js';
 import { createStepEffects, type StepEffects, type StepInstance } from './step-effects.js';
 import { EventBus } from './event-bus.js';
@@ -3454,14 +3456,28 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const sub of subtrees) for (const s of sub.stepDrivers) s.driver.syncStep();
   };
 
+  const managed =
+    mode === 'output' && outputPass === 'full' && supportsManagedStaticResume(scene)
+      ? createManagedStaticStage(scene, {
+          stage: built.container,
+          ready,
+          ...(options.assetUrls === undefined ? {} : { assetUrls: options.assetUrls }),
+          ...(options.skipFontLoad === undefined ? {} : { skipFontLoad: options.skipFontLoad }),
+          canApply: () => machine.state === 'pending',
+          applyAssetUrls,
+        })
+      : undefined;
+
   const runtime: TemplateRuntime = {
     ready,
+    ...(managed === undefined ? {} : { applyManagedState: managed.applyState }),
 
     async play(data, _opts?: PlayOptions): Promise<void> {
       if (machine.state === 'removed') {
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      if (managed?.active === true) return;
       presetEffectId = undefined;
       cancelFrameTransition();
       setNativeBorders([]);
@@ -3740,6 +3756,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (machine.state === 'removed') {
         throw new Error('Runtime removed; update() unavailable');
       }
+      if (managed?.active === true) return;
       /*
         `tasks.md` 6.7 — THE BRIDGE→PAGE CONTROL PAYLOAD, lifted off BEFORE anything treats
         this as field values.

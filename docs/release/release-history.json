@@ -87,13 +87,18 @@
         "fa": "نسخهٔ بعدی",
         "en": "Next release"
       },
-      "date": "2026-11-22",
+      "date": "2026-11-23",
       "status": "development",
       "summary": {
         "fa": "تغییرات پس از بیلد آزمایشی a96bd1dd و آزمون‌های باز ایستگاه.",
         "en": "Changes after test build a96bd1dd and outstanding station checks."
       },
-      "features": [],
+      "features": [
+        {
+          "fa": "در پایلوت External CG v2 برای قالب‌های ثابت HTML، فرمان‌های Play، Update، Stop و Clear به مالک فعلی Playout می‌رسند. بعد از راه‌اندازی دوبارهٔ Bridge، ردیف و دادهٔ تأییدشده از وضعیت Playout بازمی‌گردند. قالب می‌تواند روی یک رندرر تازه با همان داده نمایش داده شود، بدون اجرای دوبارهٔ ورود.",
+          "en": "In the External CG v2 pilot for static HTML templates, Play, Update, Stop and Clear go to the current Playout owner. After a Bridge restart, the row and confirmed data are restored from Playout. A fresh renderer can display the applied data without replaying the entrance."
+        }
+      ],
       "fixes": [
         {
           "fa": "پس از تعویض پریست، CG Bridge هشدار گزارش دیررس Route را برای لایهٔ موقت گرافیک قاب حذف می‌کند، وقتی CasparCG خالی بودن همان لایه را تأیید کند. Route واقعی روی همان لایه همچنان گزارش می‌شود.",
@@ -105,6 +110,10 @@
         }
       ],
       "planned": [
+        {
+          "fa": "روی یک کانال آزمایشی، تصویر گرافیک روی PGM سرور B پس از فرمانی که فقط به مالک Playout می‌رسد و پس از انتقال مالکیت ثبت شود.",
+          "en": "On an isolated Playout channel, capture the graphic on B's programme after an owner-only command and after ownership transfers."
+        },
         {
           "fa": "پس از سوییچ پیاپی و راه‌اندازی دوبارهٔ Bridge، هشدار Route روی ایستگاه A/B بررسی شود. اگر برگشت، وضعیت لایه و مالکیت Bridge روی موتور فعال همان لحظه ثبت شود.",
           "en": "Verify route notices on the A/B station after repeated preset changes and a Bridge-only restart. If the notice recurs, capture stage occupancy and Bridge ownership on the active engine."

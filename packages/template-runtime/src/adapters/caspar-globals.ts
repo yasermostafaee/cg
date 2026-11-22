@@ -1,4 +1,10 @@
-import { readCgControl, stripCgControl, withCgControl, type FieldValues } from '@cg/shared-schema';
+import {
+  CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+  readCgControl,
+  stripCgControl,
+  withCgControl,
+  type FieldValues,
+} from '@cg/shared-schema';
 import type { OutputPass, TemplateRuntime } from '../types.js';
 
 export function casparOutputPass(search: string): OutputPass {
@@ -31,6 +37,7 @@ export function installCasparGlobals(
   const previousRemove = win.remove;
   const previousOut = win.out;
   const previousCg = win.cg;
+  const previousApasaiCg = win.apasaiCg;
 
   const pass = casparOutputPass(win.location.search);
   const syncKey = new URLSearchParams(win.location.search).get('cgsync');
@@ -126,6 +133,14 @@ export function installCasparGlobals(
     void runtime.out();
   };
   win.cg = runtime;
+  if (runtime.applyManagedState !== undefined) {
+    win.apasaiCg = {
+      version: CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+      applyState: runtime.applyManagedState,
+    };
+  } else {
+    delete win.apasaiCg;
+  }
 
   return () => {
     channel?.close();
@@ -144,6 +159,8 @@ export function installCasparGlobals(
     else delete win.out;
     if (previousCg !== undefined) win.cg = previousCg;
     else delete win.cg;
+    if (previousApasaiCg !== undefined) win.apasaiCg = previousApasaiCg;
+    else delete win.apasaiCg;
   };
 }
 
@@ -215,5 +232,6 @@ declare global {
     remove?: () => void;
     out?: () => void;
     cg?: TemplateRuntime;
+    apasaiCg?: { version?: string; applyState(snapshot: unknown): Promise<void> };
   }
 }

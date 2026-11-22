@@ -228,6 +228,13 @@ swaps it into the channel lists only once no row has the old page on a layer.
 Extension point: anything new that goes into every page must enter the fingerprint;
 a change to the shell itself must bump the revision.
 
+**External CG v2 static output.** The exporter adds the managed resume marker when the scene
+and the embedded runtime support it. Playout calls `window.apasaiCg.applyState` with the restored
+field data and visibility. The [managed stage](../../packages/template-runtime/src/managed-static-stage.ts)
+builds a fresh hidden scene, waits for fonts and images, and then publishes it in place without an
+entrance animation. Playout owns the layer transform. The pilot supports static scenes with text
+bindings on page zero.
+
 The template catalogue also carries each managed Look's composition instance ID from the verified scene.
 CG Control matches it to dynamic field groups in Inspector. Reload on a matching console and Bridge
 populates this optional metadata for previously imported templates whose source package has Looks.

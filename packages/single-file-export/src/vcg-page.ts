@@ -11,6 +11,7 @@ import {
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  managedStaticResumePageMarker,
   type AssetEntry,
   type Scene,
 } from '@cg/shared-schema';
@@ -21,6 +22,7 @@ export function buildVcgIndexHtml(
   assetIndex: readonly AssetEntry[],
   fontIndex: readonly AssetEntry[],
   includeLottiePlayer: boolean,
+  runtimeJs?: string,
 ): string {
   // Image/video/audio ids resolve to package-relative URLs. Lottie JSON is
   // fetched and parsed separately before the runtime starts.
@@ -41,10 +43,11 @@ export function buildVcgIndexHtml(
     .join('\n');
   const fontStyle = fontFaces === '' ? '' : `\n    <style>\n${fontFaces}\n    </style>`;
 
+  const managedResume = managedStaticResumePageMarker(scene, runtimeJs);
   return `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="utf-8" />${managedResume === '' ? '' : '\n    ' + managedResume}
     ${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}
     ${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}
     ${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}

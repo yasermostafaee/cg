@@ -88,6 +88,9 @@ export interface TemplateRuntime {
   /** Resolves when fonts, assets, and DOM setup are complete. */
   readonly ready: Promise<void>;
 
+  /** Available to External CG v2 for the static page shapes accepted by this runtime. */
+  applyManagedState?(snapshot: unknown): Promise<void>;
+
   /**
    * Play the entry animation. In M3.2-α this is a no-op transition —
    * the body's `cg-pending` class is removed and the runtime moves to

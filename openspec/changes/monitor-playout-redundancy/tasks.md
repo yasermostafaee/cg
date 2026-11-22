@@ -39,14 +39,23 @@
       Exercise ownership transfer, a lost reply, receipt reconciliation, stale recovery and restart
       with two isolated HTTP Engine fixtures.
 - [x] Verify template preparation accepts matching bundle hashes from each configured member.
-- [ ] Build complete managed snapshots from the operator's channel stack, wire per-Engine operator
-      sessions and bundle preparation, and block legacy raw mutations for the mapped channels.
+- [x] Build complete managed snapshots for the static HTML pilot, wire per-Engine operator
+      sessions and bundle preparation, and block legacy raw mutations in the pilot.
+- [x] Connect the Control Play, Update, Stop and Clear actions to the pilot and restore the
+      applied data and visibility after Bridge restart.
+- [x] Verify absolute static HTML recovery in Chromium, including embedded fonts and Persian text.
+- [x] Verify cold HTML recovery on the real .22 Core in isolation. The restored PGM frame
+      matched the initial frame pixel for pixel and Stop removed the graphic.
+- [x] Read the test pair's External CG v2 capabilities on Playout .26. Both PGM returns are live,
+      the layout request schema matches .22, and both channels report `cg.channelNotMigrated`.
+- [ ] Capture B's real programme output after an owner-only Play and after transfer on an
+      isolated compatible Playout Engine/Core pair.
 - [ ] Verify recovery from a documented pre-admission refusal and establish journal retention.
 - [ ] Verify whole-layout state and a mirrored media plate with the real CG Bridge and the
       managed contract on an isolated channel.
 - [ ] Inspect B's authenticated D11 match for the flagged media on the target station.
-- [ ] Integrate the managed route and verify Take, Update, Next, Stop, Clear and transfer with
-      the real CG Bridge and Control on an isolated redundant channel.
+- [ ] Extend the pilot to sequence pages and verify Next and page recovery on a real isolated
+      redundant channel.
 - [ ] Verify the managed export adapter with real graphics and collect acceptance for cold
       recovery, masked multi-plate presets, authored outros and physical programme output.
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CG_LIVE_MASK_PLACEMENT_PAGE_MARKER, type AssetEntry, type Scene } from '@cg/shared-schema';
+import {
+  CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
+  CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+  CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+  type AssetEntry,
+  type Scene,
+} from '@cg/shared-schema';
 import { buildVcgIndexHtml } from '../src/vcg-page.js';
 
 const scene = {
@@ -48,6 +54,20 @@ describe('buildVcgIndexHtml', () => {
     expect(html).toContain('const outputPass = casparOutputPass(globalThis.location.search)');
     expect(html).toContain('installCasparGlobals(runtime)');
     expect(html.slice(0, 1024)).toContain(CG_LIVE_MASK_PLACEMENT_PAGE_MARKER);
+  });
+
+  it('advertises static recovery only with a compatible scene and packaged runtime', () => {
+    const staticScene = { ...scene, layers: [], bindings: [] };
+    const runtime = CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION;
+    expect(buildVcgIndexHtml(staticScene, [], [], false)).not.toContain(
+      CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+    );
+    expect(buildVcgIndexHtml(staticScene, [], [], false, runtime)).toContain(
+      CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+    );
+    expect(
+      buildVcgIndexHtml({ ...staticScene, lifecycle: { outPoint: 50 } }, [], [], false, runtime),
+    ).not.toContain(CG_MANAGED_STATIC_RESUME_PAGE_MARKER);
   });
 
   it('does not import the Lottie player when the caller says none is needed', () => {

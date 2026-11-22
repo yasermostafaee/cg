@@ -266,6 +266,33 @@ export const managedLayoutLayerSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
+// Fields that attest that the snapshot is the current applied state of this Engine.
+export const managedAppliedStateSchema = z.object({
+  vote: z.object({
+    voterEngineId: id,
+    ownerEngineId: id,
+    term: revision,
+    transferId: z.string().uuid(),
+    leaseId: z.string().uuid(),
+    remainingMilliseconds: integer.positive(),
+  }),
+  snapshot: z.object({
+    groupId: id,
+    membershipRevision: revision,
+    membershipHash: sha256,
+    revision,
+    layers: z
+      .array(managedLayoutLayerSchema)
+      .max(64)
+      .refine(
+        (layers) => new Set(layers.map(({ layer }) => layer)).size === layers.length,
+        'Duplicate snapshot layer',
+      ),
+  }),
+  pending: z.null(),
+  replica,
+});
+
 export const managedLayoutCommandSchema = z
   .object({
     commandId: z.string().uuid(),

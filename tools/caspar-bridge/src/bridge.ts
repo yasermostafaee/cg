@@ -295,6 +295,7 @@ import { currentAuthSession, runAsActor } from './actor-context.js';
 import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
 import { startBankBringIn } from './bank-bring-in.js';
 import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
+import type { ManagedCgPilot } from './managed-cg-pilot.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
   FixedLayersConfigError,
@@ -431,6 +432,8 @@ import {
 } from './playout-config.js';
 
 export interface BridgeOptions {
+  /** Opt-in isolated Playout v2 bridge. Raw AMCP is read-only for this process. */
+  managedCgPilot?: ManagedCgPilot;
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
   host?: string;
   /** Bind port. Defaults to the browser-safe `DEFAULT_BRIDGE_PORT`. `0` = ephemeral. */
@@ -2497,6 +2500,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
     ...(options.runtimeTuning ?? {}),
+    ...(options.managedCgPilot !== undefined && { managedCgPilot: options.managedCgPilot }),
   });
   /*
     🔴 `CENTRAL-BRIDGE-01` (D12, rule 11) — a take on a channel the Playout reports `unlicensed` is

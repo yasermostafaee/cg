@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import {
+  managedAppliedStateSchema,
   managedLayoutCommandSchema,
   managedOwnerSchema,
   managedPreparedTemplateSchema,
@@ -36,6 +37,12 @@ export interface ManagedCgCommandsOptions {
 export type ManagedCgOutcome =
   | { readonly status: 'applied' | 'rolledBack'; readonly result: ManagedResult }
   | { readonly status: 'pending'; readonly commandId: string };
+
+type PendingOutcome = Extract<ManagedCgOutcome, { status: 'pending' }>;
+interface OwnerSelection {
+  endpoint: ManagedCgEndpoint;
+  owner: ManagedOwner;
+}
 
 const OWNER_READ_TIMEOUT_MS = 5_000;
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -131,56 +138,97 @@ export class ManagedCgCommands {
    * including any layers they want to retain. A pending command must be reconciled first.
    */
   async submitLayout(layout: readonly ManagedLayoutLayer[]): Promise<ManagedCgOutcome> {
+    // Capture the caller's complete draft before the ownership round trip.
+    const layers = structuredClone(layout);
+    return this.#withNewCommand(({ endpoint, owner }) => this.#postLayout(endpoint, owner, layers));
+  }
+
+  /** Replace a changed layout using the same verified owner and revision as the read. */
+  async editLayout(
+    edit: (layers: readonly ManagedLayoutLayer[]) => readonly ManagedLayoutLayer[] | undefined,
+  ): Promise<ManagedCgOutcome | { readonly status: 'unchanged' }> {
+    return this.#withNewCommand(async ({ endpoint, owner }) => {
+      const layers = edit(await this.#readAppliedLayout(endpoint, owner));
+      return layers === undefined
+        ? { status: 'unchanged' as const }
+        : this.#postLayout(endpoint, owner, layers);
+    });
+  }
+
+  /** Return only a settled snapshot that agrees with the active owner's Native replica. */
+  async readAppliedLayout(): Promise<readonly ManagedLayoutLayer[]> {
+    if (this.#busy || this.#journal.get(this.#groupId) !== undefined) {
+      throw new Error('Resolve the pending managed CG command before reading row state.');
+    }
+    this.#busy = true;
+    try {
+      const { endpoint, owner } = await this.#readOwner();
+      return await this.#readAppliedLayout(endpoint, owner);
+    } finally {
+      this.#busy = false;
+    }
+  }
+
+  async #withNewCommand<T>(
+    useOwner: (selection: OwnerSelection) => Promise<T>,
+  ): Promise<T | PendingOutcome> {
     if (this.#busy) throw new Error('A managed CG operation is already in progress.');
     this.#busy = true;
     try {
       const unresolved = this.#journal.get(this.#groupId);
       if (unresolved !== undefined) return { status: 'pending', commandId: unresolved.commandId };
-
-      // Capture the caller's complete draft before the ownership round trip.
-      const layers = structuredClone(layout);
-      const { endpoint, owner } = await this.#readOwner();
-      const anchor = Math.min(...owner.allowedLayers.map(({ first }) => first));
-      if (!Number.isFinite(anchor)) throw new Error('Playout has no allowed managed CG layers.');
-      for (const layer of layers) {
-        if (
-          !owner.allowedLayers.some(
-            ({ first, last, kind }) =>
-              layer.layer >= first && layer.layer <= last && layer.kind === kind,
-          )
-        ) {
-          throw new Error('The managed layout contains a layer outside its allowed kind or range.');
-        }
-      }
-      const command = managedLayoutCommandSchema.parse({
-        commandId: randomUUID(),
-        target: {
-          engineId: endpoint.engineId,
-          channelCode: endpoint.channelCode,
-          nativeChannel: endpoint.nativeChannel,
-          layer: anchor,
-        },
-        expectedFence: owner.fence,
-        expectedRevision: owner.revision,
-        operation: 'layout',
-        layout: layers,
-      });
-      const requestBody = JSON.stringify(command);
-      if (Buffer.byteLength(requestBody, 'utf8') > MAX_WIRE_BYTES) {
-        throw new Error('The managed layout exceeds the Playout command size limit.');
-      }
-      const pending = {
-        ownerOrigin: endpoint.origin,
-        localChannelCode: endpoint.channelCode,
-        commandId: command.commandId,
-        requestBody,
-      };
-      this.#journal.reserve(this.#groupId, pending);
-      const result = await this.#readResult(endpoint, command, 'commands', requestBody);
-      return this.#settle(pending, result);
+      return await useOwner(await this.#readOwner());
     } finally {
       this.#busy = false;
     }
+  }
+
+  async #postLayout(
+    endpoint: ManagedCgEndpoint,
+    owner: ManagedOwner,
+    layers: readonly ManagedLayoutLayer[],
+  ): Promise<ManagedCgOutcome> {
+    if (owner.leaseExpiresAt === null || Date.parse(owner.leaseExpiresAt) <= this.#now()) {
+      throw new Error('The managed CG ownership lease expired before posting the layout.');
+    }
+    const anchor = Math.min(...owner.allowedLayers.map(({ first }) => first));
+    if (!Number.isFinite(anchor)) throw new Error('Playout has no allowed managed CG layers.');
+    for (const layer of layers) {
+      if (
+        !owner.allowedLayers.some(
+          ({ first, last, kind }) =>
+            layer.layer >= first && layer.layer <= last && layer.kind === kind,
+        )
+      ) {
+        throw new Error('The managed layout contains a layer outside its allowed kind or range.');
+      }
+    }
+    const command = managedLayoutCommandSchema.parse({
+      commandId: randomUUID(),
+      target: {
+        engineId: endpoint.engineId,
+        channelCode: endpoint.channelCode,
+        nativeChannel: endpoint.nativeChannel,
+        layer: anchor,
+      },
+      expectedFence: owner.fence,
+      expectedRevision: owner.revision,
+      operation: 'layout',
+      layout: layers,
+    });
+    const requestBody = JSON.stringify(command);
+    if (Buffer.byteLength(requestBody, 'utf8') > MAX_WIRE_BYTES) {
+      throw new Error('The managed layout exceeds the Playout command size limit.');
+    }
+    const pending = {
+      ownerOrigin: endpoint.origin,
+      localChannelCode: endpoint.channelCode,
+      commandId: command.commandId,
+      requestBody,
+    };
+    this.#journal.reserve(this.#groupId, pending);
+    const result = await this.#readResult(endpoint, command, 'commands', requestBody);
+    return this.#settle(pending, result);
   }
 
   /** Consult the original Engine and receipt. Recovery never submits a second layout. */
@@ -242,7 +290,39 @@ export class ManagedCgCommands {
     }
   }
 
-  async #readOwner(): Promise<{ endpoint: ManagedCgEndpoint; owner: ManagedOwner }> {
+  async #readAppliedLayout(
+    endpoint: ManagedCgEndpoint,
+    owner: ManagedOwner,
+  ): Promise<readonly ManagedLayoutLayer[]> {
+    const parsed = managedAppliedStateSchema.safeParse(await this.#request(endpoint, 'state'));
+    const fence = owner.fence;
+    if (parsed.success && fence !== null) {
+      const { snapshot, vote, replica } = parsed.data;
+      if (
+        snapshot.groupId === this.#groupId &&
+        snapshot.membershipRevision === owner.membershipRevision &&
+        snapshot.membershipHash === owner.membershipHash &&
+        snapshot.revision === owner.revision &&
+        owner.leaseExpiresAt !== null &&
+        Date.parse(owner.leaseExpiresAt) > this.#now() &&
+        vote.voterEngineId === endpoint.engineId &&
+        vote.ownerEngineId === endpoint.engineId &&
+        vote.term === fence.term &&
+        vote.transferId === fence.transferId &&
+        vote.leaseId === fence.leaseId &&
+        replica.engineId === endpoint.engineId &&
+        replica.channelCode === endpoint.channelCode &&
+        replica.nativeChannel === endpoint.nativeChannel &&
+        replica.coreGeneration === fence.coreGeneration &&
+        replica.appliedRevision === snapshot.revision &&
+        replica.error === null
+      )
+        return snapshot.layers;
+    }
+    throw new Error('Playout has not confirmed the current applied managed CG layout.');
+  }
+
+  async #readOwner(): Promise<OwnerSelection> {
     const observations = await Promise.all(
       this.#members.map(async (endpoint) => ({
         endpoint,
