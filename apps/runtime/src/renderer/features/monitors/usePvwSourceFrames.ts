@@ -293,31 +293,33 @@ export function usePvwSourceFrames(
 ): Frames {
   const pvw = window.cg?.sourcePreviews?.pvw;
   const foreground = useModalForeground();
+  // The editor supplies the foreground state of its preview inside the modal portal.
+  const previewForeground = mode === 'editor' ? enabled : foreground;
   const catalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
   const candidates = useMemo(() => {
-    if (channel === undefined || !ndiPreviewAvailable() || mode !== 'stage') return [];
+    if (channel === undefined || !ndiPreviewAvailable()) return [];
     const shown = new Set(visibleSources);
     return catalog.sources.filter(
       (source) => shown.has(source.id) && canResolveNdi(source, channel),
     );
-  }, [channel, mode, visibleSources, catalog]);
+  }, [channel, visibleSources, catalog]);
   const targets = useNdiTargets(
     channel,
     candidates.map(({ id }) => id),
-    enabled && foreground,
+    enabled && previewForeground,
   );
   const liveKey = JSON.stringify(liveSources);
   const liveTargets = useMemo(() => {
     const wanted = new Set(JSON.parse(liveKey) as string[]);
     return new Map([...targets].filter(([id]) => wanted.has(id)));
   }, [liveKey, targets]);
-  const directReceivers = useNdiReceivers(liveTargets, enabled && foreground);
+  const directReceivers = useNdiReceivers(liveTargets, enabled && previewForeground);
   const directIds = useMemo(
     () =>
       new Set(
         candidates.flatMap((source) => {
           const target = targets.get(source.id);
-          return !foreground ||
+          return !previewForeground ||
             (source.producer.kind === 'ndi' && target?.kind !== 'other') ||
             target?.kind === 'ndi' ||
             target?.kind === 'pending' ||
@@ -326,7 +328,7 @@ export function usePvwSourceFrames(
             : [];
         }),
       ),
-    [candidates, foreground, targets],
+    [candidates, previewForeground, targets],
   );
   const sourceKey = JSON.stringify(
     [...new Set(visibleSources)].filter((id) => !directIds.has(id)).slice(0, MAX_SOURCES),
@@ -426,7 +428,7 @@ export function usePvwSourceFrames(
   const observePicture = usePictureOriginPublisher(channel);
   const observed = useRef(new WeakSet<PvwSourceFrame>());
   useEffect(() => {
-    if (!enabled || !foreground) return;
+    if (!enabled || !previewForeground) return;
     for (const [sourceId, frame] of frames) {
       if (
         frame.engine === undefined ||
@@ -438,6 +440,6 @@ export function usePvwSourceFrames(
       observed.current.add(frame);
       observePicture(sourceId, frame.engine);
     }
-  }, [enabled, foreground, frames, observePicture]);
+  }, [enabled, previewForeground, frames, observePicture]);
   return frames;
 }

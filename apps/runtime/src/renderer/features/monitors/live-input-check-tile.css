@@ -60,3 +60,8 @@
   border-color: transparent;
   background: transparent;
 }
+
+/* The full-picture hit target stays clear while the card supplies the hover treatment. */
+.cg-input-check-tile > .cg-direct-ndi-input-select:is(:hover, :active):not(:disabled) {
+  background: transparent;
+}

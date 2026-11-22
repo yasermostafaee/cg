@@ -67,6 +67,13 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **AND** a preset with more than one frame shows its own horizontal and vertical gap controls beside Arrange in the main scroll area
 - **AND** Start with this preset stays in the same place when the current preset changes
 
+#### Scenario: Preview assigned pictures in a preset
+
+- **WHEN** a visible frame in the selected preset has an available direct NDI or routed input
+- **THEN** the editor preview shows the assigned picture with that frame's saved fit and aspect ratio
+- **AND** the editor keeps each picture with its assigned frame through a preset switch
+- **AND** switching presets leaves programme commands and audio untouched
+
 #### Scenario: Attach a graphic to a frame
 
 - **WHEN** the operator attaches a VCG in Plate graphics

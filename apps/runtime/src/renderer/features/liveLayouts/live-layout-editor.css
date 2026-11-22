@@ -380,7 +380,7 @@
   pointer-events: none;
 }
 
-.cg-live-layout-shot-picture img {
+.cg-live-layout-shot-picture :is(img, canvas) {
   position: absolute;
   max-width: none;
   max-height: none;
@@ -412,7 +412,7 @@
   height: min(100cqh, var(--cg-fit-height));
 }
 
-.cg-live-layout-shot-picture[data-fit-to-shot] img {
+.cg-live-layout-shot-picture[data-fit-to-shot] :is(img, canvas) {
   left: calc(min(0px, var(--cg-fit-x)) - var(--cg-fit-width) * var(--cg-shot-jpeg-x-factor));
   top: calc(min(0px, var(--cg-fit-y)) - var(--cg-fit-height) * var(--cg-shot-jpeg-y-factor));
   width: calc(var(--cg-fit-width) * var(--cg-shot-jpeg-width-factor));

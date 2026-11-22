@@ -117,3 +117,6 @@
       to `playing`. The fixture now awaits both page resolutions before shutdown and requires
       either settled state with `pending=false` after restart. Core playback, restart notice and
       zero-write assertions remain. The full four-case fixture, Bridge typecheck and scoped lint passed.
+- [x] 7.8 Verify a decoded direct NDI picture stays visible on pointer hover in Grid and List.
+      The old bundle painted raised button chrome over the centre pixel. A fresh Windows Edge
+      run kept the actual image pixel on both views and preserved receiver and Listen behavior.

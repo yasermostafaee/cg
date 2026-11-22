@@ -109,6 +109,14 @@
       ],
       "fixes": [
         {
+          "fa": "در فهرست و شبکهٔ انتخاب ورودی، تصویر زندهٔ NDI هنگام هاور و کلیک روی ورودی قابل‌مشاهده می‌ماند.",
+          "en": "Live NDI pictures remain visible when hovering or pressing the input in the source picker's List and Grid views."
+        },
+        {
+          "fa": "در پیش‌نمایش New live layout، قاب‌های پریست تصویر ورودی NDI مستقیم و تصویر ورودی‌های دارای پیش‌نمایش Playout را با اندازه و برش همان قاب نشان می‌دهند.",
+          "en": "New live layout preview frames display direct NDI and available Playout source pictures with the selected preset's fit and crop."
+        },
+        {
           "fa": "پس از تعویض پریست، CG Bridge هشدار گزارش دیررس Route را برای لایهٔ موقت گرافیک قاب حذف می‌کند، وقتی CasparCG خالی بودن همان لایه را تأیید کند. Route واقعی روی همان لایه همچنان گزارش می‌شود.",
           "en": "After a preset change, CG Bridge omits a late route report for a retired artwork layer when CasparCG confirms the seat is empty. A live route on that layer still surfaces."
         },

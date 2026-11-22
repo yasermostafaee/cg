@@ -17,6 +17,12 @@ keyboard focus and staged-selection treatments.
 - **AND** the permanent selection treatment identifies the staged source
 - **WHEN** the operator navigates with the keyboard **THEN** the active option is brought into view
 
+#### Scenario: A live direct NDI tile is hovered
+
+- **WHEN** an NDI tile shows a decoded picture in Grid or List and the operator hovers or presses it
+- **THEN** the live picture remains visible and its receiver stays connected
+- **AND** the tile retains its source selection behavior and visible keyboard focus
+
 #### Scenario: The input list fills the source picker
 
 - **WHEN** the operator chooses the Inputs list view

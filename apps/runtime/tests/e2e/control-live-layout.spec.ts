@@ -647,6 +647,144 @@ test('per-plate fallback previews survive save and reopen with an independent on
   }
 });
 
+test('layout presets show decoded NDI and Bridge snapshot pictures in their plates', async ({
+  page,
+}, testInfo) => {
+  const oscPort = await freeUdpPort();
+  const engine = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 15,
+    channels: 1,
+  });
+  let bridge: BridgeHandle | undefined;
+  try {
+    const directory = testInfo.outputPath('bridge');
+    fs.mkdirSync(directory, { recursive: true });
+    bridge = await createBridge({
+      port: 0,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: engine.amcpPort, oscPort } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      fixedLayers: { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } },
+      sourceCatalog: {
+        layerRange: liveLayerRange,
+        sources: [
+          {
+            ...catalog.sources[0]!,
+            origin: 'input',
+            producer: { kind: 'ndi', source: 'STUDIO (Camera)' },
+          },
+          catalog.sources[1]!,
+        ],
+      },
+      stackPath: path.join(directory, 'stack.json'),
+      templatesDir: path.join(directory, 'templates'),
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addInitScript((url) => {
+      Object.assign(window, { __CG_BRIDGE_URL__: url, __CG_SPLASH_DISABLED__: true });
+    }, bridge.url);
+    await page.goto('/');
+    const open = page.getByRole('button', { name: 'New live layout', exact: true });
+    await expect(open).toBeVisible();
+    await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 180;
+      const context = canvas.getContext('2d')!;
+      const jpeg = (color: string): string => {
+        context.fillStyle = color;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg').split(',')[1]!;
+      };
+      const ndi = Uint8Array.from(atob(jpeg('#e02050')), (byte) => byte.charCodeAt(0));
+      const camera = jpeg('#26ab69');
+      window.cg.sourcePreviews.ndiTargets = async ({ sourceIds }) => ({
+        targets: sourceIds.map((sourceId) =>
+          sourceId === 'feed-1'
+            ? { sourceId, kind: 'ndi', senderName: 'STUDIO (Camera)', engine: 'A' }
+            : { sourceId, kind: 'other' },
+        ),
+      });
+      window.cg.sourcePreviews.openNdiStream = async (sender, onPacket) => {
+        if (sender !== 'STUDIO (Camera)') throw new Error('Unexpected NDI sender');
+        const send = () => onPacket({ kind: 'picture', bytes: ndi });
+        send();
+        const timer = window.setInterval(send, 150);
+        return () => window.clearInterval(timer);
+      };
+      window.cg.sourcePreviews.pvw = async ({ sourceIds }) => ({
+        frames: sourceIds
+          .filter((sourceId) => sourceId === 'feed-2')
+          .map((sourceId) => ({
+            sourceId,
+            signal: 'present',
+            jpegBase64: camera,
+            width: 320,
+            height: 180,
+          })),
+      });
+    });
+    await open.click();
+    const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+    await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
+    await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
+    const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
+    await addPreset.click();
+    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Two feeds');
+    await setInput(page, editor, 0, 'Studio');
+    await setInput(page, editor, 1, 'Guest');
+
+    const first = editor.locator('[data-layout-preview-shot][data-frame-number="1"]');
+    const second = editor.locator('[data-layout-preview-shot][data-frame-number="2"]');
+    const ndiCanvas = first.locator('.cg-live-layout-shot-picture canvas');
+    const cameraImage = second.locator('.cg-live-layout-shot-picture img');
+    const expectNdi = async (): Promise<void> => {
+      await expect(first).toHaveAttribute('aria-hidden', 'false');
+      await expect(ndiCanvas).toBeVisible();
+      await expect
+        .poll(() =>
+          ndiCanvas.evaluate((node: HTMLCanvasElement) => {
+            const pixels = node.getContext('2d')?.getImageData(0, 0, 1, 1).data;
+            const bounds = node.getBoundingClientRect();
+            return (
+              bounds.width > 100 &&
+              Math.abs(bounds.width / bounds.height - 16 / 9) < 0.02 &&
+              node.width === 320 &&
+              node.height === 180 &&
+              pixels !== undefined &&
+              pixels[0]! > 210 &&
+              pixels[1]! < 50 &&
+              pixels[3] === 255
+            );
+          }),
+        )
+        .toBe(true);
+    };
+    await expectNdi();
+    await expect(cameraImage).toBeVisible();
+    await expect(cameraImage).toHaveJSProperty('naturalWidth', 320);
+
+    await addPreset.click();
+    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Guest only');
+    await editor.getByRole('checkbox', { name: 'Plate 1 in preset', exact: true }).uncheck();
+    await expect(first).toHaveAttribute('aria-hidden', 'true');
+    await expect(second).toHaveAttribute('aria-hidden', 'false');
+    await expect(cameraImage).toHaveJSProperty('naturalWidth', 320);
+
+    await editor.getByRole('button', { name: 'Two feeds', exact: true }).click();
+    await expectNdi();
+    await expect(cameraImage).toHaveJSProperty('naturalWidth', 320);
+  } finally {
+    await bridge?.close();
+    await engine.stop();
+  }
+});
+
 test('R-120 authors, focuses, returns and prepares a second layout while the first is on air', async ({
   page,
 }) => {

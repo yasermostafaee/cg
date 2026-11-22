@@ -47,6 +47,7 @@ import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
 import { FittedSafeAreaGuides } from '../monitors/SafeAreaGuides.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
+import type { NdiReceiver } from '../sources/directNdiPreview.js';
 import { focusSlideOcclusion } from './focusSlideClip.js';
 import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import {
@@ -244,6 +245,21 @@ function ShotFallback({
   );
 }
 
+function NdiShotPicture({
+  receiver,
+  style,
+}: {
+  receiver: NdiReceiver;
+  style?: CSSProperties | undefined;
+}): JSX.Element {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (canvas.current === null) return;
+    return receiver.attach(canvas.current);
+  }, [receiver]);
+  return <canvas ref={canvas} style={style} aria-hidden="true" />;
+}
+
 function ShotInput({
   source,
   input,
@@ -269,7 +285,9 @@ function ShotInput({
     mask === undefined
       ? [seat]
       : livePlateMaskRegions(mask).map((rect) => liveRevealSceneRect(seat, rect));
-  if (source?.jpegBase64 === undefined) {
+  const receiver = source?.signal === 'present' ? source.directNdi : undefined;
+  const jpeg = source?.jpegBase64;
+  if (receiver === undefined && jpeg === undefined) {
     const label = largestLivePlateMaskRegion(mask);
     return (
       <>
@@ -294,9 +312,15 @@ function ShotInput({
   }
 
   const sourceAspect = sourcePictureAspect(source);
-  const url = `data:image/jpeg;base64,${source.jpegBase64}`;
+  const url = jpeg === undefined ? undefined : 'data:image/jpeg;base64,' + jpeg;
+  const renderPicture = (style?: CSSProperties): JSX.Element =>
+    receiver === undefined ? (
+      <img src={url} alt="" style={style} />
+    ) : (
+      <NdiShotPicture receiver={receiver} style={style} />
+    );
   if (mask === undefined && pictureBox === undefined && sourceAspect !== null) {
-    const active = source.geometry?.activeRect ?? { x: 0, y: 0, width: 1, height: 1 };
+    const active = source?.geometry?.activeRect ?? { x: 0, y: 0, width: 1, height: 1 };
     return (
       <div
         className="cg-live-layout-shot-picture"
@@ -311,7 +335,7 @@ function ShotInput({
           } as CSSProperties
         }
       >
-        <img src={url} alt="" />
+        {renderPicture()}
       </div>
     );
   }
@@ -321,8 +345,8 @@ function ShotInput({
     input.fitMode ?? DEFAULT_LIVE_FIT_MODE,
     cropFocus,
   );
-  const jpeg =
-    source.geometry === undefined ? picture : fullJpegRect(picture, source.geometry.activeRect);
+  const picturePixels =
+    source?.geometry === undefined ? picture : fullJpegRect(picture, source.geometry.activeRect);
   return (
     <>
       {windows.map((window, index) => {
@@ -330,11 +354,12 @@ function ShotInput({
         if (clip === null) return null;
         return (
           <div key={index} className="cg-live-layout-shot-picture" style={cssRect(clip, box)}>
-            <img
-              src={url}
-              alt=""
-              style={cssRect({ ...jpeg, x: jpeg.x - clip.x, y: jpeg.y - clip.y }, clip)}
-            />
+            {renderPicture(
+              cssRect(
+                { ...picturePixels, x: picturePixels.x - clip.x, y: picturePixels.y - clip.y },
+                clip,
+              ),
+            )}
           </div>
         );
       })}

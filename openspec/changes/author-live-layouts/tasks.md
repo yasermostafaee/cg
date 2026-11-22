@@ -49,3 +49,7 @@
       passed on `ca38e1551cb4f261101ea7f0e264c7d1b7e81348`, including authored preset/plate crop,
       rectangular border visibility, operator crop/placement/mask permissions, and editor/PVW previews.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.
+- [x] Verify direct NDI and routed pictures in the selected editor preset and through a preset switch.
+      Windows Edge decoded direct NDI pixels and rendered DeckLink snapshots inside their assigned plates.
+      The native canvas kept the correct aspect, and the pictures returned to the matching frames when
+      the operator returned to the two-input preset.

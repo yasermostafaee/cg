@@ -295,7 +295,14 @@ export function LiveLayoutEditor({
     sourceId === undefined ? [] : [sourceId],
   );
   const foreground = useModalForeground(preview);
-  const sourceFrames = usePvwSourceFrames(channel, frameSources, foreground, 'editor', true);
+  const sourceFrames = usePvwSourceFrames(
+    channel,
+    frameSources,
+    foreground,
+    'editor',
+    true,
+    frameSources,
+  );
   const sourcePresence = useSourcePresence(channel, frameSources);
 
   useEffect(() => {

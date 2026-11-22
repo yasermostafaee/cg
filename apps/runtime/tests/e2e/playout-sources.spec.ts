@@ -423,6 +423,7 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
   app,
 }) => {
   const { page } = app;
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   const defaults = await openDefaults(app);
   const sourceId = 'in-studio-1';
   await page.evaluate(
@@ -496,10 +497,52 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
   await defaults.locator('[data-defaults-select="l-1"]').click();
   const panel = picker(page);
   const studio = panel.getByRole('region', { name: 'Direct NDI preview · Studio 1' });
-  await expect(studio.locator('canvas')).toBeVisible();
+  const canvas = studio.locator('canvas');
+  await expect(canvas).toBeVisible();
   await expect(studio).toContainText('Direct NDI');
   const tile = studio.locator('..');
   await expect(tile.getByRole('img', { name: 'Studio 1 · Audio peak -6 dBFS' })).toBeVisible();
+  const selectStudio = studio.getByRole('button', { name: 'Select input · Studio 1' });
+  const cancel = panel.getByRole('button', { name: 'Cancel', exact: true });
+  const expectPictureOnHover = async (): Promise<void> => {
+    await cancel.hover();
+    // The fixture changes from FRAME_A to a repeated FRAME_B once its receiver starts.
+    // Wait for that stable input before comparing the actual compositor output.
+    const steadyPixel = await page.evaluate(async (base64) => {
+      const bytes = Uint8Array.from(atob(base64), (byte) => byte.charCodeAt(0));
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
+      const reference = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = reference.getContext('2d');
+      if (context === null) throw new Error('The reference canvas is unavailable.');
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      return [...context.getImageData(reference.width / 2, reference.height / 2, 1, 1).data];
+    }, FRAME_B.toString('base64'));
+    await expect
+      .poll(() =>
+        canvas.evaluate((part: HTMLCanvasElement) => [
+          ...(part.getContext('2d')?.getImageData(part.width / 2, part.height / 2, 1, 1).data ??
+            []),
+        ]),
+      )
+      .toEqual(steadyPixel);
+    const pictureBounds = await canvas.boundingBox();
+    if (pictureBounds === null) throw new Error('The direct NDI canvas is missing.');
+    // The compositor can hide a live canvas without changing its DOM visibility.
+    // Compare the painted centre, away from the selection border and Listen button.
+    const clip = {
+      x: Math.floor(pictureBounds.x + pictureBounds.width / 2),
+      y: Math.floor(pictureBounds.y + pictureBounds.height / 2),
+      width: 1,
+      height: 1,
+    };
+    const before = await page.screenshot({ clip });
+    await selectStudio.hover();
+    expect(await selectStudio.evaluate((button) => button.matches(':hover'))).toBe(true);
+    await expect(selectStudio).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect.poll(() => page.screenshot({ clip })).toEqual(before);
+  };
+  await expectPictureOnHover();
   await studio.getByRole('button', { name: 'Listen to Studio 1' }).click();
   await expect(studio.getByRole('button', { name: 'Listen to Studio 1' })).toHaveAttribute(
     'aria-pressed',
@@ -538,9 +581,24 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
     oldReads: [],
     stopCount: 0,
   });
-  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await panel.getByRole('button', { name: 'Switch to list view' }).click();
+  await expect(canvas).toBeVisible();
+  await expect(tile.getByRole('img', { name: 'Studio 1 · Audio peak -6 dBFS' })).toBeVisible();
+  const listState = await state();
+  await expectPictureOnHover();
+  expect(await state()).toMatchObject({
+    localReads: listState.localReads,
+    stopCount: listState.stopCount,
+  });
+
+  await cancel.click();
   await expect(studio).toHaveCount(0);
-  await expect.poll(async () => (await state()).stopCount).toBe(1);
+  await expect
+    .poll(async () => {
+      const { localReads, stopCount } = await state();
+      return localReads.length - stopCount;
+    })
+    .toBe(0);
 });
 
 test('reopening an inherited media source shows its selection without changing the binding or auditioning', async ({

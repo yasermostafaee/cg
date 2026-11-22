@@ -14188,3 +14188,15 @@ Update leaves the full draft pending and leaves the previously applied data in f
 Exercise Required, min/max length, existing Persian-digit pattern behavior, nested
 fields and the Bridge update path. The authored Description is available as field
 help in CG Control, with its purpose stated in Designer.
+
+## [~] B-447 — Keep a live NDI tile visible under the picker pointer ⟨priority: high — owner, 2026-11-23⟩ — `openspec/changes/preview-live-input-check/`
+
+**Reproduction.** Open Choose a source with a live direct NDI input. Move the pointer over its picture or select the source in Grid and List views. The picture disappears while the pointer is over the NDI tile.
+
+**Expected.** The current picture stays visible through hover, press and focus. The pointer and keyboard still select the source. Hover keeps the existing receiver open.
+
+## [~] B-448 — Show assigned source pictures in New live layout presets ⟨priority: high — owner, 2026-11-23⟩ — `openspec/changes/author-live-layouts/`
+
+**Reproduction.** Assign a discovered NDI input to a plate in New live layout. The assigned frame can show a placeholder even while the workstation's direct NDI receiver is available.
+
+**Expected.** The selected preset previews its visible assigned inputs with their own framing. Direct NDI and routed picture providers use the same availability and fallback rules as PVW. Switching presets displays the inputs assigned to the visible frames and leaves programme output untouched.
