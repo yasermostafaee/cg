@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { LiveSourceIdSchema } from './elements.js';
 import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
+import {
+  FRAME_TRANSITION_DEFAULT_MS,
+  FrameTransitionSchema,
+  type FrameTransition,
+} from './frame-transition.js';
 import { IdSchema } from './primitives.js';
 
 /**
@@ -9,7 +14,7 @@ import { IdSchema } from './primitives.js';
  *
  * ⚠ **Vocabulary, and it is load-bearing.** A **LOOK** is a full sub-scene — plates, titles,
  * decor, freely placed — authored as a real nested COMPOSITION INSTANCE in the scene. Exactly
- * one look is active at a time; the switch is a cut in v1. The word is never "layer" (three
+ * one look is active at a time. The word is never "layer" (three
  * meanings already: scene layer, CasparCG video layer, cg-layer) and never "arrangement"
  * (that word means A′'s cell list, a different and incompatible schema).
  *
@@ -68,18 +73,22 @@ import { IdSchema } from './primitives.js';
  * where widening a singular field would.
  */
 
-/**
- * How a look is ENTERED. v1 is CUT-ONLY (`design.md` §14.4 parks D2's fade/move arms with
- * the animated phase), and the object shape means the animated phase ADDS union arms
- * without breaking any authored format — the same subset argument as §13.6.2. A cut
- * carries no duration and no easing; the arm declares neither, so zod strips a stale one
- * at load rather than refusing a working template over a field nothing reads.
- */
-export const LookTransitionSchema = z.object({ mode: z.literal('cut') });
+/** A legacy Cut lets the console supply its existing transition preference. */
+export const LookTransitionSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('cut'), authored: z.literal(true).optional() }),
+  z.object({ mode: z.literal('animate'), effect: FrameTransitionSchema }),
+]);
 export type LookTransition = z.infer<typeof LookTransitionSchema>;
 
-/** The one v1 transition, for writers that need a value. */
 export const CUT_LOOK_TRANSITION: LookTransition = { mode: 'cut' };
+
+export function authoredLookEffect(entered?: LookTransition): FrameTransition | undefined {
+  if (entered?.mode === 'animate') return entered.effect;
+  if (entered?.authored === true) {
+    return { motion: 'cut', fade: false, durationMs: FRAME_TRANSITION_DEFAULT_MS };
+  }
+  return undefined;
+}
 
 /** One look: a named reference to the composition INSTANCE that is its sub-scene. */
 export const LookSchema = z.object({

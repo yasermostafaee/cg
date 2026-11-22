@@ -18,6 +18,10 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
     const [profile, setProfile] = useState<BroadcastGuideProfile>(DEFAULT_BROADCAST_GUIDE_PROFILE);
     return createElement(SafeGuideSettings, {
       profile,
+      onReset: () => {
+        saved = DEFAULT_BROADCAST_GUIDE_PROFILE;
+        setProfile(saved);
+      },
       onChange: (next) => {
         saved = next;
         setProfile(next);
@@ -39,6 +43,10 @@ it('edits horizontal/vertical guides, names, percentages, visibility and aspect 
   try {
     await act(async () => root.render(createElement(Host)));
     await act(async () => button('Safe area settings').click());
+    expect(input('Frame color').labels?.item(0)?.textContent?.trim()).toBe('Frame color');
+    expect(input('Frame color').labels?.item(0)?.control).toBe(input('Frame color'));
+    expect(input('Guide color').labels?.item(0)?.textContent?.trim()).toBe('Named guide color');
+    expect(input('Guide color').labels?.item(0)?.control).toBe(input('Guide color'));
     expect(
       [...document.querySelectorAll('[role="radio"]')].map((node) =>
         node.getAttribute('aria-label'),
@@ -146,6 +154,10 @@ it('keeps multiple custom frames independent with inherited and overridden borde
     const [profile, setProfile] = useState<BroadcastGuideProfile>(DEFAULT_BROADCAST_GUIDE_PROFILE);
     return createElement(SafeGuideSettings, {
       profile,
+      onReset: () => {
+        saved = DEFAULT_BROADCAST_GUIDE_PROFILE;
+        setProfile(saved);
+      },
       onChange: (next) => {
         saved = next;
         setProfile(next);
@@ -228,6 +240,25 @@ it('keeps multiple custom frames independent with inherited and overridden borde
     expect(saved.frames?.some((frame) => frame.id === secondId)).toBe(false);
     expect(saved.frames?.some((frame) => frame.id === firstId)).toBe(true);
     expect(saved.aspect).toBe('auto');
+    const findText = (text: string): HTMLButtonElement => {
+      const match = [...document.querySelectorAll('button')].find(
+        (node) => node.textContent?.trim() === text,
+      );
+      if (match === undefined) throw new Error(`Missing ${text}`);
+      return match;
+    };
+    const beforeReset = saved;
+    await act(async () => findText('Restore defaults…').click());
+    expect(document.activeElement).toBe(findText('Cancel'));
+    await act(async () => findText('Cancel').click());
+    expect(saved).toBe(beforeReset);
+    expect(document.activeElement).toBe(findText('Restore defaults…'));
+    await act(async () => findText('Restore defaults…').click());
+    await act(async () => findText('Restore defaults').click());
+    expect(saved).toEqual(DEFAULT_BROADCAST_GUIDE_PROFILE);
+    expect(button('Auto').getAttribute('aria-checked')).toBe('true');
+    expect(button('4:3').getAttribute('aria-description')).toBe('Hidden in preview');
+    expect(input('Frame color').value).toBe('#ffffff');
   } finally {
     act(() => root.unmount());
     container.remove();

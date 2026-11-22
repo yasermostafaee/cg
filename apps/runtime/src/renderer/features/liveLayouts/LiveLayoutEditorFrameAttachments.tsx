@@ -151,7 +151,7 @@ export function LiveLayoutEditorFrameAttachments({
               <Icon icon={Move} size={14} /> Edit graphic in preview
             </Button>
           </div>
-          <div className="cg-live-layout-title-fields" key={selected.id}>
+          <div className="cg-form-grid cg-live-layout-title-fields" key={selected.id}>
             {FIELDS.map(({ key, limit, label, min }) => (
               <LiveLayoutEditorNumber
                 key={key}

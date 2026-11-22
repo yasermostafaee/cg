@@ -168,8 +168,10 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          $buildId = git rev-parse --short HEAD
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           $p = Start-Process -FilePath target/i686-pc-windows-msvc/release/cg-setup.exe -Wait -PassThru -NoNewWindow -ArgumentList @(
-            '--cg-preview', 'setup-rail-art', 'apps/runtime/src-tauri/icons/icon.png', 'apps/designer/src-tauri/icons/icon.png', $env:VERSION)
+            '--cg-preview', 'setup-rail-art', 'apps/runtime/src-tauri/icons/icon.png', 'apps/designer/src-tauri/icons/icon.png', $env:VERSION, $buildId)
           if ($p.ExitCode -ne 0) { "The preview exited $($p.ExitCode)."; exit 1 }
           foreach ($role in 'control', 'designer', 'bridge') {
             if (-not (Test-Path "setup-rail-art/$role-welcome.png")) { "No $role-welcome.png."; exit 1 }

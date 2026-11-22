@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { LiveSourceIdSchema } from './elements.js';
 import type { FieldValues } from './fields.js';
 import { LiveFramePlacementsSchema, type LiveFramePlacement } from './frame-placement.js';
 import { FrameTransitionPhaseSchema, type FrameTransitionPhase } from './frame-transition.js';
@@ -23,7 +25,9 @@ export const CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER =
   '<meta name="cg-live-preset-title-hold" content="1">';
 export const CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER =
   '<meta name="cg-live-preset-mixer-pacing" content="1">';
+export const CG_LIVE_NATIVE_BORDER_PAGE_MARKER = '<meta name="cg-live-native-border" content="2">';
 export const CG_LIVE_FOCUS_SLIDE_PAGE_MARKER = '<meta name="cg-live-focus-slide" content="1">';
+export const CG_LIVE_FOCUS_ARTWORK_PAGE_MARKER = '<meta name="cg-live-focus-artwork" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 
@@ -196,6 +200,8 @@ export type CgLiveFallback =
   | { phase: 'hold'; id: string; plateIds: string[] }
   | { phase: 'release'; id: string };
 
+const NativeBorderPlateIdsSchema = z.array(LiveSourceIdSchema.max(64)).max(128);
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
   /** Reposition this resident output page using the same coordinates as its boot override. */
@@ -204,6 +210,12 @@ export interface CgControl {
   framePlacements?: LiveFramePlacement[];
   /** Animate the running artwork for this phase. Null restores the applied placement. */
   frameTransition?: FrameTransitionPhase | null;
+  /** Hide the PGM HTML borders drawn by the native mixer. An empty array restores them. */
+  nativeBorderPlateIds?: string[];
+  /** The Bridge-served background yields these phase fallbacks to native producers. */
+  nativeFallbackHold?: true;
+  /** Release HTML border suppression only for the transition that hid it. */
+  releaseNativeBorderEffectId?: string;
   /** An authoritative preset update addressed directly to both resident passes. */
   presetTransitionCommit?: true;
   /** Identifies the transition that owns temporary native geometry and page artwork. */
@@ -211,7 +223,10 @@ export interface CgControl {
   /** Apply this rollback only on the resident page that accepted that transition. */
   restorePresetEffectId?: string;
   /** An opaque rollback envelope. Older pages ignore its control members. */
-  restorePresetEffect?: Pick<CgControl, 'plates' | 'framePlacements' | 'maskPlacements'> & {
+  restorePresetEffect?: Pick<
+    CgControl,
+    'plates' | 'framePlacements' | 'maskPlacements' | 'nativeBorderPlateIds'
+  > & {
     look: string;
     frameTransition: null;
   };
@@ -328,6 +343,10 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const control = raw as Record<string, unknown>;
   const { presetEffectId, restorePresetEffectId, restorePresetEffect } = control;
+  if ('releaseNativeBorderEffectId' in control) {
+    const id = control.releaseNativeBorderEffectId;
+    return { releaseNativeBorderEffectId: validEffectId(id) ? id : '' };
+  }
   if ('restorePresetEffectId' in control || 'restorePresetEffect' in control) {
     // The rollback must stay fenced even if its token or contents are malformed.
     if (
@@ -338,9 +357,8 @@ export function readCgControl(payload: unknown): CgControl | undefined {
     ) {
       return { restorePresetEffectId: '' };
     }
-    const { look, plates, framePlacements, maskPlacements, frameTransition } = readCgControlMembers(
-      restorePresetEffect as Record<string, unknown>,
-    );
+    const { look, plates, framePlacements, maskPlacements, frameTransition, nativeBorderPlateIds } =
+      readCgControlMembers(restorePresetEffect as Record<string, unknown>);
     if (look === undefined || frameTransition !== null) return { restorePresetEffectId: '' };
     return {
       restorePresetEffectId,
@@ -350,12 +368,15 @@ export function readCgControl(payload: unknown): CgControl | undefined {
         ...(plates !== undefined && { plates }),
         ...(framePlacements !== undefined && { framePlacements }),
         ...(maskPlacements !== undefined && { maskPlacements }),
+        ...(nativeBorderPlateIds !== undefined && { nativeBorderPlateIds }),
       },
     };
   }
   return {
     ...readCgControlMembers(control),
     ...(validEffectId(presetEffectId) && { presetEffectId }),
+    ...(validEffectId(presetEffectId) &&
+      control['nativeFallbackHold'] === true && { nativeFallbackHold: true }),
   };
 }
 
@@ -371,6 +392,7 @@ function readCgControlMembers(raw: Record<string, unknown>): CgControl {
   const frameTransition = FrameTransitionPhaseSchema.nullable().safeParse(
     (raw as Record<string, unknown>)['frameTransition'],
   );
+  const nativeBorders = NativeBorderPlateIdsSchema.safeParse(raw['nativeBorderPlateIds']);
   const masks = LiveMaskPlacementsSchema.safeParse(
     (raw as Record<string, unknown>)['maskPlacements'],
   );
@@ -381,6 +403,7 @@ function readCgControlMembers(raw: Record<string, unknown>): CgControl {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
     ...(placements.success ? { framePlacements: placements.data } : {}),
     ...(frameTransition.success ? { frameTransition: frameTransition.data } : {}),
+    ...(nativeBorders.success ? { nativeBorderPlateIds: nativeBorders.data } : {}),
     ...((raw as Record<string, unknown>)['presetTransitionCommit'] === true
       ? { presetTransitionCommit: true }
       : {}),

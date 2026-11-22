@@ -122,12 +122,12 @@ test('Composition Preview fits one project checkerboard and places the lower-thi
   await app.setDataKey('headline');
   const resolution = { width: 1280, height: 190 };
   await resizeComposition(app, resolution);
-  await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  await page.getByRole('button', { name: 'Configure safe areas', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   // The preview uses the root project dimensions after the composition is cropped.
   const raster = { width: 1280, height: 720 };
   await settings.getByRole('button', { name: 'Bottom center', exact: true }).click();
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await app.openPreviewModal();
   await expect(app.previewFrame.locator('body')).toHaveClass(/cg-pending/);
   const position: Position = { anchor: 'bottom-center', offset: { x: 0, y: 0 } };
@@ -203,12 +203,12 @@ test('a legacy cropped project defaults to full-HD Preview and keeps tiny center
   await app.play();
   await expect(app.previewFrame.locator('[data-cg-element-id]').first()).toBeVisible();
   await app.previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  await page.getByRole('button', { name: 'Configure safe areas', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   await settings.getByRole('button', { name: 'Top right', exact: true }).click();
   await setNumber(settings.getByRole('spinbutton', { name: 'Composition output X' }), 1795);
   await setNumber(settings.getByRole('spinbutton', { name: 'Composition output Y' }), 35);
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await app.openPreviewModal();
   await expectOutputPicture(app, raster, resolution, {
     anchor: 'top-right',
@@ -224,12 +224,12 @@ test('equal1280×720 project and composition share native pixels in Canvas guide
   await app.newProject('Native HD output', 'hd');
   const raster = { width: 1280, height: 720 };
   await resizeComposition(app, raster);
-  await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  await page.getByRole('button', { name: 'Configure safe areas', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   await settings.getByRole('button', { name: 'Center', exact: true }).click();
   await expect(settings.getByRole('spinbutton', { name: 'Composition output X' })).toHaveValue('0');
   await expect(settings.getByRole('spinbutton', { name: 'Composition output Y' })).toHaveValue('0');
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   const guides = page.locator('[data-safe-area-guides]');
   await expect(guides).toHaveAttribute('viewBox', '0 0 1280 720');
   const outline = guides.locator('[data-composition-output-frame]');

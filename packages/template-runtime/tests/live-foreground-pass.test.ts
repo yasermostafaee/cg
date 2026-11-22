@@ -160,7 +160,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     return scene;
   };
 
-  it('updates New live layout edge compensation through a plate resize', async () => {
+  const borderedFrameScene = () => {
     const scene = movableFrameScene();
     const child = scene.compositions?.[0];
     const layer = child?.layers[0];
@@ -215,6 +215,12 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       background: { kind: 'color', color: '#000000' },
       effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
     };
+    return scene;
+  };
+
+  it('updates New live layout edge compensation through a plate resize', async () => {
+    const scene = borderedFrameScene();
+    const { width, height } = scene.resolution;
     const runtime = createRuntime(scene, { skipFontLoad: true, installGlobals: false });
     const wrap = document.querySelector<HTMLElement>('[data-cg-frame-artwork="box"]');
     const border = wrap?.querySelector<HTMLElement>('[data-cg-element-id="guest-border"]');
@@ -243,6 +249,223 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     await runtime.update(withCgControl({}, { framePlacements: [] }));
     expect(wrap.style.getPropertyValue(PLATE_EDGES_MOTION_RATIO)).toBe('');
   });
+
+  it('fades retained decoration during motion and restores the destination visibility', async () => {
+    const scene = borderedFrameScene();
+    const layer = scene.layers[0]!;
+    const box = layer.children[0]!;
+    if (box.type !== 'composition') throw new Error('Missing plate fixture');
+    box.hiddenChildIds = ['guest-border'];
+    box.hiddenTextIds = ['name', 'additional-caption'];
+    layer.children.push({
+      ...box,
+      id: 'wide-box',
+      hiddenChildIds: [],
+      hiddenTextIds: [],
+    });
+    const plateChildren = scene.compositions?.[0]?.layers[0]?.children;
+    const title = plateChildren?.find(({ id }) => id === 'name');
+    if (plateChildren === undefined || title?.type !== 'text') throw new Error('Missing title');
+    plateChildren.push({ ...title, id: 'additional-caption', opacity: 0.8 });
+    scene.lookGroups = [
+      {
+        id: 'presets',
+        defaultLookId: 'solo',
+        looks: [
+          { id: 'solo', instanceId: box.id, name: 'Solo', entered: { mode: 'cut' } },
+          { id: 'multi', instanceId: 'wide-box', name: 'Multi', entered: { mode: 'cut' } },
+        ],
+      },
+    ];
+    let time = 0;
+    let draw: FrameRequestCallback | undefined;
+    const step = (target: number): void => {
+      time = target;
+      const next = draw;
+      draw = undefined;
+      // An offscreen native renderer may give animation frames a different time origin.
+      next?.(time + 30_000);
+    };
+    const runtime = createRuntime(scene, {
+      outputPass: 'foreground',
+      skipFontLoad: true,
+      installGlobals: false,
+      clock: {
+        now: () => time,
+        raf: (callback) => {
+          draw = callback;
+          return 1;
+        },
+        cancel: () => {
+          draw = undefined;
+        },
+      },
+    });
+    const ornament = (instance: string, id: string) => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-cg-element-id="${instance}"] [data-cg-element-id="${id}"]`,
+      );
+      if (node === null) throw new Error(`Missing ${instance}/${id}`);
+      return node;
+    };
+    const start = {
+      x: box.transform.position.x,
+      y: box.transform.position.y,
+      width: box.transform.size.w,
+      height: box.transform.size.h,
+    };
+    const end = { ...start, x: start.x + 160 };
+    const animate = (source: 'solo' | 'multi', fromOpacity: number, toOpacity: number) =>
+      runtime.update(
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              authoredPreset: true,
+              destinationLookId: source === 'solo' ? 'multi' : 'solo',
+              durationMs: 400,
+              easing: 'linear',
+              frames: [
+                {
+                  frameKey: (source === 'solo' ? box.id : 'wide-box') + '/guest-plate',
+                  lookId: source,
+                  from: start,
+                  to: end,
+                  fromOpacity: 1,
+                  toOpacity: 1,
+                },
+              ],
+              decorationOpacity: [
+                {
+                  plateId: 'guest',
+                  border: { fromOpacity, toOpacity },
+                  title: { fromOpacity, toOpacity },
+                },
+              ],
+            },
+          },
+        ),
+      );
+    const border = ornament(box.id, 'guest-border');
+    const caption = ornament(box.id, 'name');
+    const additional = ornament(box.id, 'additional-caption');
+    await runtime.play({});
+    expect(getComputedStyle(border).display).toBe('none');
+    expect(getComputedStyle(caption).display).toBe('none');
+    await animate('solo', 0, 1);
+    expect(border.style.opacity).toBe('0');
+    expect(caption.style.opacity).toBe('0');
+    step(200);
+    expect(getComputedStyle(border).display).not.toBe('none');
+    expect(getComputedStyle(caption).display).not.toBe('none');
+    expect(border.style.opacity).toBe('0.5');
+    expect(caption.style.opacity).toBe('0.5');
+    expect(additional.style.opacity).toBe('0.4');
+    expect(border.closest<HTMLElement>('[data-cg-frame-artwork]')?.style.transform).toBe(
+      'matrix(1,0,0,1,80,0)',
+    );
+    await runtime.update(withCgControl({}, { look: 'multi', frameTransition: null }));
+    expect(caption.hasAttribute('data-cg-decoration-fade')).toBe(false);
+    expect(getComputedStyle(border).display).toBe('none');
+    expect(ornament('wide-box', 'guest-border').style.opacity).toBe('1');
+
+    await animate('multi', 1, 0);
+    step(500);
+    expect(ornament('wide-box', 'guest-border').style.opacity).toBe('0.25');
+    expect(ornament('wide-box', 'name').style.opacity).toBe('0.25');
+    await runtime.update(withCgControl({}, { look: 'solo', frameTransition: null }));
+    expect(getComputedStyle(border).display).toBe('none');
+    expect(getComputedStyle(caption).display).toBe('none');
+    expect(additional.style.opacity).toBe('0.8');
+    runtime.remove();
+  });
+
+  it.each(['foreground', 'full'] as const)(
+    'only suppresses the authored plate border in the PGM foreground (%s)',
+    async (outputPass) => {
+      const scene = borderedFrameScene();
+      const layer = scene.layers[0]!;
+      const box = layer.children[0]!;
+      layer.children.push({ ...box, id: 'other-box' });
+      scene.lookGroups = [
+        {
+          id: 'presets',
+          defaultLookId: 'first',
+          looks: [
+            { id: 'first', instanceId: box.id, name: 'First', entered: { mode: 'cut' } },
+            { id: 'second', instanceId: 'other-box', name: 'Second', entered: { mode: 'cut' } },
+          ],
+        },
+      ];
+      const runtime = createRuntime(scene, {
+        outputPass,
+        skipFontLoad: true,
+        installGlobals: false,
+      });
+      await runtime.play({});
+      const hiddenBorders = () =>
+        [...document.querySelectorAll('[data-cg-native-border-hidden]')].map((el) =>
+          el.getAttribute('data-cg-element-id'),
+        );
+      const expected = outputPass === 'foreground' ? ['guest-border', 'guest-border'] : [];
+      const hide = (presetEffectId = 'native-border') =>
+        runtime.update(withCgControl({}, { nativeBorderPlateIds: ['guest'], presetEffectId }));
+      await hide();
+      expect(hiddenBorders()).toEqual(expected);
+      await runtime.update(withCgControl({}, { look: 'second', presetTransitionCommit: true }));
+      expect(runtime.activeLookId()).toBe('second');
+      expect(hiddenBorders()).toEqual(expected);
+      const title = () =>
+        document.querySelector('[data-cg-frame-artwork="other-box"] [data-cg-element-id="name"]')
+          ?.outerHTML;
+      const artwork = title();
+      expect(artwork).toBeDefined();
+      const retire = (releaseNativeBorderEffectId: string) =>
+        runtime.update(
+          withCgControl(
+            { anchor: 'Late field update' },
+            { look: 'first', releaseNativeBorderEffectId },
+          ),
+        );
+      await retire('another-take');
+      expect(hiddenBorders()).toEqual(expected);
+      await retire('native-border');
+      expect(hiddenBorders()).toEqual([]);
+      await hide('replacement');
+      await retire('native-border');
+      expect(hiddenBorders()).toEqual(expected);
+      await retire('replacement');
+      expect(hiddenBorders()).toEqual([]);
+      expect(runtime.activeLookId()).toBe('second');
+      expect(title()).toBe(artwork);
+      const restore = (restorePresetEffectId: string) =>
+        runtime.update(
+          withCgControl(
+            {},
+            {
+              restorePresetEffectId,
+              restorePresetEffect: {
+                look: 'first',
+                frameTransition: null,
+                nativeBorderPlateIds: [],
+              },
+            },
+          ),
+        );
+      await hide();
+      await restore('another-take');
+      expect(hiddenBorders()).toEqual(expected);
+      await restore('native-border');
+      expect(hiddenBorders()).toEqual([]);
+      await hide();
+      await runtime.update(withCgControl({}, { nativeBorderPlateIds: [] }));
+      expect(hiddenBorders()).toEqual([]);
+      await hide();
+      await runtime.play({});
+      expect(hiddenBorders()).toEqual([]);
+      runtime.remove();
+    },
+  );
 
   it('moves a move-only frame and its bound title as one artwork without resizing either', async () => {
     const scene = movableFrameScene();
@@ -571,6 +794,52 @@ describe('D-201 — synchronized live-input foreground pass', () => {
           expect(oldView.style.clipPath).toContain(edge);
           expect(newView.style.clipPath).toContain(edge);
         }
+        for (const moving of [true, false]) {
+          const full = { x: 0, y: 0, width: 1920, height: 1080 };
+          const cell = { x: 960, y: 540, width: 960, height: 540 };
+          await runtime.update(
+            withCgControl(
+              {},
+              {
+                frameTransition: {
+                  authoredPreset: true,
+                  destinationLookId: 'title-on',
+                  durationMs: 0,
+                  easing: 'linear',
+                  frames: [],
+                  focusArtwork: {
+                    incomingAbove: true,
+                    outgoing: {
+                      base: full,
+                      from: full,
+                      to: moving ? cell : full,
+                      fromOpacity: 1,
+                      toOpacity: 0.25,
+                    },
+                    incoming: {
+                      base: full,
+                      from: full,
+                      to: moving ? cell : full,
+                      fromOpacity: 0,
+                      toOpacity: 0.75,
+                    },
+                  },
+                },
+              },
+            ),
+          );
+          expect(oldArt.contains(graphicCaption)).toBe(true);
+          expect(oldArt.style.transform).toContain(
+            moving ? 'matrix(0.5,0,0,0.5,960,540)' : 'matrix(1,0,0,1,0,0)',
+          );
+          expect(newArt.style.transform).toContain(
+            moving ? 'matrix(0.5,0,0,0.5,960,540)' : 'matrix(1,0,0,1,0,0)',
+          );
+          expect(oldArt.style.opacity).toBe('0.25');
+          expect(newArt.style.opacity).toBe('0.75');
+          expect(hidden.style.display).toBe('none');
+          expect(newView.style.display).not.toBe('none');
+        }
         expect(runtime.setActiveLook('title-on')).toBe(true);
         expect(oldView.style.display).toBe('none');
         expect(newView.style.display).not.toBe('none');
@@ -652,6 +921,15 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       const departingTitle = departingLayer?.children.find(({ id }) => id === 'name');
       if (departingLayer === undefined || departingTitle?.type !== 'text')
         throw new Error('Missing title fixture');
+      departingLayer.children.push(
+        { ...departingTitle, id: 'subtitle', zIndex: 2 },
+        { ...box, id: 'imported-graphic', compositionId: 'graphic-source', liveForeground: true },
+      );
+      scene.compositions?.push({
+        ...frameDoc,
+        id: 'graphic-source',
+        layers: [{ ...departingLayer, children: [{ ...departingTitle, id: 'graphic-caption' }] }],
+      });
       scene.compositions?.push({
         ...frameDoc,
         id: 'departing-frame',
@@ -821,7 +1099,17 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       advanceTo(400);
       expect(departing.style.opacity).toBe('0.5');
       const outgoingTitle = artwork.querySelector('[data-cg-element-id="name"]');
-      expect(outgoingTitle?.hasAttribute(hiddenMarker) ?? outputPass === 'background').toBe(true);
+      expect(outgoingTitle?.hasAttribute(hiddenMarker)).not.toBe(true);
+      const linked = ['name', 'subtitle', 'imported-graphic', 'graphic-caption'].map((id) =>
+        artwork.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`),
+      );
+      if (outputPass === 'foreground') {
+        for (const node of linked) {
+          expect(node).not.toBeNull();
+          expect(node?.closest('[data-cg-frame-artwork]')).toBe(artwork);
+          expect(node?.closest('[data-cg-frame-transition-hidden]')).toBeNull();
+        }
+      }
       await runtime.update(
         withCgControl(
           {},
@@ -848,14 +1136,49 @@ describe('D-201 — synchronized live-input foreground pass', () => {
           ?.hasAttribute(hiddenMarker),
       ).toBe(false);
       expect(solo.hasAttribute(hiddenMarker)).toBe(false);
+      const crossing = {
+        from: { x: 250, y: 810, width: 140, height: 60 },
+        to: { x: 600, y: 670, width: 140, height: 60 },
+        fromOpacity: 1,
+        toOpacity: 0.5,
+      };
+      Object.defineProperties(artwork, {
+        offsetWidth: { value: scene.resolution.width },
+        offsetHeight: { value: scene.resolution.height },
+      });
       await runtime.update(
-        withCgControl({}, { frameTransition: { ...phase, authoredPreset: true } }),
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              ...phase,
+              authoredPreset: true,
+              ...(outputPass === 'foreground' && {
+                plateStack: [
+                  { frameKey: 'solo-root/box/plate' },
+                  { frameKey: 'solo-root/departing-box/departing-a', cover: crossing },
+                ],
+              }),
+            },
+          },
+        ),
       );
       advanceTo(600);
       expect(runtime.activeLookId()).toBe('solo');
       expect(duo.style.display).toBe('none');
       expect(artwork.style.transform).toBe('matrix(0.75,0,0,0.875,260,30)');
       expect(artwork.style.opacity).toBe('0.8');
+      if (outputPass === 'foreground') {
+        for (const node of linked) {
+          expect(artwork.contains(node)).toBe(true);
+          expect(node?.closest('[data-cg-frame-transition-hidden]')).toBeNull();
+        }
+        expect(artwork.style.getPropertyValue('mask-image')).toContain('cg-plate-depth-');
+        const hole = document.querySelector('mask[id^="cg-plate-depth-"] g rect');
+        expect(hole?.getAttribute('x')).toBe('425');
+        expect(hole?.getAttribute('y')).toBe('740');
+        expect(hole?.getAttribute('fill-opacity')).toBe('0.75');
+      }
       expect(departing.hasAttribute(hiddenMarker)).toBe(true);
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(true);
@@ -900,6 +1223,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(duo.style.display).not.toBe('none');
       expect(artwork.style.transform).toBe('');
       expect(artwork.style.opacity).toBe('');
+      expect(artwork.style.getPropertyValue('mask-image')).toBe('');
       expect(destination.style.transform).toBe('');
       expect(departing.hasAttribute(hiddenMarker)).toBe(false);
       const incomingTitle = destination.querySelector('[data-cg-element-id="name"]');

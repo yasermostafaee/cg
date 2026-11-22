@@ -2,7 +2,7 @@
 //!
 //! cg-setup-pack --ui <cg-setup.exe> --engine <engine.exe> --product <bridge|control|designer>
 //!   --version <x.y.z> --install-bytes <n> --main <path>=<bytes> [--main …] --icon <.ico>
-//!   --tile <.png> [--guide <.pdf>] --out <installer.exe>
+//!   --tile <.png> [--build-id <short source revision>] [--guide <.pdf>] --out <installer.exe>
 //!
 //! Called by `tools/release/src/pack-installers.mjs`, which reads the version from every file that
 //! carries it and measures the sizes.
@@ -72,6 +72,7 @@ fn main() {
     let config = Config {
         product,
         version: need("--version").into(),
+        build_id: one("--build-id").map(String::from),
         engine_name: engine
             .file_name()
             .map(|n| n.to_string_lossy().to_string())

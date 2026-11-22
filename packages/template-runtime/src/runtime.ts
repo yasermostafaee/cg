@@ -54,6 +54,7 @@ import {
 } from './bindings.js';
 import { applyArrangementToNodes } from './arrangement-view.js';
 import { animateFocusSlide } from './focus-slide.js';
+import { animateFocusArtwork } from './focus-artwork.js';
 import { createFramePlacementRenderer } from './frame-placement.js';
 import { createMaskPlacementRenderer } from './mask-placement.js';
 import { LookMediaPark } from './look-media.js';
@@ -639,6 +640,23 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   );
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
+  const authoredBorders =
+    mode === 'output' && outputPass === 'foreground' && !isPvwRehearsal(doc)
+      ? Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-layout-plate-border]'))
+      : [];
+  let nativeBorderEffectId: string | undefined;
+  const setNativeBorders = (plateIds: readonly string[], effectId?: string): void => {
+    const ids = new Set(plateIds);
+    let hasSuppressedBorder = false;
+    // Preset instances are all mounted. Hide the corresponding borders in both the
+    // visible and parked instances so the next look cannot briefly draw a duplicate.
+    for (const node of authoredBorders) {
+      const hidden = ids.has(node.dataset['cgLayoutPlateBorder'] ?? '');
+      node.toggleAttribute('data-cg-native-border-hidden', hidden);
+      hasSuppressedBorder ||= hidden;
+    }
+    nativeBorderEffectId = hasSuppressedBorder ? effectId : undefined;
+  };
   const departureArtwork = new Map(
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-preset-departure-key]')).map(
       (node) => [node.dataset['cgPresetDepartureKey'], node] as const,
@@ -2796,6 +2814,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   };
 
   onRootSettled = (): void => {
+    setNativeBorders([]);
     cascade(rootNode, (c) => c.stop()); // root itself is settled — a no-op
     for (const sub of subtrees) {
       for (const t of sub.tickers) t.stop();
@@ -3042,6 +3061,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   }
   function animateFrameTransition(phase: FrameTransitionPhase): void {
     clearFrameTransitionHold();
+    const fullFocusArtwork = phase.focusArtwork !== undefined && outputPass !== 'background';
     const affected = new Set(phase.hideFallbackPlateIds);
     const nodes =
       holdsLiveFallback && affected.size > 0
@@ -3058,7 +3078,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       instance !== undefined && key.startsWith(instance + '/');
     const opacityArtwork = phase.opacityArtwork?.filter(({ key }) => isCurrentArtwork(key));
     if (instance !== undefined) {
-      for (const key of phase.hidePresetArtworkKeys ?? []) {
+      for (const key of fullFocusArtwork ? [] : (phase.hidePresetArtworkKeys ?? [])) {
         const prefix = key + '/';
         const node = departureArtwork.get(key);
         if (
@@ -3071,7 +3091,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           nodes.push(node);
         }
       }
-      const holdTitles = new Set(phase.hidePresetTitlePlateIds);
+      const holdTitles = new Set(fullFocusArtwork ? undefined : phase.hidePresetTitlePlateIds);
       if (holdTitles.size > 0) {
         const affectedArtwork = [...presetTitlePlates]
           .filter(
@@ -3089,32 +3109,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const destination = lookGroup?.looks.find(({ id }) => id === phase.destinationLookId);
       if (
         phase.focusSlide === undefined &&
+        phase.focusArtwork === undefined &&
         phase.hidePresetTitlePlateIds === undefined &&
         destination !== undefined &&
         destination.instanceId !== instance
       ) {
-        const destinationTitles = new Set(
-          presetTitles
-            .filter(
-              (node) =>
-                node.dataset['cgPresetTitleKey']?.startsWith(destination.instanceId + '/') &&
-                node.dataset['cgInstanceHiddenText'] === undefined,
-            )
-            .map((node) => node.dataset['cgElementId']),
-        );
-        const animatedArtwork = phase.frames.flatMap(({ frameKey, lookId }) => {
-          const key = presetFrameTargets.get(frameKey)?.artworkKey;
-          return lookId === currentLookId && key !== undefined ? [key] : [];
-        });
         for (const node of presetTitles) {
           const key = node.dataset['cgPresetTitleKey'];
           if (key === undefined || !isCurrentArtwork(key)) continue;
+          // Captions and text nested in imported artwork travel with their plate.
+          // Each look already owns the visibility of its individual children.
+          if (node.closest('[data-cg-frame-artwork]') !== null) continue;
           if (opacityArtwork?.some(({ key: group }) => departureArtwork.get(group)?.contains(node)))
-            continue;
-          if (
-            destinationTitles.has(node.dataset['cgElementId']) &&
-            animatedArtwork.some((artwork) => key.startsWith(artwork + '/'))
-          )
             continue;
           nodes.push(node);
         }
@@ -3125,12 +3131,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const outgoing = instance === undefined ? undefined : built.elementMap.get(instance);
     const incoming = target === undefined ? undefined : built.elementMap.get(target.instanceId);
     const restore =
-      phase.focusSlide !== undefined &&
+      (phase.focusSlide !== undefined || fullFocusArtwork) &&
       scene.controlLiveLayout !== undefined &&
       outgoing !== undefined &&
       incoming !== undefined &&
       incoming !== outgoing
-        ? animateFocusSlide(outgoing, incoming, phase, options.clock)
+        ? fullFocusArtwork
+          ? animateFocusArtwork(outgoing, incoming, phase, options.clock)
+          : animateFocusSlide(outgoing, incoming, phase, options.clock)
         : undefined;
     frameTransitionHold = {
       nodes,
@@ -3140,7 +3148,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         (phase.delayMs ?? 0) + phase.durationMs + LIVE_FALLBACK_WATCHDOG_MS,
       ),
     };
-    framePlacement.animate({ ...phase, opacityArtwork }, currentLookId);
+    framePlacement.animate(
+      { ...phase, opacityArtwork, ...(fullFocusArtwork && { frames: [] }) },
+      currentLookId,
+      outgoing,
+    );
   }
 
   const contentRoots = (): HTMLElement[] =>
@@ -3452,6 +3464,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       await ready;
       presetEffectId = undefined;
       cancelFrameTransition();
+      setNativeBorders([]);
       releaseLiveFallback();
       lastFallbackPhaseId = null;
       // The stopped Canvas may expose an expired clock for editing. A Take is always real:
@@ -3737,6 +3750,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         scene the export preflight never saw.
       */
       const receivedControl = readCgControl(data);
+      const releaseNativeBorderEffectId = receivedControl?.releaseNativeBorderEffectId;
+      if (releaseNativeBorderEffectId !== undefined) {
+        if (releaseNativeBorderEffectId === nativeBorderEffectId) setNativeBorders([]);
+        return;
+      }
       const isPresetRestore = receivedControl?.restorePresetEffectId !== undefined;
       const control: CgControl | undefined = isPresetRestore
         ? receivedControl.restorePresetEffect
@@ -3748,6 +3766,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         cancelFrameTransition();
       } else if (control?.take !== undefined) {
         presetEffectId = undefined;
+        setNativeBorders([]);
       } else if (
         control?.presetEffectId !== undefined &&
         (machine.state === 'on-air' || machine.state === 'playing')
@@ -3794,6 +3813,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const nextPlacements = staleRelease ? undefined : control?.framePlacements;
       const frameTransition = staleRelease ? undefined : control?.frameTransition;
       const nextMasks = staleRelease ? undefined : control?.maskPlacements;
+      if (!staleRelease && control?.nativeBorderPlateIds !== undefined) {
+        setNativeBorders(control.nativeBorderPlateIds, control.presetEffectId);
+      }
       if (nextPlacements !== undefined) framePlacements = nextPlacements;
       if (nextMasks !== undefined) maskPlacements = nextMasks;
       const enteredLook = !staleRelease && control?.look !== undefined && enterLook(control.look);
@@ -4007,6 +4029,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (machine.state === 'removed') return;
       presetEffectId = undefined;
       cancelFrameTransition();
+      setNativeBorders([]);
       releaseLiveFallback();
       for (const watchdog of outroWatchdogs) watchdog.cancel();
       // D-125 §D6.4.4 — remove() is the PANIC path and stays a SYNCHRONOUS hard kill: it

@@ -4021,7 +4021,8 @@ larger than its engine.
 
 **Progress and identity.** Interactive Setup shows measured destination bytes while copying.
 During an unmeasured phase it keeps the completed fill and marks the remaining track as working.
-The packaged version stays visible on every page. Designer uses colored keyframes in its setup
+The packaged version stays centred below the logo and product name in the left rail on every page.
+The short build ID appears below it in smaller text. Designer uses colored keyframes in its setup
 and app icon, and Control uses a restrained green tally. See
 [`show-installer-copy-progress`](../../openspec/changes/show-installer-copy-progress).
 

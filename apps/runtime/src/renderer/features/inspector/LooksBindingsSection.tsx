@@ -1,5 +1,5 @@
 import { plateDisplayName } from '../../ui/operatorNaming.js';
-import { useSyncExternalStore } from 'react';
+import { useId, useSyncExternalStore } from 'react';
 import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
 import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -73,7 +73,7 @@ const styles = {
    */
   diverged: {
     display: 'block',
-    gridColumn: '1 / -1',
+    flexBasis: '100%',
     marginTop: 'var(--r-space-1)',
     color: colors.pending,
     fontSize: '0.72rem',
@@ -173,35 +173,6 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.04em',
   },
-  /*
-   * 🔴 **LABEL BEFORE THE BOX, ON ONE LINE — owner, 2026-09-14:** «لیبل اینپوتها در خط
-   * جدا نباشه قبلش باشه بهتره.»
-   *
-   * A two-column grid rather than a stack, and it is the shape that satisfies BOTH of the
-   * owner's calls at once: the label LEADS on the same line, and `1fr` gives the box every
-   * pixel the label does not take — which is what «تمام صفحه کن مثل gh2» asked for. A
-   * label stacked above (the drawing's `.field.full`) spends a whole line per field, and in a
-   * panel this tall that is the space the move was made to reclaim.
-   *
-   * ⚠ The label column is `auto`: it takes the widest label and no more, so every box in the
-   * section starts on the SAME vertical without anyone choosing a number.
-   */
-  row: {
-    display: 'grid',
-    gridTemplateColumns: 'auto minmax(0, 1fr)',
-    columnGap: 'var(--r-space-2)',
-    alignItems: 'center',
-    marginBottom: 'var(--r-space-1)',
-    flexWrap: 'wrap' as const,
-    paddingLeft: 'var(--r-space-3)',
-  },
-  /** The field's label, leading its box on the same line. */
-  plate: {
-    color: colors.textSecondary,
-    fontSize: 'var(--r-text-sm)',
-    fontWeight: 'var(--r-weight-medium)',
-    whiteSpace: 'nowrap' as const,
-  },
   /** A per-look value an emergency patch has taken out of force — see the header's §2. */
   masked: { color: colors.pending, fontSize: '0.72rem', fontWeight: 700 },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
@@ -280,6 +251,7 @@ export function LooksBindingsSection({
   rehearsing?: boolean | undefined;
   previewOnly?: boolean | undefined;
 }): JSX.Element | null {
+  const bindingId = useId();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
   // `MEDIA-PLATES-01` — which seats carry a clip, and how each is playing: the bridge's answer.
@@ -492,7 +464,12 @@ export function LooksBindingsSection({
         const rects = look.rects;
         const plates = (carrier.sources ?? []).filter((p) => rects[p.sourceId] !== undefined);
         return (
-          <div key={look.id} style={styles.look} data-look-row={look.id}>
+          <div
+            key={look.id}
+            className="cg-form cg-form-rows"
+            style={styles.look}
+            data-look-row={look.id}
+          >
             {/*
               🔴 THE PER-LOOK HEADING IS GONE — `INSPECTOR-DELTA` §4. It named the look and
               carried the live badge, which was right while every look was stacked on screen
@@ -505,7 +482,11 @@ export function LooksBindingsSection({
               duplicated. Two of them would be two claims about one fact, and
               `lookBindings.dom.test.ts` pins that exactly one exists.
             */}
-            {plates.length === 0 && <p style={styles.empty}>No frames in this look.</p>}
+            {plates.length === 0 && (
+              <p className="cg-form-rows__wide" style={styles.empty}>
+                No frames in this look.
+              </p>
+            )}
             {plates.map((plate) => {
               const label = plateDisplayName(plate.sourceId, carrier.sources, layout);
               const applied = bound[look.id]?.[plate.sourceId];
@@ -530,11 +511,12 @@ export function LooksBindingsSection({
               // §2 — level 4 masks level 3, for THIS plate, in EVERY look.
               const patch = patches[plate.sourceId];
               const masked = patch !== undefined && patch !== '';
+              const fieldId = `${bindingId}-${plate.sourceId}`;
               return (
-                <div key={`${look.id}:${plate.sourceId}`} style={styles.row}>
-                  <span style={styles.plate}>
-                    <bdi>{label}</bdi>
-                  </span>
+                <div key={`${look.id}:${plate.sourceId}`} className="cg-form-row">
+                  <label htmlFor={fieldId} className="cg-form-row__label">
+                    <IsolatedName>{label}</IsolatedName>
+                  </label>
                   {/*
                     🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER, on this row's CHANNEL, so an
                     input the Playout routes to another channel only is listed disabled. It only
@@ -548,85 +530,85 @@ export function LooksBindingsSection({
                     `MEDIA-PLATES-01` §2 — a clip bound here (this look's own, or the default it
                     inherits) carries its `Playback` beside the field; a live input carries nothing.
                   */}
-                  <span className="cg-source-field">
-                    <SourcePicker
-                      className={[dirty ? 'is-dirty' : '', masked ? 'is-struck' : '']
-                        .filter(Boolean)
-                        .join(' ')}
-                      aria-label={`Input for ${label} in preset ${look.name}`}
-                      data={{
-                        'data-look-binding': `${look.id}:${plate.sourceId}`,
-                        ...(masked ? { 'data-look-binding-masked': '' } : {}),
-                      }}
-                      value={value}
-                      onChange={(sourceId) =>
-                        stageLookBinding(item.itemId, look.id, plate.sourceId, sourceId)
-                      }
-                      /*
+                  <SourcePicker
+                    id={fieldId}
+                    className={['cg-form-row__control', dirty && 'is-dirty', masked && 'is-struck']
+                      .filter(Boolean)
+                      .join(' ')}
+                    aria-label={`Input for ${label} in preset ${look.name}`}
+                    data={{
+                      'data-look-binding': `${look.id}:${plate.sourceId}`,
+                      ...(masked ? { 'data-look-binding-masked': '' } : {}),
+                    }}
+                    value={value}
+                    onChange={(sourceId) =>
+                      stageLookBinding(item.itemId, look.id, plate.sourceId, sourceId)
+                    }
+                    /*
                         🔴 `B-303` — the default's WORDS and the SOURCE it names are kept apart: the
                         picker draws `Default (` + the name in its own isolate and direction + `)`,
                         and marks a default the Playout no longer offers `Unavailable` (the owner's
                         fake Playout, 2026-09-30: D10 empty, the default naming an NDI input). It was
                         one string, and «NDI کانالِ ۱ (APASAI)» read `NDI ۱ کانال (APASAI)`.
                       */
-                      choices={[{ value: '', label: 'Default', names: templateDefault }]}
-                      channel={item.slot?.channel}
-                      previewChannel={channel}
-                    />
-                    <MediaPlaybackControl sourceId={value !== '' ? value : templateDefault} />
-                  </span>
-                  {/*
+                    choices={[{ value: '', label: 'Default', names: templateDefault }]}
+                    channel={item.slot?.channel}
+                    previewChannel={channel}
+                  />
+                  <MediaPlaybackControl sourceId={value !== '' ? value : templateDefault} />
+                  <div className="cg-form-row__details">
+                    {/*
                     `MEDIA-PLATES-01` §2 — on an ON-AIR row, a plate whose seat the bridge reports as a
                     clip gets its transport, its remaining time and its `Paused` / `Ended` facts.
                   */}
-                  {rowOnAir &&
-                    (() => {
-                      const media = mediaStateOf(item.itemId, plate.sourceId);
-                      return media === undefined ? null : (
-                        <MediaTransport
-                          itemId={item.itemId}
-                          plateId={plate.sourceId}
-                          state={media}
-                        />
-                      );
-                    })()}
-                  {masked && (
-                    <>
-                      <span style={styles.masked} data-look-binding-patched={plate.sourceId}>
-                        not in force — patched to{' '}
-                        <SourceLabel sourceId={patch} meterChannel={channel} />
-                      </span>
-                      {/*
+                    {rowOnAir &&
+                      (() => {
+                        const media = mediaStateOf(item.itemId, plate.sourceId);
+                        return media === undefined ? null : (
+                          <MediaTransport
+                            itemId={item.itemId}
+                            plateId={plate.sourceId}
+                            state={media}
+                          />
+                        );
+                      })()}
+                    {masked && (
+                      <>
+                        <span style={styles.masked} data-look-binding-patched={plate.sourceId}>
+                          not in force — patched to{' '}
+                          <SourceLabel sourceId={patch} meterChannel={channel} />
+                        </span>
+                        {/*
                         §2.2 — ENDING THE PATCH IS REACHABLE FROM WHERE IT IS SEEN. It applies
                         IMMEDIATELY rather than staging, and that is deliberate: the patch it
                         undoes was applied immediately too (`R-048` is an on-air emergency, not
                         a draft), so making its removal wait for UPDATE would leave the two
                         halves of one operator decision on different clocks.
                       */}
-                      <Button
-                        variant="ghost"
-                        data-clear-patch={plate.sourceId}
-                        title={`Stop patching "${label}" and put this row's per-look inputs back in force`}
-                        onClick={() => {
-                          void window.cg.stack
-                            .swapLiveSource({
-                              itemId: item.itemId,
-                              plateId: plate.sourceId,
-                              sourceId: null,
-                              ...inputTransitionRequest(item.itemId, layout),
-                            })
-                            .then((res) => {
-                              if (!res.ok)
-                                reportCommandError(res.message ?? 'Could not clear the patch.');
-                            });
-                        }}
-                      >
-                        Clear patch
-                      </Button>
-                    </>
-                  )}
-                  {dirty && <DraftChip label="unapplied" />}
-                  {/*
+                        <Button
+                          variant="ghost"
+                          data-clear-patch={plate.sourceId}
+                          title={`Stop patching "${label}" and put this row's per-look inputs back in force`}
+                          onClick={() => {
+                            void window.cg.stack
+                              .swapLiveSource({
+                                itemId: item.itemId,
+                                plateId: plate.sourceId,
+                                sourceId: null,
+                                ...inputTransitionRequest(item.itemId, layout),
+                              })
+                              .then((res) => {
+                                if (!res.ok)
+                                  reportCommandError(res.message ?? 'Could not clear the patch.');
+                              });
+                          }}
+                        >
+                          Clear patch
+                        </Button>
+                      </>
+                    )}
+                    {dirty && <DraftChip label="unapplied" />}
+                    {/*
                     🔴 §2.3 — VISIBLE, not an `aria-label`. `DraftChip` renders the fixed text
                     "● draft" and carries its `label` as an accessible name only, so putting
                     the explanation there would have made it reachable by screen reader and
@@ -634,12 +616,12 @@ export function LooksBindingsSection({
                     actually about. An edit staged under a patch has to SAY what it is waiting
                     for, or it reads as an edit that silently did nothing.
                   */}
-                  {dirty && masked && (
-                    <span style={styles.masked} data-look-binding-waiting={plate.sourceId}>
-                      takes effect when the patch is cleared
-                    </span>
-                  )}
-                  {/*
+                    {dirty && masked && (
+                      <span style={styles.masked} data-look-binding-waiting={plate.sourceId}>
+                        takes effect when the patch is cleared
+                      </span>
+                    )}
+                    {/*
                     🔴 **THE ROW'S DIVERGENCE, ON THE ROW — owner, 2026-09-15:** «این بخش قرمز
                     فضای بیخودی اشغال کرده حذفش کن.»
 
@@ -659,7 +641,8 @@ export function LooksBindingsSection({
                     It renders only when the row is ON AIR and actually diverges, so the
                     ordinary case costs nothing.
                   */}
-                  {divergenceOf(plate.sourceId)}
+                    {divergenceOf(plate.sourceId)}
+                  </div>
                 </div>
               );
             })}

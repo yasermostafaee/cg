@@ -92,6 +92,7 @@ export function MediaPlaybackControl({
         aria-controls={panelId}
         aria-label={`Playback: ${entry.name}`}
         title="Playback"
+        className="cg-form-row__action"
         data-media-playback={entry.id}
         onClick={() => setOpen(true)}
       >

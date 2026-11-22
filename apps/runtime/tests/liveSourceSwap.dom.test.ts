@@ -14,6 +14,7 @@ import {
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
+import { fillBridgeStub } from './support/authStub.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 import { choosePickerOption, openPicker, pickerValue } from './support/sourcePicker.js';
 
@@ -74,6 +75,7 @@ afterEach(() => {
   clearPortals();
   __resetSourcesForTest();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function renderDialog(
@@ -83,7 +85,7 @@ async function renderDialog(
   assignments: SourceAssignments = ASSIGNMENTS,
   template = TEMPLATE,
 ): Promise<void> {
-  initSources({
+  const bridge = fillBridgeStub({
     sources: {
       config: () => Promise.resolve(CATALOG),
       assignments: () => Promise.resolve(assignments),
@@ -92,7 +94,9 @@ async function renderDialog(
       setConfig: () => Promise.resolve({ ok: true }),
       setAssignments: () => Promise.resolve({ ok: true }),
     },
-  } as never);
+  });
+  vi.stubGlobal('cg', bridge);
+  initSources(bridge as never);
   // `initSources` fetches asynchronously; without this flush the dialog renders
   // against an EMPTY catalog and every option assertion passes vacuously.
   await Promise.resolve();

@@ -1,5 +1,5 @@
 import * as http from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TemplateRegistry } from '../src/template-registry.js';
 import {
   TemplateHttpServer,
@@ -167,6 +167,43 @@ describe('TemplateHttpServer', () => {
       { take: 'live-take', field: 'pages', index: 2 },
       { take: 'old-take', field: 'pages', index: 7 },
     ]);
+  });
+
+  it('brokers the start epoch only for the two active Focus paint tokens', async () => {
+    const ordinary = vi.fn(() => false);
+    server = new TemplateHttpServer(() => null, undefined, undefined, ordinary);
+    await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+    const endpoint = 'http://127.0.0.1:' + server.port + '/page-state';
+    const abort = new AbortController();
+    const color = server.focusPaints.expect(endpoint + '/one', 'F1', abort.signal);
+    const mask = server.focusPaints.expect(color.url, 'F1', abort.signal, { matte: true });
+    const other = server.focusPaints.expect(endpoint + '/two', 'F1', abort.signal);
+    server.focusPaints.expect(other.url, 'F1', abort.signal, { matte: true });
+    const ready = (url: string, clock: number, look = 'F1') =>
+      post(endpoint, {
+        take: new URL(url).searchParams.get('cgpaint'),
+        field: 'focus-pair-ready',
+        index: 0,
+        look,
+        clock,
+      });
+    try {
+      expect(await ready(color.url, 1000)).toMatchObject({
+        status: 200,
+        body: '{"startAt":null}',
+        cacheControl: 'no-store',
+      });
+      expect(await ready(other.url, 9000)).toMatchObject({ status: 200, body: '{"startAt":null}' });
+      expect((await ready(mask.url, 1002, 'F2')).status).toBe(404);
+      expect(await ready(mask.url, 1450)).toMatchObject({ status: 200, body: '{"startAt":1610}' });
+      expect(await ready(color.url, 1460)).toMatchObject({ status: 200, body: '{"startAt":1610}' });
+      expect(await ready(other.url, 9200)).toMatchObject({ status: 200, body: '{"startAt":null}' });
+      expect(ordinary).not.toHaveBeenCalled();
+    } finally {
+      abort.abort();
+    }
+    expect((await ready(mask.url, 1490)).status).toBe(404);
+    await expect(Promise.all([color.ready, mask.ready])).resolves.toEqual([false, false]);
   });
 
   it('🔴 serves a stored picture by bare hash when Auto reaches a page no command preloaded', async () => {

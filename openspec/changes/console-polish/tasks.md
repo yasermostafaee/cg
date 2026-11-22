@@ -319,3 +319,8 @@ A2 FAST (visual). One batch, one gate, one push — before `v0.11.2`'s tag.
       <https://github.com/yasermostafaee/cg/actions/runs/37221039820>, both green; the Linux `E2E` step RAN
       again on `c19529a5`, which carries it — <https://github.com/yasermostafaee/cg/actions/runs/37227120747>,
       runtime 332 passed with `banner-on-red.spec.ts` in its log, designer 290 passed (3 flaky)
+
+## Shared source-form columns
+
+- [x] Reuse aligned labels, source fields and Playback actions in both source dialogs and the Inspector.
+- [x] Verify the shared column edges in Chromium at 1600 and 1024 px with mixed Persian and English names.

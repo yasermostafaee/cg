@@ -650,9 +650,8 @@ export function PreviewPanel({
           </Button>
           <SafeGuideSettings
             profile={safeGuides.profile}
-            onChange={(profile) => {
-              safeGuides.setProfile(profile);
-            }}
+            onChange={safeGuides.setProfile}
+            onReset={safeGuides.resetProfile}
           />
           {panVisible && (
             <Button

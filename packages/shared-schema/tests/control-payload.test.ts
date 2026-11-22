@@ -98,6 +98,18 @@ describe('the round trip — the bridge writes, the page reads', () => {
     }
   });
 
+  it('keeps native fallback ownership tied to the transition that requested it', () => {
+    const effect = { presetEffectId: 'change-42', nativeFallbackHold: true } as const;
+    expect(readCgControl(withCgControl({}, effect))).toEqual(effect);
+    expect(
+      readCgControl({ [CG_CONTROL_KEY]: { nativeFallbackHold: true } })?.nativeFallbackHold,
+    ).toBeUndefined();
+    expect(
+      readCgControl({ [CG_CONTROL_KEY]: { ...effect, nativeFallbackHold: 'true' } })
+        ?.nativeFallbackHold,
+    ).toBeUndefined();
+  });
+
   it('carries only valid live-plate fit facts through the wire payload', () => {
     const payload = withCgControl({} as FieldValues, {
       plates: {

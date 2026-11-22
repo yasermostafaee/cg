@@ -233,7 +233,10 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
     if (options.replica !== undefined) {
-      const { primary, peer, queue, settleMixer, verifiedLine } = options.replica;
+      const { primary, peer, queue, settleMixer, verifiedLine, foregroundCleanup } =
+        options.replica;
+      const clearingProvenSlot =
+        foregroundCleanup === true && /^(?:CLEAR \d+-\d+|MIXER \d+-\d+ CLEAR)$/.test(line);
       const label = this.backupLabel;
       const translated =
         verifiedLine !== undefined
@@ -246,7 +249,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
             ? this.ownLine({ line }, label)
             : this.lineFor(label, line, options);
       if (
-        this.strategy !== 'mirror-sync' ||
+        (this.strategy !== 'mirror-sync' && !clearingProvenSlot) ||
         primary !== this.primarySession ||
         peer !== this.backupSession ||
         queue !== peer.queue ||

@@ -1,6 +1,8 @@
 import * as http from 'node:http';
 import type * as net from 'node:net';
 import * as os from 'node:os';
+import { FocusArtworkPaints } from './focus-artwork-mixer.js';
+import { NativeFallbackHolds } from './native-fallback-hold.js';
 import {
   PAGE_MEDIA_HASH_PATH_RE,
   PAGE_MEDIA_PATH_RE,
@@ -295,6 +297,8 @@ const TEMPLATE_PATH_RE = /^\/template\/([^/]+)$/;
  * stored (`GET /page/<sha256>.<ext>`, read-only) — no control surface.
  */
 export class TemplateHttpServer {
+  readonly focusPaints = new FocusArtworkPaints();
+  readonly nativeFallbacks = new NativeFallbackHolds();
   #server: http.Server | null = null;
   #port = 0;
   #serveHost = '127.0.0.1';
@@ -443,7 +447,8 @@ export class TemplateHttpServer {
           'content-type': 'text/html; charset=utf-8',
           'cache-control': 'no-store',
         });
-        res.end(html);
+        const request = req.url ?? path;
+        res.end(this.nativeFallbacks.inject(this.focusPaints.inject(html, request), request));
         return;
       }
       res.writeHead(404, {
@@ -640,9 +645,16 @@ export class TemplateHttpServer {
         refuse('invalid page state');
         return;
       }
+      if (field === 'focus-pair-ready') {
+        const start = index === 0 && this.focusPaints.rendezvous(take, record['look'], record['clock']);
+        if (!start) { refuse('token names no matching Focus pair'); return; }
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify(start));
+        return;
+      }
       let accepted = false;
       try {
-        accepted = this.#onPageState?.(take, field, index) ?? false;
+        accepted = this.nativeFallbacks.accepts(take, field, index) || this.focusPaints.report(take, field, index) || (this.#onPageState?.(take, field, index) ?? false);
       } catch (err) {
         refuse(`handler threw: ${err instanceof Error ? err.message : String(err)}`);
         return;

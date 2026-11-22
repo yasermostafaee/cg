@@ -13,7 +13,10 @@ import {
 type LayoutTarget = LiveSourceLayoutSource &
   (
     | { kind: 'plate' }
-    | { kind: 'composition' | 'visual'; transform: Transform; bounds: LiveSourceRect }
+    | (({ kind: 'composition'; containsPlate: boolean } | { kind: 'visual' }) & {
+        transform: Transform;
+        bounds: LiveSourceRect;
+      })
   );
 
 export function plateLayoutSource(
@@ -88,16 +91,16 @@ export function autoLayoutTargets(
       targets.push({ kind: 'plate', ...plateLayoutSource(element, transform) });
       continue;
     }
-    const bounds = plateBounds.get(id) ?? sceneRect(element, []);
+    const plate = plateBounds.get(id);
+    const bounds = plate ?? sceneRect(element, []);
     const aspect = bounds.width / bounds.height;
     if (bounds.width <= 0 || bounds.height <= 0 || !Number.isFinite(aspect)) continue;
-    targets.push({
-      kind: element.type === 'composition' ? 'composition' : 'visual',
-      id,
-      aspect,
-      bounds,
-      transform,
-    });
+    const geometry = { id, aspect, bounds, transform };
+    targets.push(
+      element.type === 'composition'
+        ? { kind: 'composition', containsPlate: plate != null, ...geometry }
+        : { kind: 'visual', ...geometry },
+    );
   }
   return targets;
 }
@@ -120,9 +123,10 @@ export function autoLayoutTransform(
   if (target.kind === 'composition') {
     // Instance size scales the nested pixels AND the instance's anchor. Only this
     // reference changes, so the same child can be reused elsewhere at its original size.
+    const verticalFactor = height / bounds.height;
     return {
-      position: { x: x - bounds.x * factor, y: y - bounds.y * factor },
-      size: { w: transform.size.w * factor, h: transform.size.h * factor },
+      position: { x: x - bounds.x * factor, y: y - bounds.y * verticalFactor },
+      size: { w: transform.size.w * factor, h: transform.size.h * verticalFactor },
     };
   }
   const anchorX = transform.position.x + transform.anchor.x * transform.size.w;

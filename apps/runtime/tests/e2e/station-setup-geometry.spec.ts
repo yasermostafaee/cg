@@ -20,6 +20,54 @@ import { test, expect } from './fixtures/runtime.js';
 
 const px = (v: string): number => Number.parseFloat(v);
 
+test('Station setup uses the MAM palette for primary actions, fields and checked controls', async ({
+  app,
+}) => {
+  const page = app.page;
+  const primary = 'rgb(65, 190, 251)';
+  const primaryInk = 'rgb(0, 37, 55)';
+  await app.openStationSetupAt('Layers');
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
+
+  const apply = dialog.getByRole('button', { name: 'Apply layers', exact: true });
+  await expect(apply).toHaveCSS('background-color', primary);
+  await expect(apply).toHaveCSS('color', primaryInk);
+
+  const field = dialog.getByRole('searchbox', { name: 'Filter by name, template or layer' });
+  await expect(field).toHaveCSS('background-color', 'rgb(20, 23, 29)');
+  await expect(field).toHaveCSS('border-top-color', 'rgb(99, 106, 114)');
+  await expect(field).toHaveCSS('color', 'rgb(244, 245, 247)');
+
+  const layerSwitch = dialog.getByRole('switch', { name: 'Show layer 80', exact: true });
+  const layerTrack = layerSwitch.locator('..').locator('.cg-switch__track');
+  await expect(layerSwitch).toBeChecked();
+  await expect(layerTrack).toHaveCSS('background-color', primary);
+  await expect(layerTrack).toHaveCSS('border-top-color', primary);
+  await expect
+    .poll(() => layerTrack.evaluate((track) => getComputedStyle(track, '::after').backgroundColor))
+    .toBe(primaryInk);
+
+  const shownOnly = dialog.getByRole('checkbox', { name: 'Shown only', exact: true });
+  await expect(shownOnly).not.toBeChecked();
+  await shownOnly.press('Space');
+  await expect(shownOnly).toBeChecked();
+  await expect(shownOnly).toHaveCSS('background-color', primary);
+  await shownOnly.hover();
+  await expect(shownOnly).toHaveCSS('background-color', primary);
+  await expect
+    .poll(() =>
+      shownOnly.evaluate((checkbox) => getComputedStyle(checkbox, '::after').borderRightColor),
+    )
+    .toBe(primaryInk);
+
+  await dialog.getByRole('tab', { name: /^Connection/ }).click();
+  const failover = dialog.getByRole('switch', { name: 'Auto-failover enabled', exact: true });
+  const failoverTrack = failover.locator('..').locator('.cg-switch__track');
+  if (!(await failover.isChecked())) await failover.press('Space');
+  await expect(failover).toBeChecked();
+  await expect(failoverTrack).toHaveCSS('background-color', primary);
+});
+
 test('§7 — the frame, the rail, the pane and the footer measure to the token home at 1280 × 800', async ({
   app,
 }) => {
@@ -286,12 +334,19 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   // The control itself — the reference's taller, rounder box, scoped to this pane.
   const input = await dialog.getByLabel('Primary host').evaluate((el) => {
     const s = getComputedStyle(el);
+    const expected = document.createElement('span');
+    expected.style.backgroundColor = 'var(--r-field-bg)';
+    el.parentElement?.append(expected);
+    const sharedBackground = getComputedStyle(expected).backgroundColor;
+    expected.remove();
     const r = el.getBoundingClientRect();
     return {
       minH: s.minHeight,
       pad: s.padding,
       radius: s.borderTopLeftRadius,
       text: s.fontSize,
+      background: s.backgroundColor,
+      sharedBackground,
       h: Math.round(r.height),
     };
   });
@@ -299,6 +354,7 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   expect(input.pad).toBe(tokens.inputPad);
   expect(input.radius).toBe(tokens.inputRadius);
   expect(input.text).toBe(tokens.inputText);
+  expect(input.background).toBe(input.sharedBackground);
   // PAINTED, not merely declared — the floor is a floor and the box clears it.
   expect(input.h).toBeGreaterThanOrEqual(42);
 
@@ -410,10 +466,14 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
     The tag reuses the section contract tag's chip tokens: one tag treatment at two levels.
   */
   // Add a fresh backup draft before measuring its card-head tags.
-  await dialog.getByRole('button', { name: 'Add backup', exact: true }).click();
+  const addBackupButton = dialog.getByRole('button', { name: 'Add backup', exact: true });
+  await expect(addBackupButton).toHaveCSS('background-color', 'rgb(65, 190, 251)');
+  await addBackupButton.click();
   const addBackup = page.getByRole('dialog', { name: 'Add backup server', exact: true });
   await addBackup.getByLabel('New backup host', { exact: true }).fill('192.0.2.43');
-  await addBackup.getByRole('button', { name: 'Add to draft', exact: true }).click();
+  const addToDraft = addBackup.getByRole('button', { name: 'Add to draft', exact: true });
+  await expect(addToDraft).toHaveCSS('background-color', 'rgb(65, 190, 251)');
+  await addToDraft.click();
   await expect(addBackup).not.toBeVisible();
   const tags = dialog.getByRole('region', { name: 'CasparCG B' }).locator('.cg-setup-card-tag');
   const tag = await tags.filter({ hasText: 'Optional' }).evaluate((el) => {

@@ -363,6 +363,7 @@ mod tests {
         Config {
             product,
             version: "0.10.0".into(),
+            build_id: None,
             engine_name: "e.exe".into(),
             install_bytes: 19_600_000,
             main_files: vec![MainFile {

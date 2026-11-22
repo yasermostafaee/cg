@@ -58,7 +58,7 @@ export function LiveLayoutEditorCropControls({
           </Button>
         </div>
       </div>
-      <div className="cg-live-layout-crop-values">
+      <div className="cg-form-grid cg-live-layout-crop-values">
         <LiveLayoutEditorNumber
           label={prefix + ' X (%)'}
           value={toPercent(value.x)}

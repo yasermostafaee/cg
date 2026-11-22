@@ -47,6 +47,8 @@ export function installCasparGlobals(
     if (
       verb === 'update' &&
       (control.presetTransitionCommit === true ||
+        control.nativeBorderPlateIds !== undefined ||
+        control.releaseNativeBorderEffectId !== undefined ||
         control.restorePresetEffectId !== undefined ||
         (control.frameTransition !== undefined &&
           _take === undefined &&
@@ -54,7 +56,11 @@ export function installCasparGlobals(
           Object.keys(values).length === 0 &&
           Object.keys(control).every(
             (key) =>
-              key === 'frameTransition' || key === 'framePlacements' || key === 'presetEffectId',
+              key === 'frameTransition' ||
+              key === 'framePlacements' ||
+              key === 'nativeFallbackHold' ||
+              key === 'presetEffectId' ||
+              (key === 'look' && control.presetEffectId !== undefined && control.frameTransition?.authoredPreset === true),
           )))
     ) {
       return;

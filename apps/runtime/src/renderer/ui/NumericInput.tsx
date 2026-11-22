@@ -46,6 +46,8 @@ interface NumericInputProps extends Omit<
   'type' | 'inputMode' | 'value' | 'onChange'
 > {
   value: string;
+  /** Use bare inside a field wrapper that already paints the control. */
+  appearance?: 'field' | 'bare';
   /**
    * Receives the NORMALIZED value (canonical Latin digits) on every change — or, with
    * `digits="as-typed"`, the operator's text exactly as typed.
@@ -109,6 +111,8 @@ interface NumericInputProps extends Omit<
 export function NumericInput({
   value,
   onValueChange,
+  appearance = 'field',
+  className,
   decimal = false,
   scrub,
   allow,
@@ -172,6 +176,11 @@ export function NumericInput({
   return (
     <input
       {...rest}
+      className={
+        appearance === 'bare' || /(^|\s)cg-field(\s|$)/.test(className ?? '')
+          ? className
+          : ['cg-field', className].filter(Boolean).join(' ')
+      }
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
       value={value}

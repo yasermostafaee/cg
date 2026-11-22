@@ -157,11 +157,25 @@ until Bridge's mixer commit lands. The runtime hides the fallback child of each 
 route and matches a release to the hold ID. A bounded timer restores the authored
 fallback if the release is lost. Rehearsal and foreground passes ignore the hold.
 
-A preset animation can independently hold the titles linked to its moving live plates via
-the phase's hidePresetTitlePlateIds. The runtime derives their composition scopes from the
-authored preset. It leaves unrelated text in place and keeps the destination title policy
-when the final release removes the hold. Background and foreground receive the same phase,
-including a title-only phase when the look itself is committed.
+The plate's artwork wrapper carries its titles, additional text and imported graphics
+through a preset switch. Its transform and opacity follow the plate. Each preset and
+Focus instance keeps its authored child visibility. Pages also understand the explicit
+`hidePresetTitlePlateIds` hold sent by older Bridge versions.
+
+When a retained plate's border or title visibility differs between endpoints, a preset
+phase can carry local `decorationOpacity` values. The foreground keeps these elements
+mounted for the fade, using the plate's motion clock and preserving each element's
+authored opacity. It restores the authored state on commit or cancellation.
+
+During an overlap, `plateStack` gives the foreground renderer the physical mixer
+order and bounds of confirmed opaque plate surfaces. The renderer masks the
+covered part of each lower plate's artwork as the upper picture moves or fades.
+This applies to nested graphics and all text attached to the plate.
+
+The PGM foreground pass can suppress an authored border while Bridge draws it in the native
+mixer. A `CgControl.nativeBorderPlateIds` array replaces the suppression set for all preset
+instances. An empty array restores the authored borders. The background pass and rehearsal
+ignore this control. A fresh Take or a settled stop clears the set.
 
 For a Control-authored Focus Push or Slide over, the Bridge sends the scene-space aperture,
 direction and progress of each native mixer segment in the `focusSlide` artwork phase.

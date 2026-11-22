@@ -9,6 +9,7 @@ import {
   type Layer,
   type Look,
   type LookGroup,
+  type LookTransition,
   type Scene,
 } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
@@ -30,7 +31,7 @@ import { designerStore } from '../store.js';
  * multi-frame group's home document, and registered in the group by that instance's
  * element id. SOURCES are DERIVED from the plates (`deriveLookSources`) — `B-188` deleted the
  * group's declaration, so a source comes into existence by pointing a plate at a key and this
- * slice owns no source mutators at all. Exactly one look is active; the switch is a cut.
+ * slice owns no source mutators at all. Exactly one look is active.
  *
  * ── WHY THE ACTIVE LOOK IS EDITOR STATE AND NOT SCENE STATE ─────────────────
  *
@@ -510,6 +511,19 @@ export const looksSlice = {
     const group = projectLookGroup(current.scene);
     if (group === undefined || !group.looks.some((l) => l.id === id)) return;
     set({ scene: writeProjectGroup(current.scene, { ...group, defaultLookId: id }) });
+  },
+
+  setLookTransition(id: string, entered: LookTransition): void {
+    const project = current.scene;
+    const group = projectLookGroup(project);
+    if (project === null || group === undefined || !group.looks.some((look) => look.id === id))
+      return;
+    set({
+      scene: writeProjectGroup(project, {
+        ...group,
+        looks: group.looks.map((look) => (look.id === id ? { ...look, entered } : look)),
+      }),
+    });
   },
 
   /** Set one registered preset's permission, including an explicit legacy opt-out. */

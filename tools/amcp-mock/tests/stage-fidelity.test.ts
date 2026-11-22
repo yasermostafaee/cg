@@ -172,6 +172,16 @@ describe('RELEASE-091-01 B2 — a cleared layer, as the core has it', () => {
     expect(codes(page)).toEqual(['202', '202', '202', '202', '202']);
   });
 
+  it('reports a solid color with its exact value and producer kind on the stage', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0 });
+    const reply = await send(mock.amcpPort, ['PLAY 1-60 #00AAbB', 'INFO 1']);
+    expect(reply).toMatch(/^202 PLAY(?: OK)?\r\n/);
+    expect(reply).toMatch(
+      /<layer_60>[\s\S]*<foreground>\s*<color>#00AAbB<\/color>\s*<paused>false<\/paused>\s*<producer>color<\/producer>\s*<\/foreground>/,
+    );
+    expect(mock.layerState({ channel: 1, layer: 60 })?.producer).toBe('color');
+  });
+
   it('INFO <ch>-<layer> answers the whole channel, exactly as INFO <ch>', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true, channels: 2 });
     await send(mock.amcpPort, ['PLAY 1-60 "a"', 'PLAY 1-61 "b"']);

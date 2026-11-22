@@ -78,6 +78,34 @@ const FocusSlideArtworkSchema = z
   })
   .refine(({ fromProgress, toProgress }) => fromProgress <= toProgress);
 
+const PlateArtworkCoverSchema = z.object({
+  from: LiveFramePlacementSchema.shape.rect,
+  to: LiveFramePlacementSchema.shape.rect,
+  fromOpacity: z.number().min(0).max(1),
+  toOpacity: z.number().min(0).max(1),
+});
+
+const FocusArtworkSideSchema = z.object({
+  base: LiveFramePlacementSchema.shape.rect,
+  from: LiveFramePlacementSchema.shape.rect,
+  to: LiveFramePlacementSchema.shape.rect,
+  fromOpacity: z.number().min(0).max(1),
+  toOpacity: z.number().min(0).max(1),
+  cover: PlateArtworkCoverSchema.optional(),
+});
+
+/** Complete plate-attached roots use the same geometry and opacity segment as their inputs. */
+const FocusArtworkSchema = z.object({
+  outgoing: FocusArtworkSideSchema,
+  incoming: FocusArtworkSideSchema,
+  incomingAbove: z.boolean(),
+});
+
+const DecorationOpacitySchema = z.object({
+  fromOpacity: z.number().min(0).max(1),
+  toOpacity: z.number().min(0).max(1),
+});
+
 export const FrameTransitionPhaseSchema = z
   .object({
     authoredPreset: z.literal(true).optional(),
@@ -86,8 +114,19 @@ export const FrameTransitionPhaseSchema = z
     delayMs: z.number().finite().min(0).max(250).optional(),
     /** Native mixer frame interval for hardware-paced preset artwork. */
     mixerFrameMs: z.number().finite().min(1).max(100).optional(),
+    /** Foreground artwork in physical mixer order, from bottom to top. A cover is a proven opaque plate surface. */
+    plateStack: z
+      .array(
+        z.object({
+          frameKey: z.string().min(1),
+          cover: PlateArtworkCoverSchema.optional(),
+        }),
+      )
+      .max(128)
+      .optional(),
     easing: EasingSchema,
     focusSlide: FocusSlideArtworkSchema.optional(),
+    focusArtwork: FocusArtworkSchema.optional(),
     frames: z
       .array(
         LiveFramePlacementSchema.omit({ rect: true }).extend({
@@ -110,6 +149,20 @@ export const FrameTransitionPhaseSchema = z
       .min(1)
       .max(128)
       .optional(),
+    /** Local fades on retained plates, multiplied by their existing artwork opacity. */
+    decorationOpacity: z
+      .array(
+        z
+          .object({
+            plateId: z.string().min(1),
+            border: DecorationOpacitySchema.optional(),
+            title: DecorationOpacitySchema.optional(),
+          })
+          .refine(({ border, title }) => border !== undefined || title !== undefined),
+      )
+      .min(1)
+      .max(128)
+      .optional(),
     hideFallbackPlateIds: z.array(z.string().min(1)).max(128).optional(),
     /** Exact authored instance paths of outgoing artwork held hidden during a preset switch. */
     hidePresetArtworkKeys: z.array(z.string().min(1)).max(128).optional(),
@@ -122,16 +175,21 @@ export const FrameTransitionPhaseSchema = z
       destinationLookId,
       frames,
       focusSlide,
+      focusArtwork,
       opacityArtwork,
+      decorationOpacity,
       hidePresetArtworkKeys,
       hidePresetTitlePlateIds,
     }) =>
       (frames.length > 0 ||
         focusSlide !== undefined ||
+        focusArtwork !== undefined ||
         opacityArtwork !== undefined ||
+        decorationOpacity !== undefined ||
         (hidePresetArtworkKeys?.length ?? 0) > 0 ||
         hidePresetTitlePlateIds !== undefined) &&
       ((opacityArtwork === undefined &&
+        decorationOpacity === undefined &&
         destinationLookId === undefined &&
         hidePresetTitlePlateIds === undefined) ||
         authoredPreset === true) &&
@@ -141,7 +199,12 @@ export const FrameTransitionPhaseSchema = z
           frames.length === 0 &&
           opacityArtwork === undefined &&
           hidePresetArtworkKeys === undefined &&
-          hidePresetTitlePlateIds === undefined)),
+          hidePresetTitlePlateIds === undefined)) &&
+      (focusArtwork === undefined ||
+        (authoredPreset === true &&
+          destinationLookId !== undefined &&
+          focusSlide === undefined &&
+          opacityArtwork === undefined)),
   );
 export type FrameTransitionPhase = z.infer<typeof FrameTransitionPhaseSchema>;
 

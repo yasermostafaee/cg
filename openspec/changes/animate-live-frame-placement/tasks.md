@@ -12,6 +12,29 @@
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43623019929/job/132532721505)
       completed its E2E step successfully on `e798ca3b`.
 - [ ] Verify picture, title, fallback and mask alignment on the target Playout Engine.
+- [x] Verify the single-engine native border handoff on both directions of a 3/2-frame
+      preset switch. In a 1080i50 reference engine capture, the additional edge error was
+      at most 1 pixel at 480×270. Focused Bridge checks cover preparation, shared COMMIT,
+      cleanup, insufficient live-band space and failure recovery.
+- [x] Extend native border handoff to each confirmed A/B peer's own mixer batch and
+      recovery. Cover both active roles, mapped channels, space exhaustion, preparation refusal
+      and promotion during an effect in Bridge tests.
+- [x] Drive entering and leaving borders from the picture mixer phase. An isolated
+      1080i50 reference engine capture recorded 322 samples with no picture-only or border-only
+      samples during those entrances and exits.
+- [x] Record both 3-to-2 and 2-to-3 transitions on two isolated 1080i50 CasparCG reference
+      engines with different channel mappings.
+- [x] Use fresh Take depth spacing and verified border layers to keep the lower
+      stroke behind the higher picture in both directions of the 1080i A/B capture.
+- [ ] Verify the final preset effects on the station engines at 21.32 and 21.43.
+- [x] Compare the sealed `ee531a4a` and `c5ca136e` builds in isolated 1080i50 captures.
+      Both show fallback and border separation. Restore the earlier motion timing in the candidate.
+- [x] Verify a static fallback, native picture and border can share one CasparCG Mixer COMMIT.
+      The isolated 1080i50 capture also checks that a higher picture occludes the moving plate.
+- [x] Verify 400 ms 2↔3 motion with the full Bridge and two locally mapped CasparCG
+      2.5.0 1080i50 engines. Record each engine separately and inspect the sampled fields
+      for picture, border, fallback, and overlap order. The local recorder dropped fields.
+- [ ] Verify the station layout's 400 ms preset effects on both station output engines.
 - [x] Carry effect selection and authored frame identity into the on-air preset switch.
 - [x] Verify both directions between a one-frame and a two-frame preset, with the shared producer
       retained. Windows Chromium and a Bridge smoke test with the owner's `3ghab-composition.vcg`

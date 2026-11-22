@@ -3,6 +3,7 @@ import {
   CUT_LOOK_TRANSITION,
   LookGroupSchema,
   LookTransitionSchema,
+  authoredLookEffect,
   defaultLookOf,
   lookContaining,
   lookGroupOf,
@@ -12,7 +13,7 @@ import { SceneSchema } from '../src/scene.js';
 
 /**
  * `multibox-layout-switch` §14 (LOOKS) phase 1 — the GROUP schema: looks referencing
- * instances, cut-only v1, and the refinements that make the illegal states unparseable rather
+ * instances, preset transitions, and the refinements that make the illegal states unparseable rather
  * than detectable.
  *
  * 🔴 `B-188` — the group no longer DECLARES sources; the list is derived from the plates
@@ -72,11 +73,34 @@ describe('LookGroupSchema — the multi-frame group', () => {
   });
 });
 
-describe('LookTransitionSchema — cut-only v1 (D2 parked, §14.4)', () => {
-  it('cut parses; fade and move are UNREPRESENTABLE, not merely unused', () => {
+describe('LookTransitionSchema — authored preset effects', () => {
+  it('accepts legacy cuts and requires a valid FrameTransition for an authored animation', () => {
     expect(LookTransitionSchema.safeParse({ mode: 'cut' }).success).toBe(true);
     expect(LookTransitionSchema.safeParse({ mode: 'fade', durationMs: 400 }).success).toBe(false);
     expect(LookTransitionSchema.safeParse({ mode: 'move' }).success).toBe(false);
+  });
+
+  it('distinguishes inherited settings, explicit cuts and authored animations', () => {
+    expect(authoredLookEffect(LookTransitionSchema.parse({ mode: 'cut' }))).toBeUndefined();
+    expect(
+      authoredLookEffect(LookTransitionSchema.parse({ mode: 'cut', authored: true })),
+    ).toMatchObject({ motion: 'cut', fade: false });
+    const effect = {
+      motion: 'ease-in-out',
+      fade: true,
+      durationMs: 620,
+      enterDirection: 'down',
+      exitDirection: 'left',
+    };
+    expect(authoredLookEffect(LookTransitionSchema.parse({ mode: 'animate', effect }))).toEqual(
+      effect,
+    );
+    expect(
+      LookTransitionSchema.safeParse({
+        mode: 'animate',
+        effect: { ...effect, durationMs: 5000 },
+      }).success,
+    ).toBe(false);
   });
 
   it('a stale duration on a cut is NORMALISED AWAY, never a parse error — refusing a whole template over a field nothing reads would take a working graphic off air', () => {

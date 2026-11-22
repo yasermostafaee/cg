@@ -564,7 +564,7 @@ describe('CG Control authored live layouts', () => {
         height: expect.closeTo(rect.height, 8),
       });
     }
-    expect(focus?.allowOperatorAutoLayout).toBe(false);
+    expect(focus?.allowOperatorAutoLayout).toBe(true);
     expect(focus?.rects).toEqual({
       'frame-anchor': { x: 0, y: 0, width: 1920, height: 1080 },
     });
@@ -598,6 +598,41 @@ describe('CG Control authored live layouts', () => {
       name: 'frame-anchor',
       label: 'مجری',
     });
+  });
+
+  it('retains custom placement and independently inset Focus across save and reload', async () => {
+    const original = layoutFixture();
+    const preset = original.presets[0]!;
+    const plateId = preset.frameIds[0]!;
+    const layout: ControlLiveLayout = {
+      ...original,
+      presets: [
+        {
+          ...preset,
+          arrangement: 'custom',
+          customRects: {
+            [plateId]: { x: 0.125, y: 0.25, width: 0.25, height: 0.5 },
+          },
+          focusMargins: { top: 90, right: 0, bottom: 0, left: 120 },
+        },
+        ...original.presets.slice(1),
+      ],
+    };
+    const bytes = await compileControlLiveLayout(layout);
+    const { scene } = await unpack(bytes);
+    const looks = buildTemplateLiveSources(scene).looks;
+    expect(looks?.find(({ id }) => id === preset.id)?.rects[plateId]).toEqual({
+      x: 240,
+      y: 270,
+      width: 480,
+      height: 540,
+    });
+    expect(
+      looks?.find(({ id }) => id === controlLiveLayoutFocusLookId(preset.id, plateId))?.rects[
+        plateId
+      ],
+    ).toEqual({ x: 120, y: 90, width: 1800, height: 990 });
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
   });
 
   it('leaves authored captions inherited when loading a Control layout onto a row', async () => {

@@ -32,6 +32,8 @@ import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
+import { SelectInput } from '../../ui/SelectInput.js';
+import { TextInput } from '../../ui/TextInput.js';
 import { commandForDisplay } from '../sources/producerDisplay.js';
 import { auditTimeParts, placeName, templateName, timingClause } from './auditFormat.js';
 
@@ -399,16 +401,16 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       }
     >
       <div className="cg-audit-tools">
-        <label className="cg-audit-search">
+        <label className="cg-audit-search" htmlFor="audit-search">
           <Icon icon={Search} size={16} />
-          <input
+          <TextInput
+            id="audit-search"
             type="search"
-            className="cg-field"
             placeholder="Search events or templates…"
             aria-label="Search events, names, ids and actors"
             autoComplete="off"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={setQuery}
           />
         </label>
         <FilterSelect
@@ -451,12 +453,11 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         )}
         <div className="cg-audit-field">
           <label htmlFor="audit-actor">Actor</label>
-          <input
+          <TextInput
             id="audit-actor"
-            className="cg-field"
             placeholder="any"
             value={actorFilter}
-            onChange={(event) => setActorFilter(event.target.value)}
+            onChange={setActorFilter}
           />
         </div>
         <div className="cg-audit-field cg-audit-field--date">
@@ -567,18 +568,13 @@ function FilterSelect({
   return (
     <div className="cg-audit-field">
       <label htmlFor={id}>{label}</label>
-      <select
-        id={id}
-        className="cg-field"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
+      <SelectInput id={id} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectInput>
     </div>
   );
 }

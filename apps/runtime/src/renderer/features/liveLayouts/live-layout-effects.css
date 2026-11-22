@@ -29,6 +29,10 @@
   gap: 0.6rem;
 }
 
+.cg-live-layout-effect-controls {
+  min-width: 0;
+}
+
 .cg-live-layout-effects .cg-live-layout-effect-controls {
   display: block;
   margin: 0.4rem 0 0;
@@ -41,7 +45,9 @@
 .cg-live-layout-effects .cg-live-layout-effect-controls > legend {
   padding: 0 0.3rem;
   margin: 0;
+  color: var(--r-text);
   font-size: var(--r-text-sm);
+  font-weight: 600;
 }
 
 .cg-live-layout-effect-controls > legend > svg {
@@ -49,21 +55,6 @@
   margin-inline-end: 0.2rem;
   color: var(--r-accent);
   vertical-align: text-bottom;
-}
-
-.cg-live-layout-effect-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  align-items: end;
-}
-
-.cg-live-layout-effect-fields > label {
-  display: grid;
-  min-width: 0;
-  gap: 0.24rem;
-  color: var(--r-text-secondary);
-  font-size: var(--r-text-sm);
 }
 
 .cg-live-layout-effect-method,

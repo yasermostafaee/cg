@@ -1,12 +1,56 @@
 import { expect, test } from './fixtures/designer.js';
 
+test('many safe frames remain accessible and restoring defaults requires confirmation', async ({
+  app,
+}, testInfo) => {
+  await app.newProject('Many safe frames');
+  const { page } = app;
+  await page.setViewportSize({ width: 1280, height: 640 });
+  const configure = page.getByRole('button', { name: 'Configure safe areas', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
+  await configure.click();
+  const add = settings.getByRole('button', { name: 'Add custom frame', exact: true });
+  for (let index = 1; index < 22; index++) await add.click();
+  const group = settings.getByRole('radiogroup');
+  await expect(group.getByRole('radio')).toHaveCount(25);
+  await expect(group.getByRole('radio', { checked: true })).toHaveAccessibleDescription(
+    'Custom 22',
+  );
+  expect(await group.evaluate((el) => el.scrollHeight > el.clientHeight && el.scrollTop > 0)).toBe(
+    true,
+  );
+  const reset = settings.getByRole('button', { name: 'Restore defaults', exact: true });
+  await expect(reset).toBeInViewport();
+  await settings.getByLabel('80% color hex', { exact: true }).scrollIntoViewIfNeeded();
+  await expect(settings.getByLabel('80% color hex', { exact: true })).toBeInViewport();
+  await reset.click();
+  const confirm = page.getByRole('dialog', { name: 'Restore default safe areas', exact: true });
+  await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(reset).toBeFocused();
+  await expect(group.getByRole('radio')).toHaveCount(25);
+  await expect(group.getByRole('radio', { checked: true })).toHaveAccessibleDescription(
+    'Custom 22',
+  );
+  await page.screenshot({ path: testInfo.outputPath('safe-areas-22-custom.png') });
+  await reset.click();
+  await confirm.getByRole('button', { name: 'Restore defaults', exact: true }).click();
+  await expect(group.getByRole('radio')).toHaveCount(4);
+  await expect(group.getByRole('radio', { name: 'Auto' })).toBeChecked();
+  await settings.getByRole('button', { name: 'Close safe area settings' }).click();
+  await app.goto();
+  await app.newProject('Defaults persisted');
+  await configure.click();
+  await expect(group.getByRole('radio')).toHaveCount(4);
+  await expect(group.getByRole('radio', { name: 'Auto' })).toBeChecked();
+});
+
 test('safe guide reference and visibility settings persist, and ruler guides are separate', async ({
   app,
 }) => {
   const page = app.page;
   await app.newProject('Guide profile first project');
-  const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const configure = page.getByRole('button', { name: 'Configure safe areas', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   const guides = page.locator('[data-safe-area-guides]');
   await configure.click();
   await expect(
@@ -20,7 +64,7 @@ test('safe guide reference and visibility settings persist, and ruler guides are
   await settings.getByRole('checkbox', { name: 'Show this frame', exact: true }).uncheck();
   await expect(guides.locator('[data-guide-aspect="4:3"]')).toHaveCount(0);
   await expect(guides.locator('[data-guide-aspect="auto"]')).toHaveCount(2);
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await app.goto();
   await app.newProject('Guide profile second project');
   await configure.click();
@@ -34,7 +78,7 @@ test('safe guide reference and visibility settings persist, and ruler guides are
   await settings.getByRole('radio', { name: '16:9', exact: true }).click();
   await settings.getByRole('checkbox', { name: 'Show this frame', exact: true }).check();
   await expect(guides.locator('[data-guide-reference="16:9"]')).toHaveAttribute('x', '0');
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: /^Undo/ })).toBeDisabled();
 });
@@ -111,8 +155,8 @@ test('safe area color defaults to white and persists independently of the projec
   });
   await app.goto();
   await app.newProject('Guide colors first project');
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
-  const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
+  const configure = page.getByRole('button', { name: 'Configure safe areas', exact: true });
   const guides = page.locator('[data-safe-area-guides]');
   await page.getByRole('button', { name: 'Safe areas', exact: true }).click();
   const reference = guides.locator('[data-guide-reference="4:3"]');
@@ -132,7 +176,7 @@ test('safe area color defaults to white and persists independently of the projec
   await commonColor.blur();
   await expect(commonColor).toHaveValue('#1256ab');
   await page.screenshot({ path: testInfo.outputPath('designer-guide-colors.png') });
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await expect(
     page.frameLocator('iframe[title="cgpreview"]').locator('[data-safe-area-guides]'),
   ).toHaveCount(0);
@@ -140,7 +184,7 @@ test('safe area color defaults to white and persists independently of the projec
   await app.newProject('Guide colors second project');
   await configure.click();
   await expect(commonColor).toHaveValue('#1256ab');
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await page.getByRole('button', { name: 'Safe areas', exact: true }).click();
   await expect(reference).toHaveAttribute('stroke', '#1256ab');
   await expect(action).toHaveAttribute('stroke', '#1256ab');
@@ -151,8 +195,8 @@ test('multiple custom frames keep their own ratios, line colors and visibility',
 }, testInfo) => {
   await app.newProject('Independent safe frames');
   const { page } = app;
-  const configure = page.getByRole('button', { name: 'Configure safe guides', exact: true });
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  const configure = page.getByRole('button', { name: 'Configure safe areas', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   const show = settings.getByRole('checkbox', { name: 'Show this frame', exact: true });
   const guide = page.locator('[data-safe-area-guides]');
   const setValue = async (name: string, value: string): Promise<void> => {
@@ -202,13 +246,13 @@ test('multiple custom frames keep their own ratios, line colors and visibility',
   );
   expect(captions[0]).not.toBeNull();
   expect(captions[1]).not.toBeNull();
-  if (captions[0] === null || captions[1] === null) throw new Error('Guide captions missing');
+  if (!captions[0] || !captions[1]) throw new Error('Guide captions missing');
   expect(Math.abs(captions[0].y - captions[1].y)).toBeGreaterThanOrEqual(
     Math.min(captions[0].height, captions[1].height),
   );
   await settings.getByText('About safe areas · EBU R 95', { exact: true }).click();
   await expect(settings.getByText(/EBU R 95 defines Action Safe and Graphics Safe/)).toBeVisible();
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('multiple-custom-safe-frames.png') });
 
   await app.goto();

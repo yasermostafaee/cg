@@ -40,6 +40,35 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** it retains its input and existing audio policy
 - **AND** the switch completes with only the incoming preset visible
 
+#### Scenario: A retained picture and its opaque border share one mixer move
+
+- **GIVEN** a supported programme page and enough verified free layers on every participating engine
+- **AND** a retained plate has its opaque border visible in both presets
+- **WHEN** the operator switches between those presets on air
+- **THEN** the picture and its four border edges move and resize in the same mixer commit
+- **AND** the temporary border layers are cleared after the destination page supplies its border
+
+#### Scenario: A higher picture covers the animated border of a lower picture
+
+- **GIVEN** a supported page and four free layers above the lower picture but below the higher picture
+- **WHEN** their pictures overlap during a preset change
+- **THEN** the lower picture and its native border pass behind the higher picture
+- **AND** the foreground border is suppressed before the movement starts
+
+#### Scenario: An arriving or departing plate animates with its border
+
+- **GIVEN** a preset change with eligible opaque borders on arriving or departing pictures
+- **WHEN** the operator chooses Fade or a directional slide
+- **THEN** each border uses its actual picture's fade, movement and mixer commit
+- **AND** an unverified slide uses the same stationary fade as its picture
+
+#### Scenario: Border layers cannot be claimed on the mapped reserve
+
+- **GIVEN** a verified paired station with insufficient free border layers on either member
+- **WHEN** the operator changes presets
+- **THEN** both pages retain their existing border artwork
+- **AND** existing producers remain untouched
+
 #### Scenario: Move an on-air frame with a reserve configured
 
 - **GIVEN** a mirror-sync station with a verified resident active page
@@ -90,8 +119,14 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **WHEN** a preset transition adds or removes a verified plate
 - **THEN** its picture and mask enter or exit together
 - **AND** the remaining frame stays above departing content during the movement
-- **AND** linked titles remain hidden until settlement and then use the destination preset's authored visibility
+- **AND** on a retained plate, its title and border independently fade from the outgoing visibility to the incoming visibility during the move
 - **AND** unrelated preset titles stay visible
+
+#### Scenario: A plate returns from Focus with different border or title visibility
+
+- **WHEN** Focus and its preset author different border or title visibility and a transition plays
+- **THEN** the affected decoration fades in or out while it follows the plate
+- **AND** the final opacity matches the destination in PVW and PGM
 
 #### Scenario: Fade a shared frame during a preset change
 

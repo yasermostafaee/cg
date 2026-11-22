@@ -9,6 +9,8 @@ import {
 import {
   calculateLiveSourceAutoLayout,
   liveSourceAutoLayoutRowCounts,
+  liveSourceLayoutMargins,
+  type LiveSourceLayoutMargins,
   type LiveFrameTarget,
   type LiveSourceLayoutBias,
   type LiveSourceLayoutItem,
@@ -19,6 +21,8 @@ import {
 } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
+import { Checkbox } from '../../ui/Checkbox.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import {
   framePlacementsWithDraft,
@@ -43,6 +47,13 @@ interface GapControl {
 }
 
 type GapAxis = 'horizontalGap' | 'verticalGap';
+type MarginEdge = keyof LiveSourceLayoutMargins;
+const marginEdges = [
+  ['top', 'Top'],
+  ['right', 'Right'],
+  ['bottom', 'Bottom'],
+  ['left', 'Left'],
+] as const;
 
 interface LayoutControls {
   horizontalGap: GapControl;
@@ -50,6 +61,10 @@ interface LayoutControls {
   twoPlateLayout: TwoPlateLayout;
   bias: LiveSourceLayoutBias;
   reverse: boolean;
+  margins: LiveSourceLayoutMargins;
+  marginText?: Partial<Record<MarginEdge, string | undefined>>;
+  fill: boolean;
+  custom: boolean;
 }
 
 function readGap(text: string): number | null {
@@ -65,7 +80,7 @@ export function frameAutoLayoutAvailability(
   if (!lookAllowsOperatorAutoLayout(live, lookId)) return { kind: 'hidden' };
   const rects = lookPlateRects(live, lookId);
   const rectCount = Object.keys(rects).length;
-  if (rectCount < 2) return { kind: 'hidden' };
+  if (rectCount === 0) return { kind: 'hidden' };
   const targets = lookOperatorFrames(live, lookId);
   const frames: Frame[] = [];
   let missingPermission = false;
@@ -90,12 +105,16 @@ export function FrameAutoLayout({
   lookId,
   frames,
   enabled,
+  authoredMargins,
+  authoredFill,
 }: {
   item: StackItemState;
   live: TemplateLiveSources;
   lookId: string | undefined;
   frames: readonly Frame[];
   enabled: boolean;
+  authoredMargins?: LiveSourceLayoutMargins | undefined;
+  authoredFill?: boolean | undefined;
 }): JSX.Element | null {
   const gapId = useId();
   const [controlsByLook, setControlsByLook] = useState<
@@ -109,19 +128,28 @@ export function FrameAutoLayout({
       activeGapScope.current = undefined;
     };
   }, [gapScope]);
-  if (frames.length < 2) return null;
+  if (frames.length === 0) return null;
 
   const defaultGap = Math.round(Math.min(live.resolution.width, live.resolution.height) * 0.025);
   const defaultGapControl = { text: String(defaultGap), amount: defaultGap };
+  const canFill = frames.every(({ target }) => target.resize === 'free');
   const defaults: LayoutControls = {
     horizontalGap: defaultGapControl,
     verticalGap: defaultGapControl,
     twoPlateLayout: 'horizontal',
     bias: 'more-top',
     reverse: false,
+    margins: liveSourceLayoutMargins(
+      live.resolution,
+      authoredMargins,
+      frames.length === 1 ? 0 : 0.05,
+    ),
+    fill: authoredFill === true,
+    custom: false,
   };
   const controls = controlsByLook.get(lookId) ?? defaults;
-  const { horizontalGap, verticalGap, twoPlateLayout, bias, reverse } = controls;
+  const { horizontalGap, verticalGap, twoPlateLayout, bias, reverse, margins, fill, custom } =
+    controls;
   function updateControls(changes: Partial<LayoutControls>): void {
     setControlsByLook((current) =>
       new Map(current).set(lookId, { ...(current.get(lookId) ?? defaults), ...changes }),
@@ -147,6 +175,8 @@ export function FrameAutoLayout({
     verticalGap: verticalGap.amount,
     twoPlateLayout,
     reverse,
+    margins,
+    fill: canFill && fill,
   };
   const rows = liveSourceAutoLayoutRowCounts(geometry, live.resolution, bias, options);
   const alternateRows = liveSourceAutoLayoutRowCounts(
@@ -194,13 +224,43 @@ export function FrameAutoLayout({
     changes: Partial<Pick<LayoutControls, 'twoPlateLayout' | 'bias'>>,
   ): void {
     if (!enabled) return;
-    updateControls(changes);
+    updateControls({ ...changes, custom: false });
     arrange(
       calculateLiveSourceAutoLayout(geometry, live.resolution, changes.bias ?? bias, {
         ...options,
         twoPlateLayout: changes.twoPlateLayout ?? twoPlateLayout,
       }),
     );
+  }
+
+  function changeMargins(next: LiveSourceLayoutMargins): void {
+    if (!enabled || activeGapScope.current !== gapScope) return;
+    const result = calculateLiveSourceAutoLayout(geometry, live.resolution, bias, {
+      ...options,
+      margins: next,
+    });
+    if (result.length !== frames.length) return;
+    updateControls({ margins: next, marginText: {} });
+    arrange(result);
+  }
+
+  function changeMarginField(edge: MarginEdge, text: string): void {
+    if (!enabled || activeGapScope.current !== gapScope) return;
+    const amount = readGap(text);
+    const next = { ...margins, [edge]: amount ?? margins[edge] };
+    const result =
+      amount === null
+        ? []
+        : calculateLiveSourceAutoLayout(geometry, live.resolution, bias, {
+            ...options,
+            margins: next,
+          });
+    const accepted = result.length === frames.length;
+    updateControls({
+      margins: accepted ? next : margins,
+      marginText: { ...controls.marginText, [edge]: text },
+    });
+    if (accepted) arrange(result);
   }
 
   function changeGap(axis: GapAxis, text: string): void {
@@ -224,96 +284,158 @@ export function FrameAutoLayout({
     <details className="cg-frame-auto-layout">
       <summary>Auto layout</summary>
       <fieldset className="cg-frame-auto-layout__fields" disabled={!enabled}>
-        {frames.length === 2 && (
-          <label>
-            Arrangement
-            <select
-              className="cg-field"
-              value={twoPlateLayout}
-              onChange={(event) =>
-                changeArrangement({
-                  twoPlateLayout:
-                    event.currentTarget.value === 'vertical' ? 'vertical' : 'horizontal',
-                })
-              }
-            >
-              <option value="horizontal">Side by side</option>
-              <option value="vertical">Top and bottom</option>
-            </select>
-          </label>
-        )}
-        {canChooseFullerRow && (
-          <label>
-            Arrangement
-            <select
-              className="cg-field"
-              value={bias}
-              onChange={(event) =>
-                changeArrangement({
-                  bias: event.currentTarget.value === 'more-bottom' ? 'more-bottom' : 'more-top',
-                })
-              }
-            >
-              <option value="more-top">More frames on top</option>
-              <option value="more-bottom">More frames on bottom</option>
-            </select>
-          </label>
-        )}
-        <div className="cg-frame-auto-layout__gaps">
-          {hasHorizontalGap && (
-            <label htmlFor={`${gapId}-horizontal`}>
-              Horizontal gap (px)
-              <NumericInput
-                id={`${gapId}-horizontal`}
-                className="cg-field"
-                decimal
-                allow="number"
-                scrub={{ step: 1, min: 0, max: live.resolution.width }}
-                disabled={!enabled}
-                value={horizontalGap.text}
-                onValueChange={(value) => changeGap('horizontalGap', value)}
-              />
-            </label>
-          )}
-          {hasVerticalGap && (
-            <label htmlFor={`${gapId}-vertical`}>
-              Vertical gap (px)
-              <NumericInput
-                id={`${gapId}-vertical`}
-                className="cg-field"
-                decimal
-                allow="number"
-                scrub={{ step: 1, min: 0, max: live.resolution.height }}
-                disabled={!enabled}
-                value={verticalGap.text}
-                onValueChange={(value) => changeGap('verticalGap', value)}
-              />
-            </label>
-          )}
-        </div>
-        {(hasInvalidGap || layout.length !== frames.length) && (
-          <span role="status">Enter gaps that fit the frames.</span>
-        )}
-        <div className="cg-frame-auto-layout__actions">
-          <Button
-            variant="neutral"
-            disabled={hasInvalidGap || layout.length !== frames.length}
-            onClick={() => arrange(layout)}
-          >
-            Arrange frames
-          </Button>
-          <Button
-            variant="neutral"
-            disabled={hasInvalidGap || swapped.length !== frames.length}
-            title="Exchange frame positions without changing layer order"
-            onClick={() => {
-              updateControls({ reverse: !reverse });
-              arrange(swapped);
+        <label>
+          Arrangement
+          <SelectInput
+            value={custom ? 'custom' : frames.length === 2 ? twoPlateLayout : bias}
+            onChange={({ currentTarget: { value } }) => {
+              if (value === 'custom') updateControls({ custom: true });
+              else if (value === 'horizontal' || value === 'vertical')
+                changeArrangement({ twoPlateLayout: value });
+              else
+                changeArrangement({ bias: value === 'more-bottom' ? 'more-bottom' : 'more-top' });
             }}
           >
-            Swap frame order
-          </Button>
-        </div>
+            {frames.length === 2 ? (
+              <>
+                <option value="horizontal">Side by side</option>
+                <option value="vertical">Top and bottom</option>
+              </>
+            ) : (
+              <>
+                <option value="more-top">
+                  {frames.length === 1
+                    ? 'Single plate'
+                    : canChooseFullerRow
+                      ? 'More frames on top'
+                      : 'Grid'}
+                </option>
+                {canChooseFullerRow && <option value="more-bottom">More frames on bottom</option>}
+              </>
+            )}
+            <option value="custom">Custom</option>
+          </SelectInput>
+        </label>
+        {custom ? (
+          <span>Move or resize the plates in PVW.</span>
+        ) : (
+          <>
+            <fieldset className="cg-frame-auto-layout__margins">
+              <legend>Margins (px)</legend>
+              <div className="cg-frame-auto-layout__gaps">
+                {marginEdges.map(([edge, label]) => (
+                  <label key={edge} htmlFor={gapId + '-margin-' + edge}>
+                    {label}
+                    <NumericInput
+                      id={gapId + '-margin-' + edge}
+                      className="cg-field"
+                      decimal
+                      allow="number"
+                      scrub={{
+                        step: 1,
+                        min: 0,
+                        max:
+                          edge === 'left' || edge === 'right'
+                            ? live.resolution.width
+                            : live.resolution.height,
+                      }}
+                      disabled={!enabled}
+                      value={controls.marginText?.[edge] ?? String(margins[edge])}
+                      onValueChange={(value) => changeMarginField(edge, value)}
+                      onBlur={() =>
+                        updateControls({
+                          marginText: { ...controls.marginText, [edge]: undefined },
+                        })
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+              <Button
+                variant="neutral"
+                onClick={() =>
+                  changeMargins(liveSourceLayoutMargins(live.resolution, undefined, 0))
+                }
+              >
+                Zero margins
+              </Button>
+            </fieldset>
+            {canFill && (
+              <label className="cg-position-aspect">
+                <Checkbox
+                  checked={fill}
+                  onChange={(checked) => {
+                    const result = calculateLiveSourceAutoLayout(geometry, live.resolution, bias, {
+                      ...options,
+                      fill: checked,
+                    });
+                    if (result.length !== frames.length) return;
+                    updateControls({ fill: checked });
+                    arrange(result);
+                  }}
+                />
+                Fill available area
+              </label>
+            )}
+            <div className="cg-frame-auto-layout__gaps">
+              {hasHorizontalGap && (
+                <label htmlFor={`${gapId}-horizontal`}>
+                  Horizontal gap (px)
+                  <NumericInput
+                    id={`${gapId}-horizontal`}
+                    className="cg-field"
+                    decimal
+                    allow="number"
+                    scrub={{ step: 1, min: 0, max: live.resolution.width }}
+                    disabled={!enabled}
+                    value={horizontalGap.text}
+                    onValueChange={(value) => changeGap('horizontalGap', value)}
+                  />
+                </label>
+              )}
+              {hasVerticalGap && (
+                <label htmlFor={`${gapId}-vertical`}>
+                  Vertical gap (px)
+                  <NumericInput
+                    id={`${gapId}-vertical`}
+                    className="cg-field"
+                    decimal
+                    allow="number"
+                    scrub={{ step: 1, min: 0, max: live.resolution.height }}
+                    disabled={!enabled}
+                    value={verticalGap.text}
+                    onValueChange={(value) => changeGap('verticalGap', value)}
+                  />
+                </label>
+              )}
+            </div>
+            {(hasInvalidGap || layout.length !== frames.length) && (
+              <span role="status">Enter gaps that fit the frames.</span>
+            )}
+            <div className="cg-frame-auto-layout__actions">
+              <Button
+                variant="neutral"
+                disabled={hasInvalidGap || layout.length !== frames.length}
+                onClick={() => arrange(layout)}
+              >
+                Arrange frames
+              </Button>
+              {frames.length > 1 && (
+                <Button
+                  variant="neutral"
+                  disabled={hasInvalidGap || swapped.length !== frames.length}
+                  title="Exchange frame positions without changing layer order"
+                  onClick={() => {
+                    updateControls({ reverse: !reverse });
+                    arrange(swapped);
+                  }}
+                >
+                  Swap frame order
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </fieldset>
     </details>
   );

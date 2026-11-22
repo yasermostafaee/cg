@@ -926,6 +926,28 @@ export const TEMPLATE_SOURCE_MAX_BYTES = 44 * 1024 * 1024;
  * answered with a sentence, never with a closed socket.
  */
 export const TEMPLATE_PAGE_ALLOWANCE_BYTES = 4 * 1024 * 1024;
+
+/** The generated last script embeds the scene as one JSON line, escaped for HTML. */
+export function sceneFromRetainedPage(html: string, maxLength = TEMPLATE_PAGE_ALLOWANCE_BYTES): unknown {
+  const script = html.lastIndexOf('<script>');
+  if (script < 0) return null;
+  const boot = /^<script>\r?\n[ \t]*\(function \(\) \{\r?\n[ \t]*var scene = /.exec(
+    html.slice(script, script + 100),
+  );
+  if (boot === null) return null;
+  const start = script + boot[0].length;
+  const end = html.indexOf('\n', start);
+  if (end < 0 || end - start > maxLength) return null;
+  if (!/^\r?\n[ \t]*try \{/.test(html.slice(end, end + 32))) return null;
+  const literal = html.slice(start, end).trimEnd();
+  if (!literal.startsWith('{') || !literal.endsWith('};')) return null;
+  try {
+    return JSON.parse(literal.slice(0, -1)) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 /** The media, counted as stored (before base64): 45 MiB. */
 export const TEMPLATE_MEDIA_MAX_BYTES = Math.floor(
   ((WS_MAX_FRAME_BYTES - TEMPLATE_PAGE_ALLOWANCE_BYTES) * 3) / 4,

@@ -180,6 +180,8 @@ export const StackItemStateSchema = z.object({
    * record is a real freeze to nothing — see the schema's ABSENT-vs-EMPTY note.
    */
   frozenAssignment: LiveSourceFrozenAssignmentSchema.optional(),
+  /** Paired foreground producer's last coordinate. Recovery verifies its served page on each engine. */
+  foregroundLayer: z.number().int().nonnegative().optional(),
   /**
    * C-015 phase 6 (6.5f) — how loud each plate is INTENDED to be on this row,
    * published so the console can show it and so the browser's retention can carry
@@ -625,6 +627,7 @@ export const RetainedStackItemSchema = z.object({
    * graceful degradation for retention written by an older build, not a second rule.
    */
   frozenAssignment: LiveSourceFrozenAssignmentSchema.optional(),
+  foregroundLayer: z.number().int().nonnegative().optional(),
   /**
    * C-015 phase 6 (6.5f) — the per-plate audio intent, on the OPEN axis beside
    * `sourceOverride` and for the identical reason.
@@ -735,6 +738,7 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
     ...(item.lookSourceOverride !== undefined && { lookSourceOverride: item.lookSourceOverride }),
     ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
+    ...(item.foregroundLayer !== undefined && { foregroundLayer: item.foregroundLayer }),
     ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
     ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
     ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),

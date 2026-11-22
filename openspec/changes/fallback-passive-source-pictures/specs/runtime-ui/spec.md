@@ -18,3 +18,14 @@ The Bridge SHALL permit a bounded read of the same logical source from the alter
 
 - **WHEN** fallback is added while another source is already previewing
 - **THEN** both nodes retain their owned PVW source unions and normal snapshot budgets, independent input and positioned-media reads remain valid, and cleanup prevents late fallback work from reopening a stopped view
+
+### Requirement: Direct NDI previews keep their receiver during input list refreshes
+
+CG Control SHALL keep the picture and audio from a verified direct NDI sender while it rechecks
+the same input in the same authorized preview route. The receiver SHALL follow a verified sender
+change and release when the last interested preview closes or its access is revoked.
+
+#### Scenario: The source list refreshes with a direct preview playing
+
+- **WHEN** a source-list refresh arrives for the same input and its NDI address lookup is delayed or temporarily unresolved
+- **THEN** the existing receiver continues to feed PVW and the source picker without reopening the sender

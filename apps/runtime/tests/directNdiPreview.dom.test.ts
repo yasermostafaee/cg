@@ -78,6 +78,8 @@ it('shares the native sender between PVW and a picker card without requesting Pl
   let catalogChanged: ((catalog: ConsoleSourceCatalog) => void) | undefined;
   const authListeners = new Set<(next: AuthSessionState) => void>();
   let senderName = 'MTA (APASAI)';
+  let waitForLookup: Promise<void> | undefined;
+  let lookupUnknown = false;
   let authState: AuthSessionState = {
     kind: 'signed-in',
     principal: {
@@ -97,15 +99,23 @@ it('shares the native sender between PVW and a picker card without requesting Pl
       return close;
     },
   );
+  const ndiTargets = vi.fn(async () => {
+    await waitForLookup;
+    return {
+      targets: [
+        lookupUnknown
+          ? { sourceId: source.id, kind: 'unknown' }
+          : { sourceId: source.id, kind: 'ndi', senderName, engine: 'B' },
+      ],
+    };
+  });
   window.cg = {
     sourcePreviews: {
       pvw,
       thumbnails,
       audioLevels,
       openNdiStream,
-      ndiTargets: vi.fn(async () => ({
-        targets: [{ sourceId: source.id, kind: 'ndi', senderName, engine: 'B' }],
-      })),
+      ndiTargets,
     },
     auth: {
       state: () => ({ ...authState }),
@@ -184,6 +194,31 @@ it('shares the native sender between PVW and a picker card without requesting Pl
     expect(host.querySelector('canvas')?.width).toBe(640);
     expect(host.querySelector('canvas')?.hidden).toBe(false);
     expect(origin).toHaveBeenLastCalledWith('B');
+
+    // A successful D10 refresh publishes a new catalog even if only its read time
+    // changed. Re-reading a holder target must leave a playing receiver attached.
+    const beforeRefresh = framesOut.current?.get(source.id)?.directNdi;
+    let finishLookup: () => void = () => undefined;
+    waitForLookup = new Promise<void>((resolve) => {
+      finishLookup = resolve;
+    });
+    ndiTargets.mockClear();
+    await act(async () => {
+      catalogChanged?.({ sources: [{ ...source }] });
+    });
+    expect(ndiTargets).toHaveBeenCalled();
+    expect(host.querySelector('canvas')?.hidden).toBe(false);
+    expect(framesOut.current?.get(source.id)?.directNdi).toBe(beforeRefresh);
+    expect(close).not.toHaveBeenCalled();
+    await act(async () => {
+      lookupUnknown = true;
+      finishLookup();
+    });
+    expect(host.querySelector('canvas')?.hidden).toBe(false);
+    expect(openNdiStream).toHaveBeenCalledOnce();
+    lookupUnknown = false;
+    waitForLookup = undefined;
+
     const select = host.querySelector<HTMLButtonElement>('[aria-label="Select input · Studio"]');
     expect(select).not.toBeNull();
     await act(async () => select?.click());

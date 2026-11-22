@@ -212,14 +212,15 @@ export function buildScene(
   };
 }
 
-function styleLayoutPlateBorder(node: HTMLElement, element: SceneElement, ctx: BuildCtx): void {
+function styleLayoutPlateBorder(
+  node: HTMLElement,
+  element: SceneElement,
+  ctx: BuildCtx,
+  plateId: string,
+): void {
   const border = element.type === 'shape' ? element.stroke : undefined;
   if (border === undefined || ctx.instance === undefined) return;
-  const frame = ctx.scene.controlLiveLayout?.frames.find(
-    ({ id }) =>
-      element.id === id + '-border' && ctx.instance?.compositionId === 'layout-frame-' + id,
-  );
-  if (frame === undefined) return;
+  node.dataset['cgLayoutPlateBorder'] = plateId;
   // A previously exported layout can still carry a rounded border shape.
   node.style.borderRadius = '0';
   const { w, h } = ctx.instance.transform.size;
@@ -246,11 +247,20 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   // the SAME index on both DOM copies — each then reads the nearest publishing ancestor, which is
   // what makes nearest-wins work per instance.
   const plan = stepPlanOf(ctx.scene);
+  const plateId = ctx.scene.controlLiveLayout?.frames.find(
+    ({ id }) => ctx.instance?.compositionId === 'layout-frame-' + id,
+  )?.id;
 
   // Sort by zIndex so DOM order matches z-stack semantics.
   const sorted = [...layer.children].sort((a, b) => a.zIndex - b.zIndex);
   for (const element of sorted) {
-    if (ctx.instance?.hiddenChildIds?.includes(element.id)) continue;
+    const isPlateBorder =
+      plateId !== undefined &&
+      element.id === plateId + '-border' &&
+      element.type === 'shape' &&
+      element.stroke !== undefined;
+    const hiddenChild = ctx.instance?.hiddenChildIds?.includes(element.id) === true;
+    if (hiddenChild && !isPlateBorder) continue;
     // An element authored hidden that a step SHOWS is built as a visible element held transparent
     // by its wrapper until its step (step-css.ts `shown`): its own content is already running when
     // it appears, and the step's fade has something to fade.
@@ -260,10 +270,16 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     const instanceHiddenText =
       isCompositionTextHidden(ctx.instance, element) ||
       (ctx.hideSoloTitles === true && element.type === 'text');
-    const drawn = instanceHiddenText ? { ...built, visible: false } : built;
+    const isPlateTitle = plateId !== undefined && element.type === 'text';
+    const drawn = instanceHiddenText && !isPlateTitle ? { ...built, visible: false } : built;
     const elementNode = buildElement(drawn, ctx);
     if (elementNode === null) continue;
-    styleLayoutPlateBorder(elementNode, element, ctx);
+    // Keep hidden generated decoration mounted for a fade on the retained plate.
+    if (isPlateBorder) {
+      styleLayoutPlateBorder(elementNode, element, ctx, plateId);
+      if (hiddenChild) elementNode.dataset['cgInstanceHiddenBorder'] = '';
+    }
+    if (isPlateTitle) elementNode.dataset['cgLayoutPlateTitle'] = plateId;
     if (instanceHiddenText) elementNode.dataset['cgInstanceHiddenText'] = '';
     const instanceKey = ctx.instancePrefix + element.id;
     if (element.type === 'text' && ctx.presetDepartureKeys !== undefined)

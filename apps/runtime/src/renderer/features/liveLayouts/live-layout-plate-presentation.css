@@ -6,21 +6,11 @@
 }
 
 .cg-live-layout-plate-presentation > label {
-  display: flex;
-  flex: 0 1 auto;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-  color: var(--r-text-secondary);
-  font-size: var(--r-text-sm);
-}
-
-.cg-live-layout-plate-presentation .cg-field {
-  min-width: 0;
+  flex: 0 1 10rem;
 }
 
 .cg-live-layout-plate-presentation input.cg-field {
-  width: 8rem;
+  width: 100%;
 }
 
 .cg-live-layout-frame-options .cg-live-layout-plate-presentation {
@@ -29,8 +19,4 @@
 
 .cg-live-layout-frame-options .cg-live-layout-plate-presentation > label {
   flex: 1 1 7rem;
-}
-
-.cg-live-layout-frame-options .cg-live-layout-plate-presentation .cg-field {
-  width: 100%;
 }

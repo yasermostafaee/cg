@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { allocateLiveLayers, allocateOrderedLiveLayers } from '../src/live-plate-seating.js';
+import {
+  allocateLiveLayers,
+  allocateOrderedLiveLayers,
+  spaceLiveLayersForBorders,
+} from '../src/live-plate-seating.js';
 
 /**
  * C-015 phase 6 (task 6.0) — **which layers a template's plates go on.**
@@ -157,6 +161,124 @@ describe('allocateOrderedLiveLayers', () => {
           [1, 0],
         ],
       ),
+    ).toBeNull();
+  });
+});
+
+describe('spaceLiveLayersForBorders', () => {
+  it('leaves four usable edges above the requested lower picture and keeps physical order', () => {
+    const reserved = new Set([63, 66]);
+    expect(
+      spaceLiveLayersForBorders([62, 60, 61], new Set([1]), (layer) => !reserved.has(layer), {
+        start: 60,
+        end: 69,
+      }),
+    ).toEqual([68, 60, 67]);
+  });
+
+  it('leaves independent Focus artwork over unbordered plates and four edges over the third', () => {
+    expect(
+      spaceLiveLayersForBorders(
+        [60, 61, 62], new Set([2]), FREE, { start: 60, end: 68 },
+        4, new Set(), new Map(), [], new Set([0, 1, 2]),
+      ),
+    ).toEqual([60, 62, 64]);
+  });
+
+  it('shares one Focus page across alternate seats belonging to the same plate', () => {
+    const owners = new Map([[0, 'a'], [1, 'a'], [2, 'b'], [3, 'c']]);
+    expect(
+      spaceLiveLayersForBorders(
+        [60, 61, 62, 63], new Set([3]), FREE, { start: 60, end: 69 },
+        4, new Set(), owners, [], new Set([0, 1, 2, 3]),
+      ),
+    ).toEqual([60, 61, 63, 65]);
+  });
+
+  it('keeps existing coordinates when the optional gap already fits', () => {
+    expect(
+      spaceLiveLayersForBorders([65, 58], new Set([1]), (layer) => layer !== 60 && layer !== 62, {
+        start: 58,
+        end: 70,
+      }),
+    ).toEqual([65, 58]);
+  });
+
+  it('shifts lower to fit when both fresh picture coordinates were near the foreground', () => {
+    expect(spaceLiveLayersForBorders([68, 69], new Set([0]), FREE, { start: 64, end: 70 })).toEqual(
+      [65, 70],
+    );
+  });
+
+  it('leaves a fallback under the owning picture and its border without moving it below a peer', () => {
+    expect(
+      spaceLiveLayersForBorders(
+        [60, 61, 62],
+        new Set([0, 1, 2]),
+        (layer) => layer !== 65,
+        { start: 60, end: 79 },
+        4,
+        new Set([1, 2]),
+      ),
+    ).toEqual([60, 67, 73]);
+  });
+
+  it('fits four seats into a 20-layer band when two alternates share one plate', () => {
+    const seats = new Set([0, 1, 2, 3]);
+    const artwork = new Map([
+      [0, 'playlist'],
+      [1, 'ndi'],
+      [2, 'media'],
+      [3, 'ndi'],
+    ]);
+    expect(
+      spaceLiveLayersForBorders(
+        [60, 61, 62, 63],
+        seats,
+        FREE,
+        { start: 60, end: 78 },
+        4,
+        seats,
+        artwork,
+        [
+          [0, 1],
+          [0, 3],
+          [1, 2],
+          [3, 2],
+        ],
+      ),
+    ).toEqual([61, 67, 74, 68]);
+  });
+
+  it('keeps alternate seats distinct when compacting would reverse a required depth', () => {
+    const seats = new Set([0, 1, 2, 3]);
+    const artwork = new Map([
+      [0, 'playlist'],
+      [1, 'ndi'],
+      [2, 'media'],
+      [3, 'ndi'],
+    ]);
+    expect(
+      spaceLiveLayersForBorders(
+        [60, 61, 62, 63],
+        seats,
+        FREE,
+        { start: 60, end: 78 },
+        4,
+        seats,
+        artwork,
+        [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('returns no optional allocation if even one requested gap would cross the band', () => {
+    expect(
+      spaceLiveLayersForBorders([62, 60, 61], new Set([0, 1]), FREE, { start: 60, end: 69 }),
     ).toBeNull();
   });
 });

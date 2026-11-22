@@ -36,6 +36,14 @@
           "en": "In New live layout, configure each plate's fallback background and choose whether to show it on PGM when the picture is unavailable."
         },
         {
+          "fa": "در New live layout، بندانگشتی‌ها چینش واقعی هر پریست را نشان می‌دهند. نام‌ها بالای PVW قابل ویرایش‌اند و تنظیمات Plate، Preset و Layout تب‌های جداگانه دارند.",
+          "en": "New live layout shows the actual arrangement of each preset in its thumbnail. Edit names above PVW and use separate Plate, Preset and Layout settings tabs."
+        },
+        {
+          "fa": "فرم‌های CG Control ظاهر مشترک فیلدها و فوکوس کیبورد دارند. دکمه‌های اصلی Station Setup و پنجره‌های فرعی آن از رنگ آبی Primary استفاده می‌کنند.",
+          "en": "CG Control dialogs share field styling and keyboard focus indicators. Station Setup and its subdialogs use the shared blue primary action."
+        },
+        {
           "fa": "در Choose a source دکمهٔ Play بزرگ‌تر است. پیش‌نمایش مدیا از آغاز آماده‌سازی نشانگر بارگذاری دارد و با دکمهٔ تمام‌صفحه بزرگ می‌شود. با × یا Esc به همان پخش در پنجره برگردید.",
           "en": "Choose a source has a larger Play button and an immediate media loading indicator. Expand the preview to fullscreen and return to the same playback with × or Escape."
         },
@@ -74,16 +82,68 @@
         {
           "fa": "پس‌زمینهٔ طرح و تصویر fallback در دکمه‌های انتخاب فایل بندانگشتی دارند. پیش‌نمایش طرح ذخیره‌شده در Templates هم تصویر fallback پلیت را نشان می‌دهد.",
           "en": "Layout backgrounds and fallback pictures have thumbnails in the file pickers. Saved layout previews in Templates also show the plate's fallback picture."
+        },
+        {
+          "fa": "در Arrange دیزاینر، اینسپکتور و New live layout، حاشیهٔ هر ضلع جدا از فاصلهٔ بین قاب‌ها تنظیم می‌شود. چهار قاب ۱۶:۹ می‌توانند تمام تصویر ۱۶:۹ را بپوشانند. برای جای‌گذاری و اندازهٔ دلخواه از Custom استفاده کنید. New live layout برای Focus حاشیهٔ جدا دارد.",
+          "en": "In Designer, Inspector and New live layout, Arrange separates the four output margins from the gaps between plates. Four 16:9 plates can tile a 16:9 output. Custom allows independent positioning and sizing. New live layout has separate Focus margins."
+        },
+        {
+          "fa": "در Designer، هر پریست می‌تواند افکت ورود، مدت، Fade و جهت آمدن و رفتن قاب‌ها را جداگانه ذخیره کند. CG Control هنگام انتخاب پریست، تنظیم ذخیره‌شده را در PVW و PGM اعمال می‌کند.",
+          "en": "Designer presets can save their own entrance motion, duration, fade and plate arrival/departure directions. CG Control uses those settings when switching to the preset in PVW and PGM."
         }
       ],
       "fixes": [
+        {
+          "fa": "تعویض پریست B پس از وقفهٔ موقت تأیید سرور دوباره همگام می‌شود. در Inspector کادر A/B منشأ تصویر یا ویومتر را مشخص می‌کند و تصویر معتبر NDI در PGM در وضعیت حضور منبع B لحاظ می‌شود.",
+          "en": "Server B resumes preset updates after a temporary confirmation gap. In Inspector, the outline identifies the server providing the picture or audio meter. Verified NDI video in PGM is reflected in B source availability."
+        },
+        {
+          "fa": "پیش‌نمایش NDI هنگام تازه‌خوانی فهرست ورودی‌ها پیوسته می‌ماند. کادر و عنوان‌های پلیت در گذار بین Focus و پریست محو یا ظاهر می‌شوند. شمارهٔ نسخه و شناسهٔ بیلد زیر نام نرم‌افزار در نصاب دیده می‌شوند.",
+          "en": "NDI preview stays connected during source-list refresh. Plate borders and titles fade in or out during Focus and preset transitions. Installers show the version and build beneath the product name."
+        },
+        {
+          "fa": "در تنظیمات Safe Area در Designer، PVW و New Layout، فهرست قاب‌های سفارشی اسکرول می‌شود و قاب در حال ویرایش با تیک مشخص است. افزودن و حذف قاب ظاهر جداگانه دارند. با Restore defaults و تأیید آن می‌توانید تنظیمات راهنما را به پیش‌فرض برگردانید.",
+          "en": "In Designer, PVW and New Layout, the Safe Area frame list scrolls and a checkmark identifies the frame being edited. Add and Remove have distinct controls. Restore defaults asks for confirmation before resetting the guides."
+        },
         {
           "fa": "عرض کادر و مقادیر برش با انتخاب پلیت یا پریست از تنظیمات همان پلیت خوانده می‌شوند.",
           "en": "Border width and crop controls read the selected plate and preset's values."
         },
         {
-          "fa": "در گذار پریست روی سرور رزرو، حرکت کادر و تصویر با یک موعد محلی زمان‌بندی می‌شود. در حرکت هندسی، تصویر fallback همراه پلیت باقی می‌ماند.",
-          "en": "During preset transitions on the reserve engine, border artwork and picture motion use a shared local deadline. Fallback pictures remain with the plate during geometry-only motion."
+          "fa": "در گذار هندسی پریست روی PGM، حرکت تصویر، کادر و پس‌زمینهٔ جایگزین سازگار (رنگ، نوار رنگی یا تصویر ثابتِ مات) برای قاب‌های دارای فضای کافی روی Mixer هر موتور هماهنگ می‌شود.",
+          "en": "PGM preset geometry transitions move the picture, border, and supported fallback (solid, bars, or an opaque still) together on each engine’s mixer when the plate has suitable layers available."
+        },
+        {
+          "fa": "اگر صفحهٔ گرافیک روی سرور رزرو خالی شود، کادر و تصویر جایگزین روی سرور فعال از همان اولین تعویض پریست همراه تصویر پلیت حرکت می‌کنند.",
+          "en": "If the standby graphics page is empty, the active engine keeps the border and fallback on the plate’s mixer from the first preset change."
+        },
+        {
+          "fa": "عنوان، متن‌های اضافی و گرافیک‌های واردشدهٔ هر پلیت در تعویض پریست همراه پلیت جابه‌جا یا محو می‌شوند. نمایش متن‌ها از تنظیمات همان پریست و فوکوس پیروی می‌کند.",
+          "en": "Plate titles, additional captions and imported graphics move and fade with their plate during preset changes. Text visibility follows the authored preset and Focus settings."
+        },
+        {
+          "fa": "در خروجی 1080i، هنگام تعویض بین پریست دوقاب و سه‌قاب یا برگشت از فوکوس، کادر، عنوان‌ها و گرافیک پلیت با تصویر حرکت می‌کنند. نسخهٔ ثابتی از آن‌ها پیش از رسیدن پلیت در مقصد دیده نمی‌شود.",
+          "en": "On 1080i programme output, switching between two- and three-plate presets or returning from Focus keeps the border, titles and imported artwork with the moving picture. This removes the stationary copy that used to appear at the destination."
+        },
+        {
+          "fa": "هنگام برگشت از فوکوس در پخش دوسروره، هر موتور تا رسیدن پس‌زمینهٔ جایگزین به موقعیت و شفافیت نهایی صبر می‌کند. این تغییر از ظاهر شدن زودهنگام پس‌زمینه در قاب مقصد روی سرور رزرو جلوگیری می‌کند.",
+          "en": "On a paired playout, each engine waits for the arriving fallback to reach its final position and opacity before restoring the preset background. This addresses an early flash behind the moving plate on the standby return."
+        },
+        {
+          "fa": "در نخستین تعویض پریست پس از بارگذاری، هر سرور رسیدن تصویر، کادر و نوشته‌های پلیت به موقعیت نهایی را بررسی می‌کند. پس‌زمینهٔ جایگزینِ پریست قبلی در طول حرکت پشت قاب‌ها ظاهر نمی‌شود.",
+          "en": "On the first preset change after loading a layout, each engine checks that the picture, border and captions have reached their final positions. The previous preset’s fallback stays hidden behind moving plates."
+        },
+        {
+          "fa": "در جابه‌جایی مستقیم بین فوکوس‌ها، حرکت یا محوشدن روی کل گرافیک متصل به پلیت اعمال می‌شود. اگر ورودی NDI قطع باشد، پس‌زمینهٔ جایگزین سازگار در همان فرمان حرکت تصویر جابه‌جا می‌شود.",
+          "en": "Direct Focus transitions move or dissolve the entire attached graphic. During a slide, a supported fallback for a confirmed offline NDI input is staged in the same mixer commit as its picture."
+        },
+        {
+          "fa": "پس از راه‌اندازی دوبارهٔ Bridge، اگر صفحهٔ گرافیک رزرو خالی مانده باشد، اجرای دوبارهٔ ردیف آن را روی سرور رزرو بازیابی می‌کند.",
+          "en": "After a Bridge restart, replaying a row restores its missing graphics page on the reserve engine when the slot is confirmed empty."
+        },
+        {
+          "fa": "عنوان و فیلد انتخاب منبع در اینسپکتور و مودال‌ها تراز شدند. راهنمای فیلدها متن کامل مقدار بریده‌شده را نشان می‌دهد و تیک‌ها و سوئیچ‌های تنظیمات با رنگ Primary هماهنگ شدند.",
+          "en": "Source labels and controls align in the Inspector and dialogs. Field tooltips reveal clipped values, and Station setup checkboxes and switches share the primary accent."
         },
         {
           "fa": "با برگشت به مقدار فعلی ورودی یا مدیا در پنجرهٔ انتخاب، دکمهٔ Select دوباره غیرفعال می‌شود.",

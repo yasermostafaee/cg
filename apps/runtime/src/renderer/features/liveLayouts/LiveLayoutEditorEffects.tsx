@@ -13,6 +13,7 @@ import {
 import { Checkbox } from '../../ui/Checkbox.js';
 import { Icon } from '../../ui/Icon.js';
 import { PresetPlateDirectionControl } from '../inspector/FrameEffectControls.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import './live-layout-effects.css';
 
@@ -59,11 +60,14 @@ export function LiveLayoutEditorEffects({
           <legend>
             <Icon icon={Maximize2} size={14} /> Focus and Return
           </legend>
-          <div className="cg-live-layout-effect-fields">
-            <label className="cg-live-layout-effect-method">
+          <div className="cg-form-grid cg-live-layout-effect-fields">
+            <label
+              className="cg-form-field cg-live-layout-effect-method"
+              htmlFor={fadeId + '-motion'}
+            >
               Motion
-              <select
-                className="cg-field"
+              <SelectInput
+                id={fadeId + '-motion'}
                 aria-label="Motion"
                 value={focus.motion}
                 onChange={(event) => {
@@ -78,7 +82,7 @@ export function LiveLayoutEditorEffects({
                     {motions[motion]}
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             </label>
             <LiveLayoutEditorNumber
               label="Focus duration (ms)"
@@ -112,11 +116,14 @@ export function LiveLayoutEditorEffects({
           <legend>
             <Icon icon={ArrowLeftRight} size={14} /> Switch focused plate
           </legend>
-          <div className="cg-live-layout-effect-fields">
-            <label className="cg-live-layout-effect-method">
+          <div className="cg-form-grid cg-live-layout-effect-fields">
+            <label
+              className="cg-form-field cg-live-layout-effect-method"
+              htmlFor={fadeId + '-switch'}
+            >
               Effect
-              <select
-                className="cg-field"
+              <SelectInput
+                id={fadeId + '-switch'}
                 aria-label="Effect"
                 value={change.mode}
                 onChange={(event) => {
@@ -131,7 +138,7 @@ export function LiveLayoutEditorEffects({
                 <option value="fade">Fade</option>
                 <option value="push">Push</option>
                 <option value="slide-over">Slide over</option>
-              </select>
+              </SelectInput>
             </label>
             <LiveLayoutEditorNumber
               label="Switch duration (ms)"
@@ -143,10 +150,10 @@ export function LiveLayoutEditorEffects({
               onChange={(durationMs) => setSwitch({ durationMs })}
             />
             {(change.mode === 'push' || change.mode === 'slide-over') && (
-              <label>
+              <label className="cg-form-field" htmlFor={fadeId + '-direction'}>
                 Direction
-                <select
-                  className="cg-field"
+                <SelectInput
+                  id={fadeId + '-direction'}
                   aria-label="Direction"
                   value={change.direction}
                   onChange={(event) => {
@@ -161,7 +168,7 @@ export function LiveLayoutEditorEffects({
                       {directions[direction]}
                     </option>
                   ))}
-                </select>
+                </SelectInput>
               </label>
             )}
           </div>

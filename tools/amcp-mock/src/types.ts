@@ -68,7 +68,7 @@ export const FULL_FRAME: MixerRect = Object.freeze({ x: 0, y: 0, width: 1, heigh
  * the discriminator the ownership phases turn on. A mock that cannot tell those
  * apart cannot test them.
  */
-export type ProducerKind = 'empty' | 'html' | 'ffmpeg' | 'route' | 'decklink' | 'ndi';
+export type ProducerKind = 'empty' | 'html' | 'ffmpeg' | 'route' | 'decklink' | 'ndi' | 'color';
 
 /**
  * Observable layer state. Mirrors what CasparCG 2.3.x emits via OSC

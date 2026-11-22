@@ -156,8 +156,54 @@ export interface ServerBGuardContext {
   readonly map: BackupChannelMap;
   /** The station's own configured layer on its channel N (`#isOwnConfiguredLayer`), as A's guard asks. */
   readonly isOwnLayer: (stationChannel: number, layer: number) => boolean;
+  /** A live effect lease may sample its own foreground on the same engine. */
+  readonly ownsArtworkRoute?: (stationChannel: number, targetLayer: number, foregroundLayer: number, mixFields?: number) => boolean;
+  readonly ownsArtworkCommand?: (stationChannel: number, command: ArtworkCommand) => boolean;
 }
 
+export type ArtworkCommand =
+  | { kind: 'route'; verb: 'PLAY' | 'LOADBG'; channel: number; target: number; source: number; mixFields?: number }
+  | { kind: 'sting'; verb: 'PLAY'; channel: number; target: number; blackUri: string; matteLayer: number; artworkLayer: number };
+
+export function artworkCommand(line: string): ArtworkCommand | undefined {
+  if (/[^\x20-\x7e]/.test(line)) return undefined;
+  const sting = /^PLAY (\d+)-(\d+) "(https?:\/\/[^"\s]+)" STING "route:\/\/(\d+)-(\d+)" 0 "route:\/\/(\d+)-(\d+)"$/.exec(line);
+  if (sting) {
+    const [, channel, target, blackUri, matteChannel, matte, artworkChannel, artwork] = sting;
+    if (channel !== matteChannel || channel !== artworkChannel || target === matte || target === artwork || matte === artwork)
+      return undefined;
+    return { kind: 'sting', verb:'PLAY', channel:Number(channel), target:Number(target),
+      blackUri:blackUri!, matteLayer:Number(matte), artworkLayer:Number(artwork) };
+  }
+  const match =
+    /^(?:PLAY|LOADBG) (\d+)-(\d+) "route:\/\/(\d+)-(\d+)"(?: MIX ([1-9]\d{0,4}))?$/.exec(line);
+  return match !== null &&
+    (!line.startsWith('LOADBG ') || match[5] !== undefined) &&
+    match[1] === match[3] &&
+    match[2] !== match[4]
+    ? {
+        kind: 'route',
+        verb: line.startsWith('LOADBG ') ? 'LOADBG' : 'PLAY',
+        channel: Number(match[1]),
+        target: Number(match[2]),
+        source: Number(match[4]),
+        ...(match[5] !== undefined && { mixFields: Number(match[5]) }),
+      }
+    : undefined;
+}
+
+function ownsArtwork(ctx: ServerBGuardContext, station: number, command: ArtworkCommand): boolean {
+  if (ctx.ownsArtworkCommand) return ctx.ownsArtworkCommand(station, command);
+  return command.kind === 'route' && (command.verb === 'LOADBG' || command.mixFields === undefined) &&
+    ctx.ownsArtworkRoute?.(station, command.target, command.source, command.mixFields) === true;
+}
+
+function translateArtwork(command: ArtworkCommand, channel: number): string {
+  const target = `${command.verb} ${channel}-${command.target}`;
+  if (command.kind === 'sting')
+    return `${target} "${command.blackUri}" STING "route://${channel}-${command.matteLayer}" 0 "route://${channel}-${command.artworkLayer}"`;
+  return `${target} "route://${channel}-${command.source}"${command.mixFields === undefined ? '' : ' MIX ' + command.mixFields}`;
+}
 /**
  * Step 2 — 🔴 **THE GUARD FOR SERVER B.** The line about to be sent to B, judged alone: `null` — it may go.
  * It does not trust step 1; a line that reaches it untranslated names a channel that is not one of B's mirror
@@ -173,7 +219,13 @@ export function serverBLineRefusal(
     playlistSource !== undefined &&
     /^LOADBG \d+-\d+ "route:\/\/\d+-\d+"$/.test(lineOnB) &&
     lineOnB.endsWith(`"route://${String(playlistSource.channel)}-${String(playlistSource.layer)}"`);
-  if (ROUTE.test(lineOnB) && !qualifiedPlaylist) {
+  const art = artworkCommand(lineOnB);
+  const artStation = art === undefined ? null : ctx.map.stationChannelOf(art.channel);
+  const qualifiedArtwork =
+    art !== undefined &&
+    artStation !== null &&
+    ownsArtwork(ctx, artStation, art);
+  if (ROUTE.test(lineOnB) && !qualifiedPlaylist && !qualifiedArtwork) {
     return { code: BACKUP_ROUTE_CODE, reason: 'a route:// is never sent to server B' };
   }
   if (isChannelFree(lineOnB)) return null;
@@ -221,7 +273,18 @@ export function serverBLineFor(
   ctx: ServerBGuardContext,
   options: { readonly verbatim?: boolean } = {},
 ): ServerBLineVerdict {
-  const translated = options.verbatim === true ? { line } : translateForServerB(line, ctx.map);
+  const art = artworkCommand(line);
+  const onB = art === undefined ? null : ctx.map.channelOnB(art.channel);
+  const translated =
+    options.verbatim === true
+      ? { line }
+      : art !== undefined &&
+          onB !== null &&
+          ownsArtwork(ctx, art.channel, art)
+        ? {
+            line: translateArtwork(art, onB),
+          }
+        : translateForServerB(line, ctx.map);
   if (!('line' in translated)) return translated;
   const refusal = serverBLineRefusal(translated.line, ctx);
   return refusal === null ? translated : refused(refusal.code, refusal.reason);

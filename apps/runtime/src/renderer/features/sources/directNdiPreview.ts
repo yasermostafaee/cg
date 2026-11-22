@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   holdsPermissionClass,
   isPlaylistOutput,
@@ -16,7 +16,7 @@ import { currentSourceCatalog, subscribeSources } from './sourceStore.js';
 type NativeOpen = NonNullable<RuntimeBridge['sourcePreviews']['openNdiStream']>;
 type ReadTargets = NonNullable<RuntimeBridge['sourcePreviews']['ndiTargets']>;
 type SelectedTarget = Extract<SourceNdiTarget, { kind: 'ndi' }>;
-export type NdiTarget = SourceNdiTarget | { sourceId: string; kind: 'pending' };
+export type NdiTarget = SourceNdiTarget | { sourceId: string; kind: 'pending' | 'blocked' };
 type Watch = () => void;
 type Levels = readonly [number, number];
 
@@ -26,6 +26,7 @@ const EMPTY_RECEIVERS: ReadonlyMap<string, NdiReceiver> = new Map();
 const PICTURE_TIMEOUT_MS = 2500;
 const LEVEL_TIMEOUT_MS = 300;
 const TARGET_BATCH_SIZE = 8;
+const TARGET_RESOLUTION_TIMEOUT_MS = 1500;
 
 const RUNTIME_REQUIRED = 'Install the 64-bit NDI Runtime on this CG Control computer.';
 
@@ -77,12 +78,7 @@ function readNdiTargets(
       const batches = [];
       for (let offset = 0; offset < all.length; offset += TARGET_BATCH_SIZE) {
         const sourceIds = all.slice(offset, offset + TARGET_BATCH_SIZE);
-        batches.push(
-          Promise.resolve()
-            .then(() => read({ channel, sourceIds }))
-            .then(({ targets }) => targets.filter(({ sourceId }) => sourceIds.includes(sourceId)))
-            .catch(() => []),
-        );
+        batches.push(resolveNdiTargetBatch(read, channel, sourceIds));
       }
       void Promise.all(batches).then((results) => {
         const byId = new Map(results.flat().map((target) => [target.sourceId, target]));
@@ -96,6 +92,28 @@ function readNdiTargets(
   }
   const pending = bucket;
   return new Promise((resolve) => pending.push({ ids, resolve }));
+}
+
+/** A stalled identity lookup must not leave every route preview waiting forever. */
+async function resolveNdiTargetBatch(
+  read: ReadTargets,
+  channel: number,
+  sourceIds: string[],
+): Promise<readonly SourceNdiTarget[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const response = await Promise.race([
+      Promise.resolve().then(() => read({ channel, sourceIds })),
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), TARGET_RESOLUTION_TIMEOUT_MS);
+      }),
+    ]);
+    return response?.targets.filter(({ sourceId }) => sourceIds.includes(sourceId)) ?? [];
+  } catch {
+    return [];
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export function ndiPreviewAvailable(): boolean {
@@ -120,6 +138,11 @@ export async function resolvesToDirectNdi(
 }
 
 const noAuthSubscription = (): (() => void) => () => undefined;
+
+interface ResolvedTarget {
+  definition: string;
+  target: SourceNdiTarget;
+}
 
 export function useNdiTargets(
   channel: number | undefined,
@@ -149,18 +172,24 @@ export function useNdiTargets(
   const active = demand && authorizedPrincipal !== null;
   const route = useSourcePreviewRoute(active ? channel : undefined);
   const catalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
-  const key = JSON.stringify([channel, route, sourceIds, authorizedPrincipal]);
-  const ids = useMemo(() => JSON.parse(key)[2] as string[], [key]);
+  const scope = JSON.stringify([channel, route, authorizedPrincipal]);
+  const idsKey = JSON.stringify(sourceIds);
+  const ids = useMemo(() => JSON.parse(idsKey) as string[], [idsKey]);
+  const definitions = useMemo(() => {
+    if (!active) return new Map<string, string>();
+    const byId = new Map(catalog.sources.map((source) => [source.id, source]));
+    return new Map(
+      ids.map((id) => {
+        const source = byId.get(id);
+        return [id, JSON.stringify([source?.producer, source?.status, source?.departed])];
+      }),
+    );
+  }, [active, catalog, ids]);
   const [result, setResult] = useState<{
-    key: string;
+    scope: string;
     read: ReadTargets;
-    catalog: ReturnType<typeof currentSourceCatalog>;
-    targets: ReadonlyMap<string, NdiTarget>;
+    targets: ReadonlyMap<string, ResolvedTarget>;
   }>();
-  const pending = useMemo(
-    () => new Map(ids.map((sourceId) => [sourceId, { sourceId, kind: 'pending' } as const])),
-    [ids],
-  );
   useEffect(() => {
     if (!active || read === undefined || channel === undefined) {
       setResult(undefined);
@@ -169,21 +198,52 @@ export function useNdiTargets(
     let disposed = false;
     void readNdiTargets(read, channel, ids).then((targets) => {
       if (disposed) return;
-      setResult({
-        key,
-        read,
-        catalog,
-        targets: new Map(targets.map((target) => [target.sourceId, target])),
+      setResult((previous) => {
+        const held =
+          previous?.scope === scope && previous.read === read ? previous.targets : undefined;
+        const next = new Map<string, ResolvedTarget>();
+        for (const target of targets) {
+          const definition = definitions.get(target.sourceId);
+          if (definition === undefined) continue;
+          const prior = held?.get(target.sourceId);
+          // A partial or timed-out read is not a new sender. Its existing stream
+          // still reports genuine loss independently of the catalog.
+          next.set(
+            target.sourceId,
+            target.kind === 'unknown' &&
+              prior?.definition === definition &&
+              prior.target.kind === 'ndi'
+              ? prior
+              : { definition, target },
+          );
+        }
+        return { scope, read, targets: next };
       });
     });
     return () => {
       disposed = true;
     };
-  }, [active, catalog, channel, ids, key, read]);
-  if (!demand) return EMPTY_TARGETS;
-  return active && result?.key === key && result.read === read && result.catalog === catalog
-    ? result.targets
-    : pending;
+  }, [active, channel, definitions, ids, read, scope]);
+  return useMemo(() => {
+    if (!demand) return EMPTY_TARGETS;
+    if (!active) {
+      // Passive previews require operator access too.
+      return new Map<string, NdiTarget>(
+        ids.map((sourceId) => [sourceId, { sourceId, kind: 'blocked' }]),
+      );
+    }
+    const held = result?.scope === scope && result.read === read ? result.targets : undefined;
+    return new Map(
+      [...definitions].map(([sourceId, definition]): [string, NdiTarget] => {
+        // D10 publishes even for an unchanged list with a new read time.
+        const target = held?.get(sourceId);
+        return [
+          sourceId,
+          target?.definition === definition ? target.target : { sourceId, kind: 'pending' },
+        ];
+      }),
+    );
+  }, [active, definitions, demand, ids, read, result, scope]);
 }
 
 interface CanvasSubscription {
@@ -390,35 +450,52 @@ export function useNdiReceivers(
   const open = window.cg?.sourcePreviews?.openNdiStream;
   const key = JSON.stringify(
     [...targets.values()].flatMap((target) =>
-      target.kind === 'ndi' ? [[target.sourceId, target.senderName, target.engine]] : [],
+      target.kind === 'ndi' ? [[target.sourceId, target.senderName]] : [],
     ),
   );
-  const entries = useMemo(() => JSON.parse(key) as [string, string, 'A' | 'B'][], [key]);
+  const entries = useMemo(() => JSON.parse(key) as [string, string][], [key]);
+  const holds = useRef(new Map<string, ReturnType<typeof holdReceiver>>());
   const [resolved, setResolved] = useState<{
-    key: string;
     open: NativeOpen;
-    receivers: ReadonlyMap<string, NdiReceiver>;
+    bySender: ReadonlyMap<string, NdiReceiver>;
   }>();
   useEffect(() => {
-    if (!enabled || open === undefined || entries.length === 0) {
+    const retained = holds.current;
+    return () => {
+      for (const held of retained.values()) held.release();
+      retained.clear();
+    };
+  }, [enabled, open]);
+  useEffect(() => {
+    if (!enabled || open === undefined) {
       setResolved(undefined);
       return;
     }
-    const held = entries.map(
-      ([sourceId, sender]) => [sourceId, holdReceiver(open, sender)] as const,
-    );
+    const wanted = new Set(entries.map(([, sender]) => sender));
+    const retained = holds.current;
+    for (const sender of wanted) {
+      if (!retained.has(sender)) retained.set(sender, holdReceiver(open, sender));
+    }
+    for (const [sender, held] of retained) {
+      if (wanted.has(sender)) continue;
+      held.release();
+      retained.delete(sender);
+    }
     setResolved({
-      key,
       open,
-      receivers: new Map(held.map(([sourceId, { receiver }]) => [sourceId, receiver])),
+      bySender: new Map([...retained].map(([sender, held]) => [sender, held.receiver])),
     });
-    return () => {
-      for (const [, heldReceiver] of held) heldReceiver.release();
-    };
-  }, [enabled, entries, key, open]);
-  return enabled && resolved?.key === key && resolved.open === open
-    ? resolved.receivers
-    : EMPTY_RECEIVERS;
+  }, [enabled, entries, open]);
+  return useMemo(() => {
+    if (!enabled || entries.length === 0 || resolved === undefined || resolved.open !== open)
+      return EMPTY_RECEIVERS;
+    return new Map(
+      entries.flatMap(([sourceId, sender]) => {
+        const receiver = resolved.bySender.get(sender);
+        return receiver === undefined ? [] : [[sourceId, receiver] as const];
+      }),
+    );
+  }, [enabled, entries, open, resolved]);
 }
 
 export function confirmedNdiTarget(target: NdiTarget | undefined): SelectedTarget | undefined {

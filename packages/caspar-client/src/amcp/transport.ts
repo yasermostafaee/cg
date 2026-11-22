@@ -129,6 +129,11 @@ export class AmcpTransport extends EventEmitter<AmcpTransportEvents> {
     return this.connected;
   }
 
+  /** Numeric address of the live AMCP peer, including when the configured endpoint was a hostname. */
+  get peerAddress(): string | undefined {
+    return this.connected ? this.socket?.remoteAddress : undefined;
+  }
+
   /** Diagnostic: bytes buffered by the parser awaiting CRLF. */
   get pendingBytes(): number {
     return this.parser.pendingBytes;

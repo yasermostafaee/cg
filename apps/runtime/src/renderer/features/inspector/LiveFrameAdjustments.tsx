@@ -12,6 +12,8 @@ import {
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
 import {
+  authoredLookEffect,
+  controlLiveLayoutFocusTarget,
   DEFAULT_LIVE_CROP_FOCUS,
   isOnAirStatus,
   sameLiveCropFocus,
@@ -100,9 +102,21 @@ export function LiveFrameAdjustments({
     ((frameDraft?.edits.size ?? 0) > 0 || (hasAppliedFrames && frameDraft?.reset === undefined));
   const showAspect =
     capabilities?.previewResizeMode === true && frames.some((frame) => frame.resize === 'free');
+  const arrangeLookId =
+    rehearsing === true && previewLookId !== undefined
+      ? activeLookOf(live, previewLookId)?.id
+      : lookId;
+  const focus =
+    controlLiveLayout === undefined
+      ? undefined
+      : controlLiveLayoutFocusTarget(controlLiveLayout, arrangeLookId);
+  const preset = controlLiveLayout?.presets.find(
+    ({ id }) => id === (focus?.presetId ?? arrangeLookId),
+  );
+  const authoredEffect = authoredLookEffect(activeLookOf(live, arrangeLookId)?.entered);
   const layout =
     capabilities?.liveFramePlacement === true
-      ? frameAutoLayoutAvailability(live, lookId)
+      ? frameAutoLayoutAvailability(live, arrangeLookId)
       : undefined;
   const fits = lookPlateFits(live, lookId);
   const rects = lookPlateRects(live, lookId);
@@ -230,14 +244,29 @@ export function LiveFrameAdjustments({
         </label>
       )}
       {controlLiveLayout === undefined ? (
-        (frameEffect || presetEffect) && (
-          <FrameEffectControls
-            disabled={!canEdit}
-            {...(presetEffect && {
-              label: frameEffect ? 'Move / resize and preset effects' : 'Preset effect',
-            })}
-          />
-        )
+        <>
+          {(frameEffect || (presetEffect && authoredEffect === undefined)) && (
+            <FrameEffectControls
+              disabled={!canEdit}
+              {...(presetEffect &&
+                authoredEffect === undefined && {
+                  label: frameEffect ? 'Move / resize and preset effects' : 'Preset effect',
+                })}
+            />
+          )}
+          {presetEffect && authoredEffect !== undefined && (
+            <FrameEffectControls
+              key={arrangeLookId}
+              label="Preset effect"
+              disabled={!canEdit}
+              preset={{
+                itemId: item.itemId,
+                value: authoredEffect,
+                defaultLabel: 'Preset default',
+              }}
+            />
+          )}
+        </>
       ) : (
         <>
           {frameEffect && <FrameEffectControls disabled={!canEdit} />}
@@ -261,7 +290,9 @@ export function LiveFrameAdjustments({
         key={item.itemId}
         item={item}
         live={live}
-        lookId={lookId}
+        lookId={arrangeLookId}
+        authoredMargins={focus ? preset?.focusMargins : preset?.margins}
+        authoredFill={focus !== undefined || preset?.fill}
         frames={layout?.kind === 'eligible' ? layout.frames : []}
         enabled={canEdit && (!onAir || item.onAirFramePlacement === true)}
       />

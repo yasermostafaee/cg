@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { BroadcastGuideProfile } from '@cg/ui';
+import { DEFAULT_BROADCAST_GUIDE_PROFILE, type BroadcastGuideProfile } from '@cg/ui';
 import {
   createRuntimeSafeGuideStore,
   RUNTIME_SAFE_GUIDES_KEY,
@@ -14,6 +14,7 @@ export function useSafeGuidePreferences(): {
   visible: boolean;
   setProfile: (profile: BroadcastGuideProfile) => void;
   setVisible: (visible: boolean) => void;
+  resetProfile: () => void;
   restore: (preferences: RuntimeSafeGuidePreferences) => void;
 } {
   const preferences = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -27,6 +28,8 @@ export function useSafeGuidePreferences(): {
   return {
     ...preferences,
     setProfile: store.setProfile,
+    resetProfile: () =>
+      store.restore({ ...store.getSnapshot(), profile: DEFAULT_BROADCAST_GUIDE_PROFILE }),
     setVisible: store.setVisible,
     restore: store.restore,
   };

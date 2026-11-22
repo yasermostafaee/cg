@@ -94,10 +94,8 @@ export default [
             // `OPERATOR-NAME-SWEEP-01` — 3 → 2: the `#audit-operator` raw input retired with
             // the self-declared console name. The ratchet refuses movement in BOTH directions, so
             // this number had to fall in the same commit — a debt paid is a number that is now a lie.
-            'src/renderer/features/audit/AuditPanel.tsx': 2,
             'src/renderer/features/fixedLayers/CandidateLayersSection.tsx': 4,
-            'src/renderer/features/fixedLayers/useTemplatePicker.tsx': 2,
-            'src/renderer/features/inspector/DelimitersSection.tsx': 2,
+            'src/renderer/features/fixedLayers/useTemplatePicker.tsx': 1,
             'src/renderer/features/inspector/Inspector.tsx': 3,
             'src/renderer/features/inspector/PositionPicker.tsx': 2,
             'src/renderer/features/layers/LayersPanel.tsx': 2,
@@ -107,8 +105,7 @@ export default [
             'src/renderer/features/lock/LockOverlay.tsx': 2,
             // `PLAYOUT-SOURCES-01` §1.F — `LiveSourceDialog.tsx` (5) went with the catalogue editor:
             // the sources are the Playout's. The debt left with the file; the entry leaves with it.
-            'src/renderer/features/stationSetup/BackupServerDialog.tsx': 1,
-            'src/renderer/features/stationSetup/StationSetupDialog.tsx': 3,
+            'src/renderer/features/stationSetup/StationSetupDialog.tsx': 1,
             'src/renderer/features/connections/FailoverBanner.tsx': 3,
             'src/renderer/features/inspector/SourceDefaultsLink.tsx': 1,
             'src/renderer/features/status/StatusBar.tsx': 1,

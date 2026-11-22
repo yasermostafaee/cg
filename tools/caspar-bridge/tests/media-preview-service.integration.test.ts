@@ -54,6 +54,7 @@ async function fixture(
   let mode: 'direct' | 'proxy' = 'direct';
   let proxyState = 'notPrepared';
   let proxyError: string | undefined;
+  let manifestRetryAt: string | null | undefined;
   let supported = true;
   let malicious = false;
   let slow = false;
@@ -95,7 +96,7 @@ async function fixture(
           fingerprint: FINGERPRINT,
           durationMs: 10_000,
           browserMode: mode,
-          proxy: { state: proxyState, error: proxyError },
+          proxy: { state: proxyState, error: proxyError, retryAt: manifestRetryAt },
           fileUrl: malicious
             ? 'http://elsewhere.invalid/private'
             : `${root}/file?revision=${FINGERPRINT}`,
@@ -235,6 +236,17 @@ async function fixture(
     },
     readyProxy: () => {
       proxyState = 'ready';
+    },
+    setProxyState: (
+      state: 'queued' | 'preparing' | 'retry' | 'notRequired',
+      { error, retryMs }: { error?: string; retryMs?: number } = {},
+    ) => {
+      proxyState = state;
+      proxyError = error;
+      manifestRetryAt =
+        retryMs === undefined
+          ? null
+          : new Date(now + retryMs).toISOString().replace(/Z$/, '+00:00');
     },
     failProxy: (error?: string) => {
       proxyState = 'error';
@@ -649,6 +661,75 @@ it('observes a ready shared proxy without reposting during the busy cooldown', a
   expect(f.preparations()).toBe(1);
 });
 
+it('streams a .22 direct file whose manifest says no proxy is required', async () => {
+  const f = await fixture();
+  f.setProxyState('notRequired');
+  const opened = await f.open();
+  expect(opened).toMatchObject({ state: 'ready', playbackMode: 'original', engine: 'B' });
+  expect(opened.videoUrl).toContain('/file?ticket=');
+  const partial = await fetch(f.url(opened.videoUrl), { headers: { Range: 'bytes=0-31' } });
+  expect(partial.status).toBe(206);
+  expect(Buffer.from(await partial.arrayBuffer())).toEqual(BYTES.subarray(0, 32));
+  expect(f.preparations()).toBe(0);
+  f.setMode();
+  expect(await f.open(opened.previewId)).toMatchObject({ state: 'error' });
+  expect(f.preparations()).toBe(0);
+});
+
+it('waits for a .22 prewarmed proxy and preserves its poster without submitting duplicate work', async () => {
+  const f = await fixture();
+  f.setMode();
+  f.setProxyState('queued');
+  const queued = await f.open();
+  expect(queued).toMatchObject({ state: 'preparing', preparationPhase: 'waiting-for-capacity' });
+  expect(queued.message).toContain('queued');
+  expect(queued.videoUrl).toBeUndefined();
+  expect((await fetch(f.url(queued.posterUrl))).status).toBe(200);
+  f.setProxyState('queued', { error: 'mediaPreview.diskBudget' });
+  const cacheFull = await f.open(queued.previewId);
+  expect(cacheFull.message).toContain('waiting for space');
+  f.setProxyState('preparing');
+  expect(await f.open(queued.previewId)).toMatchObject({
+    state: 'preparing',
+    preparationPhase: 'encoding',
+  });
+  f.readyProxy();
+  const ready = await f.open(queued.previewId);
+  expect(ready).toMatchObject({ state: 'ready', playbackMode: 'proxy', engine: 'B' });
+  expect(ready.posterUrl).toBe(queued.posterUrl);
+  expect(ready.videoUrl).toContain('/proxy?ticket=');
+  expect(f.preparations()).toBe(0);
+});
+
+it('honors the .22 retry deadline even if a later manifest reports notPrepared', async () => {
+  const f = await fixture();
+  f.setMode();
+  f.setProxyState('retry', { retryMs: 120_000, error: 'internal worker detail' });
+  const retry = await f.open();
+  expect(retry).toMatchObject({ state: 'preparing', preparationPhase: 'waiting-for-capacity' });
+  expect(retry.message).toContain('about 2 min');
+  expect(retry.message).not.toContain('internal worker detail');
+  expect(retry.videoUrl).toBeUndefined();
+  f.resetProxy();
+  for (let ms = 15_000; ms <= 105_000; ms += 15_000) {
+    f.advance(15_000);
+    expect(await f.open(retry.previewId)).toMatchObject({ state: 'preparing' });
+  }
+  f.advance(14_999);
+  expect(await f.open(retry.previewId)).toMatchObject({ state: 'preparing' });
+  expect(f.preparations()).toBe(0);
+  f.advance(1);
+  f.setProxyState('retry', { retryMs: 0 });
+  expect(await f.open(retry.previewId)).toMatchObject({ state: 'preparing' });
+  expect(f.preparations()).toBe(0);
+  f.resetProxy();
+  expect(await f.open(retry.previewId)).toMatchObject({
+    state: 'preparing',
+    preparationPhase: 'encoding',
+  });
+  expect(f.preparations()).toBe(1);
+});
+
 it('continues playback when Playout accepted preparation but its POST response was lost', async () => {
   const f = await fixture();
   f.setMode();
@@ -685,6 +766,7 @@ it.each([
 
 it.each([
   ['mediaPreview.proxyTooLarge', 'size limit'],
+  ['mediaPreview.proxyBudgetExceeded', 'size limit'],
   ['mediaPreview.preparationTimedOut', 'timed out'],
   ['internal detail must stay private', 'could not be prepared'],
 ] as const)(

@@ -173,6 +173,9 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     Refused the same way `VOLUME` is: a value that is not a number in `[0, 1]` is not a clamp.
   */
   if (sub === 'OPACITY') {
+    if (args.length === 2) {
+      return { kind: 'ok-line', code: 201, verb: 'MIXER', data: String(ctx.getLayer(slot).opacity) };
+    }
     const opacity = Number(args[2]);
     if (args[2] === undefined || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
       return { kind: 'err', code: 401, verb: 'MIXER' };
@@ -181,6 +184,10 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   }
 
   if (sub === 'FILL' || sub === 'CLIP') {
+    if (args.length === 2) {
+      const { x, y, width, height } = sub === 'FILL' ? ctx.getLayer(slot).fill : ctx.getLayer(slot).clip;
+      return { kind: 'ok-line', code: 201, verb: 'MIXER', data: [x, y, width, height].join(' ') };
+    }
     const rect = parseMixerRect(args.slice(2));
     // Same doctrine as VOLUME's refusal: four numbers or nothing. A rect with a
     // silently-coerced component is a geometry nobody declared, and half a
@@ -407,7 +414,8 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
 function stageXml(layers: readonly LayerState[]): string[] {
   if (layers.length === 0) return [];
   const producer = (kind: ProducerKind, path: string, paused: boolean | null): string[] => [
-    ...(kind !== 'empty' && path !== ''
+    ...(kind === 'color' ? [`<color>${xmlText(path)}</color>`] : []),
+    ...(kind !== 'empty' && kind !== 'color' && path !== ''
       ? ['<file>', `   <path>${xmlText(path)}</path>`, '</file>']
       : []),
     ...(paused === null ? [] : [`<paused>${String(paused)}</paused>`]),
@@ -566,9 +574,11 @@ function classifyProducer(args: readonly string[]): ProducerVerdict {
   // so the real spelling never matched and every mock-facing test had to use a
   // non-CasparCG argument order to get an html producer at all.
   const keyword = (a: string): string => a.toUpperCase().replace(/^\[|\]$/g, '');
-  if (args.some((a) => keyword(a) === 'HTML') || /^https?:\/\//i.test(first)) {
-    return { ok: true, kind: 'html' };
-  }
+  if (args.some((a) => keyword(a) === 'HTML')) return { ok: true, kind: 'html' };
+  // CasparCG's literal HTTP still PLAY uses an FFmpeg producer for bridge-held pictures.
+  if (/^https?:\/\/[^/]+\/page\/[a-f0-9]{64}\.(?:png|jpg)$/i.test(first))
+    return { ok: true, kind: 'ffmpeg' };
+  if (/^https?:\/\//i.test(first)) return { ok: true, kind: 'html' };
 
   const upper = first.toUpperCase();
   if (upper === 'DECKLINK') {
@@ -606,6 +616,7 @@ function classifyProducer(args: readonly string[]): ProducerVerdict {
     return { ok: true, kind: 'route' };
   }
 
+  if (/^#[a-f\d]{6}(?:[a-f\d]{2})?$/i.test(first)) return { ok: true, kind: 'color' };
   // No scheme, no keyword — a media file name, which is what CasparCG assumes.
   return { ok: true, kind: 'ffmpeg' };
 }

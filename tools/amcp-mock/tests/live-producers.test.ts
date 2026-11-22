@@ -302,7 +302,7 @@ describe('MIXER FILL and CLIP', () => {
     expect(m.layerState(L(38))?.opacity).toBe(1);
     // A value that is not an opacity is a refusal, not a clamp.
     expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY 2')).toBe('401 ERROR\r\n');
-    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY')).toBe('401 ERROR\r\n');
+    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY')).toBe('201 MIXER OK\r\n1\r\n');
     // MIXER CLEAR resets the whole transform, opacity included.
     await send(m.amcpPort, 'MIXER 1-38 OPACITY 0');
     expect(await send(m.amcpPort, 'MIXER 1-38 CLEAR')).toBe('202 MIXER\r\n');

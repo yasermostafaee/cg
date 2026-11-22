@@ -5,8 +5,8 @@
 
 use crate::icons::{self, Icon};
 use crate::layout::{
-    Item, Measure, RailStep, Rect, Scene, Style, Variant, WidgetId, WidgetKind, FOOT_Y, RAIL_W,
-    TITLE_H, WIN_H, WIN_W,
+    Item, Measure, RailStep, Rect, Scene, Style, TextAlign, Variant, WidgetId, WidgetKind, FOOT_Y,
+    RAIL_LOGO, RAIL_W, RAIL_WORDMARK_Y, TITLE_H, WIN_H, WIN_W,
 };
 use crate::model::{StepState, MAX_STEPS};
 use crate::palette::{self, Rgb};
@@ -22,8 +22,6 @@ use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::DirectWrite::*;
 use windows::Win32::Graphics::Imaging::*;
 use windows_numerics::{Matrix3x2, Vector2};
-
-const HEADER_TILE: Rect = Rect::new((RAIL_W - 48.0) / 2.0, 24.0, 48.0, 48.0);
 
 pub fn color(c: Rgb, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F {
@@ -574,10 +572,9 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
     if layered {
         p.layer(e);
     }
-    // Title-bar text stays fixed while the wizard changes pages.
-    let on_title_bar =
-        |item: &&Item| matches!(item, Item::Text { rect, .. } if rect.bottom() <= TITLE_H);
-    for item in f.scene.items.iter().filter(|item| !on_title_bar(item)) {
+    // Rail text stays fixed while the wizard changes pages.
+    let on_rail = |item: &&Item| matches!(item, Item::Text { rect, .. } if rect.right() <= RAIL_W);
+    for item in f.scene.items.iter().filter(|item| !on_rail(item)) {
         page_item(&mut p, f, item);
     }
     // The page's own controls (the folder's Change, the Playout page's fields) enter with the page;
@@ -592,7 +589,7 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
         p.pop();
     }
     unsafe { rt.SetTransform(&Matrix3x2::identity()) };
-    for item in f.scene.items.iter().filter(on_title_bar) {
+    for item in f.scene.items.iter().filter(on_rail) {
         page_item(&mut p, f, item);
     }
     for w in f.scene.widgets.iter().filter(|w| !on_page(w)) {
@@ -613,7 +610,7 @@ fn rail(p: &mut Painter, f: &Frame) {
     // `P-067` — the product's OWN scene, faint above Help (CG Control's is the one every rail drew).
     draw_art(p, &rail_art::display_list(rail_art::rail_art(f.product)));
     // Each installer uses the same product tile here and on its welcome page.
-    product_tile(p, f, HEADER_TILE);
+    product_tile(p, f, RAIL_LOGO);
     wordmark(p, f.role);
     // The steps.
     for (i, step) in f.scene.rail.iter().enumerate() {
@@ -740,10 +737,14 @@ fn wordmark(p: &mut Painter, role: &str) {
     let m = Gfx::metrics(&layout);
     // CSS centres the INK (`text-indent` matches the trailing spacing); so do we.
     let x = RAIL_W / 2.0 - (m.widthIncludingTrailingWhitespace - spacing) / 2.0;
-    let y = HEADER_TILE.bottom() + 10.0;
     let b = p.brush(palette::SPLASH_INK, 1.0);
     unsafe {
-        p.rt.DrawTextLayout(v(x, y), &layout, &b, D2D1_DRAW_TEXT_OPTIONS_NONE)
+        p.rt.DrawTextLayout(
+            v(x, RAIL_WORDMARK_Y),
+            &layout,
+            &b,
+            D2D1_DRAW_TEXT_OPTIONS_NONE,
+        )
     };
 }
 
@@ -890,14 +891,14 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
             text,
             style,
             color,
-            right,
+            align,
             wrap,
             ..
         } => {
-            let align = if *right {
-                DWRITE_TEXT_ALIGNMENT_TRAILING
-            } else {
-                DWRITE_TEXT_ALIGNMENT_LEADING
+            let align = match align {
+                TextAlign::Left => DWRITE_TEXT_ALIGNMENT_LEADING,
+                TextAlign::Center => DWRITE_TEXT_ALIGNMENT_CENTER,
+                TextAlign::Right => DWRITE_TEXT_ALIGNMENT_TRAILING,
             };
             p.text(*rect, text, *style, *color, 1.0, align, *wrap);
         }
@@ -1295,7 +1296,7 @@ mod product_colour_tests {
             ] {
                 for scale in [1.0f32, 1.5, 2.0] {
                     let mut device = Device::default();
-                    let header_px = (HEADER_TILE.w * scale).round() as u32;
+                    let header_px = (RAIL_LOGO.w * scale).round() as u32;
                     let header = gfx.tile(&target, &mut device, png, header_px).unwrap();
                     let welcome_px = (88.0 * scale).round() as u32;
                     let welcome = gfx.tile(&target, &mut device, png, welcome_px).unwrap();

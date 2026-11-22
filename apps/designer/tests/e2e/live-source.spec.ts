@@ -1134,10 +1134,70 @@ test.describe('Live Source (D-137 phase 1)', () => {
     );
   });
 
+  test('Arrange fits a single plate to asymmetric margins and tiles four plates edge to edge', async ({
+    app,
+  }) => {
+    await app.newProject('Live source canvas margins', 'fhd');
+    await app.addLiveSource();
+    await app.inspector.getByRole('button', { name: 'Toggle Arrange' }).click();
+    const readGeometry = () =>
+      holes(app).evaluateAll((nodes) =>
+        nodes
+          .map((node) => {
+            const stage = node.closest('.cg-stage')!.getBoundingClientRect();
+            const { x, y, width, height } = node.getBoundingClientRect();
+            return [x - stage.x, y - stage.y, width, height].map(Math.round);
+          })
+          .sort((a, b) => a[1]! - b[1]! || a[0]! - b[0]!),
+      );
+    const enter = async (label: string, value: string) => {
+      const field = app.inspector.getByRole('spinbutton', { name: label, exact: true });
+      await field.fill(value);
+      await field.press('Enter');
+    };
+    await app.inspector.getByRole('combobox', { name: 'sizing' }).selectOption('fill');
+    await enter('top margin', '60');
+    await enter('right margin', '120');
+    await enter('bottom margin', '40');
+    await enter('left margin', '80');
+    await expect.poll(readGeometry).toEqual([[80, 60, 1720, 980]]);
+
+    await app.addLiveSource({ x: 230, y: 190 });
+    await app.addLiveSource({ x: 260, y: 220 });
+    await app.addLiveSource({ x: 290, y: 250 });
+    const ids = await app.timelineRowIds();
+    expect(ids).toHaveLength(4);
+    await app.selectElementById(ids[0]!);
+    for (const id of ids.slice(1)) {
+      await app.page.locator(`.cg-tl-row[data-element-id="${id}"]`).click({ modifiers: ['Shift'] });
+    }
+    await app.multiInspector.getByRole('button', { name: 'Zero margins' }).click();
+    await enter('horizontal gap', '0');
+    await enter('vertical gap', '0');
+    const tiled = [
+      [0, 0, 960, 540],
+      [960, 0, 960, 540],
+      [0, 540, 960, 540],
+      [960, 540, 960, 540],
+    ];
+    await expect.poll(readGeometry).toEqual(tiled);
+
+    const custom = app.multiInspector.getByRole('button', { name: 'Custom', exact: true });
+    await custom.click();
+    await expect(custom).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(readGeometry).toEqual(tiled);
+    await app.selectElementById(ids[0]!);
+    await app.setInspectorNumber('X position', 27);
+    await app.setInspectorNumber('Width', 700);
+    await expect
+      .poll(async () => (await readGeometry()).filter(([x]) => x === 27).map((box) => box.slice(2)))
+      .toEqual([[700, 540]]);
+  });
+
   test('B-360 — two Live Sources can stack, use a vertical gap, and exchange seats', async ({
     app,
   }) => {
-    await app.newProject('LiveSourceVerticalAutoLayout');
+    await app.newProject('LiveSourceVerticalAutoLayout', 'fhd');
     await app.addLiveSource({ x: 180, y: 140 });
     await app.setLiveSourceAspect('custom');
     const customAspect = app.inspector.getByRole('spinbutton', { name: 'custom aspect' });
@@ -1224,6 +1284,43 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const wideAfter = after.find((item) => item.id === wideId)!;
     expect(portraitAfter.width / portraitAfter.height).toBeCloseTo(3 / 4, 2);
     expect(wideAfter.width / wideAfter.height).toBeCloseTo(16 / 9, 2);
+
+    await app.multiInspector.getByRole('button', { name: 'Zero margins' }).click();
+    await verticalGap.fill('0');
+    await verticalGap.press('Enter');
+    await app.multiInspector.getByRole('combobox', { name: 'sizing' }).selectOption('fill');
+    const origin = await app.canvasFrame.locator('.cg-stage').evaluate((stage) => {
+      const { x, y } = stage.getBoundingClientRect();
+      return { x, y };
+    });
+    const atOutputOrigin = (axis: 'x' | 'y') =>
+      readGeometry().then((frames) =>
+        frames
+          .sort((left, right) => left[axis] - right[axis])
+          .map(({ x, y, width, height }) =>
+            [x - origin.x, y - origin.y, width, height].map(Math.round),
+          ),
+      );
+    await expect
+      .poll(() => atOutputOrigin('y'))
+      .toEqual([
+        [0, 0, 1920, 540],
+        [0, 540, 1920, 540],
+      ]);
+
+    await app.multiInspector.getByRole('combobox', { name: 'layout' }).selectOption('horizontal');
+    const horizontalGap = app.multiInspector.getByRole('spinbutton', {
+      name: 'horizontal gap',
+      exact: true,
+    });
+    await horizontalGap.fill('0');
+    await horizontalGap.press('Enter');
+    await expect
+      .poll(() => atOutputOrigin('x'))
+      .toEqual([
+        [0, 0, 960, 1080],
+        [960, 0, 960, 1080],
+      ]);
   });
 
   test('Auto layout arranges and swaps titled live compositions inside one preset', async ({

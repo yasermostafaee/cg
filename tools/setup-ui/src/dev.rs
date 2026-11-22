@@ -1,7 +1,7 @@
 //! A developer's doors into a BARE `cg-setup.exe` (nothing appended). An installer never reaches
 //! them: `app::run` takes this path only when no payload is found behind the program.
 //!
-//! `--cg-preview <dir> <dark tile.png> <light tile.png> [version]` renders every page, for each
+//! `--cg-preview <dir> <dark tile.png> <light tile.png> [version] [build-id]` renders every page, for each
 //! product, at 100 %, 150 % and 200 %, the way the window paints them. Release-guide captures pass
 //! their real version; an ad-hoc developer preview keeps the historical sample default.
 
@@ -14,10 +14,11 @@ use crate::ui::gfx::Gfx;
 use crate::ui::preview::{render, Shot};
 use std::path::Path;
 
-fn config(id: ProductId, version: &str) -> Config {
+fn config(id: ProductId, version: &str, build_id: Option<&str>) -> Config {
     Config {
         product: id,
         version: version.into(),
+        build_id: build_id.map(String::from),
         engine_name: "engine.exe".into(),
         install_bytes: if id == ProductId::Bridge {
             95_800_000
@@ -36,6 +37,7 @@ pub fn preview(args: &[String]) -> u32 {
         return 2;
     };
     let version = args.get(3).map(String::as_str).unwrap_or("0.10.0");
+    let build_id = args.get(4).map(String::as_str);
     let out = Path::new(out);
     let _ = std::fs::create_dir_all(out);
     let (Ok(dark), Ok(light)) = (std::fs::read(dark), std::fs::read(light)) else {
@@ -70,7 +72,7 @@ pub fn preview(args: &[String]) -> u32 {
         };
         let mut shots: Vec<(String, Model, Option<WidgetId>)> = Vec::new();
         let mk = |facts: &Facts| {
-            let mut m = Model::new(p, config(id, version), facts.clone(), None, true);
+            let mut m = Model::new(p, config(id, version, build_id), facts.clone(), None, true);
             m.space = Space {
                 drive: "C:".into(),
                 free: Some(126_000_000_000),

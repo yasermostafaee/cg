@@ -3,6 +3,7 @@ import {
   CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
+  CG_LIVE_NATIVE_BORDER_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER,
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
@@ -76,8 +77,8 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 14,
-      shell: '782fc3c759c89fcbcd91e7542c8d99b214b5e26e9cd27338091f0062241f5728',
+      revision: 16,
+      shell: 'da4d66e4eb99319b4994621e37c5e18d4c9ce5cd86d79694cb4b792d6bb312ba',
     });
   });
 
@@ -94,6 +95,7 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       expect(head).toContain(CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER);
+      expect(head).toContain(CG_LIVE_NATIVE_BORDER_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_RECOVERY_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_FOCUS_SLIDE_PAGE_MARKER);

@@ -2,6 +2,7 @@ import {
   composeAffine,
   framePlacementFits,
   frameTransitionProgress,
+  IDENTITY_AFFINE,
   invertAffine,
   transformToParent,
   type Affine,
@@ -11,12 +12,13 @@ import {
   type LiveFrameTarget,
 } from '@cg/shared-schema';
 import type { RuntimeClock } from './types.js';
+import { createPlateDepthMask } from './plate-depth-mask.js';
 
 export const PLATE_EDGES_MOTION_RATIO = '--cg-plate-edges-motion-ratio';
 
 interface FramePlacementRenderer {
   apply(placements: readonly LiveFramePlacement[], lookId: string | undefined): void;
-  animate(phase: FrameTransitionPhase, lookId: string | undefined): void;
+  animate(phase: FrameTransitionPhase, lookId: string | undefined, look?: HTMLElement): void;
   cancel(): void;
 }
 
@@ -32,6 +34,7 @@ export function createFramePlacementRenderer(
   const raf = clock?.raf ?? view?.requestAnimationFrame?.bind(view);
   const cancelRaf = clock?.cancel ?? view?.cancelAnimationFrame?.bind(view);
   const authored = new Map(flattened.map((entry) => [entry.key, entry]));
+  const painted = new Map<HTMLElement, Affine>();
   const wrappers = new Map(
     Array.from(
       container.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]'),
@@ -78,6 +81,7 @@ export function createFramePlacementRenderer(
 
   // Only move the wrapper. The authored nodes retain their own animations and media.
   function paint(wrapper: HTMLElement, matrix: Affine): void {
+    painted.set(wrapper, matrix);
     wrapper.style.position = 'absolute';
     wrapper.style.transform = `matrix(${[matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].join(',')})`;
     if (plateEdgeWrappers.has(wrapper) && matrix.a !== 0) {
@@ -86,7 +90,13 @@ export function createFramePlacementRenderer(
   }
 
   let animation: { handle?: number } | undefined;
+  let depthMask: ReturnType<typeof createPlateDepthMask> | undefined;
+  let restoreDecorations: (() => void) | undefined;
   const cancel = (): void => {
+    depthMask?.clear();
+    depthMask = undefined;
+    restoreDecorations?.();
+    restoreDecorations = undefined;
     if (animation?.handle !== undefined) cancelRaf?.(animation.handle);
     animation = undefined;
   };
@@ -95,6 +105,7 @@ export function createFramePlacementRenderer(
     cancel,
     apply(placements, lookId) {
       cancel();
+      painted.clear();
       for (const wrapper of wrappers.values()) {
         wrapper.style.position = '';
         wrapper.style.transform = '';
@@ -109,7 +120,7 @@ export function createFramePlacementRenderer(
         if (value !== null) paint(value.wrapper, value.matrix);
       }
     },
-    animate(phase, lookId) {
+    animate(phase, lookId, look) {
       cancel();
       const motion = phase.frames.flatMap(
         ({ frameKey, lookId: frameLook, from, to, fromOpacity, toOpacity }) => {
@@ -136,12 +147,45 @@ export function createFramePlacementRenderer(
         const wrapper = groupWrappers.get(key);
         return id === lookId && wrapper !== undefined ? [{ wrapper, ...opacity }] : [];
       });
-      if (motion.length === 0 && groups.length === 0) return;
+      const fades = plateDecorationFades(look, phase.decorationOpacity);
+      if (fades.length > 0) {
+        restoreDecorations = () => {
+          for (const { node, opacity } of fades) {
+            node.style.opacity = opacity;
+            node.removeAttribute('data-cg-decoration-fade');
+          }
+        };
+      }
+      if (phase.plateStack !== undefined) {
+        const targetOf = (key: string) => {
+          const target = presetTargets.get(key);
+          return target === undefined ? undefined : wrappers.get(target.artworkKey);
+        };
+        depthMask = createPlateDepthMask(container, phase.plateStack, targetOf, (key) => {
+          const target = presetTargets.get(key);
+          const art = target && authored.get(target.artworkKey);
+          const wrapper = targetOf(key);
+          if (art === undefined || wrapper === undefined) return null;
+          const elementInverse = invertAffine(transformToParent(art.element.transform));
+          if (elementInverse === null) return null;
+          const parent = composeAffine(art.toScene, elementInverse);
+          return invertAffine(composeAffine(parent, painted.get(wrapper) ?? IDENTITY_AFFINE));
+        });
+      }
+      if (
+        motion.length === 0 &&
+        groups.length === 0 &&
+        fades.length === 0 &&
+        depthMask === undefined
+      )
+        return;
       const startAt = now() + (phase.delayMs ?? 0);
       const active: { handle?: number } = {};
-      const render = (time: number): void => {
+      const render = (): void => {
         if (animation !== active) return;
-        const elapsed = time - startAt;
+        // CasparCG's offscreen renderer supplies an external begin-frame timestamp.
+        // Measure both ends of the interval with the same monotonic page clock.
+        const elapsed = now() - startAt;
         const frameMs = phase.mixerFrameMs;
         const sample = frameMs === undefined ? elapsed : Math.floor(elapsed / frameMs) * frameMs;
         const progress =
@@ -160,13 +204,42 @@ export function createFramePlacementRenderer(
           const opacity = interpolate(fromOpacity, toOpacity, eased);
           wrapper.style.opacity = opacity === 1 ? '' : String(opacity);
         }
+        for (const { node, opacity, fromOpacity, toOpacity } of fades) {
+          const authoredOpacity = opacity === '' ? 1 : Number(opacity);
+          node.style.opacity = String(authoredOpacity * interpolate(fromOpacity, toOpacity, eased));
+          node.setAttribute('data-cg-decoration-fade', '');
+        }
+        depthMask?.paint(eased);
         if (progress === 1) animation = undefined;
         else if (raf !== undefined) active.handle = raf(render);
       };
       animation = active;
-      render(now());
+      render();
     },
   };
+}
+
+function plateDecorationFades(
+  look: HTMLElement | undefined,
+  fades: FrameTransitionPhase['decorationOpacity'],
+) {
+  if (look === undefined || fades === undefined) return [];
+  const byPlate = new Map(fades.map((fade) => [fade.plateId, fade]));
+  return Array.from(
+    look.querySelectorAll<HTMLElement>(
+      '[data-cg-layout-plate-title], [data-cg-layout-plate-border]',
+    ),
+  ).flatMap((node) => {
+    const border = node.dataset['cgLayoutPlateBorder'];
+    const title = node.dataset['cgLayoutPlateTitle'];
+    const fade =
+      border !== undefined
+        ? byPlate.get(border)?.border
+        : title === undefined
+          ? undefined
+          : byPlate.get(title)?.title;
+    return fade === undefined ? [] : [{ node, opacity: node.style.opacity, ...fade }];
+  });
 }
 
 function interpolate(from: number, to: number, progress: number): number {

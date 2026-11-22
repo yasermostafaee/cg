@@ -178,3 +178,129 @@ test('PVW and New live layout share visibility and edits, and Profiles restores 
     await bridge.close();
   }
 });
+test('a full frame list remains keyboard-accessible and shared defaults require confirmation', async ({
+  page,
+}, testInfo) => {
+  const bridge = await createBridge({
+    port: 0,
+    connection: {
+      servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: false,
+    },
+    fixedLayers: { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } },
+  });
+  try {
+    await page.addInitScript((bridgeUrl) => {
+      Object.assign(window, {
+        __CG_SPLASH_DISABLED__: true,
+        __CG_BRIDGE_URL__: bridgeUrl,
+      });
+      const key = 'cg.runtime.safe-guides.v1';
+      if (localStorage.getItem(key) !== null) return;
+      const frames = [
+        'auto',
+        '16:9',
+        '4:3',
+        ...Array.from({ length: 22 }, (_, i) => `ratio-${i + 1}`),
+      ].map((id, index) => ({
+        id,
+        aspect: index < 3 ? id : 'custom',
+        visible: index === 0 || index === 24,
+        ...(index < 3 ? {} : { customAspect: { width: 3, height: 4 } }),
+        color: '#88ddff',
+        borders: [100, 93, 90, 80].map((percent) => ({ percent, visible: true })),
+      }));
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 1,
+          aspect: 'auto',
+          activeFrameId: 'auto',
+          standardVisible: true,
+          visible: true,
+          color: '#ffaa22',
+          frames,
+          lines: [{ id: 'test-line', axis: 'x', position: 25, name: 'Test guide', visible: true }],
+        }),
+      );
+    }, bridge.url);
+    await page.setViewportSize({ width: 1100, height: 640 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Show monitors', exact: true }).click();
+    const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+    const open = (view: typeof pvw) =>
+      view.getByRole('button', { name: 'Safe area settings', exact: true }).click();
+    const panel = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
+    const pick = (label: string) => panel.getByRole('radio', { name: label, exact: true });
+    const restore = panel.getByRole('button', { name: 'Restore defaults…', exact: true });
+    const close = panel.getByRole('button', { name: 'Close safe area settings', exact: true });
+    await open(pvw);
+    await expect(panel.getByRole('radio')).toHaveCount(25);
+    await pick('Auto').focus();
+    await pick('Auto').press('End');
+    const last = pick('Custom 22 (3:4)');
+    await expect(last).toBeFocused();
+    await expect(last).toHaveAttribute('aria-checked', 'true');
+    await expect(last).toHaveAccessibleDescription('Shown in preview');
+    const grid = panel.getByRole('radiogroup');
+    expect(await grid.evaluate((el) => el.scrollHeight > el.clientHeight && el.scrollTop > 0)).toBe(
+      true,
+    );
+    await expect(last).toBeInViewport();
+    await expect(restore).toBeInViewport();
+    const scroll = panel.locator('.cg-safe-guide-settings__scroll');
+    await scroll.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await expect(
+      panel.getByRole('textbox', { name: 'Guide 1 name', exact: true }),
+    ).toBeInViewport();
+    await expect(restore).toBeInViewport();
+    await scroll.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await panel.screenshot({ path: testInfo.outputPath('safe-area-22-frames.png') });
+    await restore.click();
+    const cancel = panel.getByRole('button', { name: 'Cancel', exact: true });
+    await expect(cancel).toBeFocused();
+    await cancel.press('Escape');
+    await expect(restore).toBeFocused();
+    await expect(last).toHaveAttribute('aria-checked', 'true');
+    await restore.click();
+    await cancel.click();
+    await close.click();
+    await page.reload();
+    await page.getByRole('button', { name: 'Show monitors', exact: true }).click();
+    await open(pvw);
+    await expect(last).toHaveAttribute('aria-checked', 'true');
+    await close.click();
+    const pvwToggle = pvw.getByRole('button', { name: 'Safe areas in Preview', exact: true });
+    await pvwToggle.click();
+    const layout = page.getByRole('dialog', { name: 'New live layout', exact: true });
+    await page.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await open(layout);
+    await expect(panel.getByRole('radio')).toHaveCount(25);
+    await restore.click();
+    await panel.getByRole('button', { name: 'Restore defaults', exact: true }).click();
+    await expect(panel.getByRole('radio')).toHaveCount(4);
+    await expect(pick('Auto')).toHaveAttribute('aria-checked', 'true');
+    await expect(panel.getByLabel('Frame color', { exact: true })).toHaveValue('#ffffff');
+    await expect(panel.getByRole('textbox', { name: 'Guide 1 name' })).toHaveCount(0);
+    await close.click();
+    await expect(layout.getByRole('button', { name: 'Safe areas', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await layout.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(pvwToggle).toHaveAttribute('aria-pressed', 'false');
+    await page.reload();
+    await page.getByRole('button', { name: 'Show monitors', exact: true }).click();
+    await open(pvw);
+    await expect(panel.getByRole('radio')).toHaveCount(4);
+    await expect(pick('Auto')).toHaveAttribute('aria-checked', 'true');
+    await expect(panel.getByLabel('Guide color', { exact: true })).toHaveValue('#ffffff');
+  } finally {
+    await bridge.close();
+  }
+});

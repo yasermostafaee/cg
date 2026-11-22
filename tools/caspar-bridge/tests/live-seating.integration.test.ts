@@ -1,7 +1,9 @@
 import * as fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import {
   createMock,
   decodeCgData,
@@ -18,9 +20,11 @@ import {
 } from '@cg/shared-ipc';
 import {
   CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
+  CG_LIVE_FOCUS_ARTWORK_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_NATIVE_BORDER_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
@@ -63,6 +67,8 @@ import { recvLines as readWireLines } from './support/wire-trace.js';
  * structure was correct and nothing reached CasparCG.
  */
 
+import { mockFocusArtwork } from './support/mock-focus-artwork.js';
+
 let mock: MockHandle | null = null;
 let backup: MockHandle | null = null;
 let runtime: CasparRuntime | null = null;
@@ -84,9 +90,9 @@ afterEach(async () => {
   tracePath = null;
 });
 
-function singleServer(amcpPort: number): ConnectionConfig {
+function singleServer(amcpPort: number, host = '127.0.0.1'): ConnectionConfig {
   return {
-    servers: { A: { host: '127.0.0.1', amcpPort, oscPort: 0 } },
+    servers: { A: { host, amcpPort, oscPort: 0 } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
   };
@@ -355,6 +361,7 @@ async function boot(options: {
   mirrorChannel?: number;
   missingBackupMedia?: boolean;
   lookMixerHoldMs?: number;
+  serverHost?: string;
 }): Promise<CasparRuntime> {
   tracePath = path.join(
     os.tmpdir(),
@@ -363,7 +370,7 @@ async function boot(options: {
   // The Bridge binds an ephemeral UDP port and tells each core where to send OSC. Probing
   // and releasing a port before startup lets another parallel fixture claim it before the bind.
   mock = await createMock({ amcpPort: 0, oscPort: 0, oscHz: 30, tracePath });
-  const config = singleServer(mock.amcpPort);
+  const config = singleServer(mock.amcpPort, options.serverHost);
   if (options.redundant === true || options.mirrorChannel !== undefined) {
     backup = await createMock({
       amcpPort: 0,
@@ -371,7 +378,11 @@ async function boot(options: {
       oscHz: 30,
       ...(options.mirrorChannel !== undefined && { channels: options.mirrorChannel }),
     });
-    config.servers.B = { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: 0 };
+    config.servers.B = {
+      host: options.serverHost ?? '127.0.0.1',
+      amcpPort: backup.amcpPort,
+      oscPort: 0,
+    };
   }
   const r = new CasparRuntime(
     config,
@@ -449,6 +460,18 @@ async function bootControlFocus(
   withFallback = false,
   plateCount: 2 | 3 = 3,
   supportsMixerPacing = false,
+  nativeBorderBand?: { start: number; end: number },
+  commonBorderOnly = false,
+  fallbackPlateIds: readonly string[] = focusFrameIds,
+  stationTopology = false,
+  sourceFixture?: {
+    sources: SourceCatalog['sources'];
+    serverHost?: string;
+    supportsRoutedArtwork?: boolean;
+    configureLayout?: (layout: ControlLiveLayout) => void;
+    keepPlateSources?: boolean;
+    beforeTake: (runtime: CasparRuntime) => void;
+  },
 ) {
   const cameras = {
     'guest-1': 'src-a',
@@ -464,22 +487,29 @@ async function bootControlFocus(
       id,
       title: id,
       sourceId: cameras[id],
-      ...(bordered && { border: { color: '#0099ff', width: 5 } }),
-      ...(withFallback && {
-        fallback: { kind: 'color' as const, color: '#e05020' },
-        showFallback: true,
-      }),
+      ...(bordered &&
+        (!commonBorderOnly || id === focusFrameIds[0]) && {
+          border: { color: '#0099ff', width: 5 },
+        }),
+      ...(withFallback &&
+        fallbackPlateIds.includes(id) && {
+          fallback: stationTopology
+            ? { kind: 'bars' as const }
+            : { kind: 'color' as const, color: '#e05020' },
+          showFallback: true,
+        }),
     })),
     presets: [
       {
         id: focusPreset,
         name: plateCount === 3 ? 'Three-up' : 'Two-up',
         frameIds: focusFrameIds.slice(0, plateCount),
-        arrangement: 'host-and-guests',
+        arrangement: stationTopology ? 'grid-top' : 'host-and-guests',
         horizontalGap: 24,
         verticalGap: 20,
         hiddenTitles: [],
         hiddenFocusTitles: [],
+        ...(stationTopology && { hiddenFocusBorders: [...focusFrameIds] }),
         reverse: false,
       },
     ],
@@ -494,8 +524,19 @@ async function bootControlFocus(
       id: soloPreset,
       name: 'Interview',
       frameIds: [focusFrameIds[0]],
+      ...(stationTopology && { hiddenBorders: [focusFrameIds[0]] }),
     });
   }
+  const twoPreset = 'two-camera';
+  if (stationTopology)
+    layout.presets.push({
+      ...layout.presets[0]!,
+      id: twoPreset,
+      name: 'Two-up',
+      frameIds: focusFrameIds.slice(0, 2),
+      arrangement: 'side-by-side',
+    });
+  sourceFixture?.configureLayout?.(layout);
   const rects = controlLiveLayoutRects(layout, layout.presets[0]!);
   const base = template(
     focusFrameIds.map((id) => ({ id, rect: rects[id] ?? focusRect })),
@@ -506,7 +547,9 @@ async function bootControlFocus(
     name: id,
     entered: { mode: 'cut' as const },
     rects: membership,
-    ...(withFallback && { fallbacks: Object.keys(membership) }),
+    ...(withFallback && {
+      fallbacks: Object.keys(membership).filter((frameId) => fallbackPlateIds.includes(frameId)),
+    }),
     transitionFrames: Object.fromEntries(
       Object.keys(membership).map((frameId) => [
         frameId,
@@ -518,6 +561,7 @@ async function bootControlFocus(
     ),
   });
   const r = await boot({
+    ...(sourceFixture?.serverHost !== undefined && { serverHost: sourceFixture.serverHost }),
     template: {
       ...base,
       controlLiveLayout: layout,
@@ -533,26 +577,1322 @@ async function bootControlFocus(
       },
     },
     catalog: catalog({
-      layerRange: { start: 30, end: 36 },
-      sources: Object.values(cameras).map((id) => ({
-        id,
-        name: id,
-        format: '1080i5000',
-        producer: { kind: 'ndi', source: id },
-      })),
+      layerRange: nativeBorderBand ?? { start: 30, end: 36 },
+      sources: [...Object.values(cameras), ...(stationTopology ? ['src-alternate'] : [])].map(
+        (id) =>
+          sourceFixture?.sources.find((source) => source.id === id) ?? {
+            id,
+            name: id,
+            format: '1080i5000',
+            producer: { kind: 'ndi', source: id },
+          },
+      ),
     }),
     assignments: { assignments: [] },
     html:
       PRESET_TITLE_HOLD_HTML +
       CG_LIVE_FOCUS_SLIDE_PAGE_MARKER +
+      (sourceFixture?.supportsRoutedArtwork ? CG_LIVE_FOCUS_ARTWORK_PAGE_MARKER : '') +
+      (nativeBorderBand === undefined ? '' : CG_LIVE_NATIVE_BORDER_PAGE_MARKER) +
       (supportsMixerPacing ? CG_LIVE_PRESET_MIXER_PACING_PAGE_MARKER : ''),
     ...(paired && { mirrorChannel: 2 }),
   });
+  sourceFixture?.beforeTake(r);
   if (promoteBeforeTake) expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
-  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  if (stationTopology) {
+    await r.load('item-1', 'lower-third', {});
+    if (!sourceFixture?.keepPlateSources) {
+      expect(
+        await r.update('item-1', {}, 'merge', {
+          [twoPreset]: { [focusFrameIds[1]]: 'src-alternate' },
+        }),
+      ).toMatchObject({ accepted: true });
+    }
+    expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  } else expect(await loadAndTake(r)).toMatchObject({ accepted: true });
   await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
   return r;
 }
+
+const NATIVE_BORDER_BAND = { start: 50, end: 59 };
+
+async function bootNativePresetBorder(band = NATIVE_BORDER_BAND) {
+  return bootControlFocus(false, true, 'motion', true, false, false, 3, true, band, true);
+}
+
+const nativeBorderControl = (line: string) => {
+  if (!line.startsWith('CG ') || !line.includes(' UPDATE ')) return undefined;
+  const command = parseAmcpLine(line);
+  const data = decodeCgData(command!.args[3]!).data;
+  return data === null ? undefined : readCgControl(JSON.parse(data));
+};
+
+const nativeBorderPlayLayers = (lines: readonly string[], channel = 1): number[] =>
+  lines.flatMap((line) => {
+    const match = /^PLAY (\d+)-(\d+) #0099ff$/i.exec(line);
+    return match === null || Number(match[1]) !== channel ? [] : [Number(match[2])];
+  });
+
+it('native preset borders move in the picture mixer batch and clear in both directions', async () => {
+  const r = await bootNativePresetBorder();
+  const engine = mock!;
+  const itemId = 'item-1';
+  for (const destination of [focusPreset, soloPreset]) {
+    const seats = r.liveLayers().get(itemId)!;
+    const picture = seats.find(({ sourceId }) => sourceId === focusFrameIds[0])!.slot.layer;
+    const before = engine.receivedCommands().length;
+    expect(await r.setActiveLook(itemId, destination, focusMotion)).toEqual({ ok: true });
+    expect(r.stackSnapshot()[0]?.activeLookId).toBe(destination);
+    const lines = engine
+      .receivedCommands()
+      .slice(before)
+      .map(({ line }) => line);
+    expectNativeBorderMove(
+      lines,
+      1,
+      picture,
+      seats.map(({ slot }) => slot.layer),
+    );
+  }
+});
+
+it('stages independent title and border opacity with the retained picture on A/B for Focus and a named solo', async () => {
+  const id = focusFrameIds[0];
+  const runtime = await bootControlFocus(
+    true,
+    true,
+    'motion',
+    true,
+    false,
+    false,
+    3,
+    true,
+    NATIVE_BORDER_BAND,
+    true,
+    focusFrameIds,
+    false,
+    {
+      sources: [],
+      configureLayout: (layout) => {
+        layout.presets[0]!.hiddenBorders = [id];
+        layout.presets[0]!.hiddenFocusTitles = [id];
+        layout.presets[1]!.hiddenTitles = [id];
+      },
+      beforeTake: () => undefined,
+    },
+  );
+  const peers = [
+    [mock!, 1],
+    [backup!, 2],
+  ] as const;
+  const picture = runtime
+    .liveLayers()
+    .get('item-1')!
+    .find((record) => record.sourceId === id)!.slot.layer;
+  for (const destination of [focusPreset, focusLooks[0]!, focusPreset, soloPreset]) {
+    const offsets = peers.map(([engine]) => engine.receivedCommands().length);
+    expect(await runtime.setActiveLook('item-1', destination, focusMotion)).toEqual({ ok: true });
+    const visible = Number(destination !== focusPreset);
+    for (const [peerIndex, [engine, channel]] of peers.entries()) {
+      const lines = engine
+        .receivedCommands()
+        .slice(offsets[peerIndex]!)
+        .map(({ line }) => line);
+      const move = lines.findIndex(
+        (line) =>
+          line.startsWith('MIXER ' + channel + '-' + picture + ' FILL ') &&
+          / [1-9]\d* \w+ DEFER$/.test(line),
+      );
+      expect(move).toBeGreaterThanOrEqual(0);
+      const commit = 'MIXER ' + channel + ' COMMIT';
+      const batch = lines.slice(lines.lastIndexOf(commit, move) + 1, lines.indexOf(commit, move));
+      const pacing = lines[move]!.match(/ [1-9]\d* \w+ DEFER$/)![0];
+      const strokes = nativeBorderPlayLayers(lines, channel);
+      expect(strokes.length).toBeGreaterThan(0);
+      for (const layer of strokes) {
+        expect(batch).toContain('MIXER ' + channel + '-' + layer + ' OPACITY ' + visible + pacing);
+        if (visible)
+          expect(lines.slice(0, move)).not.toContain(
+            'MIXER ' + channel + '-' + layer + ' OPACITY 1',
+          );
+      }
+      const authored = lines
+        .filter((line) =>
+          line.startsWith('CG ' + channel + '-' + NATIVE_BORDER_BAND.end + ' UPDATE '),
+        )
+        .flatMap((line) => nativeBorderControl(line)?.frameTransition?.decorationOpacity ?? []);
+      expect(authored).toContainEqual({
+        plateId: id,
+        border: { fromOpacity: 1 - visible, toOpacity: visible },
+        title: { fromOpacity: visible, toOpacity: 1 - visible },
+      });
+      expect(engine.stagedMixerCount(channel)).toBe(0);
+    }
+  }
+}, 30_000);
+
+async function bootPairedNativePresetBorder(
+  promoted = false,
+  fallbackPlateIds?: readonly string[],
+) {
+  return bootControlFocus(
+    true,
+    true,
+    'motion',
+    true,
+    promoted,
+    fallbackPlateIds !== undefined,
+    3,
+    true,
+    NATIVE_BORDER_BAND,
+    true,
+    fallbackPlateIds,
+  );
+}
+
+it.each([false, true])(
+  'moves retained and entering/leaving foreground surfaces on the picture mixer (B active: %s)',
+  async (promoted) => {
+    let coldStillReads = 0;
+    const runtime = await bootControlFocus(
+      true,
+      false,
+      'motion',
+      true,
+      promoted,
+      true,
+      3,
+      true,
+      { start: 60, end: 79 },
+      false,
+      focusFrameIds,
+      true,
+      {
+        sources: [],
+        supportsRoutedArtwork: true,
+        keepPlateSources: true,
+        beforeTake: () => {
+          const info = defaultHandlers().get('INFO')!;
+          for (const engine of [mock!, backup!]) {
+            engine.setHandler('INFO', async (req, context, socket) => {
+              const answer = await info(req, context, socket);
+              if (answer.kind !== 'ok-line') return answer;
+              let data = answer.data.replace(
+                /<file>\s*<path>route:\/\/(\d+)-(\d+)<\/path>\s*<\/file>/g,
+                '<route><channel>$1</channel><layer>$2</layer></route>',
+              );
+              if (!promoted && engine === mock && coldStillReads < 15) {
+                const waiting = data.replace(/<foreground>[\s\S]*?<\/foreground>/g, (producer) =>
+                  producer.includes('.png</path>')
+                    ? producer.replace(
+                        '<producer>ffmpeg</producer>',
+                        '<producer>transition</producer><transition><direction>from_left</direction>' +
+                          '<frame>0</frame><frame>0</frame><producer>ffmpeg</producer><type>cut</type></transition>',
+                      )
+                    : producer,
+                );
+                if (waiting !== data) coldStillReads++;
+                data = waiting;
+              }
+              return { ...answer, data };
+            });
+          }
+        },
+      },
+    );
+    const engines = [
+      [mock!, 1],
+      [backup!, 2],
+    ] as const;
+    const steps = [
+      { look: 'two-camera', retained: 2 },
+      { look: focusPreset, retained: 2 },
+      { look: focusLooks[0]!, retained: 1 },
+      { look: focusPreset, retained: 1 },
+    ];
+    const coldPicture = runtime
+      .liveLayers()
+      .get('item-1')!
+      .find(
+        (record) => !record.held && record.sourceId === focusFrameIds[0] && record.role === 'fill',
+      )!.slot.layer;
+    const coldEngine = backup!;
+    const mixer = defaultHandlers().get('MIXER')!;
+    let coldReads = 0;
+    let pictureLanded = -1;
+    if (promoted) {
+      // The actual .22 B engine accepted the tween at once but the mixer
+      // reported starting geometry across the old 300 ms guard. A later
+      // untweened FILL jumped the picture ahead of its four attached decals.
+      coldEngine.setHandler('MIXER', (request, context, socket) => {
+        if (request.raw === 'MIXER 2-' + coldPicture + ' CLIP' && pictureLanded === -1) {
+          if (++coldReads <= 12)
+            return { kind: 'ok-line', code: 201, verb: 'MIXER', data: '2 2 1 1' };
+          pictureLanded = coldEngine.receivedCommands().length;
+        }
+        return mixer(request, context, socket);
+      });
+    }
+    for (const { look, retained } of steps) {
+      const starts = engines.map(([engine]) => engine.receivedCommands().length);
+      expect(await runtime.setActiveLook('item-1', look, focusMotion)).toEqual({ ok: true });
+      for (const [i, [engine, channel]] of engines.entries()) {
+        const lines = engine
+          .receivedCommands()
+          .slice(starts[i]!)
+          .map(({ line }) => line);
+        const routes = lines.flatMap((line) => {
+          const found = new RegExp(
+            '^PLAY ' + channel + '-(\\d+) "route://' + channel + '-79"$',
+          ).exec(line);
+          return found ? [Number(found[1])] : [];
+        });
+        expect(routes, `artwork seats for ${look} on channel ${channel}`).toHaveLength(3);
+        for (const layer of routes) {
+          expect(
+            lines.some(
+              (line) =>
+                line.startsWith('MIXER ' + channel + '-' + layer + ' FILL ') &&
+                / DEFER$/.test(line),
+            ),
+          ).toBe(true);
+          expect(lines).toContain('MIXER ' + channel + '-' + layer + ' VOLUME 0');
+          expect(engine.layerState({ channel, layer })?.producer ?? 'empty').toBe('empty');
+        }
+        const freezes = lines.flatMap((line) => {
+          const parsed = /^PAUSE \d+-(\d+)$/.exec(line);
+          return parsed && routes.includes(Number(parsed[1])) ? [Number(parsed[1])] : [];
+        });
+        expect(freezes, `settled artwork for ${look} on channel ${channel}`).toHaveLength(retained);
+        if (promoted && engine === coldEngine && look === 'two-camera') {
+          expect(coldReads).toBe(13);
+          expect(pictureLanded).toBeGreaterThan(starts[i]!);
+          const lastRead = pictureLanded - starts[i]! - 1;
+          expect(lines[lastRead]).toBe('MIXER 2-' + coldPicture + ' CLIP');
+          const pause = lines.findIndex((line) =>
+            freezes.some((layer) => line === 'PAUSE 2-' + layer),
+          );
+          const finalPicture = lines.findIndex(
+            (line, index) =>
+              index > lastRead &&
+              line.startsWith('MIXER 2-' + coldPicture + ' FILL ') &&
+              /[\d.] DEFER$/.test(line),
+          );
+          expect(pause).toBeGreaterThan(lastRead);
+          expect(finalPicture).toBeGreaterThan(lastRead);
+        }
+        expect(lines).toContain('MIXER ' + channel + '-79 CLIP 2 2 1 1');
+        expect(lines).not.toContain('MIXER ' + channel + '-79 CLIP 0 0 0 0');
+        expect(lines).toContain('MIXER ' + channel + '-79 CLIP 0 0 1 1');
+      }
+    }
+    if (!promoted) expect(coldStillReads).toBe(15);
+    if (promoted) {
+      // A readback refusal must take the existing rollback path. Continue
+      // serving other getters so both engines can restore their previous look.
+      coldEngine.setHandler('MIXER', (request, context, socket) =>
+        request.raw === 'MIXER 2-' + coldPicture + ' CLIP'
+          ? { kind: 'err', code: 400, verb: 'MIXER', detail: 'readback unavailable' }
+          : mixer(request, context, socket),
+      );
+      expect(await runtime.setActiveLook('item-1', 'two-camera', focusMotion)).toMatchObject({
+        ok: false,
+      });
+      expect(runtime.stackSnapshot().find((row) => row.itemId === 'item-1')?.activeLookId).toBe(
+        focusPreset,
+      );
+    }
+  },
+  30_000,
+);
+
+function expectNativeBorderMove(
+  lines: readonly string[],
+  channel: number,
+  picture: number,
+  liveSeats: readonly number[],
+) {
+  const mixer = `MIXER ${channel}`;
+  const commit = mixer + ' COMMIT';
+  const layers = nativeBorderPlayLayers(lines, channel);
+  expect(layers).toHaveLength(4);
+  expect(new Set(layers).size).toBe(4);
+  expect(lines).toContain(`INFO ${channel}`);
+  const above = Math.min(NATIVE_BORDER_BAND.end, ...liveSeats.filter((layer) => layer > picture));
+  for (const layer of layers) {
+    expect(layer).toBeGreaterThan(picture);
+    expect(layer).toBeLessThan(above);
+    const play = lines.indexOf(`PLAY ${channel}-${layer} #0099ff`);
+    const hide = lines.indexOf(`${mixer}-${layer} OPACITY 0`);
+    const reveal = lines.indexOf(`${mixer}-${layer} OPACITY 1`);
+    expect(hide).toBeGreaterThanOrEqual(0);
+    expect(play).toBeGreaterThan(hide);
+    expect(reveal).toBeGreaterThan(play);
+  }
+
+  const pictureMoves = lines.flatMap((line, index) => {
+    const tween = line.startsWith(`${mixer}-${picture} FILL `)
+      ? line.match(/ [1-9]\d* [a-z]\w* DEFER$/)?.[0]
+      : undefined;
+    return tween === undefined ? [] : [{ index, tween }];
+  });
+  expect(pictureMoves.length).toBeGreaterThan(0);
+  for (const { index, tween } of pictureMoves) {
+    const end = lines.indexOf(commit, index);
+    expect(
+      end,
+      lines.map((line) => (line.length > 120 ? line.slice(0, 40) : line)).join('\n'),
+    ).toBeGreaterThan(index);
+    const batch = lines.slice(lines.lastIndexOf(commit, index) + 1, end);
+    for (const layer of layers) {
+      for (const transform of ['FILL', 'CLIP']) {
+        const transforms = batch.filter((line) =>
+          line.startsWith(`${mixer}-${layer} ${transform} `),
+        );
+        expect(
+          transforms.some((line) => line.endsWith(tween)),
+          `${lines[index]} must share ${mixer}-${layer} ${transform}: ${transforms.join(', ')}`,
+        ).toBe(true);
+      }
+    }
+  }
+
+  const foreground = `CG ${channel}-${NATIVE_BORDER_BAND.end} UPDATE `;
+  const suppress = lines.findIndex(
+    (line) =>
+      line.startsWith(foreground) &&
+      nativeBorderControl(line)?.nativeBorderPlateIds?.includes(focusFrameIds[0]) === true,
+  );
+  const effectId =
+    suppress === -1 ? undefined : nativeBorderControl(lines[suppress]!)?.presetEffectId;
+  const restore = lines.findIndex((line, index) => {
+    if (index <= suppress || !line.startsWith(foreground)) return false;
+    const control = nativeBorderControl(line);
+    return (
+      control?.nativeBorderPlateIds?.length === 0 ||
+      (effectId !== undefined && control?.releaseNativeBorderEffectId === effectId)
+    );
+  });
+  expect(suppress).toBeGreaterThan(0);
+  expect(suppress).toBeLessThan(lines.indexOf(commit, pictureMoves[0]!.index));
+  expect(restore).toBeGreaterThan(lines.indexOf(commit, pictureMoves.at(-1)!.index));
+  for (const layer of layers) {
+    const clear = lines.indexOf(`CLEAR ${channel}-${layer}`);
+    expect(clear).toBeGreaterThan(restore);
+    expect(lines.indexOf(`${mixer}-${layer} CLEAR`)).toBeGreaterThan(clear);
+  }
+}
+
+it.each([false, true])(
+  'native preset borders share each mapped picture mixer batch and release on both engines (B promoted: %s)',
+  async (promoted) => {
+    const r = await bootPairedNativePresetBorder(promoted);
+    const engines = [
+      [mock!, 1],
+      [backup!, 2],
+    ] as const;
+    const itemId = 'item-1';
+    for (const destination of [focusPreset, soloPreset]) {
+      const liveSeats = r.liveLayers().get(itemId)!;
+      const picture = liveSeats.find(({ sourceId }) => sourceId === focusFrameIds[0])!.slot.layer;
+      const marks = engines.map(([engine]) => engine.receivedCommands().length);
+      expect(await r.setActiveLook(itemId, destination, focusMotion)).toEqual({ ok: true });
+      expect(r.activeLookId(itemId)).toBe(destination);
+      for (const [index, [engine, channel]] of engines.entries()) {
+        const lines = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .map(({ line }) => line);
+        expectNativeBorderMove(
+          lines,
+          channel,
+          picture,
+          liveSeats.map(({ slot }) => slot.layer),
+        );
+        for (const layer of nativeBorderPlayLayers(lines, channel)) {
+          expect(engine.layerState({ channel, layer })?.producer ?? 'empty').toBe('empty');
+        }
+        expect(engine.stagedMixerCount(channel)).toBe(0);
+      }
+    }
+  },
+);
+
+it.each(['empty', 'html'])(
+  'keeps the retained border and fallback in the active mixer when the reserve foreground is empty (last OSC: %s)',
+  async (lastProducer) => {
+    const retained = focusFrameIds[0];
+    const r = await bootPairedNativePresetBorder(false, [retained]);
+    const reserve = backup!;
+    const client = new AmcpTransport();
+    await client.connect(reserve.host, reserve.amcpPort);
+    const queue = new CommandQueue(client);
+    try {
+      expect((await queue.enqueue(`CLEAR 2-${String(NATIVE_BORDER_BAND.end)}`)).response.kind).toBe(
+        'ok',
+      );
+      reserve.emitOsc(`/channel/2/stage/layer/${NATIVE_BORDER_BAND.end}/foreground/producer`, [
+        lastProducer,
+      ]);
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    } finally {
+      queue.dispose();
+      client.destroy();
+    }
+    for (const destination of [focusPreset, soloPreset]) {
+      const seats = r.liveLayers().get('item-1')!;
+      const picture = seats.find(({ sourceId }) => sourceId === retained)!.slot.layer;
+      const activeMark = mock!.receivedCommands().length;
+      const reserveMark = reserve.receivedCommands().length;
+      expect(await r.setActiveLook('item-1', destination, focusMotion)).toEqual({ ok: true });
+      const active = mock!
+        .receivedCommands()
+        .slice(activeMark)
+        .map(({ line }) => line);
+      expectNativeBorderMove(
+        active,
+        1,
+        picture,
+        seats.map(({ slot }) => slot.layer),
+      );
+      const underlay = active.flatMap((line) => /^PLAY 1-(\d+) #e05020$/.exec(line)?.[1] ?? []);
+      expect(underlay).toHaveLength(1);
+      const move = active.findIndex(
+        (line) => line.startsWith(`MIXER 1-${picture} FILL `) && / [1-9]\d* \w+ DEFER$/.test(line),
+      );
+      const commit = active.indexOf('MIXER 1 COMMIT', move);
+      expect(active.slice(move, commit)).toContainEqual(
+        expect.stringMatching(new RegExp(`^MIXER 1-${underlay[0]} FILL .* [1-9]\\d* \\w+ DEFER$`)),
+      );
+      expect(active).toContain(`CLEAR 1-${underlay[0]}`);
+      const peer = reserve
+        .receivedCommands()
+        .slice(reserveMark)
+        .map(({ line }) => line);
+      expect(nativeBorderPlayLayers(peer, 2)).toEqual([]);
+      expect(
+        peer.some((line) => line.includes('#e05020') || line.includes('hideFallbackPlateIds')),
+      ).toBe(false);
+    }
+  },
+);
+
+it('native preset fallback moves below its picture in the paired border batch and retires after HTML settlement', async () => {
+  const retained = focusFrameIds[0];
+  const r = await bootPairedNativePresetBorder(false, [retained]);
+  const engines = [
+    [mock!, 1],
+    [backup!, 2],
+  ] as const;
+  const cg = defaultHandlers().get('CG')!;
+  const mixer = defaultHandlers().get('MIXER')!;
+  const reserve = backup!;
+  let delayedReserveUnderlay: number | undefined;
+  reserve.setHandler('MIXER', async (request, context, connection) => {
+    const reply = mixer(request, context, connection);
+    const scheduled = /^MIXER 2-(\d+) OPACITY 1 [1-9]\d* [a-z]\w* DEFER$/.exec(request.raw);
+    if (scheduled !== null && delayedReserveUnderlay === undefined) {
+      const layer = Number(scheduled[1]);
+      if (reserve.layerState({ channel: 2, layer })?.filePath === '#e05020') {
+        delayedReserveUnderlay = layer;
+        await new Promise<void>((resolve) => setTimeout(resolve, 240));
+      }
+    }
+    return reply;
+  });
+  for (const destination of [focusPreset, soloPreset]) {
+    const seats = r.liveLayers().get('item-1')!;
+    const picture = seats.find(({ sourceId }) => sourceId === retained)!.slot.layer;
+    const observations = engines.map(([engine, channel]) => {
+      let visibleAtHide: { layer: number; opacity: number } | undefined;
+      engine.setHandler('CG', (request, context, connection) => {
+        const phase = nativeBorderControl(request.raw)?.frameTransition;
+        if (visibleAtHide === undefined && phase?.hideFallbackPlateIds?.includes(retained)) {
+          for (let layer = NATIVE_BORDER_BAND.start; layer < NATIVE_BORDER_BAND.end; layer += 1) {
+            const state = engine.layerState({ channel, layer });
+            if (state?.producer === 'color' && state.filePath === '#e05020') {
+              visibleAtHide = { layer, opacity: state.opacity };
+              break;
+            }
+          }
+        }
+        return cg(request, context, connection);
+      });
+      return {
+        engine,
+        channel,
+        mark: engine.receivedCommands().length,
+        visibleAtHide: () => visibleAtHide,
+      };
+    });
+    expect(await r.setActiveLook('item-1', destination, focusMotion)).toEqual({ ok: true });
+    expect(r.activeLookId('item-1')).toBe(destination);
+    for (const { engine, channel, mark, visibleAtHide } of observations) {
+      const lines = engine
+        .receivedCommands()
+        .slice(mark)
+        .map(({ line }) => line);
+      expectNativeBorderMove(
+        lines,
+        channel,
+        picture,
+        seats.map(({ slot }) => slot.layer),
+      );
+      const prefix = `MIXER ${channel}`;
+      const commit = prefix + ' COMMIT';
+      const underlays = lines.flatMap((line) => {
+        const match = /^PLAY (\d+)-(\d+) #e05020$/.exec(line);
+        return match?.[1] === String(channel) ? [Number(match[2])] : [];
+      });
+      expect(underlays).toHaveLength(1);
+      const underlay = underlays[0]!;
+      if (channel === 2 && destination === focusPreset)
+        expect(delayedReserveUnderlay).toBe(underlay);
+      const underlaySlot = `${channel}-${underlay}`;
+      const below = Math.max(
+        NATIVE_BORDER_BAND.start - 1,
+        ...seats.map(({ slot }) => slot.layer).filter((layer) => layer < picture),
+      );
+      expect(underlay).toBeGreaterThan(below);
+      expect(underlay).toBeLessThan(picture);
+      expect(visibleAtHide()).toEqual({ layer: underlay, opacity: 1 });
+      const play = lines.indexOf(`PLAY ${underlaySlot} #e05020`);
+      const reveal = lines.indexOf(`${prefix}-${underlay} OPACITY 1`);
+      const hidden = lines.indexOf(`${prefix}-${underlay} OPACITY 0`);
+      expect(hidden).toBeGreaterThanOrEqual(0);
+      expect(hidden).toBeLessThan(play);
+      expect(reveal).toBeGreaterThan(play);
+      const hold = lines.findIndex((line) => {
+        const phase = nativeBorderControl(line)?.frameTransition;
+        return phase?.durationMs === 0 && phase.hideFallbackPlateIds?.includes(retained);
+      });
+      expect(hold).toBeGreaterThan(reveal);
+      expect(nativeBorderControl(lines[hold]!)?.frameTransition?.hideFallbackPlateIds).toEqual([
+        retained,
+      ]);
+      const effectId = nativeBorderControl(lines[hold]!)?.presetEffectId;
+      expect(effectId).toBeTruthy();
+
+      const pictureMoves = lines.flatMap((line, index) => {
+        const tween = line.startsWith(`${prefix}-${picture} FILL `)
+          ? line.match(/ [1-9]\d* [a-z]\w* DEFER$/)?.[0]
+          : undefined;
+        return tween === undefined ? [] : [{ index, tween }];
+      });
+      expect(pictureMoves.length).toBeGreaterThan(0);
+      const borders = nativeBorderPlayLayers(lines, channel);
+      for (const { index, tween } of pictureMoves) {
+        const end = lines.indexOf(commit, index);
+        const batch = lines.slice(lines.lastIndexOf(commit, index) + 1, end);
+        for (const transform of ['FILL', 'CLIP']) {
+          expect(
+            batch.some(
+              (line) =>
+                line.startsWith(`${prefix}-${underlay} ${transform} `) && line.endsWith(tween),
+            ),
+          ).toBe(true);
+        }
+        for (const layer of [underlay, ...borders])
+          expect(batch).toContain(`${prefix}-${layer} OPACITY 1${tween}`);
+        expect(
+          batch.some((line) =>
+            nativeBorderControl(line)?.frameTransition?.hideFallbackPlateIds?.includes(retained),
+          ),
+        ).toBe(true);
+      }
+      const settled = lines.findIndex((line, index) => {
+        if (index <= hold) return false;
+        const control = nativeBorderControl(line);
+        return (
+          control?.nativeBorderPlateIds?.length === 0 ||
+          control?.releaseNativeBorderEffectId === effectId
+        );
+      });
+      expect(settled).toBeGreaterThan(lines.indexOf(commit, pictureMoves.at(-1)!.index));
+      const cleared = lines.indexOf(`CLEAR ${underlaySlot}`);
+      expect(cleared).toBeGreaterThan(settled);
+      expect(lines.indexOf(`${prefix}-${underlay} CLEAR`)).toBeGreaterThan(cleared);
+      expect(engine.layerState({ channel, layer: underlay })?.producer ?? 'empty').toBe('empty');
+      expect(engine.stagedMixerCount(channel)).toBe(0);
+    }
+  }
+});
+
+it('shares artwork for four seats across three plates and moves bars when the source preset hides the border', async () => {
+  const band = { start: 60, end: 79 };
+  const r = await bootControlFocus(
+    true,
+    true,
+    'motion',
+    true,
+    false,
+    true,
+    3,
+    true,
+    band,
+    false,
+    focusFrameIds,
+    true,
+  );
+  const seats = r.liveLayers().get('item-1')!;
+  expect(seats).toHaveLength(4);
+  const playlist = seats.find(({ sourceId }) => sourceId === focusFrameIds[0])!;
+  const alternate = seats
+    .filter(({ sourceId }) => sourceId === focusFrameIds[1])
+    .map(({ slot }) => slot.layer)
+    .sort((a, b) => a - b);
+  expect(alternate).toHaveLength(2);
+  expect(alternate[1]!).toBe(alternate[0]! + 1);
+  expect(playlist.slot.layer).toBeGreaterThanOrEqual(band.start + 1);
+  const engines = [
+    [mock!, 1],
+    [backup!, 2],
+  ] as const;
+  const marks = engines.map(([engine]) => engine.receivedCommands().length);
+  expect(
+    await r.setActiveLook('item-1', focusPreset, {
+      ...focusMotion,
+      durationMs: 400,
+      enterDirection: 'down',
+    }),
+  ).toEqual({ ok: true });
+  for (const [index, [engine, channel]] of engines.entries()) {
+    const lines = engine
+      .receivedCommands()
+      .slice(marks[index]!)
+      .map(({ line }) => line);
+    const picture = playlist.slot.layer;
+    const pictureMove = lines.findIndex(
+      (line) =>
+        line.startsWith(`MIXER ${channel}-${picture} FILL `) &&
+        / [1-9]\d* [a-z]\w* DEFER$/.test(line),
+    );
+    expect(pictureMove).toBeGreaterThanOrEqual(0);
+    const commit = `MIXER ${channel} COMMIT`;
+    const before = lines.lastIndexOf(commit, pictureMove);
+    const after = lines.indexOf(commit, pictureMove);
+    expect(after).toBeGreaterThan(pictureMove);
+    const batch = lines.slice(before + 1, after);
+    const underlay = lines.find(
+      (line) =>
+        line.startsWith(`PLAY ${channel}-${picture - 1} "`) &&
+        /\/page\/[a-f0-9]{64}\.png"$/.test(line),
+    );
+    expect(underlay).toBeTruthy();
+    const foregroundPaints = lines
+      .filter((line) => line.startsWith(`CG ${channel}-${band.end} UPDATE `))
+      .flatMap((line) => nativeBorderControl(line)?.frameTransition?.plateStack ?? []);
+    expect(foregroundPaints.some(({ cover }) => cover !== undefined)).toBe(true);
+    expect(
+      lines
+        .filter((line) => line.startsWith(`CG ${channel}-10 UPDATE `))
+        .some((line) => nativeBorderControl(line)?.frameTransition?.plateStack !== undefined),
+    ).toBe(false);
+    expect(batch.some((line) => line.startsWith(`MIXER ${channel}-${picture - 1} FILL `))).toBe(
+      true,
+    );
+    expect(
+      batch.some((line) =>
+        nativeBorderControl(line)?.frameTransition?.hideFallbackPlateIds?.includes(
+          playlist.sourceId,
+        ),
+      ),
+      batch.join('\n'),
+    ).toBe(true);
+    expect(
+      batch.some((line) =>
+        nativeBorderControl(line)?.nativeBorderPlateIds?.includes(playlist.sourceId),
+      ),
+    ).toBe(true);
+    expect(
+      batch.flatMap((line) => nativeBorderControl(line)?.frameTransition?.decorationOpacity ?? []),
+    ).toContainEqual({ plateId: playlist.sourceId, border: { fromOpacity: 0, toOpacity: 1 } });
+    expect(lines).toContain(`CLEAR ${channel}-${picture - 1}`);
+    expect(engine.stagedMixerCount(channel)).toBe(0);
+  }
+});
+
+it.each([false, true])(
+  'moves fallback with the offline NDI seat entering Focus and returning on both engines (fade %s)',
+  async (fade) => {
+    const item = 'item-1';
+    const plate = focusFrameIds[1];
+    const runtime = await bootControlFocus(
+      true,
+      false,
+      'motion',
+      true,
+      false,
+      true,
+      3,
+      true,
+      { start: 60, end: 79 },
+      false,
+      focusFrameIds,
+      true,
+    );
+    const engines = [
+      [mock!, 1],
+      [backup!, 2],
+    ] as const;
+    const seats = runtime
+      .liveLayers()
+      .get(item)!
+      .filter(({ sourceId }) => sourceId === plate);
+    const lowest = Math.min(...seats.map(({ slot }) => slot.layer));
+    const highest = Math.max(...seats.map(({ slot }) => slot.layer));
+    const ndi = seats.find((seat) => seat.producer.startsWith('[NDI] '))!;
+    const name = JSON.parse(ndi.producer.slice('[NDI] '.length)) as string;
+    for (const [engine] of engines) {
+      const info = defaultHandlers().get('INFO')!;
+      engine.setHandler('INFO', async (request, context, connection) => {
+        const reply = await info(request, context, connection);
+        if (reply.kind !== 'ok-line') return reply;
+        const entry = new RegExp('(<layer_' + ndi.slot.layer + '>[\\s\\S]*?<foreground>)');
+        return {
+          ...reply,
+          data: reply.data.replace(
+            entry,
+            '$1<ndi><name>' +
+              name +
+              '</name></ndi><media><video-frames>0</video-frames><video-age-ms>-1</video-age-ms></media>',
+          ),
+        };
+      });
+    }
+    for (const target of [focusLooks[1]!, focusPreset]) {
+      const marks = engines.map(([engine]) => engine.receivedCommands().length);
+      expect(await runtime.setActiveLook(item, target, { ...focusMotion, fade })).toEqual({
+        ok: true,
+      });
+      for (const [index, [engine, channel]] of engines.entries()) {
+        const lines = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .map(({ line }) => line);
+        const prefix = 'MIXER ' + channel + '-';
+        const still = lowest - 1;
+        const tween = lines.findIndex(
+          (line) =>
+            line.startsWith(prefix + still + ' FILL ') && / [1-9]\d* [a-z]\w* DEFER$/.test(line),
+        );
+        expect(tween).toBeGreaterThanOrEqual(0);
+        const commit = 'MIXER ' + channel + ' COMMIT';
+        const batch = lines.slice(
+          lines.lastIndexOf(commit, tween) + 1,
+          lines.indexOf(commit, tween),
+        );
+        expect(
+          seats.some(({ slot }) =>
+            batch.some((line) => line.startsWith(prefix + slot.layer + ' FILL ')),
+          ),
+        ).toBe(true);
+        expect(
+          batch.some((line) =>
+            nativeBorderControl(line)?.frameTransition?.hideFallbackPlateIds?.includes(plate),
+          ),
+        ).toBe(true);
+        // The stroke and the fallback have separate authored visibility on the moving seat.
+        const movesBorder = batch.some((line) =>
+          nativeBorderControl(line)?.nativeBorderPlateIds?.includes(plate),
+        );
+        expect(movesBorder).toBe(true);
+        const edgeOpacity = target === focusPreset ? 1 : 0;
+        for (let edge = highest + 1; edge <= highest + 4; edge++) {
+          expect(batch.some((line) => line.startsWith(prefix + edge + ' FILL '))).toBe(true);
+          const finalOpacity = prefix + edge + ' OPACITY ' + edgeOpacity;
+          expect(
+            lines.some(
+              (line) => line.startsWith(finalOpacity + ' ') && / [1-9]\d* \w+ DEFER$/.test(line),
+            ),
+            'Missing fading edge ' +
+              finalOpacity +
+              '\n' +
+              lines.filter((line) => line.startsWith(prefix + edge + ' OPACITY ')).join('\n'),
+          ).toBe(true);
+          expect(lines.indexOf('CLEAR ' + channel + '-' + edge)).toBeGreaterThan(
+            lines.indexOf(commit, tween),
+          );
+        }
+        expect(lines).toContain('CLEAR ' + channel + '-' + still);
+        expect(engine.stagedMixerCount(channel)).toBe(0);
+      }
+    }
+  },
+);
+
+it('keeps the reserve fallback held until its arriving underlay reaches the final position and opacity', async () => {
+  const item = 'item-1';
+  const arriving = focusFrameIds[1];
+  const runtime = await bootControlFocus(
+    true,
+    false,
+    'motion',
+    true,
+    false,
+    true,
+    3,
+    true,
+    { start: 60, end: 79 },
+    false,
+    [arriving],
+    true,
+  );
+  await expect.poll(() => runtime.channelSettingsState().observed[0]?.mode).toBe('1080i5000');
+  expect(await runtime.setActiveLook(item, focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+  const reserve = backup!;
+  const mixer = defaultHandlers().get('MIXER')!;
+  const lowest = Math.min(
+    ...runtime
+      .liveLayers()
+      .get(item)!
+      .filter((s) => s.sourceId === arriving)
+      .map((s) => s.slot.layer),
+  );
+  const underlay = lowest - 1;
+  const prefix = 'MIXER 2-' + underlay;
+  const before = reserve.receivedCommands().length;
+  let targetFill: string | undefined;
+  let lastPosition = false;
+  let lastOpacity = false;
+  let positionReads = 0;
+  let opacityReads = 0;
+  let completed = -1;
+  reserve.setHandler('MIXER', (request, context, connection) => {
+    const raw = request.raw;
+    if (raw.startsWith(prefix + ' FILL ') && / [1-9]\d* [A-Za-z_]+ DEFER$/i.test(raw)) {
+      targetFill = raw.split(/\s+/).slice(3, 7).join(' ');
+    }
+    if (targetFill && raw === prefix + ' FILL') {
+      lastPosition = ++positionReads >= 3;
+      return {
+        kind: 'ok-line',
+        code: 201,
+        verb: 'MIXER',
+        data: lastPosition ? targetFill : '0 0.85 0.4 0.4',
+      };
+    }
+    if (targetFill && raw === prefix + ' OPACITY') {
+      lastOpacity = ++opacityReads >= 2;
+      if (lastPosition && lastOpacity && completed === -1)
+        completed = reserve.receivedCommands().length - before;
+      return { kind: 'ok-line', code: 201, verb: 'MIXER', data: lastOpacity ? '1' : '0.75' };
+    }
+    return mixer(request, context, connection);
+  });
+  expect(await runtime.setActiveLook(item, focusPreset, focusMotion)).toEqual({ ok: true });
+  expect(targetFill).toBeDefined();
+  expect(positionReads).toBeGreaterThanOrEqual(3);
+  expect(opacityReads).toBeGreaterThanOrEqual(2);
+  expect(completed).toBeGreaterThan(0);
+  const lines = reserve
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  const end = lines.indexOf('CLEAR 2-' + underlay);
+  expect(end).toBeGreaterThanOrEqual(completed);
+  const release = lines.findIndex((line) => {
+    if (!line.startsWith('CG 2-10 UPDATE')) return false;
+    const payload = nativeBorderControl(line);
+    return (
+      payload?.liveFallback?.phase === 'release' ||
+      (payload?.look === focusPreset && !payload.frameTransition)
+    );
+  });
+  expect(release).toBeGreaterThanOrEqual(completed);
+  expect(reserve.stagedMixerCount(2)).toBe(0);
+});
+
+it('keeps the native stroke and fallback with the picture when another producer leaves fewer than four edge slots', async () => {
+  const runtime = await bootControlFocus(
+    true,
+    false,
+    'motion',
+    true,
+    false,
+    true,
+    3,
+    true,
+    { start: 60, end: 79 },
+    false,
+    focusFrameIds,
+    true,
+  );
+  const plate = focusFrameIds[1];
+  const seats = runtime
+    .liveLayers()
+    .get('item-1')!
+    .filter((r) => r.sourceId === plate);
+  const low = Math.min(...seats.map(({ slot }) => slot.layer));
+  const high = Math.max(...seats.map(({ slot }) => slot.layer));
+  const foreign = high + 3;
+  const engines = [
+    [mock!, 1],
+    [backup!, 2],
+  ] as const;
+  const info = defaultHandlers().get('INFO')!;
+  for (const [engine] of engines) {
+    engine.setHandler('INFO', async (req, context, socket) => {
+      const reply = await info(req, context, socket);
+      return reply.kind !== 'ok-line'
+        ? reply
+        : {
+            ...reply,
+            data: reply.data.replace(
+              '</stage>',
+              '<layer_' +
+                foreign +
+                '><foreground><producer>route</producer></foreground></layer_' +
+                foreign +
+                '></stage>',
+            ),
+          };
+    });
+  }
+  const marks = engines.map(([engine]) => engine.receivedCommands().length);
+  expect(await runtime.setActiveLook('item-1', focusLooks[1]!, focusMotion)).toEqual({ ok: true });
+  for (const [i, [engine, channel]] of engines.entries()) {
+    const lines = engine
+      .receivedCommands()
+      .slice(marks[i]!)
+      .map((c) => c.line);
+    const under = low - 1,
+      stroke = high + 1,
+      prefix = 'MIXER ' + channel + '-';
+    const still = (layer: number) =>
+      lines.find((l) => l.startsWith('PLAY ' + channel + '-' + layer + ' "http'));
+    expect(still(under)).toBeDefined();
+    expect(still(stroke)).toBeDefined();
+    expect(still(under)?.split(' "')[1]).not.toBe(still(stroke)?.split(' "')[1]);
+    const matches = lines
+      .map((line, index) => ({ line, index }))
+      .filter(
+        ({ line }) =>
+          line.startsWith(prefix + under + ' FILL ') && / [1-9]\d* [a-z]\w* DEFER$/.test(line),
+      );
+    expect(matches.length).toBeGreaterThan(0);
+    for (const { line, index } of matches) {
+      const commit = 'MIXER ' + channel + ' COMMIT';
+      const batch = lines.slice(lines.lastIndexOf(commit, index) + 1, lines.indexOf(commit, index));
+      expect(batch).toContain(line.replace(prefix + under + ' ', prefix + stroke + ' '));
+      expect(
+        batch.some((c) => seats.some((s) => c.startsWith(prefix + s.slot.layer + ' FILL '))),
+      ).toBe(true);
+    }
+    expect(lines).toContain('CLEAR ' + channel + '-' + stroke);
+    expect(lines).not.toContain('CLEAR ' + channel + '-' + foreign);
+  }
+});
+
+it('native preset borders commit on the reserve when two slow page replies exceed one reply window', async () => {
+  const r = await bootPairedNativePresetBorder();
+  const engine = backup!;
+  const cg = defaultHandlers().get('CG')!;
+  engine.setHandler('CG', async (request, context, connection) => {
+    const reply = cg(request, context, connection);
+    const control = nativeBorderControl(request.raw);
+    if (
+      control?.nativeBorderPlateIds?.length &&
+      control.frameTransition?.frames.some(
+        ({ from, to }) => from.x !== to.x || from.y !== to.y || from.width !== to.width,
+      )
+    )
+      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+    return reply;
+  });
+  const liveSeats = r.liveLayers().get('item-1')!;
+  const picture = liveSeats.find(({ sourceId }) => sourceId === focusFrameIds[0])!.slot.layer;
+  const mark = engine.receivedCommands().length;
+  await expect(
+    r.setActiveLook('item-1', focusPreset, {
+      ...focusMotion,
+      motion: 'linear',
+      durationMs: 760,
+    }),
+  ).resolves.toEqual({ ok: true });
+  const lines = engine
+    .receivedCommands()
+    .slice(mark)
+    .map(({ line }) => line);
+  expectNativeBorderMove(
+    lines,
+    2,
+    picture,
+    liveSeats.map(({ slot }) => slot.layer),
+  );
+  expect(engine.stagedMixerCount(2)).toBe(0);
+});
+
+it('native preset borders retain the HTML on both engines when the mapped reserve band is occupied', async () => {
+  const r = await bootPairedNativePresetBorder();
+  const reserve = backup!;
+  const seats = r.liveLayers().get('item-1')!;
+  const picture = seats.find(({ sourceId }) => sourceId === focusFrameIds[0])!.slot.layer;
+  const upper = Math.min(
+    ...seats.filter(({ slot }) => slot.layer > picture).map(({ slot }) => slot.layer),
+    NATIVE_BORDER_BAND.end,
+  );
+  const slots = Array.from({ length: upper - picture - 1 }, (_, offset) => ({
+    channel: 2,
+    layer: picture + 1 + offset,
+  }));
+  expect(slots.length).toBeGreaterThanOrEqual(4);
+  const otherClient = new AmcpTransport();
+  let queue: CommandQueue | undefined;
+  try {
+    await otherClient.connect(reserve.host, reserve.amcpPort);
+    queue = new CommandQueue(otherClient);
+    for (const { channel, layer } of slots) {
+      expect((await queue.enqueue(`PLAY ${channel}-${layer} #6020da`)).response.kind).not.toBe(
+        'err',
+      );
+    }
+  } finally {
+    queue?.dispose();
+    otherClient.destroy();
+  }
+  const before = slots.map((slot) => structuredClone(reserve.layerState(slot)));
+  expect(before.every((state) => state?.producer === 'color')).toBe(true);
+  const engines = [
+    [mock!, 1],
+    [reserve, 2],
+  ] as const;
+  const marks = engines.map(([engine]) => engine.receivedCommands().length);
+  expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
+  for (const [index, [engine, channel]] of engines.entries()) {
+    const lines = engine
+      .receivedCommands()
+      .slice(marks[index]!)
+      .map(({ line }) => line);
+    expect(nativeBorderPlayLayers(lines, channel)).toEqual([]);
+    expect(
+      lines.some((line) => nativeBorderControl(line)?.nativeBorderPlateIds !== undefined),
+    ).toBe(false);
+    expect(
+      lines.some((line) =>
+        nativeBorderControl(line)?.frameTransition?.frames.some(
+          ({ from, to }) => from.width !== to.width,
+        ),
+      ),
+    ).toBe(true);
+  }
+  expect(slots.map((slot) => reserve.layerState(slot))).toEqual(before);
+});
+
+it('native preset borders clean up both engines and animate with HTML when reserve PLAY is refused', async () => {
+  const r = await bootPairedNativePresetBorder();
+  const active = mock!;
+  const reserve = backup!;
+  const engines = [
+    [active, 1],
+    [reserve, 2],
+  ] as const;
+  const play = defaultHandlers().get('PLAY')!;
+  let colorAttempts = 0;
+  reserve.setHandler('PLAY', (request, context, connection) => {
+    if (nativeBorderPlayLayers([request.raw], 2).length > 0 && ++colorAttempts === 2)
+      return { kind: 'err', code: 502, verb: 'PLAY' };
+    return play(request, context, connection);
+  });
+
+  const marks = engines.map(([engine]) => engine.receivedCommands().length);
+  expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
+  expect(colorAttempts).toBe(2);
+  for (const [index, [engine, channel]] of engines.entries()) {
+    const lines = engine
+      .receivedCommands()
+      .slice(marks[index]!)
+      .map(({ line }) => line);
+    expect(nativeBorderPlayLayers(lines, channel)).toHaveLength(channel === 1 ? 4 : 2);
+    const controls = lines.flatMap((line) => nativeBorderControl(line) ?? []);
+    expect(controls.some(({ nativeBorderPlateIds }) => nativeBorderPlateIds !== undefined)).toBe(
+      false,
+    );
+    expect(
+      controls.some(({ frameTransition }) =>
+        frameTransition?.frames.some(({ from, to }) => from.width !== to.width),
+      ),
+    ).toBe(true);
+    for (const layer of nativeBorderPlayLayers(lines, channel)) {
+      expect(engine.layerState({ channel, layer })?.producer ?? 'empty').toBe('empty');
+      expect(lines).toContain(`MIXER ${channel}-${layer} CLEAR`);
+    }
+    expect(engine.stagedMixerCount(channel)).toBe(0);
+  }
+});
+
+it('native preset borders abandon the in-flight move and release both sessions after promotion', async () => {
+  const r = await bootPairedNativePresetBorder();
+  const active = mock!;
+  const reserve = backup!;
+  const itemId = 'item-1';
+  const mixer = defaultHandlers().get('MIXER')!;
+  let release: (() => void) | undefined;
+  active.setHandler('MIXER', async (request, context, connection) => {
+    const reply = mixer(request, context, connection);
+    const layer = /^MIXER 1-(\d+) FILL .* [1-9]\d* [a-z]\w* DEFER$/.exec(request.raw)?.[1];
+    if (
+      release === undefined &&
+      layer !== undefined &&
+      active.layerState({ channel: 1, layer: Number(layer) })?.producer === 'color'
+    ) {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    }
+    return reply;
+  });
+
+  const move = r.setActiveLook(itemId, focusPreset, focusMotion);
+  let layersA: number[] = [];
+  let layersB: number[] = [];
+  let promotedMark = 0;
+  try {
+    await expect.poll(() => release !== undefined, { timeout: HEALTH_MS }).toBe(true);
+    layersA = nativeBorderPlayLayers(
+      active.receivedCommands().map(({ line }) => line),
+      1,
+    );
+    layersB = nativeBorderPlayLayers(
+      reserve.receivedCommands().map(({ line }) => line),
+      2,
+    );
+    expect(new Set(layersA).size).toBe(4);
+    expect(new Set(layersB).size).toBe(4);
+    promotedMark = reserve.receivedCommands().length;
+    expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
+  } finally {
+    release?.();
+    // Always settle before the fixtures shut down, even when a setup assertion fails.
+    await move.catch(() => undefined);
+  }
+
+  expect(await move).toMatchObject({ ok: false });
+  expect(r.activeLookId(itemId)).toBe(soloPreset);
+  await expect
+    .poll(
+      () => layersB.map((layer) => reserve.layerState({ channel: 2, layer })?.producer ?? 'empty'),
+      { timeout: HEALTH_MS },
+    )
+    .toEqual(layersB.map(() => 'empty'));
+  expect(
+    reserve
+      .receivedCommands()
+      .slice(promotedMark)
+      .map(({ line }) => line)
+      .filter((line) => /^MIXER 2-\d+ FILL .* [1-9]\d* [a-z]\w* DEFER$/.test(line)),
+  ).toEqual([]);
+
+  expect(await r.failover()).toEqual({ ok: true, newPrimary: 'A' });
+  await expect
+    .poll(
+      () => layersA.map((layer) => active.layerState({ channel: 1, layer })?.producer ?? 'empty'),
+      { timeout: HEALTH_MS },
+    )
+    .toEqual(layersA.map(() => 'empty'));
+  await expect.poll(() => active.stagedMixerCount(1), { timeout: HEALTH_MS }).toBe(0);
+  await expect.poll(() => reserve.stagedMixerCount(2), { timeout: HEALTH_MS }).toBe(0);
+});
+
+it('keeps HTML borders when every remaining live-input layer is occupied', async () => {
+  const band = { ...NATIVE_BORDER_BAND, end: 56 };
+  const r = await bootNativePresetBorder(band);
+  const engine = mock!;
+  const occupied = new Set(
+    r
+      .liveLayers()
+      .get('item-1')!
+      .map(({ slot }) => slot.layer),
+  );
+  const foreground = r.stackSnapshot()[0]!.foregroundLayer;
+  const foreign = Array.from(
+    { length: band.end - band.start + 1 },
+    (_, n) => band.start + n,
+  ).filter((layer) => layer !== foreground && !occupied.has(layer));
+  expect(foreign.length).toBeGreaterThan(0);
+  const info = defaultHandlers().get('INFO')!;
+  engine.setHandler('INFO', (request, context, connection) => {
+    for (const layer of foreign) {
+      context.setLayer(
+        { channel: 1, layer },
+        { producer: 'ndi', filePath: 'other-camera', onAir: true },
+      );
+    }
+    return info(request, context, connection);
+  });
+  const before = engine.receivedCommands().length;
+  expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
+  const lines = engine
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  expect(nativeBorderPlayLayers(lines)).toEqual([]);
+  for (const layer of foreign) {
+    expect(
+      lines.some((line) => line.startsWith(`PLAY 1-${layer} `) || line === `CLEAR 1-${layer}`),
+    ).toBe(false);
+  }
+  expect(lines.some((line) => nativeBorderControl(line)?.nativeBorderPlateIds !== undefined)).toBe(
+    false,
+  );
+  expect(
+    lines.some((line) =>
+      nativeBorderControl(line)?.frameTransition?.frames.some(
+        ({ from, to }) => from.width !== to.width,
+      ),
+    ),
+  ).toBe(true);
+});
+
+it('native preset borders release HTML suppression and retire temporary seats on mixer refusal', async () => {
+  const r = await bootNativePresetBorder();
+  const engine = mock!;
+  const itemId = 'item-1';
+  const picture = r
+    .liveLayers()
+    .get(itemId)!
+    .find(({ sourceId }) => sourceId === focusFrameIds[0])!;
+  const previous = engine.layerState(picture.slot);
+  const cg = defaultHandlers().get('CG')!;
+  const mixer = defaultHandlers().get('MIXER')!;
+  let suppressed = false;
+  let refused = false;
+  engine.setHandler('CG', (request, context, connection) => {
+    if (nativeBorderControl(request.raw)?.nativeBorderPlateIds?.includes(focusFrameIds[0]))
+      suppressed = true;
+    return cg(request, context, connection);
+  });
+  engine.setHandler('MIXER', (request, context, connection) => {
+    if (request.raw === 'MIXER 1 COMMIT' && suppressed && !refused) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+  const before = engine.receivedCommands().length;
+  expect(await r.setActiveLook(itemId, focusPreset, focusMotion)).toMatchObject({
+    ok: false,
+    reason: 'amcp-502',
+  });
+  expect(refused).toBe(true);
+  expect(r.stackSnapshot()[0]?.activeLookId).toBe(soloPreset);
+  expect(engine.layerState(picture.slot)).toEqual(previous);
+  const lines = engine
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  expect(
+    lines.some(
+      (line) => nativeBorderControl(line)?.restorePresetEffect?.nativeBorderPlateIds?.length === 0,
+    ),
+  ).toBe(true);
+  const layers = nativeBorderPlayLayers(lines);
+  expect(layers).toHaveLength(4);
+  for (const layer of layers) {
+    expect(lines).toContain(`CLEAR 1-${layer}`);
+    expect(lines).toContain(`MIXER 1-${layer} CLEAR`);
+  }
+});
 
 it.each([false, true])(
   'paces interlaced native preset artwork on supporting resident pages for both outputs (%s)',
@@ -607,7 +1947,11 @@ it.each([false, true])(
           expect(artworkStart - nativeCommit!.at).toBeLessThan(70);
         }
       } else {
-        expect(move.map(({ phase }) => phase.delayMs)).toEqual([0, 0]);
+        // Older pages can honor delayMs, even though they cannot sample mixer frames.
+        for (const { at, phase } of move) {
+          expect(phase.delayMs).toBeGreaterThan(15);
+          expect(Math.abs(at + (phase.delayMs ?? 0) - nativeCommit!.at)).toBeLessThan(25);
+        }
       }
     }
   },
@@ -732,6 +2076,100 @@ it.each([2, 3] as const)(
       phase: 'hold',
       plateIds: expect.arrayContaining(arrivals),
     });
+  },
+);
+
+it.each([false, true])(
+  'native preset border stages entering and leaving edges in the picture commit (slide: %s)',
+  async (slide) => {
+    const foreground = 69;
+    const r = await bootControlFocus(false, true, 'motion', true, false, true, 3, true, {
+      start: 50,
+      end: foreground,
+    });
+    const engine = mock!;
+    const itemId = 'item-1';
+    const entering = focusFrameIds.slice(1);
+    const records = r.liveLayers().get(itemId)!;
+    const pictureSlots = entering.map(
+      (plateId) => records.find(({ sourceId }) => sourceId === plateId)!.slot.layer,
+    );
+    for (const arrival of [true, false]) {
+      const mark = engine.receivedCommands().length;
+      const destination = arrival ? focusPreset : soloPreset;
+      const opacity = arrival ? 1 : 0;
+      const request = {
+        ...focusMotion,
+        durationMs: 480,
+        ...(slide && { enterDirection: 'down' as const, exitDirection: 'up' as const }),
+      };
+      expect(await r.setActiveLook(itemId, destination, request)).toEqual({ ok: true });
+      expect(r.activeLookId(itemId)).toBe(destination);
+      const lines = engine
+        .receivedCommands()
+        .slice(mark)
+        .map(({ line }) => line);
+      const borders = nativeBorderPlayLayers(lines);
+      expect(new Set(borders).size).toBe(12);
+      expect(borders).toHaveLength(12);
+      const depths = records.map(({ slot }) => slot.layer).sort((a, b) => a - b);
+      for (const [index, depth] of depths.entries()) {
+        const upper = depths[index + 1] ?? foreground;
+        expect(borders.filter((layer) => layer > depth && layer < upper)).toHaveLength(4);
+      }
+      const prefix = 'MIXER 1-' + pictureSlots[0] + ' OPACITY ' + opacity + ' ';
+      const matched = lines.findIndex(
+        (line) => line.startsWith(prefix) && / [1-9][0-9]* linear DEFER$/.test(line),
+      );
+      expect(matched).toBeGreaterThan(0);
+      const previousCommit = lines.lastIndexOf('MIXER 1 COMMIT', matched);
+      const commit = lines.indexOf('MIXER 1 COMMIT', matched);
+      const sameBatch = lines.slice(previousCommit + 1, commit);
+      expect(commit).toBeGreaterThan(matched);
+      const tween = lines[matched]!.match(/ [1-9][0-9]* linear DEFER$/)![0];
+      expect(
+        pictureSlots.every((layer) =>
+          sameBatch.includes('MIXER 1-' + layer + ' OPACITY ' + opacity + tween),
+        ),
+      ).toBe(true);
+      const movingEdges = borders.filter((layer) =>
+        sameBatch.includes('MIXER 1-' + layer + ' OPACITY ' + opacity + tween),
+      );
+      expect(movingEdges).toHaveLength(8);
+      if (slide) {
+        expect(
+          pictureSlots.some((layer) =>
+            sameBatch.some((line) => line.startsWith('MIXER 1-' + layer + ' FILL ')),
+          ),
+        ).toBe(true);
+        expect(
+          movingEdges.every((layer) =>
+            sameBatch.some(
+              (line) => line.startsWith('MIXER 1-' + layer + ' FILL ') && line.endsWith(tween),
+            ),
+          ),
+        ).toBe(true);
+      }
+      const foregroundPrefix = 'CG 1-' + foreground + ' UPDATE ';
+      const suppress = lines.findIndex(
+        (line) =>
+          line.startsWith(foregroundPrefix) &&
+          entering.every(
+            (plateId) =>
+              nativeBorderControl(line)?.nativeBorderPlateIds?.includes(plateId) === true,
+          ),
+      );
+      const restore = lines.findIndex(
+        (line) =>
+          line.startsWith(foregroundPrefix) &&
+          nativeBorderControl(line)?.nativeBorderPlateIds?.length === 0,
+      );
+      expect(suppress).toBeGreaterThan(0);
+      expect(suppress).toBeLessThan(commit);
+      expect(restore).toBeGreaterThan(commit);
+      for (const layer of borders)
+        expect(lines.indexOf('CLEAR 1-' + layer)).toBeGreaterThan(restore);
+    }
   },
 );
 
@@ -1226,6 +2664,828 @@ it('refuses a Control Focus slide transaction and restores the previously shown 
   expect(mock!.stagedMixerCount(1)).toBe(0);
 });
 
+async function bootOpaquePlate(directory: string, ordinary: boolean, adjacentProducer = false) {
+  const plateId = ordinary ? focusFrameIds[2] : focusFrameIds[0];
+  const mediaId = ordinary ? 'src-c' : 'src-a';
+  // Matroska EBML/Tracks prefix with a single AVC/HEVC Main10-compatible video configuration.
+  const bytes = Buffer.from(
+    'GkXfo4tCgohtYXRyb3NrYRhTgGfXFlSua9Ku0IOBAYaQVl9NUEVHSC9JU08vSEVWQ2OisAECAAAAAAAAAAAAAAAAAAABAAAAAAADIAABAARAAQwAIQABAANCAQEiAAEAA0QBAeCGsIGguoFa',
+    'base64',
+  );
+  const fingerprint = createHash('sha256').update(bytes).digest('hex');
+  const replica = path.join(directory, fingerprint + '.mkv').replaceAll('\\', '/');
+  const file = adjacentProducer
+    ? path.join(directory, 'Mountains .mkv').replaceAll('\\', '/')
+    : replica;
+  // The backup's own D11 may also list a named original. Only the local file is read.
+  const backupFile = adjacentProducer ? 'D:/Reserve/Mountains verified.mkv' : replica;
+  fs.writeFileSync(replica, bytes);
+  if (file !== replica) fs.writeFileSync(file, bytes);
+  const r = await bootControlFocus(
+    true,
+    false,
+    'motion',
+    ordinary,
+    false,
+    true,
+    3,
+    ordinary,
+    ordinary ? { start: 60, end: 83 } : undefined,
+    false,
+    focusFrameIds,
+    ordinary,
+    {
+      serverHost: 'localhost.',
+      sources: [
+        {
+          id: mediaId,
+          name: 'Opaque file',
+          format: '1080i5000',
+          origin: 'media',
+          producer: { kind: 'media', file },
+          media: { width: 1920, height: 1080, fingerprint, loop: true },
+        },
+      ],
+      beforeTake: (runtime) =>
+        runtime.useBackupMedia((id) =>
+          id === fingerprint
+            ? { kind: 'copy', clip: backupFile }
+            : { kind: 'refused', reason: 'no-copy' },
+        ),
+    },
+  );
+  const slot = r
+    .liveLayers()
+    .get('item-1')!
+    .find(({ sourceId }) => sourceId === plateId)!.slot;
+  const engines = [mock!, backup!] as const;
+  const info = defaultHandlers().get('INFO')!;
+  let peerFile = backupFile;
+  for (const [index, engine] of engines.entries()) {
+    engine.setHandler('INFO', async (request, context, connection) => {
+      const reply = await info(request, context, connection);
+      if (reply.kind !== 'ok-line') return reply;
+      const entry = new RegExp(
+        '(<layer_' + slot.layer + '>[\\s\\S]*?<foreground>)[\\s\\S]*?(</foreground>)',
+      );
+      return {
+        ...reply,
+        data: reply.data
+          .replace(
+            entry,
+            '$1<producer>ffmpeg</producer><file><path>' +
+              (index === 0 ? file : peerFile) +
+              '</path></file>$2',
+          )
+          .replace(
+            '</stage>',
+            adjacentProducer
+              ? '<layer_' +
+                  (slot.layer + 1) +
+                  '><foreground><producer>route</producer></foreground></layer_' +
+                  (slot.layer + 1) +
+                  '></stage>'
+              : '</stage>',
+          ),
+      };
+    });
+  }
+  return {
+    r,
+    slot,
+    engines,
+    plateId,
+    mediaId,
+    mismatchPeer: () => {
+      peerFile = replica.replace(fingerprint, 'd'.repeat(64));
+    },
+  };
+}
+
+it('hides fingerprint-proven opaque file fallback only during direct Focus slides on both engines', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-focus-opacity-'));
+  try {
+    const { r, engines, mediaId, mismatchPeer } = await bootOpaquePlate(directory, false);
+    const item = 'item-1';
+    expect(await r.setActiveLook(item, focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+    const slide = { mode: 'slide-over', direction: 'up', durationMs: 160 } as const;
+    // D11 can list the original path for the same immutable content a resident copy is playing.
+    const catalogue = r.sourceCatalog();
+    const clip = catalogue.sources.find(({ id }) => id === mediaId)!;
+    r.setResolvedSourceCatalog({
+      ...catalogue,
+      sources: [
+        ...catalogue.sources.map((source) =>
+          source === clip ? { ...source, media: { width: 1920, height: 1080 } } : source,
+        ),
+        { ...clip, id: 'src-copy', producer: { kind: 'media', file: 'original.mkv' } },
+      ],
+    });
+    for (const [target, proved] of [
+      [focusLooks[1]!, true],
+      [focusLooks[0]!, true],
+      [focusLooks[1]!, false],
+    ] as const) {
+      if (!proved) mismatchPeer();
+      const marks = engines.map((engine) => engine.receivedCommands().length);
+      expect(await r.setActiveLook(item, target, undefined, slide)).toEqual({ ok: true });
+      for (const [index, engine] of engines.entries()) {
+        const phases = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .flatMap(({ line }) => {
+            if (!line.includes('focusSlide')) return [];
+            const decoded = decodeCgData(parseAmcpLine(line)!.args[3]!);
+            if (decoded.data === null) throw new Error('Cannot decode Focus slide');
+            return [readCgControl(JSON.parse(decoded.data))?.frameTransition];
+          });
+        expect(phases.length).toBeGreaterThan(1);
+        for (const phase of phases)
+          expect(phase?.hideFallbackPlateIds).toEqual(proved ? [focusFrameIds[0]] : undefined);
+      }
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('keeps proven opaque arrivals and departures free of bars on both hostname-connected engines', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-preset-opacity-'));
+  try {
+    const { r, engines, slot, plateId, mismatchPeer } = await bootOpaquePlate(directory, true);
+    for (const [target, proved] of [
+      ['two-camera', true],
+      [focusPreset, true],
+      ['two-camera', false],
+    ] as const) {
+      if (!proved) mismatchPeer();
+      const marks = engines.map((engine) => engine.receivedCommands().length);
+      expect(
+        await r.setActiveLook('item-1', target, {
+          ...focusMotion,
+          fade: true,
+          enterDirection: 'down',
+          exitDirection: 'up',
+        }),
+      ).toEqual({ ok: true });
+      for (const [index, engine] of engines.entries()) {
+        const lines = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .map(({ line }) => line);
+        const channel = index + 1;
+        expect(
+          lines.some(
+            (line) =>
+              line.startsWith('MIXER ' + channel + '-' + slot.layer + ' OPACITY ') &&
+              / [1-9]\d* linear DEFER$/.test(line),
+          ),
+        ).toBe(true);
+        expect(
+          lines.some((line) =>
+            line.startsWith('PLAY ' + channel + '-' + (slot.layer - 1) + ' "http'),
+          ),
+        ).toBe(!proved);
+        expect(
+          lines.some((line) =>
+            nativeBorderControl(line)?.frameTransition?.hideFallbackPlateIds?.includes(plateId),
+          ),
+        ).toBe(true);
+      }
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('keeps bars beneath a proven opaque clip suppressed when an adjacent producer leaves no border slots', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-preset-compact-opacity-'));
+  try {
+    const { r, engines, plateId } = await bootOpaquePlate(directory, true, true);
+    for (const target of ['two-camera', focusPreset]) {
+      const marks = engines.map((engine) => engine.receivedCommands().length);
+      expect(await r.setActiveLook('item-1', target, { ...focusMotion, fade: true })).toEqual({
+        ok: true,
+      });
+      for (const [index, engine] of engines.entries()) {
+        const controls = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .map(({ line }) => nativeBorderControl(line));
+        expect(
+          controls.some((control) =>
+            control?.frameTransition?.hideFallbackPlateIds?.includes(plateId),
+          ),
+        ).toBe(true);
+        expect(controls.some((control) => control?.nativeBorderPlateIds?.includes(plateId))).toBe(
+          false,
+        );
+      }
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('uses one mixer seam for a witnessed offline Focus plate on both engines', async () => {
+  const runtime = await bootControlFocus(
+    true,
+    false,
+    'motion',
+    true,
+    false,
+    true,
+    3,
+    true,
+    { start: 60, end: 79 },
+    false,
+    focusFrameIds,
+    true,
+  );
+  const itemId = 'item-1';
+  const seats = runtime
+    .liveLayers()
+    .get(itemId)!
+    .filter(({ held }) => held !== true);
+  const silent = seats.find(({ sourceId }) => sourceId === focusFrameIds[1])!;
+  const layer = silent.slot.layer;
+  const underlay = layer - 1;
+  const ndiName = JSON.parse(silent.producer.slice('[NDI] '.length)) as string;
+  const silentLook = controlLiveLayoutFocusLookId(focusPreset, silent.sourceId);
+  const liveLook = controlLiveLayoutFocusLookId(focusPreset, focusFrameIds[2]);
+  const engines = [
+    [mock!, 1],
+    [backup!, 2],
+  ] as const;
+  const info = defaultHandlers().get('INFO')!;
+  expect(await runtime.setActiveLook(itemId, silentLook, focusMotion)).toEqual({ ok: true });
+  for (const [engine] of engines) {
+    engine.setHandler('INFO', async (request, context, connection) => {
+      const reply = await info(request, context, connection);
+      if (reply.kind !== 'ok-line') return reply;
+      const entry = new RegExp('(<layer_' + layer + '>[\\s\\S]*?<foreground>)');
+      return {
+        ...reply,
+        data: reply.data.replace(
+          entry,
+          '$1<ndi><name>' +
+            ndiName +
+            '</name></ndi><media><video-frames>0</video-frames><video-age-ms>-1</video-age-ms></media>',
+        ),
+      };
+    });
+  }
+  for (const look of [liveLook, silentLook]) {
+    const marks = engines.map(([engine]) => engine.receivedCommands().length);
+    expect(
+      await runtime.setActiveLook(itemId, look, undefined, {
+        mode: 'slide-over',
+        direction: 'up',
+        durationMs: 160,
+      }),
+    ).toEqual({ ok: true });
+    for (const [index, [engine, channel]] of engines.entries()) {
+      const read = () =>
+        engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .map(({ line }) => line);
+      await expect.poll(() => read().includes('CLEAR ' + channel + '-' + underlay)).toBe(true);
+      const lines = read();
+      expect(
+        lines.some((line) => line.startsWith('PLAY ' + channel + '-' + underlay + ' "http')),
+      ).toBe(true);
+      const motionPicture = lines.findIndex(
+        (line) =>
+          line.startsWith('MIXER ' + channel + '-' + layer + ' CLIP ') &&
+          /\s[1-9]\d* linear DEFER$/.test(line),
+      );
+      expect(motionPicture).toBeGreaterThan(-1);
+      const nextCommit = lines.indexOf('MIXER ' + channel + ' COMMIT', motionPicture);
+      const motionUnderlay = lines[motionPicture]!.replace(
+        'MIXER ' + channel + '-' + layer,
+        'MIXER ' + channel + '-' + underlay,
+      );
+      const previousCommit = lines.lastIndexOf('MIXER ' + channel + ' COMMIT', motionPicture - 1);
+      expect(lines.slice(previousCommit + 1, nextCommit)).toContain(motionUnderlay);
+      expect(
+        lines.some(
+          (line) =>
+            line.includes('focusSlide') &&
+            line.includes('hideFallbackPlateIds') &&
+            line.includes(silent.sourceId),
+        ),
+      ).toBe(true);
+      expect(lines.indexOf('CLEAR ' + channel + '-' + underlay)).toBeGreaterThan(nextCommit);
+    }
+  }
+}, 15_000);
+
+it('keeps the offline NDI artwork throughout direct Focus slides and dissolves on both engines', async () => {
+  const runtime = await bootControlFocus(
+    true,
+    false,
+    'fade',
+    true,
+    false,
+    true,
+    3,
+    true,
+    { start: 60, end: 79 },
+    false,
+    focusFrameIds,
+    true,
+  );
+  const item = 'item-1';
+  const engines = [
+    [mock!, 1],
+    [backup!, 2],
+  ] as const;
+  const seats = runtime
+    .liveLayers()
+    .get(item)!
+    .filter((seat) => !seat.held)
+    .sort((a, b) => a.slot.layer - b.slot.layer);
+  const [lower, offline, upper] = [seats[0]!, seats[1]!, seats[2]!];
+  const [one, two, three] = seats.map((seat) =>
+    controlLiveLayoutFocusLookId(focusPreset, seat.sourceId),
+  );
+  const ndiName = JSON.parse(offline.producer.slice('[NDI] '.length)) as string;
+  expect(await runtime.setActiveLook(item, two!, focusMotion)).toEqual({ ok: true });
+  for (const [engine] of engines) {
+    const info = defaultHandlers().get('INFO')!;
+    engine.setHandler('INFO', async (request, context, connection) => {
+      const reply = await info(request, context, connection);
+      if (reply.kind !== 'ok-line') return reply;
+      const entry = new RegExp('(<layer_' + offline.slot.layer + '>[\\s\\S]*?<foreground>)');
+      return {
+        ...reply,
+        data: reply.data.replace(
+          entry,
+          '$1<ndi><name>' +
+            ndiName +
+            '</name></ndi><media><video-frames>0</video-frames><video-age-ms>-1</video-age-ms></media>',
+        ),
+      };
+    });
+  }
+  for (const [target, mode, faded, opacity] of [
+    [three, 'slide-over', upper, 1],
+    [two, 'push', upper, 0],
+    [three, 'fade', upper, 1],
+    [two, 'fade', upper, 0],
+    [one, 'fade', lower, 1],
+    [two, 'fade', lower, 0],
+  ] as const) {
+    const marks = engines.map(([engine]) => engine.receivedCommands().length);
+    const result =
+      mode === 'fade'
+        ? await runtime.setActiveLook(item, target!, { motion: 'cut', fade: true, durationMs: 160 })
+        : await runtime.setActiveLook(item, target!, undefined, {
+            mode,
+            direction: 'up',
+            durationMs: 160,
+          });
+    expect(result).toEqual({ ok: true });
+    for (const [i, [engine, channel]] of engines.entries()) {
+      const lines = engine
+        .receivedCommands()
+        .slice(marks[i]!)
+        .map(({ line }) => line);
+      const updates = lines.flatMap((line) => {
+        const control = nativeBorderControl(line);
+        return control === undefined ? [] : [{ line, control }];
+      });
+      const phases = updates.filter(({ control }) => control.frameTransition != null);
+      expect(phases.length).toBeGreaterThan(0);
+      expect(updates.some(({ control }) => control.liveFallback?.phase === 'hold')).toBe(false);
+      if (mode === 'fade') {
+        expect(
+          phases.every(
+            ({ control }) =>
+              !control.frameTransition?.hideFallbackPlateIds?.includes(offline.sourceId),
+          ),
+        ).toBe(true);
+        const backdrop = phases.find(({ line }) => line.startsWith('CG ' + channel + '-10 '));
+        expect(backdrop?.control.look).toBe(two);
+        expect(lines).toContain(
+          'MIXER ' + channel + '-' + faded.slot.layer + ' OPACITY ' + opacity + ' 4 linear DEFER',
+        );
+      } else {
+        expect(
+          phases.some(({ control }) => control.frameTransition?.focusSlide?.toProgress === 1),
+        ).toBe(true);
+      }
+      expect(engine.stagedMixerCount(channel)).toBe(0);
+    }
+  }
+});
+
+it.each([true, false])(
+  'moves an empty NDI Focus fallback with the native Motion tween (common authored preset %s)',
+  async (common) => {
+    const runtime = await bootControlFocus(
+      true,
+      true,
+      'motion',
+      true,
+      false,
+      true,
+      common ? 3 : 2,
+      true,
+      { start: 60, end: 79 },
+      false,
+      focusFrameIds,
+      true,
+    );
+    const item = 'item-1';
+    const engines = [
+      [mock!, 1],
+      [backup!, 2],
+    ] as const;
+    const frame = focusFrameIds[2];
+    const seat = runtime
+      .liveLayers()
+      .get(item)!
+      .find((s) => s.sourceId === frame)!;
+    const offlineSeats = [seat];
+    if (!common) {
+      const marks = engines.map(([engine]) => engine.receivedCommands().length);
+      const target = controlLiveLayoutFocusLookId(soloPreset, frame);
+      expect(await runtime.setActiveLook(item, target, focusMotion)).toEqual({ ok: true });
+      for (const [i, [engine, channel]] of engines.entries()) {
+        const lines = engine
+          .receivedCommands()
+          .slice(marks[i]!)
+          .map(({ line }) => line);
+        expect(
+          lines.some(
+            (line) =>
+              line.startsWith('MIXER ' + channel + '-' + seat.slot.layer + ' FILL ') &&
+              / [1-9]\d* easeinoutquad DEFER$/.test(line),
+          ),
+        ).toBe(true);
+        expect(
+          lines.some((line) => {
+            const control = nativeBorderControl(line);
+            return (
+              control?.look === target &&
+              control.frameTransition != null &&
+              !control.presetTransitionCommit
+            );
+          }),
+        ).toBe(false);
+      }
+      expect(await runtime.setActiveLook(item, soloPreset, focusMotion)).toEqual({ ok: true });
+    }
+    for (const [engine] of engines) {
+      const info = defaultHandlers().get('INFO')!;
+      engine.setHandler('INFO', async (request, context, connection) => {
+        const reply = await info(request, context, connection);
+        if (reply.kind !== 'ok-line') return reply;
+        let data = reply.data;
+        for (const missing of offlineSeats) {
+          const entry = new RegExp('(<layer_' + missing.slot.layer + '>[\\s\\S]*?<foreground>)');
+          const name = JSON.parse(missing.producer.slice('[NDI] '.length)) as string;
+          data = data.replace(
+            entry,
+            '$1<ndi><name>' +
+              name +
+              '</name></ndi><media><video-frames>0</video-frames><video-age-ms>-1</video-age-ms></media>',
+          );
+        }
+        return { ...reply, data };
+      });
+    }
+    for (const [preset, origin] of [
+      [soloPreset, soloPreset],
+      [focusPreset, focusLooks[0]!],
+    ] as const) {
+      if (preset === focusPreset) {
+        expect(await runtime.setActiveLook(item, preset, focusMotion)).toEqual({ ok: true });
+        expect(await runtime.setActiveLook(item, origin, focusMotion)).toEqual({ ok: true });
+      }
+      const destination = controlLiveLayoutFocusLookId(preset, frame);
+      for (const entering of [true, false]) {
+        const marks = engines.map(([engine]) => engine.receivedCommands().length);
+        const look = entering
+          ? destination
+          : controlLiveLayoutFocusLookId(preset, focusFrameIds[0]);
+        expect(await runtime.setActiveLook(item, look, focusMotion)).toEqual({ ok: true });
+        for (const [i, [engine, channel]] of engines.entries()) {
+          const lines = engine
+            .receivedCommands()
+            .slice(marks[i]!)
+            .map(({ line }) => line);
+          const phases = lines.flatMap((line) => {
+            if (!line.startsWith('CG ' + channel + '-10 ')) return [];
+            const control = nativeBorderControl(line);
+            return control?.look === destination && control.frameTransition?.frames.length
+              ? [control.frameTransition]
+              : [];
+          });
+          expect(phases.length).toBeGreaterThan(1);
+          const last = phases.at(-1)!;
+          expect(last.hideFallbackPlateIds ?? []).not.toContain(frame);
+          expect(last.frames).toHaveLength(1);
+          expect(last.frames[0]).toMatchObject({
+            lookId: destination,
+            fromOpacity: entering ? 0 : 1,
+            toOpacity: entering ? 1 : 0,
+          });
+          const art = last.frames[0]!;
+          const anchor = entering ? art.from : art.to;
+          if (preset === soloPreset || !common)
+            expect(anchor).toEqual({
+              x: SCENE.width * 0.375,
+              y: SCENE.height * 0.375,
+              width: SCENE.width / 4,
+              height: SCENE.height / 4,
+            });
+          else expect(anchor.width).toBeLessThan(SCENE.width);
+          expect(entering ? art.to : art.from).toEqual(focusRect);
+          expect(
+            lines.some(
+              (line) =>
+                line.startsWith('MIXER ' + channel + '-' + seat.slot.layer + ' FILL ') &&
+                / [1-9]\d* easeinoutquad DEFER$/.test(line),
+            ),
+          ).toBe(true);
+        }
+      }
+    }
+    const other = runtime
+      .liveLayers()
+      .get(item)!
+      .find((s) => s.sourceId === focusFrameIds[0])!;
+    offlineSeats.push(other);
+    const marks = engines.map(([engine]) => engine.receivedCommands().length);
+    expect(await runtime.setActiveLook(item, focusLooks[2]!, focusMotion)).toEqual({ ok: true });
+    for (const [i, [engine, channel]] of engines.entries()) {
+      const updates = engine
+        .receivedCommands()
+        .slice(marks[i]!)
+        .filter(({ line }) => line.startsWith('CG ' + channel + '-10 '));
+      const controls = updates.map(({ line }) => nativeBorderControl(line));
+      if (common) {
+        const phase = controls.find(
+          (control) => control?.look === focusPreset && control.frameTransition?.durationMs,
+        );
+        expect(
+          phase?.frameTransition?.frames.map(({ fromOpacity, toOpacity }) => [
+            fromOpacity,
+            toOpacity,
+          ]),
+        ).toEqual([
+          [1, 0],
+          [0, 1],
+        ]);
+        expect(phase?.frameTransition?.hideFallbackPlateIds).toEqual([focusFrameIds[1]]);
+        expect(phase?.frameTransition?.hidePresetArtworkKeys).toContain(
+          focusPreset + '/' + focusFrameIds[1],
+        );
+      } else {
+        expect(
+          controls.some(
+            (control) =>
+              control?.look === focusLooks[2] &&
+              control?.frameTransition?.durationMs === 0 &&
+              !control.frameTransition.hideFallbackPlateIds?.length,
+          ),
+        ).toBe(true);
+        expect(controls.some((control) => control?.liveFallback?.phase === 'hold')).toBe(false);
+      }
+    }
+  },
+);
+
+it.each([
+  { mode: 'slide-over', dropPeer: false, activePaintError: false, thirdBorderOnly: false },
+  { mode: 'fade', dropPeer: false, activePaintError: false, thirdBorderOnly: false },
+  { mode: 'slide-over', dropPeer: true, activePaintError: false, thirdBorderOnly: false },
+  { mode: 'slide-over', dropPeer: false, activePaintError: true, thirdBorderOnly: false },
+  { mode: 'slide-over', dropPeer: false, activePaintError: false, thirdBorderOnly: true },
+] as const)(
+  'seats private full-resolution Focus artwork for $mode (peer failure: $dropPeer, primary failure: $activePaintError, third border only: $thirdBorderOnly)',
+  async ({ mode, dropPeer, activePaintError, thirdBorderOnly }) => {
+    const r = await bootControlFocus(
+      true,
+      false,
+      thirdBorderOnly ? 'cut' : mode,
+      !thirdBorderOnly,
+      false,
+      !thirdBorderOnly,
+      3,
+      true,
+      { start: 60, end: 79 },
+      false,
+      focusFrameIds,
+      true,
+      {
+        sources: [],
+        supportsRoutedArtwork: true,
+        keepPlateSources: true,
+        configureLayout: (layout) => {
+          if (thirdBorderOnly) layout.frames[2]!.border = { color: '#0099ff', width: 5 };
+        },
+        beforeTake: () => {
+          mockFocusArtwork(mock!, activePaintError);
+          mockFocusArtwork(backup!);
+        },
+      },
+    );
+    if (thirdBorderOnly) {
+      const pictures = r.liveLayers().get('item-1')!.toSorted((a, b) => a.slot.layer - b.slot.layer);
+      expect(pictures).toHaveLength(3);
+      for (const [i, picture] of pictures.entries()) {
+        const nextDepth = pictures[i + 1]?.slot.layer ?? 79;
+        const required = picture.sourceId === 'src-c' ? 4 : 1;
+        expect(nextDepth - picture.slot.layer - 1).toBeGreaterThanOrEqual(required);
+      }
+    }
+    expect(await r.setActiveLook('item-1', focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+    const engines = [
+      [mock!, 1],
+      [backup!, 2],
+    ] as const;
+    let failedRead = false;
+    if (dropPeer) {
+      const read = defaultHandlers().get('MIXER')!;
+      backup!.setHandler('MIXER', async (req, context, socket) => {
+        if (!failedRead && req.args.length === 2 && req.args[1] === 'FILL') {
+          failedRead = true;
+          return { kind: 'err', code: 501, verb: 'MIXER' };
+        }
+        return read(req, context, socket);
+      });
+    }
+    const marks = engines.map(([engine]) => engine.receivedCommands().length);
+    const result = await r.setActiveLook('item-1', focusLooks[1]!, focusMotion, undefined, {
+      mode,
+      direction: 'up',
+      durationMs: 200,
+    });
+    if (activePaintError) {
+      expect(result).toMatchObject({ ok: false, reason: 'focus-artwork-not-ready' });
+      expect(r.activeLookId('item-1')).toBe(focusLooks[0]);
+      return;
+    }
+    expect(result).toEqual({ ok: true });
+    expect(failedRead).toBe(dropPeer);
+    expect(r.activeLookId('item-1')).toBe(focusLooks[1]);
+    for (const [i, [engine, channel]] of engines.entries()) {
+      const lines = engine
+        .receivedCommands()
+        .slice(marks[i]!)
+        .map(({ line }) => line);
+      const surfaces = lines.flatMap((line) => {
+        const match = new RegExp('^CG ' + channel + '-(\\d+) ADD 0 .*cgsync=[^ "]+%2F').exec(line);
+        return match ? [Number(match[1])] : [];
+      });
+      expect(surfaces).toHaveLength(mode === 'fade' ? 4 : 2);
+      const matteLayers = lines.flatMap((line) => {
+        const match = / STING "route:\/\/\d+-(\d+)" 0 "route:\/\/\d+-\d+"$/.exec(line);
+        return match ? [Number(match[1])] : [];
+      });
+      if (mode === 'fade') {
+        const mix = lines.find(
+          (line) => /^LOADBG \d+-\d+ "route:\/\//.test(line) && / MIX \d+$/.test(line),
+        );
+        expect(mix).toBeDefined();
+        const layer = Number(/^LOADBG \d+-(\d+)/.exec(mix!)![1]);
+        expect(lines.indexOf('PLAY ' + channel + '-' + layer)).toBeGreaterThan(lines.indexOf(mix!));
+        expect(layer).toBeGreaterThan(Math.max(...surfaces));
+        expect(lines).toContain('CLEAR ' + channel + '-' + layer);
+        expect(matteLayers).toHaveLength(2);
+        expect(lines.filter((line) => line.endsWith(' MIX 30000'))).toHaveLength(2);
+        const commit = 'MIXER ' + channel + ' COMMIT';
+        const compoundOpacity = 'MIXER ' + channel + '-' + layer + ' OPACITY ';
+        const visible = lines.indexOf(compoundOpacity + '1 DEFER');
+        const handoff = lines.indexOf(compoundOpacity + '0 DEFER', visible + 1);
+        expect(handoff).toBeGreaterThan(visible);
+        const starting = lines.slice(
+          lines.lastIndexOf(commit, visible) + 1,
+          lines.indexOf(commit, visible),
+        );
+        const ending = lines.slice(
+          lines.lastIndexOf(commit, handoff) + 1,
+          lines.indexOf(commit, handoff),
+        );
+        const parked = new Set(
+          starting.flatMap((line) => {
+            const match = /^MIXER (\d+-\d+) CLIP 2 2 1 1 DEFER$/.exec(line);
+            return match ? [match[1]!] : [];
+          }),
+        );
+        // Neither the focused picture nor its foreground remains behind its
+        // own alpha-bearing composite. They return in the same mixer commit.
+        expect(parked.size).toBeGreaterThanOrEqual(3);
+        for (const target of parked)
+          expect(ending).toContain('MIXER ' + target + ' CLIP 0 0 1 1 DEFER');
+        const destinations = lines.flatMap((line) => {
+          const match = /^PLAY \d+-(\d+) .*(?: STING | MIX 30000$)/.exec(line);
+          return match ? [Number(match[1])] : [];
+        });
+        for (const seat of [...surfaces, ...destinations, layer]) {
+          const muted = lines.indexOf('MIXER ' + channel + '-' + seat + ' VOLUME 0');
+          expect(muted).toBeGreaterThanOrEqual(0);
+          const played = lines.findIndex(
+            (line) =>
+              line.startsWith('PLAY ' + channel + '-' + seat + ' ') ||
+              line.startsWith('CG ' + channel + '-' + seat + ' ADD '),
+          );
+          expect(played).toBeGreaterThan(muted);
+        }
+      }
+      for (const layer of surfaces) {
+        expect(lines).toContain('CG ' + channel + '-' + layer + ' PLAY 0');
+        expect(
+          lines.some(
+            (line) =>
+              line.startsWith('MIXER ' + channel + '-' + layer + ' CLIP ') &&
+              line.endsWith(' DEFER'),
+          ),
+        ).toBe(!matteLayers.includes(layer));
+        expect(lines).toContain('CLEAR ' + channel + '-' + layer);
+      }
+    }
+  },
+);
+
+it.each(['motion', 'fade'] as const)(
+  'sends complete Focus %s roots in both physical layer orders to both engines',
+  async (mode) => {
+    const r = await bootControlFocus(true, false, mode);
+    expect((await r.out('item-1')).accepted).toBe(true);
+    const info = r.templateGet('lower-third', 1)!;
+    const html = r.templateHtml('lower-third', 1)!;
+    expect(
+      r.templateImport(
+        info,
+        html.replace('</head>', CG_LIVE_FOCUS_ARTWORK_PAGE_MARKER + '</head>'),
+        1,
+        {
+          sourceSha256: info.controlLiveLayoutSource!,
+        },
+      ).registered,
+    ).toBe(true);
+    expect((await r.take('item-1')).accepted).toBe(true);
+    const foreground = r.stackSnapshot()[0]?.foregroundLayer;
+    expect(foreground).toBeDefined();
+    const records = [...r.liveLayers().get('item-1')!].sort((a, b) => a.slot.layer - b.slot.layer);
+    const first = controlLiveLayoutFocusLookId(focusPreset, records[0]!.sourceId);
+    const last = controlLiveLayoutFocusLookId(focusPreset, records.at(-1)!.sourceId);
+    expect(await r.setActiveLook('item-1', first, focusMotion)).toEqual({ ok: true });
+    for (const [from, to, incomingAbove] of [
+      [first, last, true],
+      [last, first, false],
+    ] as const) {
+      const engines = [
+        [mock!, 1],
+        [backup!, 2],
+      ] as const;
+      const marks = engines.map(([engine]) => engine.receivedCommands().length);
+      expect(
+        await r.setActiveLook(
+          'item-1',
+          to,
+          mode === 'fade' ? { motion: 'cut', fade: true, durationMs: 160 } : focusMotion,
+        ),
+      ).toEqual({ ok: true });
+      for (const [index, [engine, channel]] of engines.entries()) {
+        const phases = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .filter(({ line }) => line.startsWith(`CG ${channel}-${foreground} `))
+          .flatMap(({ line }) => {
+            const control = nativeBorderControl(line);
+            return control?.frameTransition?.focusArtwork === undefined ? [] : [control];
+          });
+        expect(phases.length).toBeGreaterThan(1);
+        for (const control of phases) {
+          expect(control.look).toBe(from);
+          expect(control.frameTransition?.destinationLookId).toBe(to);
+          expect(control.frameTransition?.frames).toEqual([]);
+          expect(control.frameTransition?.hidePresetTitlePlateIds).toBeUndefined();
+          expect(control.frameTransition?.hidePresetArtworkKeys).toBeUndefined();
+          expect(control.frameTransition?.focusArtwork?.incomingAbove).toBe(incomingAbove);
+        }
+        const phase = phases.at(-1)!.frameTransition!;
+        const art = phase.focusArtwork!;
+        if (mode === 'fade') {
+          expect(art.outgoing.from).toEqual(art.outgoing.to);
+          expect(art.incoming.from).toEqual(art.incoming.to);
+        } else {
+          expect(art.outgoing.from).not.toEqual(art.outgoing.to);
+          expect(art.incoming.from).not.toEqual(art.incoming.to);
+        }
+        expect(art.incoming.toOpacity).toBe(1);
+        expect(engine.stagedMixerCount(channel)).toBe(0);
+      }
+    }
+  },
+);
+
 it('dissolves Control Focus in both mixer layer orders on the active and reserve engines', async () => {
   const r = await bootControlFocus(true, false, 'fade');
   const records = r.liveLayers().get('item-1')!;
@@ -1559,6 +3819,272 @@ it('D-201 — Clear removes the live input, foreground pass and background page 
   expect(plateClear).toBeGreaterThanOrEqual(0);
   expect(foregroundClear).toBeGreaterThan(plateClear);
   expect(backgroundClear).toBeGreaterThan(foregroundClear);
+});
+
+it.each([
+  'retained',
+  'legacy',
+  'foreign reserve',
+  'unreadable reserve',
+  'stop',
+  'remove',
+  'mirror-async',
+  'journal-replay',
+] as const)(
+  'after Bridge restart Clear verifies the paired foreground separately on both engines (%s)',
+  async (scenario) => {
+    const info = template([{ id: 'guest-1', rect: BOX }], true);
+    const first = await boot({ template: info, mirrorChannel: 2 });
+    await loadAndTake(first);
+    const a = mock!;
+    const b = backup!;
+    const item = retainedFromStackItem(
+      first.stackSnapshot().find(({ itemId }) => itemId === 'item-1')!,
+    );
+    expect(item.foregroundLayer).toBe(BAND.end);
+    if (scenario === 'legacy') delete item.foregroundLayer;
+    const primarySlot = { channel: 1, layer: BAND.end };
+    const reserveSlot = { channel: 2, layer: BAND.end };
+    for (const [engine, slot] of [
+      [a, primarySlot],
+      [b, reserveSlot],
+    ] as const) {
+      expect(engine.layerState(slot)?.filePath).toContain('cgpass=foreground&cgsync=item-1');
+    }
+    const ledger = new Map([...first.liveLayers()].map(([owner, seats]) => [owner, [...seats]]));
+    const port = first.templateServe!.port;
+    const config = first.config();
+    if (scenario === 'mirror-async' || scenario === 'journal-replay') config.strategy = scenario;
+    const mapping = first.backupChannelMap();
+    await first.stop();
+    const second = new CasparRuntime(
+      config,
+      { port },
+      {
+        layerPolicy: TEST_LAYER_POLICY,
+        sourceCatalog: catalog(),
+        backupChannels: mapping,
+      },
+    );
+    runtime = second;
+    second.templateImport(info, '<!doctype html><html><body>served</body></html>');
+    second.adoptLiveLayers(ledger, () => 'unknown');
+    second.start();
+    await second.startServing();
+    await second.whenServerHealthy(HEALTH_MS);
+    await expect.poll(() => second.health().backup?.state, { timeout: HEALTH_MS }).toBe('healthy');
+    expect((await second.restore([item])).restored).toBe(1);
+    if (scenario === 'foreign reserve') {
+      const handleInfo = defaultHandlers().get('INFO')!;
+      b.setHandler('INFO', (req, ctx, conn) => {
+        ctx.setLayer(reserveSlot, {
+          filePath: ctx
+            .getLayer(reserveSlot)
+            .filePath.replace('cgsync=item-1', 'cgsync=another-row'),
+        });
+        return handleInfo(req, ctx, conn);
+      });
+    }
+    const beforeB = b.receivedCommands().length;
+    if (scenario === 'unreadable reserve') {
+      b.setHandler('INFO', () => ({ kind: 'err', code: 500, verb: 'INFO' }));
+      expect((await second.out('item-1')).accepted).toBe(false);
+      expect(second.stackSnapshot()[0]?.foregroundLayer).toBe(BAND.end);
+      expect(a.layerState(primarySlot)?.producer).toBe('empty');
+      expect(b.layerState(reserveSlot)?.producer).toBe('html');
+      b.setHandler('INFO', defaultHandlers().get('INFO')!);
+    }
+    const cleared =
+      scenario === 'stop'
+        ? await second.stopItem('item-1')
+        : scenario === 'remove'
+          ? await second.remove('item-1')
+          : await second.out('item-1');
+    expect(cleared).toMatchObject({ accepted: true });
+    expect(a.layerState(primarySlot)?.producer).toBe('empty');
+    const reserveClear = b
+      .receivedCommands()
+      .slice(beforeB)
+      .map(({ line }) => line);
+    if (scenario === 'foreign reserve') {
+      expect(reserveClear).not.toContain(`CLEAR 2-${String(BAND.end)}`);
+      expect(b.layerState(reserveSlot)?.producer).toBe('html');
+    } else {
+      expect(reserveClear).toContain(`CLEAR 2-${String(BAND.end)}`);
+      expect(b.layerState(reserveSlot)?.producer).toBe('empty');
+    }
+    expect(second.stackSnapshot()[0]?.foregroundLayer).toBeUndefined();
+  },
+);
+
+it.each(['background', 'foreground'] as const)(
+  'normal Take repairs a refused empty peer %s without replacing the primary page',
+  async (pass) => {
+    const r = await boot({
+      template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true),
+      html: EFFECT_HTML,
+      mirrorChannel: 2,
+      catalog: catalog({
+        sources: [
+          {
+            id: 'src-a',
+            name: 'Camera',
+            format: '1080i5000',
+            producer: { kind: 'ndi', source: 'Camera' },
+          },
+        ],
+      }),
+    });
+    const a = mock!;
+    const b = backup!;
+    const cg = defaultHandlers().get('CG')!;
+    let refused = false;
+    b.setHandler('CG', (request, context, connection) => {
+      if (!refused && request.raw.includes(' ADD ') && request.raw.includes(`cgpass=${pass}`)) {
+        refused = true;
+        return { kind: 'err', code: 404, verb: 'CG' };
+      }
+      return cg(request, context, connection);
+    });
+    await r.load('item-1', 'lower-third', {});
+    expect(await r.take('item-1')).toMatchObject({ accepted: true });
+    expect(refused).toBe(true);
+    for (const layer of [10, BAND.end]) {
+      expect(a.layerState({ channel: 1, layer })?.producer).toBe('html');
+      expect(b.layerState({ channel: 2, layer })?.producer).toBe('html');
+    }
+    const primaryAdds = a
+      .receivedCommands()
+      .filter(({ line }) => line.includes(' ADD ') && line.includes(`cgpass=${pass}`));
+    const peerAdds = b
+      .receivedCommands()
+      .filter(({ line }) => line.includes(' ADD ') && line.includes(`cgpass=${pass}`));
+    expect(primaryAdds).toHaveLength(1);
+    expect(peerAdds).toHaveLength(2);
+    if (pass === 'background') {
+      const active = readCgControl(
+        JSON.parse(a.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}'),
+      );
+      const restored = readCgControl(
+        JSON.parse(b.lastCgAdd({ channel: 2, layer: 10 })?.data ?? '{}'),
+      );
+      expect(restored?.take).toBe(active?.take);
+      expect(active?.take).toBeDefined();
+    }
+    await expect.poll(() => r.stackSnapshot()[0]?.onAirFrameTransition).toBe(true);
+    expect(await r.setFramePlacements('item-1', [MOVED_FRAME])).toEqual({ accepted: true });
+    expect(b.layerState({ channel: 2, layer: BAND.start })?.fill).toEqual(
+      a.layerState({ channel: 1, layer: BAND.start })?.fill,
+    );
+    expect(b.layerState({ channel: 2, layer: 10 })?.volume).toBe(1);
+    expect(b.layerState({ channel: 2, layer: BAND.end })?.volume).toBe(0);
+    const before = b.receivedCommands().length;
+    expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+    expect(await r.take('item-1')).toMatchObject({ accepted: true });
+    expect(
+      b
+        .receivedCommands()
+        .slice(before)
+        .some(({ line }) => line.includes(' ADD ') && line.includes('cgpass=background')),
+    ).toBe(false);
+  },
+);
+
+it('normal Take leaves a nonempty foreign peer page intact when repairing a missing copy', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }], true),
+    mirrorChannel: 2,
+  });
+  const b = backup!;
+  const cg = defaultHandlers().get('CG')!;
+  b.setHandler('CG', (request, context, connection) => {
+    if (request.raw.includes(' ADD ') && request.raw.includes('cgpass=background')) {
+      context.setLayer(
+        { channel: 2, layer: 10 },
+        { producer: 'html', filePath: 'http://other/template/foreign', onStage: true },
+      );
+      return { kind: 'err', code: 404, verb: 'CG' };
+    }
+    return cg(request, context, connection);
+  });
+  await r.load('item-1', 'lower-third', {});
+  const before = b.receivedCommands().length;
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  expect(b.layerState({ channel: 2, layer: 10 })?.filePath).toBe('http://other/template/foreign');
+  expect(
+    b
+      .receivedCommands()
+      .slice(before)
+      .some(({ line }) => line.includes(' ADD ') && line.includes('cgpass=background')),
+  ).toBe(false);
+});
+
+it('normal Take retries a still-empty healthy peer after an earlier repair was refused', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }], true),
+    mirrorChannel: 2,
+  });
+  const a = mock!;
+  const b = backup!;
+  const cg = defaultHandlers().get('CG')!;
+  let refuse = true;
+  b.setHandler('CG', (request, context, connection) => {
+    if (refuse && request.raw.includes(' ADD ') && request.raw.includes('cgpass=background'))
+      return { kind: 'err', code: 404, verb: 'CG' };
+    return cg(request, context, connection);
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(b.layerState({ channel: 2, layer: 10 })?.producer).toBe('empty');
+  expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+  refuse = false;
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  expect(b.layerState({ channel: 2, layer: 10 })?.producer).toBe('html');
+  expect(
+    a
+      .receivedCommands()
+      .filter(({ line }) => line.includes(' ADD ') && line.includes('cgpass=background')),
+  ).toHaveLength(1);
+});
+
+it('Clear supersedes a queued peer-page repair without a later re-take', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }], true),
+    mirrorChannel: 2,
+  });
+  const b = backup!;
+  const cg = defaultHandlers().get('CG')!;
+  b.setHandler('CG', (request, context, connection) =>
+    request.raw.includes(' ADD ') && request.raw.includes('cgpass=background')
+      ? { kind: 'err', code: 404, verb: 'CG' }
+      : cg(request, context, connection),
+  );
+  await r.load('item-1', 'lower-third', {});
+  b.setHandler('CG', cg);
+  const info = defaultHandlers().get('INFO')!;
+  let release: (() => void) | undefined;
+  b.setHandler('INFO', (request, context, connection) => {
+    if (request.raw === 'INFO 2' && release === undefined)
+      return new Promise((resolve) => {
+        release = () => resolve(info(request, context, connection));
+      });
+    return info(request, context, connection);
+  });
+  const before = b.receivedCommands().length;
+  const take = r.take('item-1');
+  await expect.poll(() => release !== undefined).toBe(true);
+  const takeSeq = r.stackSnapshot()[0]?.lastIntentSeq;
+  const clear = r.out('item-1');
+  await expect.poll(() => r.stackSnapshot()[0]?.lastIntentSeq).not.toBe(takeSeq);
+  release?.();
+  expect(await take).toMatchObject({ accepted: false, errorCode: 'frame-transition-interrupted' });
+  expect(await clear).toMatchObject({ accepted: true });
+  expect(
+    b
+      .receivedCommands()
+      .slice(before)
+      .some(({ line }) => line.includes(' ADD ') && line.includes('cgpass=background')),
+  ).toBe(false);
+  expect(b.layerState({ channel: 2, layer: 10 })?.producer).toBe('empty');
 });
 
 it('the ledger records the layer, the plate and the producer ARGUMENT that was sent', async () => {
@@ -3195,6 +5721,63 @@ it('animates the retained authored seat in both directions and cuts the new plat
   }
 });
 
+it('applies the destination Designer effect to an ordinary mirrored preset switch and honors an explicit Cut', async () => {
+  const original = presetEffectTemplate();
+  const r = await boot({
+    template: original,
+    html: PRESET_RECOVERY_HTML,
+    mirrorChannel: 2,
+    catalog: catalog({
+      sources: ['src-a', 'src-b'].map((id) => ({
+        id,
+        name: id,
+        format: '1080i5000',
+        producer: { kind: 'ndi', source: id },
+      })),
+    }),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const authored = structuredClone(original);
+  const destination = authored.liveSources!.looks!.find(({ id }) => id === 'duo')!;
+  destination.entered = {
+    mode: 'animate',
+    effect: { motion: 'ease-out', fade: false, durationMs: 240 },
+  };
+  expect(r.templateImport(authored, PRESET_RECOVERY_HTML).registered).toBe(true);
+  await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
+
+  const engines = [mock!, backup!];
+  const cut = { motion: 'cut', fade: false, durationMs: 200 } as const;
+  for (const [look, override, animated] of [
+    ['duo', undefined, true],
+    ['solo', undefined, false],
+    ['duo', cut, false],
+  ] as const) {
+    const starts = engines.map((engine) => engine.receivedCommands().length);
+    expect(await r.setActiveLook('item-1', look, override)).toEqual({ ok: true });
+    for (const [i, engine] of engines.entries()) {
+      const writes = engine.receivedCommands().slice(starts[i]!).map(({ line }) => line);
+      const phases = writes.flatMap((line) => nativeBorderControl(line)?.frameTransition ?? []);
+      const timed = writes.some((line) =>
+        / (?:FILL|CLIP) .* [1-9]\d* easeoutquad DEFER$/.test(line),
+      );
+      expect(timed, 'engine ' + i + ' entering ' + look).toBe(animated);
+      if (animated) {
+        expect(phases).toContainEqual(
+          expect.objectContaining({ authoredPreset: true, easing: 'easeoutquad', durationMs: 240 }),
+        );
+      } else {
+        expect(phases).toHaveLength(0);
+      }
+      expect(writes.some((line) => nativeBorderControl(line)?.look === look)).toBe(true);
+    }
+  }
+});
+
 it('keeps a fit-only preset phase aligned on each engine when the primary acknowledgement is delayed', async () => {
   const base = presetEffectTemplate();
   const live = base.liveSources!;
@@ -3791,7 +6374,7 @@ it('slides picture, mask and artwork together with independent departure and arr
   }
 });
 
-it('dips the retained picture when Fade is checked and releases linked titles only after the preset settles', async () => {
+it('dips the retained picture and its complete artwork together when Fade is checked', async () => {
   const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML);
   const itemId = 'item-1';
   const records = r.liveLayers().get(itemId)!;
@@ -3812,17 +6395,13 @@ it('dips the retained picture when Fade is checked and releases linked titles on
     );
     expect(retainedDip).toBeGreaterThan(0);
     expect(retainedRestore).toBeGreaterThan(retainedDip);
-    const lastMixerCommit = lines.lastIndexOf('MIXER 1 COMMIT');
     for (const layer of [10, DEPARTURE_BAND.end]) {
       const prefix = `CG 1-${layer} UPDATE `;
       const updates = lines.filter((line) => line.startsWith(prefix));
-      expect(updates.slice(0, -1).every((line) => line.includes('hidePresetTitlePlateIds'))).toBe(
-        true,
-      );
-      expect(
-        updates.some((line) => line.includes('hidePresetTitlePlateIds') && line.includes(look)),
-      ).toBe(true);
-      expect(lines.indexOf(updates.at(-1)!)).toBeGreaterThan(lastMixerCommit);
+      expect(updates.some((line) => line.includes('hidePresetTitlePlateIds'))).toBe(false);
+      expect(updates).toContainEqual(expect.stringContaining('toOpacity'));
+      expect(updates).toContainEqual(expect.stringContaining('easeinquad'));
+      expect(updates).toContainEqual(expect.stringContaining('easeoutquad'));
       expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer })?.data ?? '{}')).toMatchObject({
         __cg: { frameTransition: null, presetTransitionCommit: true },
       });
@@ -3881,11 +6460,11 @@ it.each([false, true])(
       .slice(quietBefore)
       .map(({ line }) => line);
     expect(activeLines).toContainEqual(expect.stringMatching(/FILL .*easeinquad DEFER$/));
-    expect(activeLines).toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
+    expect(activeLines).not.toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
     expect(backupLines).toContainEqual(
       expect.stringMatching(/^MIXER 2-\d+ FILL .*easeinquad DEFER$/),
     );
-    expect(backupLines).toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
+    expect(backupLines).not.toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
     expect(backupLines.filter((line) => line === 'MIXER 2 COMMIT').length).toBeGreaterThan(1);
     for (const layer of [10, PRESET_RECOVERY_BAND.end]) {
       const compared = backupLines.filter((line) => line.startsWith(`CG 2-${layer} UPDATE `));
@@ -4076,6 +6655,82 @@ it.each([false, true])(
       expect(reserveMixer()).toEqual([]);
     }
     expect(mock!.layerState(departing.slot)?.opacity).toBe(priorOpacity);
+  },
+);
+
+it.each([false, true])(
+  'reconciles all owned reserve seats after a transient observation gap (foreign HTML: %s)',
+  async (foreignPage) => {
+    const runtime = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, {});
+    const engine = backup!;
+    const item = 'item-1';
+    const foreground = PRESET_RECOVERY_BAND.end;
+    const report = (producer: string) =>
+      engine.emitOsc('/channel/2/stage/layer/' + foreground + '/foreground/producer', [producer]);
+    const info = defaultHandlers().get('INFO')!;
+    engine.setHandler('INFO', (request, context, socket) =>
+      request.raw === 'INFO 2'
+        ? { kind: 'err', code: 502, verb: 'INFO' }
+        : info(request, context, socket),
+    );
+    // Suppress the fixture's periodic reports for this one page while AMCP is unobservable.
+    const hidden = engine.layerState({ channel: 2, layer: foreground })!;
+    hidden.onStage = false;
+    report('empty');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const start = engine.receivedCommands().length;
+    expect(await runtime.setActiveLook(item, 'solo', PRESET_EFFECT)).toEqual({ ok: true });
+    expect(runtime.activeLookId(item)).toBe('solo');
+    const missed = engine
+      .receivedCommands()
+      .slice(start)
+      .map(({ line }) => line);
+    expect(missed).toContain('INFO 2');
+    expect(missed.filter((line) => /^(CG|MIXER|PLAY|CLEAR) 2(?: |-|$)/.test(line))).toEqual([]);
+
+    engine.setHandler('INFO', async (request, context, socket) => {
+      const reply = await info(request, context, socket);
+      if (!foreignPage || request.raw !== 'INFO 2' || reply.kind !== 'ok-line') return reply;
+      // A different row kept the same URL, port and HTML producer on this channel.
+      expect(reply.data).toContain('cgsync=item-1');
+      return { ...reply, data: reply.data.replaceAll('cgsync=item-1', 'cgsync=other-row') };
+    });
+    hidden.onStage = true;
+    report('html');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const recovered = engine.receivedCommands().length;
+    expect(await runtime.setActiveLook(item, 'duo', PRESET_EFFECT)).toEqual({ ok: true });
+    const lines = engine
+      .receivedCommands()
+      .slice(recovered)
+      .map(({ line }) => line);
+    expect(lines).toContain('INFO 2');
+    if (foreignPage) {
+      expect(lines.filter((line) => /^(CG|MIXER|PLAY|CLEAR) 2(?: |-|$)/.test(line))).toEqual([]);
+      return;
+    }
+    for (const { slot } of runtime.liveLayers().get(item)!) {
+      const onPrimary = mock!.layerState(slot)!;
+      const onReserve = engine.layerState({ channel: 2, layer: slot.layer })!;
+      for (const op of ['FILL', 'CLIP', 'OPACITY', 'VOLUME'])
+        expect(
+          lines.some((line) => line.startsWith('MIXER 2-' + slot.layer + ' ' + op + ' ')),
+        ).toBe(true);
+      expect(onReserve).toMatchObject({
+        fill: onPrimary.fill,
+        clip: onPrimary.clip,
+        opacity: onPrimary.opacity,
+        volume: onPrimary.volume,
+      });
+    }
+    for (const layer of [10, foreground])
+      expect(
+        nativeBorderControl(
+          lines.filter((line) => line.startsWith('CG 2-' + layer + ' UPDATE ')).at(-1)!,
+        ),
+      ).toMatchObject({ look: 'duo', presetTransitionCommit: true });
+    expect(lines.some((line) => /^CG 2-\d+ ADD |^PLAY /.test(line))).toBe(false);
   },
 );
 

@@ -65,7 +65,6 @@ test('closed media bindings request no pictures and the modal still shows their 
   const checkField = async (binding: Locator): Promise<void> => {
     await expect(binding).toContainText('Clip 001');
     await expect(binding.locator('img, video, [data-source-audio-meter]')).toHaveCount(0);
-    await expect(binding.locator('[data-source-preview-provider]')).toHaveCount(0);
     await expect(binding.locator('[data-source-presence-state="present"]')).toHaveCount(2);
   };
   await checkField(field);
@@ -95,6 +94,14 @@ test('closed media bindings request no pictures and the modal still shows their 
     );
     await picker(page).getByRole('button', { name: 'Cancel', exact: true }).click();
     await checkField(inherited);
+    await expect(inherited.locator('[data-source-preview-provider]')).toHaveAttribute(
+      'data-source-presence-server',
+      'B',
+    );
+    await expect(inherited.locator('[data-source-preview-provider]')).toHaveAttribute(
+      'title',
+      /Last picture from server B/,
+    );
   }
   const proof = await readProof();
   expect(proof.reads.filter((id) => id === 'md-m-clip-001')).toHaveLength(before + 1);
@@ -182,6 +189,7 @@ test('source availability and decoded poster providers follow A/B changes withou
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(backupBadge).toHaveAttribute('data-source-presence-state', 'present');
+  await provider(inherited, 'B');
 
   await changeRole('A');
   await expect(backupBadge).toHaveAttribute('data-source-presence-state', 'missing');
@@ -422,15 +430,25 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
       const previews = window.cg.sourcePreviews;
       const localReads: string[] = [];
       const oldReads: string[] = [];
+      let stopCount = 0;
+      let completeRefresh: (() => void) | undefined;
       const picture = (base64: string): Uint8Array =>
         Uint8Array.from(atob(base64), (byte) => byte.charCodeAt(0));
-      previews.ndiTargets = async ({ sourceIds }) => ({
-        targets: sourceIds.map((id) =>
-          id === sourceId
-            ? { sourceId: id, kind: 'ndi', senderName: 'Test (Studio)', engine: 'A' }
-            : { sourceId: id, kind: 'other' },
-        ),
-      });
+      let refresh: Promise<void> | undefined;
+      let refreshingStudio = false;
+      previews.ndiTargets = async ({ sourceIds }) => {
+        if (refresh !== undefined && sourceIds.includes(sourceId)) {
+          refreshingStudio = true;
+          await refresh;
+        }
+        return {
+          targets: sourceIds.map((id) =>
+            id === sourceId
+              ? { sourceId: id, kind: 'ndi', senderName: 'Test (Studio)', engine: 'A' }
+              : { sourceId: id, kind: 'other' },
+          ),
+        };
+      };
       previews.openNdiStream = async (sender, onPacket) => {
         localReads.push(sender);
         const pcm = new Int16Array(3840).fill(16384);
@@ -439,7 +457,10 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
           onPacket({ kind: 'picture', bytes: picture(jpgB) });
           onPacket({ kind: 'audio', bytes: new Uint8Array(pcm.buffer) });
         }, 100);
-        return () => clearInterval(cursor);
+        return () => {
+          stopCount++;
+          clearInterval(cursor);
+        };
       };
       const thumbnails = previews.thumbnails;
       previews.thumbnails = (request) => {
@@ -451,7 +472,23 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
         if (request.sourceIds.includes(sourceId)) oldReads.push('audioLevels');
         return levels?.(request) ?? { readings: [] };
       };
-      Object.assign(window, { ndiE2e: { localReads, oldReads } });
+      Object.assign(window, {
+        ndiE2e: {
+          state: () => ({ localReads, oldReads, stopCount, refreshingStudio }),
+          async refreshCatalog() {
+            refreshingStudio = false;
+            refresh = new Promise((resolve) => {
+              completeRefresh = resolve;
+            });
+            const { layerRange } = await window.cg.sources.config();
+            return window.cg.sources.setConfig(layerRange === undefined ? {} : { layerRange });
+          },
+          completeRefresh() {
+            completeRefresh?.();
+            refresh = undefined;
+          },
+        },
+      });
     },
     { sourceId, jpgA: FRAME_A.toString('base64'), jpgB: FRAME_B.toString('base64') },
   );
@@ -468,12 +505,42 @@ test('the input picker draws consecutive direct NDI frames and meters local PCM'
     'aria-pressed',
     'true',
   );
-  expect(await page.evaluate(() => (window as unknown as { ndiE2e: unknown }).ndiE2e)).toEqual({
+  interface PageProbe {
+    ndiE2e: {
+      state: () => {
+        localReads: string[];
+        oldReads: string[];
+        stopCount: number;
+        refreshingStudio: boolean;
+      };
+      refreshCatalog: () => Promise<{ ok: boolean }>;
+      completeRefresh: () => void;
+    };
+  }
+  const state = () => page.evaluate(() => (window as unknown as PageProbe).ndiE2e.state());
+  for (let read = 0; read < 3; read++) {
+    expect(
+      await page.evaluate(() => (window as unknown as PageProbe).ndiE2e.refreshCatalog()),
+    ).toMatchObject({
+      ok: true,
+    });
+    await expect.poll(async () => (await state()).refreshingStudio).toBe(true);
+    await expect(studio.locator('canvas')).toBeVisible();
+    await expect(studio).not.toContainText('Waiting for NDI');
+    await expect(studio.getByRole('button', { name: 'Listen to Studio 1' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await page.evaluate(() => (window as unknown as PageProbe).ndiE2e.completeRefresh());
+  }
+  expect(await state()).toMatchObject({
     localReads: ['Test (Studio)'],
     oldReads: [],
+    stopCount: 0,
   });
   await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(studio).toHaveCount(0);
+  await expect.poll(async () => (await state()).stopCount).toBe(1);
 });
 
 test('reopening an inherited media source shows its selection without changing the binding or auditioning', async ({
@@ -528,9 +595,38 @@ test('reopening an inherited media source shows its selection without changing t
   ).toBe(0);
 });
 
-test('the large source picker shows larger pictures and restores the parent dialog focus', async ({
+test('only NDI cards show NDI waiting while a stalled route falls back to its preview', async ({
   app,
 }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1366, height: 1000 });
+  const defaults = await openDefaults(app);
+  await page.evaluate(() => {
+    window.cg.sourcePreviews.openNdiStream = async () => () => undefined;
+    // Simulate an old or busy Bridge that never answers the optional NDI lookup.
+    window.cg.sourcePreviews.ndiTargets = () => new Promise(() => undefined);
+    window.cg.sourcePreviews.thumbnails = async ({ sourceIds }) => ({
+      frames: sourceIds.map((sourceId) => ({ sourceId, signal: 'absent' })),
+    });
+  });
+  await defaults.locator('[data-defaults-select="l-1"]').click();
+  const panel = picker(page);
+  const ndi = panel.locator('.cg-vlist-action-row').filter({
+    has: page.locator('[data-picker-input="in-studio-1"]'),
+  });
+  const route = panel.locator('.cg-vlist-action-row').filter({
+    has: page.locator('[data-picker-input="in-input-3"]'),
+  });
+  await expect(ndi).toContainText('Waiting for NDI');
+  await route.scrollIntoViewIfNeeded();
+  await expect(route).toContainText('Checking source…');
+  await expect(route).toContainText('No signal');
+  await expect(route).not.toContainText('Waiting for NDI');
+});
+
+test('the large source picker shows larger pictures and restores the parent dialog focus', async ({
+  app,
+}, testInfo) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 900 });
   const dialog = await openDefaults(app);
@@ -618,6 +714,20 @@ test('the large source picker shows larger pictures and restores the parent dial
   const [listFirst, listSecond] = await Promise.all([position(0), position(1)]);
   expect(listSecond.x).toBeCloseTo(listFirst.x, 0);
   expect(listSecond.y).toBeGreaterThan(listFirst.y);
+  const list = inputs.locator('[data-picker-list]');
+  const footer = panel.locator('.cg-modal-footer');
+  const availableHeight = async () => {
+    const listBox = await list.boundingBox();
+    const footerBox = await footer.boundingBox();
+    if (listBox === null || footerBox === null) throw new Error('Picker view has no bounds');
+    return footerBox.y - (listBox.y + listBox.height);
+  };
+  await expect.poll(availableHeight).toBeLessThanOrEqual(2);
+  await expect.poll(availableHeight).toBeGreaterThanOrEqual(-2);
+  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await list.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await expect.poll(availableHeight).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: testInfo.outputPath('inputs-list-fills-dialog.png') });
   await gridView.click();
   await expect(inputs).toHaveAttribute('data-input-view', 'grid');
 
@@ -976,6 +1086,15 @@ test('Media: play, pause, drag to seek and stop a preview without choosing the c
   await expect(panel.locator('[data-media-view]')).toHaveAttribute('data-media-view', 'grid');
   await panel.getByRole('button', { name: 'Switch to list view', exact: true }).click();
   const search = panel.getByRole('textbox', { name: 'Search media' });
+  const sort = panel.getByRole('button', { name: 'Sort media', exact: true });
+  const view = panel.getByRole('button', { name: 'Switch to grid view', exact: true });
+  await expect(search).toHaveCSS('min-height', '32px');
+  await expect(sort).toHaveCSS('height', '32px');
+  await expect(view).toHaveCSS('height', '32px');
+  await search.focus();
+  await search.press('Tab');
+  await expect(sort).toBeFocused();
+  await expect(sort).toHaveCSS('outline-style', 'solid');
   await search.fill('Studio');
   await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
   const play = panel.getByRole('button', { name: 'Play preview' });

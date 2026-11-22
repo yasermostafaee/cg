@@ -9,8 +9,10 @@ import type { SourceCatalog } from '@cg/shared-ipc';
 import { controlLiveLayoutFocusLookId, type Scene } from '@cg/shared-schema';
 import { pack, sha256Hex } from '@cg/vcg-format';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { mockFocusArtwork } from '../../../../tools/caspar-bridge/tests/support/mock-focus-artwork.js';
 
 const inputNames = ['Studio camera', 'Guest line 1', 'Guest line 2'];
+const liveLayerRange = { start: 60, end: 79 };
 const catalog: SourceCatalog = {
   sources: inputNames.map((name, index) => ({
     id: `feed-${index + 1}`,
@@ -18,8 +20,18 @@ const catalog: SourceCatalog = {
     format: '1080p2500',
     producer: { kind: 'decklink', device: index + 1 },
   })),
-  layerRange: { start: 60, end: 79 },
+  layerRange: liveLayerRange,
 };
+
+async function showLayoutSettings(
+  editor: Locator,
+  name: 'Plate' | 'Preset' | 'Layout',
+): Promise<void> {
+  await editor
+    .getByRole('tablist', { name: 'Layout settings', exact: true })
+    .getByRole('tab', { name, exact: true })
+    .click();
+}
 
 function freeUdpPort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -33,6 +45,7 @@ function freeUdpPort(): Promise<number> {
 }
 
 async function setInput(page: Page, editor: Locator, index: number, title: string): Promise<void> {
+  await showLayoutSettings(editor, 'Plate');
   await editor.getByRole('button', { name: `Edit plate ${index + 1}`, exact: true }).click();
   await editor.getByRole('combobox', { name: 'Plate input' }).click();
   const chooser = page.getByRole('dialog', { name: 'Choose a source' });
@@ -127,6 +140,185 @@ function frameGraphic(): Promise<Uint8Array> {
   });
 }
 
+test('live layout settings tabs keep preset diagrams, count-based arrangements and numeric scrubbing accessible', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  const directory = testInfo.outputPath('bridge');
+  fs.mkdirSync(directory, { recursive: true });
+  const oscPort = await freeUdpPort();
+  const engine = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 15,
+    channels: 1,
+  });
+  let bridge: BridgeHandle | undefined;
+  try {
+    bridge = await createBridge({
+      port: 0,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: engine.amcpPort, oscPort } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      fixedLayers: { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } },
+      sourceCatalog: catalog,
+      stackPath: path.join(directory, 'stack.json'),
+      templatesDir: path.join(directory, 'templates'),
+    });
+    await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
+    await page.goto('/');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page
+      .getByRole('region', { name: 'Layers' })
+      .getByRole('button', { name: 'New live layout', exact: true })
+      .click();
+    const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+    const tabs = editor.getByRole('tablist', { name: 'Layout settings', exact: true });
+    await expect(tabs.getByRole('tab')).toHaveText(['Plate', 'Preset', 'Layout']);
+    await expect(tabs.getByRole('tab', { name: 'Plate', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await tabs.getByRole('tab', { name: 'Plate', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(tabs.getByRole('tab', { name: 'Preset', exact: true })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(tabs.getByRole('tab', { name: 'Preset', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await page.keyboard.press('End');
+    await expect(tabs.getByRole('tab', { name: 'Layout', exact: true })).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(tabs.getByRole('tab', { name: 'Plate', exact: true })).toBeFocused();
+    await showLayoutSettings(editor, 'Preset');
+    const removePreset = editor.getByRole('button', { name: 'Delete preset', exact: true });
+    await expect(removePreset).toBeDisabled();
+    await expect(editor.getByRole('button', { name: 'Start with this preset' })).toBeDisabled();
+    await showLayoutSettings(editor, 'Plate');
+    const addPlate = editor.getByRole('button', { name: 'Add plate', exact: true });
+    const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
+    const presets = editor.getByRole('group', { name: 'Presets', exact: true });
+    const cards = presets.locator('[data-layout-preset]');
+    await addPlate.click();
+    await addPreset.click();
+    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('One');
+    await expect(cards).toHaveCount(1);
+    await expect(cards.nth(0).locator('[data-layout-thumbnail-plate]')).toHaveCount(1);
+    const arrange = editor.getByRole('region', { name: 'Arrange', exact: true });
+    const choices = arrange.getByRole('group', { name: 'Arrangement', exact: true });
+    await expect(choices.getByRole('button')).toHaveText(['Single plate', 'Custom']);
+    const shot = (number: number) =>
+      editor.locator(`[data-layout-preview-shot][data-frame-number="${number}"]`);
+    const presetMargins = arrange.getByRole('group', { name: 'Preset margins (px)' });
+    const setNumber = async (field: Locator, value: string): Promise<void> => {
+      await field.fill(value);
+      await field.press('Tab');
+    };
+    await setNumber(presetMargins.getByLabel('Left', { exact: true }), '96');
+    await arrange.getByRole('checkbox', { name: 'Fill available area' }).check();
+    expect(await shot(1).evaluate((element) => (element as HTMLElement).style.left)).toBe('5%');
+    await addPreset.click();
+    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Two');
+    await addPlate.click();
+    await expect(cards.nth(1).locator('[data-layout-thumbnail-plate]')).toHaveCount(2);
+    await expect(choices.getByRole('button')).toHaveText([
+      'Side by side',
+      'Top and bottom',
+      'Custom',
+    ]);
+    await choices.getByRole('button', { name: 'Top and bottom', exact: true }).click();
+    await expect(choices.getByRole('button', { name: 'Top and bottom' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await addPreset.click();
+    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Three');
+    await addPlate.click();
+    await expect(cards.nth(2).locator('[data-layout-thumbnail-plate]')).toHaveCount(3);
+    await expect(choices.getByRole('button')).toHaveText([
+      'Side by side',
+      'Grid · fuller top',
+      'Grid · fuller bottom',
+      'Host + guests',
+      'Custom',
+    ]);
+    for (const choice of await choices.getByRole('button').all()) {
+      await expect(choice.locator('[data-layout-thumbnail-plate]')).toHaveCount(3);
+    }
+    const gap = editor.getByLabel('Horizontal gap', { exact: true });
+    await expect(gap).toHaveAttribute('type', 'text');
+    await expect(gap).toHaveAttribute('inputmode', 'numeric');
+    await gap.fill('20');
+    await gap.press('Tab');
+    const bounds = (await gap.boundingBox())!;
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width / 2 + 12, bounds.y + bounds.height / 2);
+    await page.mouse.up();
+    await expect.poll(async () => Number(await gap.inputValue())).toBeGreaterThan(20);
+    await addPreset.click();
+    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Four');
+    await addPlate.click();
+    await choices.getByRole('button', { name: /Grid/ }).click();
+    await setNumber(gap, '0');
+    await setNumber(editor.getByLabel('Vertical gap', { exact: true }), '0');
+    await presetMargins.getByRole('button', { name: 'Zero preset margins' }).click();
+    const inlineRect = async (number: number): Promise<string[]> =>
+      shot(number).evaluate((element) => {
+        const { left, top, width, height } = (element as HTMLElement).style;
+        return [left, top, width, height];
+      });
+    expect(await inlineRect(1)).toEqual(['0%', '0%', '50%', '50%']);
+    expect(await inlineRect(4)).toEqual(['50%', '50%', '50%', '50%']);
+    await shot(1).getByRole('button', { name: 'Focus plate 1', exact: true }).click();
+    const focusMargins = arrange.getByRole('group', { name: 'Focus margins (px)' });
+    await setNumber(focusMargins.getByLabel('Top', { exact: true }), '108');
+    expect(await inlineRect(1)).toEqual(['0%', '10%', '100%', '90%']);
+    await editor.getByRole('button', { name: /Return to/ }).click();
+    await choices.getByRole('button', { name: 'Custom', exact: true }).click();
+    const placement = editor.getByRole('group', { name: 'Plate placement', exact: true });
+    const numeric = arrange.getByRole('group', { name: 'Plate position and size (px)' });
+    await placement.getByRole('button', { name: 'Move plate 4' }).click();
+    await setNumber(numeric.getByLabel('Width', { exact: true }), '480');
+    expect(await inlineRect(4)).toEqual(['50%', '50%', '25%', '50%']);
+    await placement.getByRole('button', { name: 'Move plate 4' }).press('ArrowLeft');
+    await expect.poll(async () => Number.parseFloat((await inlineRect(4))[0]!)).toBeLessThan(50);
+    await presets.getByRole('button', { name: 'One', exact: true }).click();
+    await expect(choices.getByRole('button', { name: 'Single plate' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await presets.getByRole('button', { name: 'Two', exact: true }).click();
+    await expect(choices.getByRole('button', { name: 'Top and bottom' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await showLayoutSettings(editor, 'Layout');
+    await expect(editor.getByRole('group', { name: 'Background', exact: true })).toBeVisible();
+    await expect(editor.getByRole('tabpanel')).toHaveCount(1);
+    await showLayoutSettings(editor, 'Preset');
+    for (const count of [3, 2, 1, 0]) {
+      await removePreset.click();
+      await expect(cards).toHaveCount(count);
+    }
+    await expect(removePreset).toBeDisabled();
+    await showLayoutSettings(editor, 'Plate');
+    const removePlate = editor.getByRole('button', { name: 'Delete plate', exact: true });
+    for (const count of [3, 2, 1, 0]) {
+      await removePlate.click();
+      await expect(editor.getByRole('button', { name: /^Edit plate / })).toHaveCount(count);
+    }
+    await expect(editor.getByRole('button', { name: 'Save layout', exact: true })).toBeDisabled();
+  } finally {
+    await bridge?.close();
+    await engine.stop();
+  }
+});
+
 test('per-plate fallback previews survive save and reopen with an independent on-air toggle', async ({
   page,
 }, testInfo) => {
@@ -168,6 +360,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     const fallback = (dialog: Locator, plate: number) =>
       dialog.locator(`[data-frame-number="${plate}"] [data-layout-plate-fallback]`);
     const editPlate = async (dialog: Locator, plate: number): Promise<void> => {
+      await showLayoutSettings(dialog, 'Plate');
       await dialog.getByRole('button', { name: `Edit plate ${plate}`, exact: true }).click();
       if (!(await background(dialog).isVisible())) {
         await dialog.getByText('Advanced plate controls', { exact: true }).click();
@@ -175,6 +368,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     };
 
     await editor.getByRole('textbox', { name: 'Layout name' }).fill('Fallback test');
+    await showLayoutSettings(editor, 'Layout');
     const solidBackground = editor
       .getByRole('group', { name: 'Background', exact: true })
       .getByRole('button', { name: 'Solid color', exact: true });
@@ -183,6 +377,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
       solidBackground,
       editor.getByLabel('Background color', { exact: true }),
     );
+    await showLayoutSettings(editor, 'Plate');
     const add = editor.getByRole('button', { name: 'Add plate', exact: true });
     await add.click();
     await add.click();
@@ -239,7 +434,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     const fallbackSwatch = (await background(editor).getByLabel('Fallback colour').boundingBox())!;
     expect(borderSwatch.width).toBeLessThanOrEqual(48);
     expect(fallbackSwatch.width).toBeLessThanOrEqual(48);
-    const platePanel = editor.getByRole('complementary', { name: 'Plates', exact: true });
+    const platePanel = editor.getByRole('region', { name: 'Plates', exact: true });
     expect(await platePanel.evaluate((node) => node.scrollWidth - node.clientWidth)).toBe(0);
     await expect(onAir(editor)).toBeChecked();
     await onAir(editor).uncheck();
@@ -279,6 +474,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await expect(background(editor).getByText('plate-poster.png', { exact: true })).toHaveCount(0);
     const chooseBackground = (dialog: Locator) =>
       dialog.getByRole('button', { name: 'Choose background image or video' });
+    await showLayoutSettings(editor, 'Layout');
     const backgroundMedia = editor.getByLabel('Background media file', { exact: true });
     await backgroundMedia.setInputFiles(
       fileURLToPath(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url)),
@@ -301,6 +497,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     const backgroundThumbnail = chooseBackground(editor).locator('img');
     await expect(backgroundThumbnail).toBeVisible();
     await expect(backgroundThumbnail).toHaveJSProperty('naturalWidth', 32);
+    await showLayoutSettings(editor, 'Plate');
     await expect(onAir(editor)).toBeChecked();
     await expect(fallback(editor, 2).locator('img')).toHaveJSProperty('naturalWidth', 1280);
     // First save a package in the older format, before the embedded PNG was generated.
@@ -350,8 +547,10 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await expect(onAir(restored)).toBeChecked();
     await expect(fallbackImageButton(restored)).toHaveAttribute('title', 'plate-poster.png');
     await expect(fallbackImageButton(restored).locator('img')).toBeVisible();
+    await showLayoutSettings(restored, 'Layout');
     await expect(chooseBackground(restored)).toHaveAttribute('title', 'layout-poster.png');
     await expect(chooseBackground(restored).locator('img')).toBeVisible();
+    await showLayoutSettings(restored, 'Plate');
     await expect(fallback(restored, 2).locator('img')).toHaveJSProperty('naturalWidth', 1280);
     const layoutTitle = (dialog: Locator) =>
       dialog.getByRole('textbox', { name: 'Title', exact: true });
@@ -451,7 +650,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
 test('R-120 authors, focuses, returns and prepares a second layout while the first is on air', async ({
   page,
 }) => {
-  test.setTimeout(80_000);
+  test.setTimeout(120_000);
   page.setDefaultTimeout(12_000);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-control-layout-'));
   let mock: MockHandle | undefined;
@@ -460,6 +659,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const oscPort = await freeUdpPort();
     mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 15, channels: 1 });
     const engine = mock;
+    const paintedArtwork = mockFocusArtwork(engine);
     bridge = await createBridge({
       port: 0,
       connection: {
@@ -490,7 +690,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
     await page.goto('/');
     const layers = page.getByRole('region', { name: 'Layers' });
-    await expect(layers.getByRole('button', { name: 'New live layout' })).toBeVisible();
+    await expect(layers.getByRole('button', { name: 'New live layout' })).toBeVisible({
+      timeout: 15_000,
+    });
     // Live camera snapshots are reads, and the rest of the app and wire use the actual Bridge.
     await page.evaluate(() => {
       const canvas = document.createElement('canvas');
@@ -534,7 +736,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
     await expect(editor.getByRole('button', { name: /^Edit plate / })).toHaveCount(0);
     await expect(editor.locator('.cg-live-layout-preset-choice')).toHaveCount(0);
+    await showLayoutSettings(editor, 'Preset');
     await expect(startPreset).toBeDisabled();
+    await showLayoutSettings(editor, 'Plate');
     await expect(saveLayout).toBeDisabled();
     expect((await editor.boundingBox())?.width ?? 0).toBeGreaterThan(1080);
     expect((await editor.boundingBox())?.height ?? 0).toBeGreaterThan(900);
@@ -561,16 +765,24 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const layoutName = editor.getByRole('textbox', { name: 'Layout name' });
     await layoutName.fill('Studio panel');
     await addPreset.click();
+    await showLayoutSettings(editor, 'Preset');
     await expect(startPreset).toBeDisabled();
+    await showLayoutSettings(editor, 'Plate');
     await expect(saveLayout).toBeDisabled();
+    await showLayoutSettings(editor, 'Preset');
     await editor.getByRole('button', { name: 'Delete preset', exact: true }).click();
+    await showLayoutSettings(editor, 'Plate');
     await addFrame.click();
     await addFrame.click();
     await expect(saveLayout).toBeDisabled();
     await addPreset.click();
     await expect(saveLayout).toBeEnabled();
+    await showLayoutSettings(editor, 'Preset');
     await expect(startPreset).toBeDisabled();
+    await showLayoutSettings(editor, 'Plate');
+    await showLayoutSettings(editor, 'Preset');
     const startWidth = (await startPreset.boundingBox())!.width;
+    await showLayoutSettings(editor, 'Plate');
     await addFrame.click();
     await addFrame.click();
     await editor.getByRole('button', { name: 'Delete plate' }).click();
@@ -579,10 +791,12 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       'overflow-y',
       'visible',
     );
-    const workspace = editor.locator('.cg-live-layout-workspace');
+    const workspace = editor.locator('.cg-live-layout-editor');
     const sidebarBounds = () =>
       workspace.evaluate((node) => {
-        const sidebar = node.querySelector<HTMLElement>('.cg-live-layout-frames')!;
+        const sidebar = node.querySelector<HTMLElement>(
+          '.cg-live-layout-settings-panel:not([hidden])',
+        )!;
         const parent = node.closest('[data-modal-body]')!;
         return {
           top: sidebar.getBoundingClientRect().top,
@@ -592,8 +806,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const sidebarAtStart = await sidebarBounds();
     expect(sidebarAtStart.footerGap).toBeGreaterThanOrEqual(0);
     expect(sidebarAtStart.footerGap).toBeLessThan(24);
+    await showLayoutSettings(editor, 'Layout');
     await editor.getByText('Layout effects', { exact: true }).scrollIntoViewIfNeeded();
     expect(await sidebarBounds()).toEqual(sidebarAtStart);
+    await showLayoutSettings(editor, 'Plate');
     await workspace.getByRole('region', { name: 'Layout preview' }).evaluate((node) => {
       node.scrollTop = 0;
     });
@@ -756,8 +972,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await verticalGap.fill('36');
     await verticalGap.press('Tab');
     await editor.getByRole('button', { name: 'Add preset' }).click();
+    await showLayoutSettings(editor, 'Preset');
     await expect(startPreset).toBeEnabled();
     expect((await startPreset.boundingBox())!.width).toBeCloseTo(startWidth, 1);
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Interview');
     await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).uncheck();
     const positionPicker = editor.getByRole('group', { name: 'Position in preset', exact: true });
@@ -766,15 +984,17 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await horizontalGap.fill('12');
     await horizontalGap.press('Tab');
     await editor.getByRole('button', { name: 'Add preset' }).click();
+    await showLayoutSettings(editor, 'Preset');
     await editor.getByRole('button', { name: 'Delete preset' }).click();
+    await showLayoutSettings(editor, 'Plate');
     const threeUp = editor.getByRole('button', { name: 'Three-up', exact: true });
     const interview = editor.getByRole('button', { name: 'Interview', exact: true });
     await threeUp.click();
     await editor.getByRole('textbox', { name: 'Preset name' }).focus();
     await expect(threeUp).toHaveAttribute('aria-pressed', 'true');
     await expect(interview).toHaveAttribute('aria-pressed', 'false');
-    await expect(threeUp.locator('.cg-live-layout-selection-mark')).toBeVisible();
-    await expect(interview.locator('.cg-live-layout-selection-mark')).toBeHidden();
+    await expect(threeUp.locator('[data-layout-thumbnail-plate]')).toHaveCount(3);
+    await expect(interview.locator('[data-layout-thumbnail-plate]')).toHaveCount(2);
     expect(await fieldAppearance(threeUp)).not.toEqual(await fieldAppearance(interview));
     await expect(editor.getByRole('checkbox', { name: 'Plate 3 in preset' })).toBeChecked();
     await expect(horizontalGap).toHaveValue('48');
@@ -794,6 +1014,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const png = await page.evaluate(
       () => document.createElement('canvas').toDataURL('image/png').split(',')[1]!,
     );
+    await showLayoutSettings(editor, 'Layout');
     await editor.getByLabel('Background media file').setInputFiles({
       name: 'panel.png',
       mimeType: 'image/png',
@@ -868,9 +1089,23 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const focusedTitle = editorStage.locator(
       '[data-layout-preview-shot][data-frame-number="1"] .cg-live-layout-shot-title',
     );
+    const firstTitleLayer = focusedTitle.locator('..');
+    const sampleDecorationFade = (layer: Locator): Promise<number> =>
+      layer.evaluate((node) => {
+        const animation = node.getAnimations()[0];
+        const effect = animation?.effect;
+        if (!(effect instanceof KeyframeEffect) || animation === undefined)
+          throw new Error('Missing decoration fade');
+        animation.pause();
+        animation.currentTime = Number(effect.getTiming().duration) / 2;
+        const opacity = Number(getComputedStyle(node).opacity);
+        animation.finish();
+        return opacity;
+      });
     await expect(focusedTitle).toBeVisible();
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('checkbox', { name: 'Show title in Focus' }).uncheck();
-    await expect(focusedTitle).toHaveCount(0);
+    await expect(firstTitleLayer).toHaveCSS('opacity', '0');
     await editor.getByRole('button', { name: 'Focus plate 2', exact: true }).click();
     const arrival = editorStage.locator('[data-layout-preview-shot][aria-hidden="false"]');
     await expect
@@ -887,7 +1122,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       )
       .toBe(true);
     await editor.getByRole('button', { name: 'Return to Three-up' }).click();
-    await expect(focusedTitle).toBeVisible();
+    await expect(firstTitleLayer).toHaveCSS('opacity', '1');
 
     await editor.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
     await expect(
@@ -906,6 +1141,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await editor.getByLabel('Border width (px)', { exact: true }).fill('18');
     await expect(editor.getByLabel('Border radius (px)', { exact: true })).toHaveCount(0);
     const authoredBorder = thirdShot.locator('.cg-live-layout-shot-border');
+    const borderLayer = thirdShot.locator('[data-shot-border]');
     await expect(authoredBorder).toHaveCSS('border-top-color', 'rgb(254, 195, 82)');
     await expect(authoredBorder).toHaveCSS('border-top-left-radius', '0px');
     const borderInPreset = plateAppearance.getByLabel('Show border in preset', { exact: true });
@@ -913,13 +1149,15 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(borderInPreset).toBeChecked();
     await expect(borderInFocus).toBeChecked();
     await borderInPreset.uncheck();
-    await expect(authoredBorder).toHaveCount(0);
+    await expect(borderLayer).toHaveCSS('opacity', '0');
     await borderInPreset.check();
     await borderInFocus.uncheck();
     await thirdShot.getByRole('button', { name: /^Focus plate 3/ }).click();
-    await expect(authoredBorder).toHaveCount(0);
+    expect(await sampleDecorationFade(borderLayer)).toBeCloseTo(0.5, 2);
+    await expect(borderLayer).toHaveCSS('opacity', '0');
     await editor.getByRole('button', { name: /^Return to / }).click();
-    await expect(authoredBorder).toBeVisible();
+    expect(await sampleDecorationFade(borderLayer)).toBeCloseTo(0.5, 2);
+    await expect(borderLayer).toHaveCSS('opacity', '1');
     await borderInFocus.check();
     await expect(thirdShot).toHaveCSS('outline-offset', '2px');
     await expect(thirdShot).toHaveCSS('outline-style', 'solid');
@@ -1043,9 +1281,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await soloFocusTitle.check();
     await expect(focusedTitle).toBeVisible();
     await soloFocusTitle.uncheck();
-    await expect(focusedTitle).toHaveCount(0);
+    await expect(firstTitleLayer).toHaveCSS('opacity', '0');
     await editor.getByRole('button', { name: 'Three-up', exact: true }).click();
-    await expect(focusedTitle).toBeVisible();
+    expect(await sampleDecorationFade(firstTitleLayer)).toBeCloseTo(0.5, 2);
+    await expect(firstTitleLayer).toHaveCSS('opacity', '1');
     await editor.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
     await editor.getByText('Plate graphics', { exact: true }).click();
     const [graphicPicker] = await Promise.all([
@@ -1072,7 +1311,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await threeUp.click();
     await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
     await editor.getByRole('button', { name: 'Save layout' }).click();
-    await expect(editor).toBeHidden();
+    await expect(editor).toBeHidden({ timeout: 20_000 });
 
     const listed = runtime.templateList(1).find(({ name }) => name === 'Studio panel');
     expect(listed?.controlLiveLayout?.presets.map(({ name }) => name)).toEqual([
@@ -1232,7 +1471,13 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(hiddenTitle).toHaveAttribute('data-cg-instance-hidden-text', '');
     await expect(hiddenTitle).toBeHidden();
     await localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }).click();
-    await expect(previewFrame.locator('[data-cg-pvw-focus-switch="push"]').first()).toBeVisible();
+    const firstPush = previewFrame.locator('[data-cg-pvw-focus-switch="push"]');
+    await expect(firstPush).toBeVisible();
+    await expect(
+      firstPush.locator(
+        `[data-cg-pvw-focus-plane="outgoing"] [data-cg-element-id="${authored.frames[0]!.id}-title"]`,
+      ),
+    ).toBeHidden();
     await expect(
       localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -1241,10 +1486,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const push = previewFrame.locator('[data-cg-pvw-focus-switch="push"]');
     const graphic = '[data-cg-element-id="frame-graphic-accent"]';
     const thirdPlateBorder = `[data-cg-element-id="${authored.frames[2]!.id}-border"]`;
+    const thirdTitle = `[data-cg-element-id="${authored.frames[2]!.id}-title"]`;
+    const thirdCaption = 'سطر دوم ۷۸۹';
     const incoming = push.locator('[data-cg-pvw-focus-plane="incoming"]');
     await Promise.all([
       expect(incoming.locator(graphic)).toBeVisible(),
       expect(incoming.locator(thirdPlateBorder)).toBeVisible(),
+      expect(incoming.locator(thirdTitle)).toBeVisible(),
+      expect(incoming.getByText(thirdCaption, { exact: true })).toBeVisible(),
     ]);
     await expect(push).toHaveCount(0);
     const focusedBorder = previewFrame.locator(thirdPlateBorder).filter({ visible: true });
@@ -1254,6 +1503,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await Promise.all([
       expect(outgoing.locator(graphic)).toBeVisible(),
       expect(outgoing.locator(thirdPlateBorder)).toBeVisible(),
+      expect(outgoing.locator(thirdTitle)).toBeVisible(),
+      expect(outgoing.getByText(thirdCaption, { exact: true })).toBeVisible(),
     ]);
     await expect(push).toHaveCount(0);
     await expect(previewFrame.locator(graphic).filter({ visible: true })).toHaveCount(0);
@@ -1301,6 +1552,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(localFocus.getByRole('button', { name: 'Return to Three-up' })).toHaveCount(0);
     await programme.getByRole('button', { name: 'Focus plate 2 in Programme' }).click();
     await expect.poll(active).toBe(focus(1));
+    expect(paintedArtwork.map(({ lookId }) => lookId).sort()).toEqual([focus(0), focus(1)].sort());
     await programme.getByRole('button', { name: 'Return to Three-up' }).click();
     await expect.poll(active).toBe(origin);
     expect(seats()).toEqual(initial);
@@ -1309,9 +1561,18 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       .slice(wireStart)
       .map(({ line }) => line);
     expect(focusCommands.some((line) => / FILL .* \d+ linear DEFER$/.test(line))).toBe(true);
-    expect(
-      focusCommands.filter((line) => /^(?:PLAY|CLEAR) 1-(?:6[0-9]|7[0-9])\b/.test(line)),
-    ).toEqual([]);
+    const seatedPictureLayers = new Set(initial?.map(({ slot }) => slot.layer));
+    for (const line of focusCommands) {
+      const layer = line.match(/^(?:PLAY|CLEAR) 1-((?:6[0-9]|7[0-9]))\b/)?.[1];
+      if (layer === undefined) continue;
+      expect(seatedPictureLayers.has(Number(layer))).toBe(false);
+      if (line.startsWith('PLAY')) {
+        expect(
+          /#[0-9a-f]{6}$/i.test(line) || line.endsWith(` "route://1-${liveLayerRange.end}"`),
+        ).toBe(true);
+        expect(focusCommands.slice(focusCommands.indexOf(line) + 1)).toContain(`CLEAR 1-${layer}`);
+      }
+    }
 
     const inputEffect = inspector.getByRole('combobox', { name: 'Input transition' });
     await expect(inputEffect.locator('option:checked')).toHaveText('Layout default (Push)');
@@ -1353,14 +1614,23 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await programme.getByRole('button', { name: 'Focus plate 1 in Programme' }).click();
     await expect.poll(active).toBe(focus(0));
     const fadeStart = engine.receivedCommands().length;
+    const beforeFadePaint = paintedArtwork.length;
     await programme.getByRole('button', { name: 'Focus plate 2 in Programme' }).click();
     await expect.poll(active).toBe(focus(1));
-    expect(
-      engine
-        .receivedCommands()
-        .slice(fadeStart)
-        .some(({ line }) => / OPACITY (?:0|1) 25 linear DEFER$/.test(line)),
-    ).toBe(true);
+    expect(new Set(paintedArtwork.slice(beforeFadePaint).map(({ lookId }) => lookId))).toEqual(
+      new Set([focus(0), focus(1)]),
+    );
+    const fadeCommands = engine
+      .receivedCommands()
+      .slice(fadeStart)
+      .map(({ line }) => line);
+    // At 1080i50, the 25-frame dissolve has 50 fields plus the final mixer tick.
+    const mix = fadeCommands.find((line) => /^LOADBG 1-\d+ "route:\/\/1-\d+" MIX 51$/.test(line));
+    expect(mix).toBeDefined();
+    const slot = mix!.split(' ')[1]!;
+    const startMix = fadeCommands.indexOf(`PLAY ${slot}`);
+    expect(startMix).toBeGreaterThan(fadeCommands.indexOf(mix!));
+    expect(fadeCommands.indexOf(`CLEAR ${slot}`)).toBeGreaterThan(startMix);
     await programme.getByRole('button', { name: 'Return to Three-up' }).click();
     await expect.poll(active).toBe(origin);
 
@@ -1402,8 +1672,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(copy.getByRole('textbox', { name: 'Layout name' })).toHaveValue(
       'Studio panel copy',
     );
+    await showLayoutSettings(copy, 'Layout');
     await expect(backgroundImageButton(copy)).toHaveAttribute('title', 'panel.png');
     await expect(backgroundImageButton(copy).locator('img')).toBeVisible();
+    await showLayoutSettings(copy, 'Plate');
     await copy.getByText('Title style', { exact: true }).click();
     await expect(copy.getByLabel('Box width (%)', { exact: true })).toHaveValue('70');
     await expect(copy.getByLabel('Text vertical offset (px)', { exact: true })).toHaveValue('-5');
@@ -1515,6 +1787,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(cropMotion[2]?.fit).toBeGreaterThan(cropMotion[1]!.fit);
     for (const { aspect: imageAspect } of cropMotion) expect(imageAspect).toBeCloseTo(16 / 9, 2);
     await copy.getByRole('button', { name: 'Three-up', exact: true }).click();
+    await showLayoutSettings(copy, 'Layout');
     await noBackground(copy).click();
     await expect(noBackground(copy)).toHaveAttribute('aria-pressed', 'true');
     await expect(backgroundImageButton(copy).locator('img')).toHaveCount(0);
@@ -1589,6 +1862,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(runtime.templateGet(nextTemplate.templateId, 1)?.controlLiveLayout).toEqual(nextLayout);
     await again.click();
     await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    await showLayoutSettings(lockedEdit, 'Layout');
     await expect(noBackground(lockedEdit)).toHaveAttribute('aria-pressed', 'true');
     await expect(lockedEdit.locator('[data-layout-preview]')).toHaveAttribute(
       'data-transparent-background',

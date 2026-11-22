@@ -266,9 +266,10 @@ test('§4 — a six-frame template with five irregular looks renders exactly its
   expect(frames[3]?.cells).toEqual(['l-1', 'l-2', 'l-4', 'l-6']);
   // No look was invented from the frame count: nothing declares five frames.
   await expect(picker.locator('[data-look-frames="5"]')).toHaveCount(0);
-  // The tooltip says the frame count in the operator's words and carries the id.
-  await expect(segments.nth(1)).toHaveAttribute('title', '2 frames · pair');
-  await expect(segments.nth(0)).toHaveAttribute('title', '1 frame · solo');
+  await expect(segments.nth(0)).toHaveAttribute('title', 'Solo · 1 plate');
+  await expect(segments.nth(1)).toHaveAccessibleName('Pair · Starting preset');
+  await segments.nth(1).hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Pair · 2 plates');
   // The AUTHORED default is what a fresh row marks — `trio`, the third, not the first.
   await expect(segments.nth(2)).toHaveAttribute('aria-pressed', 'true');
   await expect(picker.locator('[aria-pressed="true"]')).toHaveCount(1);

@@ -9,6 +9,7 @@ import {
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import {
+  authoredLookEffect,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutSoloTarget,
   isOnAirStatus,
@@ -444,7 +445,12 @@ export function LayerRow({
     try {
       const layoutEffects =
         layout === undefined ? undefined : effectiveLayoutEffects(item.itemId, layout);
-      const effect = layoutEffects?.focus ?? frameTransitionPreference();
+      const authoredEffect = authoredLookEffect(
+        template?.liveSources?.looks?.find(({ id }) => id === lookId)?.entered,
+      );
+      const override = rowEffectOverrides(item.itemId)?.preset;
+      const effect =
+        layoutEffects?.focus ?? override ?? authoredEffect ?? frameTransitionPreference();
       const from =
         layout === undefined
           ? undefined
@@ -473,7 +479,11 @@ export function LayerRow({
       const transition =
         onProgramme &&
         (layout !== undefined ||
-          (item.onAirPresetTransition === true && (effect.motion !== 'cut' || effect.fade)))
+          (item.onAirPresetTransition === true &&
+            (override !== undefined ||
+              authoredEffect !== undefined ||
+              effect.motion !== 'cut' ||
+              effect.fade)))
           ? focusEffect
           : undefined;
       const res = await window.cg.stack.setActiveLook({

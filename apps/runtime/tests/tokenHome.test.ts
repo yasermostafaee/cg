@@ -141,17 +141,21 @@ const DATA_NOT_CHROME = new Map([
 ]);
 
 describe('§1 — one home for colour, and a guard that says so', () => {
-  const css = readFileSync(CSS, 'utf8');
+  const css = [CSS, join(RENDERER, 'ui', 'forms.css')]
+    .map((file) => readFileSync(file, 'utf8'))
+    .join('\n');
   const cssRules = stripComments(css, true);
 
-  it('controls.css declares no --r-* value of its own: the home is theme.ts', () => {
+  it('shared control CSS declares no --r-* value of its own: the home is theme.ts', () => {
     // `:root { --r-…: … }` is gone entirely. If it comes back, the duplicate is back.
-    expect(/--r-[a-z0-9-]+\s*:/.test(cssRules), 'controls.css re-declared a token').toBe(false);
+    expect(/--r-[a-z0-9-]+\s*:/.test(cssRules), 'shared control CSS re-declared a token').toBe(
+      false,
+    );
   });
 
-  it('no rule in controls.css spells a colour', () => {
+  it('no shared control rule spells a colour', () => {
     const hits = [...cssRules.matchAll(COLOUR)].map((m) => m[0]);
-    expect(hits, `raw colours in controls.css: ${hits.join(', ')}`).toEqual([]);
+    expect(hits, `raw colours in shared control CSS: ${hits.join(', ')}`).toEqual([]);
   });
 
   /**
@@ -169,7 +173,7 @@ describe('§1 — one home for colour, and a guard that says so', () => {
    * is to move together. So the rule is: a length may not EQUAL a token in the family
    * its property belongs to.
    */
-  it('no rule in controls.css re-spells a value the scale already owns', () => {
+  it('no shared control rule re-spells a value the scale already owns', () => {
     const family: Record<string, RegExp> = {
       spacing: /^(padding|margin|gap|row-gap|column-gap)$/,
       radius: /radius/,
@@ -212,7 +216,7 @@ describe('§1 — one home for colour, and a guard that says so', () => {
     const used = new Set([...css.matchAll(/var\((--r-[a-z0-9-]+)/g)].map((m) => m[1] as string));
     const declared = new Set(Object.keys(cssVars));
     const missing = [...used].filter((n) => !declared.has(n));
-    expect(missing, `controls.css reads tokens theme.ts does not declare`).toEqual([]);
+    expect(missing, 'shared control CSS reads tokens theme.ts does not declare').toEqual([]);
   });
 
   it('no renderer component spells a colour — theme.ts is the only home', () => {

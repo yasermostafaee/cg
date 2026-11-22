@@ -67,12 +67,14 @@ export function LiveLayoutEditorRectOverlay({
   selectedIndex,
   onSelect,
   onChange,
+  labels,
 }: {
-  kind: 'mask' | 'graphic';
+  kind: 'mask' | 'graphic' | 'plate';
   rects: readonly LiveRevealRect[];
   selectedIndex: number;
   onSelect: (index: number) => void;
   onChange: (index: number, rect: LiveRevealRect) => void;
+  labels?: readonly string[];
 }): JSX.Element {
   const frame = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag>();
@@ -146,17 +148,29 @@ export function LiveLayoutEditorRectOverlay({
       ref={frame}
       className="cg-live-layout-rect-overlay"
       role="group"
-      aria-label={kind === 'mask' ? 'Preview mask' : 'Preview graphic'}
+      aria-label={
+        kind === 'mask'
+          ? 'Preview mask'
+          : kind === 'graphic'
+            ? 'Preview graphic'
+            : 'Plate placement'
+      }
     >
       {rects.map((rect, index) => {
         const selected = selectedIndex === index;
-        const name = kind === 'mask' ? 'mask window ' + String(index + 1) : 'plate graphic';
+        const name =
+          kind === 'mask'
+            ? 'mask window ' + String(index + 1)
+            : kind === 'graphic'
+              ? 'plate graphic'
+              : (labels?.[index] ?? 'plate ' + String(index + 1));
         return (
           <div
             key={index}
             className="cg-live-layout-rect-box"
             data-layout-mask-window={kind === 'mask' ? index + 1 : undefined}
             data-layout-graphic-placement={kind === 'graphic' ? '' : undefined}
+            data-layout-plate-placement={kind === 'plate' ? '' : undefined}
             data-selected={selected ? '' : undefined}
             style={{
               left: `${rect.x * 100}%`,

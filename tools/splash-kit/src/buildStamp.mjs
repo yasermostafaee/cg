@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
  *    about surface reads these values instead of deriving a second set.
  *
  * WHY THIS FILE IS `.mjs` AND NOT `.ts`, which is worth knowing before someone "tidies" it:
- * its only consumer is each app's `vite.config.ts`. Vite loads a config by bundling it with
+ * each app's `vite.config.ts` and the installer packer run it directly. Vite loads a config by bundling it with
  * esbuild, but it treats a workspace package resolved through `node_modules` as EXTERNAL —
  * so Node imports this file directly, without a TypeScript transform, and a `.ts` source
  * export fails with `ERR_MODULE_NOT_FOUND` before the build starts. (Observed; the timing
@@ -41,7 +41,7 @@ import { readFileSync } from 'node:fs';
  * @param {string} cwd
  * @returns {string}
  */
-function shortShaOrFallback(cwd) {
+export function shortShaOrFallback(cwd) {
   try {
     const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
       cwd,

@@ -1,7 +1,9 @@
 import {
+  controlLiveLayoutDecorationOpacity,
   frameTransitionPhases,
   presetDepartureRect,
   presetTransitionDurations,
+  type ControlLiveLayout,
   type FrameTransition,
   type FrameTransitionPhase,
   type LiveFrameTarget,
@@ -137,8 +139,8 @@ export function rehearsalPresetPlan(
   after: PresetView,
   effect: FrameTransition,
   periodMs: number,
-  holdTitles: boolean,
   raster: Pick<LiveSourceRect, 'width' | 'height'>,
+  layout?: ControlLiveLayout,
 ): PresetPlan | undefined {
   const oldInputs = new Map(before.plates.map(({ plateId, sourceId }) => [plateId, sourceId]));
   const newInputs = new Map(after.plates.map(({ plateId, sourceId }) => [plateId, sourceId]));
@@ -170,23 +172,34 @@ export function rehearsalPresetPlan(
   );
   const outgoing = artworkGroups(before.look, departing, { fromOpacity: 1, toOpacity: 0 });
   const incoming = artworkGroups(after.look, arriving, { fromOpacity: 0, toOpacity: 1 });
-  const moves = shared.filter(({ from, to }) => effect.fade || !sameRect(from, to));
+  const sharedPlateIds = [...retainedIds];
+  const decorations = (from: number, to: number) =>
+    layout === undefined
+      ? []
+      : controlLiveLayoutDecorationOpacity(
+          layout,
+          before.look.id,
+          after.look.id,
+          sharedPlateIds,
+          from,
+          to,
+        );
+  const decorationChange = decorations(0, 1).length > 0;
+  const moves = shared.filter(
+    ({ from, to }) => decorationChange || effect.fade || !sameRect(from, to),
+  );
   const ticks = presetTransitionDurations(effect.durationMs / periodMs, {
     exit: outgoing.length > 0,
     move: moves.length > 0 && (effect.motion !== 'cut' || effect.fade),
     enter: incoming.length > 0,
   });
   if (ticks.exit + ticks.move + ticks.enter === 0) return undefined;
-  const titlePlateIds = [...new Set([...Object.keys(before.rects), ...Object.keys(after.rects)])];
-  const titleHold =
-    holdTitles && titlePlateIds.length > 0 ? { hidePresetTitlePlateIds: titlePlateIds } : {};
   const exit: FrameTransitionPhase[] = [];
   if (ticks.exit > 0) {
     const departingFrames = slidingArtworkFrames(before, outgoing, effect.exitDirection, raster);
     exit.push({
       authoredPreset: true,
       destinationLookId: after.look.id,
-      ...titleHold,
       durationMs: ticks.exit * periodMs,
       easing: 'linear',
       frames: [
@@ -202,12 +215,19 @@ export function rehearsalPresetPlan(
       opacityArtwork: outgoing,
     });
   }
+  const movementDuration = ticks.move * periodMs;
+  let elapsed = 0;
   for (const phase of movementPhases(moves, effect, ticks.move, periodMs)) {
+    const decorationOpacity = decorations(
+      elapsed / movementDuration,
+      (elapsed + phase.durationMs) / movementDuration,
+    );
+    elapsed += phase.durationMs;
     exit.push({
       ...phase,
       authoredPreset: true,
       destinationLookId: after.look.id,
-      ...titleHold,
+      ...(decorationOpacity.length > 0 && { decorationOpacity }),
       ...(outgoing.length > 0 && { hidePresetArtworkKeys: outgoing.map(({ key }) => key) }),
     });
   }
@@ -219,20 +239,18 @@ export function rehearsalPresetPlan(
   return {
     exit,
     enter:
-      ticks.enter === 0 && titleHold.hidePresetTitlePlateIds === undefined
+      ticks.enter === 0
         ? undefined
         : {
             authoredPreset: true,
-            ...titleHold,
             durationMs: ticks.enter * periodMs,
             easing: 'linear',
             frames: slideArrival ? arrivingFrames : [],
-            ...(ticks.enter > 0 && { opacityArtwork: incoming }),
+            opacityArtwork: incoming,
           },
     ...(slideArrival && {
       prepareEnter: {
         authoredPreset: true,
-        ...titleHold,
         durationMs: 0,
         easing: 'linear',
         frames: [],

@@ -161,7 +161,10 @@ export class OscEmitter {
       });
       if (layer.producer !== 'empty') {
         messages.push({
-          address: `${base}/foreground/file/path`,
+          address:
+            layer.producer === 'color'
+              ? `${base}/foreground/color`
+              : `${base}/foreground/file/path`,
           args: [layer.filePath],
         });
         messages.push({

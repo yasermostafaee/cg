@@ -53,23 +53,33 @@ export function Popover({
     const el = panel.current;
     const rect = anchor.current?.getBoundingClientRect();
     if (el === null || rect === undefined) return;
-    const h = el.offsetHeight;
-    const w = el.offsetWidth;
-    const below = rect.bottom + GAP;
-    const top = below + h <= window.innerHeight - EDGE ? below : Math.max(EDGE, rect.top - GAP - h);
-    const left = Math.max(EDGE, Math.min(rect.left, window.innerWidth - w - EDGE));
-    setPos({ top, left });
+    const position = () => {
+      const h = el.offsetHeight;
+      const w = el.offsetWidth;
+      const below = rect.bottom + GAP;
+      const top =
+        below + h <= window.innerHeight - EDGE ? below : Math.max(EDGE, rect.top - GAP - h);
+      const left = Math.max(EDGE, Math.min(rect.left, window.innerWidth - w - EDGE));
+      setPos({ top, left });
+    };
+    position();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(position);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [anchor]);
 
+  const placed = pos !== null;
   useEffect(() => {
+    if (!placed) return;
     const field = anchor.current;
     const target =
       initialFocusSelector === undefined
         ? null
         : panel.current?.querySelector<HTMLElement>(initialFocusSelector);
-    (target ?? panel.current)?.focus();
+    (target ?? panel.current)?.focus({ preventScroll: true });
     return () => field?.focus();
-  }, [anchor, initialFocusSelector]);
+  }, [anchor, initialFocusSelector, placed]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent): void => {

@@ -59,14 +59,6 @@ import {
  */
 
 const styles = {
-  row: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(6rem, 1fr) minmax(10rem, 1.4fr)',
-    gap: '0.6rem',
-    alignItems: 'center',
-    padding: '0.4rem 0',
-  },
-  plate: { fontSize: '0.82rem', fontWeight: 600 },
   assigned: { display: 'block', fontSize: '0.7rem', fontWeight: 400, color: colors.textMuted },
   overridden: { color: colors.pending, fontSize: '0.7rem' },
 } as const;
@@ -141,56 +133,66 @@ export function LiveSourceSwapDialog({
       }
     >
       <InputEffectControls itemId={item.itemId} layout={template.controlLiveLayout} />
-      {plates.map((plate) => {
-        const assigned = revertedSources.get(plate.sourceId) ?? null;
-        const hasPresetAssignment =
-          bindingLookId !== undefined &&
-          item.lookSourceOverride?.[bindingLookId]?.[plate.sourceId] !== undefined;
-        const swapped = override[plate.sourceId];
-        const label = plateDisplayName(plate.sourceId, template.liveSources?.sources, layout);
-        return (
-          <div key={plate.sourceId} style={styles.row} data-swap-plate={plate.sourceId}>
-            <label htmlFor={`swap-${item.itemId}-${plate.sourceId}`} style={styles.plate}>
-              <bdi>{label}</bdi>
-              <span style={styles.assigned} data-swap-assigned="">
-                <ChoiceLabel
-                  meterChannel={channel}
-                  choice={{
-                    value: '',
-                    label: hasPresetAssignment ? 'Preset assignment' : 'Template assignment',
-                    names: assigned,
-                  }}
-                />
-                {swapped !== undefined && (
-                  <span style={styles.overridden}> · swapped for this row</span>
-                )}
-              </span>
-            </label>
-            {/*
+      <div className="cg-form cg-form-rows">
+        {plates.map((plate) => {
+          const assigned = revertedSources.get(plate.sourceId) ?? null;
+          const hasPresetAssignment =
+            bindingLookId !== undefined &&
+            item.lookSourceOverride?.[bindingLookId]?.[plate.sourceId] !== undefined;
+          const swapped = override[plate.sourceId];
+          const label = plateDisplayName(plate.sourceId, template.liveSources?.sources, layout);
+          return (
+            <div key={plate.sourceId} className="cg-form-row" data-swap-plate={plate.sourceId}>
+              <label
+                htmlFor={`swap-${item.itemId}-${plate.sourceId}`}
+                className="cg-form-row__label"
+              >
+                <bdi>{label}</bdi>
+              </label>
+              {/*
               🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER. `R-048` 6.9e is kept to the letter:
               open the row's swap, then CHOOSE — opening the field and clicking an input is the one
               choose, exactly as the native select was, and it commits at once. No confirm step.
             */}
-            <SourcePicker
-              id={`swap-${item.itemId}-${plate.sourceId}`}
-              // `B-309` — the picker's name is the plate's, in the operator's words — never its id.
-              aria-label={`Live source for ${label}`}
-              value={swapped ?? ''}
-              onChange={(sourceId) => change(plate.sourceId, sourceId)}
-              // `B-303` — the words and the name kept apart: the name in its own isolate and direction.
-              choices={[
-                {
-                  value: '',
-                  label: hasPresetAssignment ? 'Use preset assignment' : 'Use template assignment',
-                  names: assigned,
-                },
-              ]}
-              channel={item.slot?.channel}
-              previewChannel={channel}
-            />
-          </div>
-        );
-      })}
+              <SourcePicker
+                className="cg-form-row__control"
+                id={`swap-${item.itemId}-${plate.sourceId}`}
+                // `B-309` — the picker's name is the plate's, in the operator's words — never its id.
+                aria-label={`Live source for ${label}`}
+                value={swapped ?? ''}
+                onChange={(sourceId) => change(plate.sourceId, sourceId)}
+                // `B-303` — the words and the name kept apart: the name in its own isolate and direction.
+                choices={[
+                  {
+                    value: '',
+                    label: hasPresetAssignment
+                      ? 'Use preset assignment'
+                      : 'Use template assignment',
+                    names: assigned,
+                  },
+                ]}
+                channel={item.slot?.channel}
+                previewChannel={channel}
+              />
+              <div className="cg-form-row__details">
+                <span style={styles.assigned} data-swap-assigned="">
+                  <ChoiceLabel
+                    meterChannel={channel}
+                    choice={{
+                      value: '',
+                      label: hasPresetAssignment ? 'Preset assignment' : 'Template assignment',
+                      names: assigned,
+                    }}
+                  />
+                  {swapped !== undefined && (
+                    <span style={styles.overridden}> · swapped for this row</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </Modal>
   );
 }

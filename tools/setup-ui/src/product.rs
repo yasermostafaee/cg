@@ -24,6 +24,9 @@ pub enum ProductId {
 pub struct Config {
     pub product: ProductId,
     pub version: String,
+    /// The short source revision shared with the built apps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_id: Option<String>,
     /// The engine's file name (today's installer, as NSIS built it).
     pub engine_name: String,
     /// What the engine copies to disk, in bytes ("Space · Needed").

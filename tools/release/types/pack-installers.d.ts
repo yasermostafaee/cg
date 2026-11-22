@@ -23,5 +23,8 @@ declare module '*pack-installers.mjs' {
     outDir: string;
     guide?: string | null;
   }): PackItem[];
-  export function packArgs(item: PackItem, options: { version: string; setupDir: string }): string[];
+  export function packArgs(
+    item: PackItem,
+    options: { version: string; setupDir: string; buildId?: string },
+  ): string[];
 }

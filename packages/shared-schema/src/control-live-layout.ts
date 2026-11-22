@@ -25,7 +25,12 @@ import {
   type LiveCropFocus,
   type LiveFitMode,
 } from './live-fit.js';
-import { calculateLiveSourceAutoLayout, liveSourceRowCounts } from './live-source-auto-layout.js';
+import {
+  calculateLiveSourceAutoLayout,
+  liveSourceLayoutBounds,
+  liveSourceLayoutMargins,
+  liveSourceRowCounts,
+} from './live-source-auto-layout.js';
 import { PlayoutMediaSourceIdSchema, type LiveSourceRect } from './live-source.js';
 import {
   FrameRateSchema,
@@ -170,6 +175,7 @@ const ControlLiveLayoutArrangementSchema = z.enum([
   'grid-top',
   'grid-bottom',
   'host-and-guests',
+  'custom',
 ]);
 export type ControlLiveLayoutArrangement = z.infer<typeof ControlLiveLayoutArrangementSchema>;
 
@@ -195,6 +201,14 @@ const ControlLiveLayoutPlateOverrideSchema = z.object({
 });
 export type ControlLiveLayoutPlateOverride = z.infer<typeof ControlLiveLayoutPlateOverrideSchema>;
 
+const LayoutInsetSchema = z.number().finite().nonnegative();
+const ControlLiveLayoutMarginsSchema = z.object({
+  top: LayoutInsetSchema,
+  right: LayoutInsetSchema,
+  bottom: LayoutInsetSchema,
+  left: LayoutInsetSchema,
+});
+
 const ControlLiveLayoutPresetSchema = z.object({
   // Preset ids and frame ids exclude the separator used by the derived Focus ids.
   id: z
@@ -209,6 +223,10 @@ const ControlLiveLayoutPresetSchema = z.object({
   horizontalGap: z.number().finite().nonnegative(),
   verticalGap: z.number().finite().nonnegative(),
   reverse: z.boolean(),
+  margins: ControlLiveLayoutMarginsSchema.optional(),
+  focusMargins: ControlLiveLayoutMarginsSchema.optional(),
+  fill: z.boolean().optional(),
+  customRects: z.record(ControlLiveLayoutFrameIdSchema, LiveRevealRectSchema).optional(),
   hiddenTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
   hiddenFocusTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
   hiddenBorders: z
@@ -373,6 +391,10 @@ export const ControlLiveLayoutSchema = z
       }
       if (Object.keys(preset.plateOverrides ?? {}).some((id) => !preset.frameIds.includes(id)))
         issue(['presets', index, 'plateOverrides'], 'Plate overrides must belong to this preset.');
+      if (Object.keys(preset.customRects ?? {}).some((id) => !frameIds.has(id)))
+        issue(['presets', index, 'customRects'], 'Custom positions must belong to this layout.');
+      if (controlLiveLayoutFocusRect(layout, preset) === undefined)
+        issue(['presets', index, 'focusMargins'], 'Focus margins must leave room for a plate.');
       const attachments = preset.frameAttachments ?? [];
       if (new Set(attachments.map(({ id }) => id)).size !== attachments.length)
         issue(['presets', index, 'frameAttachments'], 'Frame attachments must have distinct ids.');
@@ -382,7 +404,7 @@ export const ControlLiveLayoutSchema = z
           'Attach a template to a frame in this preset.',
         );
       if (Object.keys(controlLiveLayoutRects(layout, preset)).length !== preset.frameIds.length)
-        issue(['presets', index], `There is no room for the gaps in “${preset.name}”.`);
+        issue(['presets', index], `There is no room for the gaps or margins in “${preset.name}”.`);
     }
   });
 export type ControlLiveLayout = z.infer<typeof ControlLiveLayoutSchema>;
@@ -462,6 +484,50 @@ export function controlLiveLayoutBorderHidden(
   return (focused ? preset.hiddenFocusBorders : preset.hiddenBorders)?.includes(frameId) === true;
 }
 
+/** Opacity of individual retained plate decorations within a segment of an authored switch.
+ * Entering and leaving plates already fade with their complete plate artwork. */
+export function controlLiveLayoutDecorationOpacity(
+  layout: ControlLiveLayout,
+  fromLookId: string,
+  toLookId: string,
+  plateIds: readonly string[],
+  startFraction = 0,
+  endFraction = 1,
+): {
+  plateId: string;
+  border?: { fromOpacity: number; toOpacity: number };
+  title?: { fromOpacity: number; toOpacity: number };
+}[] {
+  const fromFocus = controlLiveLayoutFocusTarget(layout, fromLookId);
+  const toFocus = controlLiveLayoutFocusTarget(layout, toLookId);
+  const from = layout.presets.find(({ id }) => id === (fromFocus?.presetId ?? fromLookId));
+  const to = layout.presets.find(({ id }) => id === (toFocus?.presetId ?? toLookId));
+  if (!from || !to) return [];
+  const segment = (wasHidden: boolean, isHidden: boolean) =>
+    wasHidden === isHidden
+      ? undefined
+      : {
+          fromOpacity: wasHidden ? startFraction : 1 - startFraction,
+          toOpacity: wasHidden ? endFraction : 1 - endFraction,
+        };
+  return plateIds.flatMap((plateId) => {
+    if (
+      !(fromFocus ? fromFocus.frameId === plateId : from.frameIds.includes(plateId)) ||
+      !(toFocus ? toFocus.frameId === plateId : to.frameIds.includes(plateId))
+    )
+      return [];
+    const border = segment(
+      controlLiveLayoutBorderHidden(from, plateId, fromFocus !== undefined),
+      controlLiveLayoutBorderHidden(to, plateId, toFocus !== undefined),
+    );
+    const title = segment(
+      controlLiveLayoutTitleHidden(from, plateId, fromFocus !== undefined),
+      controlLiveLayoutTitleHidden(to, plateId, toFocus !== undefined),
+    );
+    return border || title ? [{ plateId, ...(border && { border }), ...(title && { title }) }] : [];
+  });
+}
+
 /** Frame ids in effective on-screen arrangement order. */
 export function controlLiveLayoutPresetFrameIds({
   frameIds,
@@ -486,6 +552,17 @@ export function controlLiveLayoutMovePresetFrame(
   return preset.reverse ? ids.reverse() : ids;
 }
 
+/** Focus fills the independently inset output area. Omitted margins retain full-screen Focus. */
+export function controlLiveLayoutFocusRect(
+  { resolution }: { resolution: Resolution },
+  preset: Pick<ControlLiveLayoutPreset, 'focusMargins'>,
+): LiveSourceRect | undefined {
+  return liveSourceLayoutBounds(
+    resolution,
+    liveSourceLayoutMargins(resolution, preset.focusMargins, 0),
+  );
+}
+
 /** Output-pixel rectangles. The compiler and authoring preview share this calculation. */
 export function controlLiveLayoutRects(
   { resolution }: { resolution: Resolution },
@@ -502,12 +579,37 @@ export function controlLiveLayoutRects(
   const [first, ...guests] = plates;
   const rects = Object.create(null) as Record<string, LiveSourceRect>;
   if (first === undefined) return rects;
-  const canvas = { x: 0, y: 0, width, height };
+  if (arrangement === 'custom') {
+    const defaults = calculateLiveSourceAutoLayout(plates, resolution, 'more-top', {
+      fill: true,
+      horizontalGap: 0,
+      verticalGap: 0,
+      margins: liveSourceLayoutMargins(resolution, undefined, 0),
+    });
+    for (const { id, ...fallback } of defaults) {
+      const rect = preset.customRects?.[id];
+      rects[id] =
+        rect === undefined
+          ? fallback
+          : {
+              x: rect.x * width,
+              y: rect.y * height,
+              width: rect.width * width,
+              height: rect.height * height,
+            };
+    }
+    return rects;
+  }
+
+  const fill = preset.fill === true;
+  const margins = liveSourceLayoutMargins(resolution, preset.margins, count === 1 ? 0 : 0.05);
+  const bounds = liveSourceLayoutBounds(resolution, margins);
+  if (bounds === undefined) return rects;
   if (count === 1) {
     rects[first.id] =
-      first.aspect === width / height
-        ? canvas
-        : fitPictureToBox(canvas, first.aspect, 'contain').visible;
+      fill || first.aspect === bounds.width / bounds.height
+        ? bounds
+        : fitPictureToBox(bounds, first.aspect, 'contain').visible;
     return rects;
   }
 
@@ -519,32 +621,39 @@ export function controlLiveLayoutRects(
     const cells = calculateLiveSourceAutoLayout(plates, resolution, bias, {
       horizontalGap,
       verticalGap,
-      ...(authoredShape && { rowCounts: liveSourceRowCounts(count, bias) }),
+      margins,
+      fill,
+      ...((authoredShape || fill) && { rowCounts: liveSourceRowCounts(count, bias) }),
     });
     for (const { id, ...rect } of cells) rects[id] = rect;
     return rects;
   }
 
-  const margin = Math.min(width, height) * 0.05;
-  const availableWidth = width - margin * 2;
-  const availableHeight = height - margin * 2;
+  const { width: availableWidth, height: availableHeight } = bounds;
   if (arrangement === 'host-and-guests' && guests.length > 1) {
     const gapBudget = verticalGap * (guests.length - 1);
     const inverseAspectSum = guests.reduce((sum, { aspect }) => sum + 1 / aspect, 0);
     // The guest column has the host's height, including its vertical gaps.
-    const hostHeight = Math.min(
-      availableHeight,
-      (availableWidth - horizontalGap + gapBudget / inverseAspectSum) /
-        (first.aspect + 1 / inverseAspectSum),
-    );
-    const guestWidth = (hostHeight - gapBudget) / inverseAspectSum;
+    const room = availableWidth - horizontalGap;
+    if (room <= 0 || availableHeight <= gapBudget) return rects;
+    const hostHeight = fill
+      ? availableHeight
+      : Math.min(
+          availableHeight,
+          (room + gapBudget / inverseAspectSum) / (first.aspect + 1 / inverseAspectSum),
+        );
+    const guestWidth = fill
+      ? room / (first.aspect * inverseAspectSum + 1)
+      : (hostHeight - gapBudget) / inverseAspectSum;
     if (guestWidth <= 0) return rects;
-    const hostWidth = hostHeight * first.aspect;
-    const x = (width - hostWidth - guestWidth - horizontalGap) / 2;
-    let y = (height - hostHeight) / 2;
+    const hostWidth = fill ? room - guestWidth : hostHeight * first.aspect;
+    const x = bounds.x + (availableWidth - hostWidth - guestWidth - horizontalGap) / 2;
+    let y = bounds.y + (availableHeight - hostHeight) / 2;
     rects[first.id] = { x, y, width: hostWidth, height: hostHeight };
     for (const { id, aspect } of guests) {
-      const guestHeight = guestWidth / aspect;
+      const guestHeight = fill
+        ? (hostHeight - gapBudget) / (aspect * inverseAspectSum)
+        : guestWidth / aspect;
       rects[id] = { x: x + hostWidth + horizontalGap, y, width: guestWidth, height: guestHeight };
       y += guestHeight + verticalGap;
     }
@@ -557,14 +666,15 @@ export function controlLiveLayoutRects(
   const totalGap = gap * (count - 1);
   const mainLimit = vertical ? availableHeight : availableWidth;
   const crossLimit = vertical ? availableWidth : availableHeight;
-  const crossSize = Math.min(crossLimit, (mainLimit - totalGap) / totalWeight);
-  if (crossSize <= 0) return rects;
-  const mainSize = vertical ? height : width;
-  const crossCanvas = vertical ? width : height;
-  let cursor = (mainSize - (crossSize * totalWeight + totalGap)) / 2;
-  const cross = (crossCanvas - crossSize) / 2;
+  const room = mainLimit - totalGap;
+  if (room <= 0) return rects;
+  const crossSize = fill ? crossLimit : Math.min(crossLimit, room / totalWeight);
+  const mainOrigin = vertical ? bounds.y : bounds.x;
+  const crossOrigin = vertical ? bounds.x : bounds.y;
+  let cursor = mainOrigin + (fill ? 0 : (room - crossSize * totalWeight) / 2);
+  const cross = crossOrigin + (crossLimit - crossSize) / 2;
   for (const { id, aspect } of plates) {
-    const size = crossSize * (vertical ? 1 / aspect : aspect);
+    const size = fill ? room / count : crossSize * (vertical ? 1 / aspect : aspect);
     rects[id] = vertical
       ? { x: cross, y: cursor, width: crossSize, height: size }
       : { x: cursor, y: cross, width: size, height: crossSize };

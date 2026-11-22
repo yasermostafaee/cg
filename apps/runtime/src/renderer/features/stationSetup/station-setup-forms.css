@@ -1,0 +1,20 @@
+/* Preserve Station Setup's 42px controls while its form grids adapt to the pane. */
+.cg-station-setup-forms {
+  container: cg-station-setup-forms / inline-size;
+}
+
+.cg-station-setup-forms .cg-setup-field__label,
+.cg-station-setup-forms .cg-setup-field__hint,
+.cg-station-setup-forms .cg-setup-field__error {
+  overflow-wrap: anywhere;
+}
+
+@container cg-station-setup-forms (max-width: 34rem) {
+  .cg-station-setup-forms .cg-setup-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cg-station-setup-forms .cg-shared-files-action {
+    justify-self: start;
+  }
+}

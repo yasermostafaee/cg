@@ -44,9 +44,24 @@
 
 import type { StackItemStatus } from '@cg/shared-schema';
 
+// Dark form palette from APASAI MAM design/tokens/theme.dark.tokens.json.
+const mamForm = {
+  canvas: '#0e1216',
+  card: '#14171d',
+  overlay: '#181d23',
+  text: '#f4f5f7',
+  muted: '#a0a5ac',
+  border: '#262c33',
+  fieldLine: '#636a72',
+  primary: '#41befb',
+  primaryInk: '#002537',
+  selected: '#003248',
+} as const;
+
 /** Default artwork carried with a layout authored in CG Control. */
 export const liveLayoutArtwork = {
   background: '#132b3c',
+  fallbackColor: '#000000',
   mediaBackdrop: '#101822',
   titleText: '#FFFFFF',
   titleShadow: '#00000080',
@@ -1654,6 +1669,19 @@ export const cssVars = {
    */
   '--r-field-bg': REF_INSET,
   '--r-field-line': '#435367',
+  '--r-form-control-min-h': '2rem',
+  '--r-form-column-min-w': '8rem',
+  '--r-form-label-max-w': '32%',
+  '--r-form-swatch-h': '1.75rem',
+  '--r-form-field-line': mamForm.fieldLine,
+  '--r-form-card': mamForm.card,
+  '--r-form-overlay': mamForm.overlay,
+  '--r-form-text': mamForm.text,
+  '--r-form-muted': mamForm.muted,
+  '--r-form-divider': mamForm.border,
+  '--r-form-primary': mamForm.primary,
+  '--r-form-primary-ink': mamForm.primaryInk,
+  '--r-form-selected': mamForm.selected,
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
   /** `UI-POLISH-01` F — a passing check's ✓; see `colors.checkPass`. Never an air claim. */
   '--r-check-pass': colors.checkPass,
@@ -2346,11 +2374,11 @@ export const cssVars = {
    */
   '--r-modal-shadow': '0 32px 100px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2)',
   /** The frame's edge — `#3a4c60`, a step brighter than `--r-border`, so a dialog reads as lifted. */
-  '--r-modal-line': '#3a4c60',
+  '--r-modal-line': mamForm.fieldLine,
   /** `.modal-head{padding:22px 26px;gap:14px;background:#172230}`. */
   '--r-modal-head-pad': '22px 26px',
   '--r-modal-head-gap': '14px',
-  '--r-modal-head-bg': '#172230',
+  '--r-modal-head-bg': mamForm.overlay,
   /** Its title — 18 px / 650, which resolves to the 700 face here (A3). */
   '--r-modal-title-text': '18px',
   /** `.modal-body{padding:22px}` on the confirm dialog; the audio dialog insets `0 20px`. */
@@ -2358,7 +2386,7 @@ export const cssVars = {
   /** `.modal-foot{padding:16px 26px;gap:12px;background:#14202d}`, rendered 72 px tall. */
   '--r-modal-foot-pad': '16px 26px',
   '--r-modal-foot-gap': '12px',
-  '--r-modal-foot-bg': '#14202d',
+  '--r-modal-foot-bg': mamForm.overlay,
   /**
    * 🔴 THE FOOTER FLOOR FOR EVERY DIALOG THAT IS NOT `fixed` — 72 px, measured.
    *
@@ -3195,12 +3223,12 @@ export const cssVars = {
    * two. The ink stays the console's.
    */
   /** The frame's own ground — `.settings{background:var(--surface)}`. */
-  '--r-setup-surface': '#15191f',
+  '--r-setup-surface': mamForm.overlay,
   /** The rail's ground — `.sidebar{background:#11151b}`, one step under the frame. */
-  '--r-setup-rail-bg': '#11151b',
+  '--r-setup-rail-bg': mamForm.canvas,
   /** A CARD — `.card{background:#191e25;border:1px solid var(--line)}`. RAISED off the frame. */
-  '--r-setup-card-bg': '#191e25',
-  '--r-setup-card-line': '#2b323c',
+  '--r-setup-card-bg': mamForm.card,
+  '--r-setup-card-line': mamForm.border,
   /** The quieter rule INSIDE a card — `--line-soft`: under a card head, between two rows. */
   '--r-setup-rule': '#232a33',
   /** A card's HELP band — `.card-help{background:#161b22}`, under a rule. */
@@ -3209,13 +3237,9 @@ export const cssVars = {
   '--r-setup-table-head-bg': '#14191f',
   /** A record row under the pointer — `.data-table tbody tr:hover{background:#1d242d}`. */
   '--r-setup-row-hover': '#1d242d',
-  /** A FIELD in this dialog — `.input{background:#10151c;border-color:#3b4552}`, hover `#596575`. */
-  '--r-setup-field-bg': '#10151c',
-  '--r-setup-field-line': '#3b4552',
-  '--r-setup-field-hover-line': '#596575',
   /** The INLINE table input — `.layer-table .input{background:#121820;border-color:transparent}`, hover `#414f5f`. */
-  '--r-setup-inline-input-bg': '#121820',
-  '--r-setup-inline-input-hover-line': '#414f5f',
+  '--r-setup-inline-input-bg': mamForm.card,
+  '--r-setup-inline-input-hover-line': mamForm.muted,
   /** A chip — `.tag{background:#1c222a;border-color:#35404c}`; the mono chips take the raised one. */
   '--r-setup-chip-bg': '#1c222a',
   '--r-setup-chip-line': '#35404c',
@@ -3229,8 +3253,8 @@ export const cssVars = {
    * THE DIALOG'S BUTTON — `.btn{background:#242b34;border-color:var(--line)}`, hover
    * `#303945` / `#465363`; `.icon-btn:hover{background:#2a323d}`.
    */
-  '--r-setup-btn-bg': '#242b34',
-  '--r-setup-btn-hover-bg': '#303945',
+  '--r-setup-btn-bg': mamForm.card,
+  '--r-setup-btn-hover-bg': mamForm.border,
   '--r-setup-btn-hover-line': '#465363',
   '--r-setup-icon-btn-hover-bg': '#2a323d',
   /** An EMPTY tile — `.empty-icon{background:#232b35;border:1px dashed #485465}`. */
@@ -3330,34 +3354,15 @@ export const cssVars = {
    * the opaque `--r-caution-bg`, which painted the rule out.
    */
   '--r-setup-output-warning-wash': 'rgba(40, 36, 29, 0.25)',
-  /**
-   * 🔴 THE MINT, AND WHERE OWNER ANSWER A4 PUTS IT.
-   *
-   * A4 reads _"the outer primary is `--r-accent`; the reference's MINT belongs only to its
-   * shadow family."_ **This dialog IS that shadow family**, so A4 LOCALISES the mint here
-   * rather than forbidding it — it is not a licence anywhere else, and nothing outside
-   * `[data-modal-size='fixed']` may read these.
-   *
-   * ⚠ **IT IS KEPT OFF EVERYTHING THAT STATES AIR**, which is the standing rule (`design.md`
-   * §20.6) and is why this list is short: the SELECTED rail item, the rail's unapplied COUNT
-   * chip, the dialog's own `primary` (`Add …` / `Apply …`), and a dirty row's marks. No
-   * surface in this dialog reports air, so none of those can be mistaken for one — and the
-   * A/B server chip stays OFF the mint deliberately, because a green mark beside a SERVER'S
-   * NAME is exactly the health claim the rule forbids.
-   */
+  /** Selected options and unapplied change indicators inside Station setup. */
   '--r-setup-accent': '#8ce6d1',
-  /** The dark ink a filled mint control owes — `.btn.primary{color:#10251f}`. */
-  '--r-setup-accent-ink': '#10251f',
-  /** …and the count chip's, which the reference draws one notch different (`#152720`). */
   '--r-setup-count-ink': '#152720',
-  /** `.btn.primary:hover{background:#acf3e2}`. */
-  '--r-setup-accent-hover': '#acf3e2',
-  /** The SELECTED rail item — `.tab[aria-selected=true]{background:#20322f;border-color:#314b45;color:#c8f9ed}`. */
-  '--r-setup-selected-bg': '#20322f',
-  '--r-setup-selected-line': '#314b45',
-  '--r-setup-selected-ink': '#c8f9ed',
-  /** …and a rail item under the pointer — `.tab:hover{background:#1c222b}`. */
-  '--r-setup-tab-hover-bg': '#1c222b',
+  /** The selected setup rail item uses the form palette. */
+  '--r-setup-selected-bg': mamForm.selected,
+  '--r-setup-selected-line': mamForm.fieldLine,
+  '--r-setup-selected-ink': mamForm.text,
+  /** The neutral rail hover. */
+  '--r-setup-tab-hover-bg': mamForm.border,
   /** A DIRTY row's input edge — `.layer-table tr.edited .input{border-color:#48786b}`. */
   '--r-setup-dirty-line': '#48786b',
   /**
@@ -3372,8 +3377,6 @@ export const cssVars = {
   '--r-setup-switch-bg': '#39424f',
   '--r-setup-switch-line': '#515d6c',
   '--r-setup-switch-knob': '#d8dee6',
-  /** …and the knob's ink once the track is mint — `.switch input:checked+.switch-track:after`. */
-  '--r-setup-switch-knob-on': '#17332b',
   /*
    * ── `SETTINGS-MATCH-02` — the GEOMETRY for the four bodies and the frame's remaining chrome.
    * Read by `controls.css`'s `.cg-setup-*`, `.cg-rail-*`, `.cg-layer-*` and `.cg-resource-*`.
@@ -3535,7 +3538,7 @@ export const cssVars = {
   '--r-sub-foot-pad': `${String(STATION_SETUP_PX.subFootPadY)}px ${String(STATION_SETUP_PX.subFootPadX)}px`,
   '--r-sub-foot-gap': `${String(STATION_SETUP_PX.subFootGap)}px`,
   /** The sub-dialog's footer band — `.sub-foot{background:#12171e}`, a step under its body. */
-  '--r-sub-foot-bg': '#12171e',
+  '--r-sub-foot-bg': mamForm.overlay,
   '--r-sub-lede-text': `${String(STATION_SETUP_PX.subLedeText)}px`,
   '--r-sub-lede-gap': `${String(STATION_SETUP_PX.subLedeGap)}px`,
   '--r-kind-options-gap': `${String(STATION_SETUP_PX.kindOptionsGap)}px`,

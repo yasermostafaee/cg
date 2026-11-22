@@ -1,16 +1,24 @@
-import { ArrowLeftRight, LayoutGrid, MoveHorizontal, MoveVertical } from 'lucide-react';
+import { useId } from 'react';
+import { ArrowLeftRight, LayoutGrid, Move, MoveHorizontal, MoveVertical } from 'lucide-react';
 import {
   DEFAULT_LIVE_CROP_FOCUS,
+  controlLiveLayoutFocusRect,
   controlLiveLayoutRects,
+  liveSourceLayoutMargins,
   type LiveCropFocus,
   type ControlLiveLayout,
   type ControlLiveLayoutArrangement,
   type ControlLiveLayoutPreset,
+  type LiveSourceLayoutMargins,
+  type LiveSourceRect,
+  type Resolution,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
+import { Checkbox } from '../../ui/Checkbox.js';
 import { Icon } from '../../ui/Icon.js';
 import { LiveLayoutEditorCropControls } from './LiveLayoutEditorCropControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
+import { LiveLayoutGeometryThumbnail } from './LiveLayoutGeometryThumbnail.js';
 import { LiveLayoutEditorPlatePresentation } from './LiveLayoutEditorPlatePresentation.js';
 import './live-layout-arrangement.css';
 
@@ -26,6 +34,58 @@ const choices: readonly {
   { value: 'host-and-guests', name: 'Host + guests', counts: [3, 4] },
 ];
 
+const EDGES = [
+  { side: 'top', name: 'Top', axis: 'height', opposite: 'bottom' },
+  { side: 'right', name: 'Right', axis: 'width', opposite: 'left' },
+  { side: 'bottom', name: 'Bottom', axis: 'height', opposite: 'top' },
+  { side: 'left', name: 'Left', axis: 'width', opposite: 'right' },
+] as const;
+const ZERO_MARGINS: LiveSourceLayoutMargins = { top: 0, right: 0, bottom: 0, left: 0 };
+const RECT_FIELDS = [
+  { key: 'x', limit: 'width', name: 'X', axis: 'width', min: 0 },
+  { key: 'y', limit: 'height', name: 'Y', axis: 'height', min: 0 },
+  { key: 'width', limit: 'x', name: 'Width', axis: 'width', min: 1 },
+  { key: 'height', limit: 'y', name: 'Height', axis: 'height', min: 1 },
+] as const;
+
+function MarginFields({
+  kind,
+  resolution,
+  margins,
+  onChange,
+}: {
+  kind: 'Preset' | 'Focus';
+  resolution: Resolution;
+  margins: LiveSourceLayoutMargins;
+  onChange: (margins: LiveSourceLayoutMargins) => void;
+}): JSX.Element {
+  return (
+    <div className="cg-live-layout-margin-row" role="group" aria-label={kind + ' margins (px)'}>
+      <span>{kind} margins (px)</span>
+      <div className="cg-live-layout-margin-fields">
+        {EDGES.map(({ side, name, axis, opposite }) => (
+          <LiveLayoutEditorNumber
+            key={side}
+            label={name}
+            value={margins[side]}
+            min={0}
+            max={Math.max(0, Math.floor(resolution[axis] - margins[opposite] - 1))}
+            onChange={(value) => onChange({ ...margins, [side]: value })}
+          />
+        ))}
+        <Button
+          variant="neutral"
+          aria-label={`Zero ${kind.toLowerCase()} margins`}
+          disabled={Object.values(margins).every((value) => value === 0)}
+          onClick={() => onChange(ZERO_MARGINS)}
+        >
+          Zero margins
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function LiveLayoutEditorArrange({
   layout,
   preset,
@@ -33,6 +93,10 @@ export function LiveLayoutEditorArrange({
   onFitChange,
   canEditCrop,
   onCropChange,
+  editingPlacement,
+  onEditingPlacementChange,
+  onCustom,
+  selectedPlate,
 }: {
   layout: ControlLiveLayout;
   preset: ControlLiveLayoutPreset;
@@ -40,14 +104,26 @@ export function LiveLayoutEditorArrange({
   onFitChange: (fit: ControlLiveLayoutPreset['plateFitMode']) => void;
   canEditCrop: boolean;
   onCropChange: (crop: LiveCropFocus | undefined) => void;
+  editingPlacement: boolean;
+  onEditingPlacementChange: (editing: boolean) => void;
+  onCustom: () => void;
+  selectedPlate?:
+    | { id: string; rect: LiveSourceRect; onChange: (rect: LiveSourceRect) => void }
+    | undefined;
 }): JSX.Element | null {
+  const fillId = useId();
   const count = preset.frameIds.length;
   if (count === 0) return null;
   const { width, height } = layout.resolution;
+  const custom = preset.arrangement === 'custom';
 
   function changeGeometry(patch: Partial<ControlLiveLayoutPreset>): void {
     const proposed = { ...preset, ...patch };
-    if (Object.keys(controlLiveLayoutRects(layout, proposed)).length === count) onChange(patch);
+    if (
+      Object.keys(controlLiveLayoutRects(layout, proposed)).length === count &&
+      controlLiveLayoutFocusRect(layout, proposed) !== undefined
+    )
+      onChange(patch);
   }
 
   return (
@@ -56,7 +132,17 @@ export function LiveLayoutEditorArrange({
         <h3>
           <Icon icon={LayoutGrid} size={16} /> Arrange
         </h3>
-        {count > 1 && (
+        {custom && (
+          <Button
+            variant="neutral"
+            active={editingPlacement}
+            aria-pressed={editingPlacement}
+            onClick={() => onEditingPlacementChange(!editingPlacement)}
+          >
+            <Icon icon={Move} size={14} /> Edit plate layout
+          </Button>
+        )}
+        {count > 1 && !custom && (
           <Button
             variant="neutral"
             active={preset.reverse}
@@ -67,82 +153,139 @@ export function LiveLayoutEditorArrange({
           </Button>
         )}
       </div>
+      {custom && editingPlacement && selectedPlate !== undefined && (
+        <div
+          key={preset.id + ':' + selectedPlate.id}
+          className="cg-live-layout-margin-row"
+          role="group"
+          aria-label="Plate position and size (px)"
+        >
+          <span>Plate position and size (px)</span>
+          <div className="cg-live-layout-margin-fields">
+            {RECT_FIELDS.map(({ key, limit, name, axis, min }) => (
+              <LiveLayoutEditorNumber
+                key={key}
+                label={name}
+                value={Number(selectedPlate.rect[key].toFixed(2))}
+                min={min}
+                max={Math.max(min, layout.resolution[axis] - selectedPlate.rect[limit])}
+                decimal
+                onChange={(value) =>
+                  selectedPlate.onChange({ ...selectedPlate.rect, [key]: value })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
       <LiveLayoutEditorPlatePresentation
         key={preset.id}
         scope="preset"
         value={{ aspectRatio: preset.plateAspectRatio, fitMode: preset.plateFitMode }}
         inheritedAspect={width / height}
         inheritedFit="Plate defaults"
+        geometryControls={!custom && preset.fill !== true}
         onChange={(patch) => {
           if ('aspectRatio' in patch) changeGeometry({ plateAspectRatio: patch.aspectRatio });
           if ('fitMode' in patch) onFitChange(patch.fitMode);
         }}
       />
-      {count > 1 && (
-        <>
-          <div className="cg-live-layout-arrange-buttons" role="group" aria-label="Arrangement">
-            {choices
-              .filter(({ counts }) => counts.includes(count))
-              .map(({ value, name }) => (
-                <Button
-                  key={value}
-                  active={preset.arrangement === value}
-                  aria-pressed={preset.arrangement === value}
-                  onClick={() => changeGeometry({ arrangement: value })}
-                >
-                  <span className="cg-live-layout-arrangement-glyph" aria-hidden="true">
-                    {Object.entries(
-                      controlLiveLayoutRects(layout, {
-                        ...preset,
-                        arrangement: value,
-                        horizontalGap: 0,
-                        verticalGap: 0,
-                        reverse: false,
-                      }),
-                    ).map(([id, rect]) => (
-                      <span
-                        key={id}
-                        style={{
-                          left: `${(100 * rect.x) / width}%`,
-                          top: `${(100 * rect.y) / height}%`,
-                          width: `${(100 * rect.width) / width}%`,
-                          height: `${(100 * rect.height) / height}%`,
-                        }}
-                      />
-                    ))}
-                  </span>
-                  <span>{name}</span>
-                </Button>
-              ))}
-          </div>
-          <div className="cg-live-layout-gaps" role="group" aria-label="Plate gaps, pixels">
-            <div className="cg-live-layout-gap-control">
-              <Icon icon={MoveHorizontal} size={14} />
-              <LiveLayoutEditorNumber
-                key={`${preset.id}-horizontal`}
-                label="Horizontal gap"
-                value={preset.horizontalGap}
-                min={0}
-                max={layout.resolution.width}
-                onChange={(horizontalGap) => changeGeometry({ horizontalGap })}
-              />
-              <span aria-hidden="true">px</span>
-            </div>
-            <div className="cg-live-layout-gap-control">
-              <Icon icon={MoveVertical} size={14} />
-              <LiveLayoutEditorNumber
-                key={`${preset.id}-vertical`}
-                label="Vertical gap"
-                value={preset.verticalGap}
-                min={0}
-                max={layout.resolution.height}
-                onChange={(verticalGap) => changeGeometry({ verticalGap })}
-              />
-              <span aria-hidden="true">px</span>
-            </div>
-          </div>
-        </>
+      <div className="cg-live-layout-arrange-buttons" role="group" aria-label="Arrangement">
+        {(count === 1
+          ? [{ value: 'side-by-side' as const, name: 'Single plate' }]
+          : choices.filter(({ counts }) => counts.includes(count))
+        ).map(({ value, name }) => (
+          <Button
+            key={value}
+            active={count === 1 ? !custom : preset.arrangement === value}
+            aria-pressed={count === 1 ? !custom : preset.arrangement === value}
+            onClick={() => changeGeometry({ arrangement: value })}
+          >
+            <LiveLayoutGeometryThumbnail
+              layout={layout}
+              preset={{
+                ...preset,
+                arrangement: value,
+                horizontalGap: 0,
+                verticalGap: 0,
+                margins: ZERO_MARGINS,
+                reverse: false,
+              }}
+              className="cg-live-layout-arrangement-glyph"
+            />
+            <span>{value === 'grid-top' && count === 4 ? 'Grid · 2 × 2' : name}</span>
+          </Button>
+        ))}
+        <Button active={custom} aria-pressed={custom} onClick={onCustom}>
+          <LiveLayoutGeometryThumbnail
+            layout={layout}
+            preset={{
+              ...preset,
+              arrangement: preset.customRects === undefined ? preset.arrangement : 'custom',
+            }}
+            className="cg-live-layout-arrangement-glyph"
+          />
+          Custom
+        </Button>
+      </div>
+      {!custom && (
+        <label className="cg-live-layout-arrange-fill" htmlFor={fillId}>
+          <Checkbox
+            id={fillId}
+            checked={preset.fill === true}
+            onChange={(fill) => changeGeometry({ fill })}
+          />
+          Fill available area
+        </label>
       )}
+      {count > 1 && !custom && (
+        <div className="cg-live-layout-gaps" role="group" aria-label="Plate gaps, pixels">
+          <div className="cg-live-layout-gap-control">
+            <Icon icon={MoveHorizontal} size={14} />
+            <LiveLayoutEditorNumber
+              key={`${preset.id}-horizontal`}
+              label="Horizontal gap"
+              value={preset.horizontalGap}
+              min={0}
+              max={layout.resolution.width}
+              onChange={(horizontalGap) => changeGeometry({ horizontalGap })}
+            />
+            <span aria-hidden="true">px</span>
+          </div>
+          <div className="cg-live-layout-gap-control">
+            <Icon icon={MoveVertical} size={14} />
+            <LiveLayoutEditorNumber
+              key={`${preset.id}-vertical`}
+              label="Vertical gap"
+              value={preset.verticalGap}
+              min={0}
+              max={layout.resolution.height}
+              onChange={(verticalGap) => changeGeometry({ verticalGap })}
+            />
+            <span aria-hidden="true">px</span>
+          </div>
+        </div>
+      )}
+      {!custom && (
+        <MarginFields
+          key={preset.id + '-preset-margins'}
+          kind="Preset"
+          resolution={layout.resolution}
+          margins={liveSourceLayoutMargins(
+            layout.resolution,
+            preset.margins,
+            count === 1 ? 0 : 0.05,
+          )}
+          onChange={(margins) => changeGeometry({ margins })}
+        />
+      )}
+      <MarginFields
+        key={preset.id + '-focus-margins'}
+        kind="Focus"
+        resolution={layout.resolution}
+        margins={liveSourceLayoutMargins(layout.resolution, preset.focusMargins, 0)}
+        onChange={(focusMargins) => changeGeometry({ focusMargins })}
+      />
       {canEditCrop && (
         <LiveLayoutEditorCropControls
           key={preset.id + '-crop'}

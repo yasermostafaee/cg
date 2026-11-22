@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { isIP } from 'node:net';
-import { networkInterfaces } from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { z } from 'zod';
 import {
@@ -13,6 +11,7 @@ import {
 import type { AuthSession } from './auth-session.js';
 import type { HttpTickets, TicketGrant } from './http-tickets.js';
 import { openPlayoutResponse, playoutFetch } from './playout-http.js';
+import { isLocalAddress, literalAddress } from './local-address.js';
 
 export const MEDIA_PREVIEW_HTTP_PREFIX = '/media-preview/';
 /** Verified Playout topology wins over the legacy AMCP sender's last selection. Read-only. */
@@ -47,8 +46,9 @@ const manifestSchema = z.object({
   durationMs: z.number().finite().nonnegative().nullable().optional(),
   browserMode: z.enum(['direct', 'proxy']),
   proxy: z.object({
-    state: z.enum(['notPrepared', 'preparing', 'ready', 'error']),
+    state: z.enum(['notPrepared', 'queued', 'preparing', 'retry', 'ready', 'notRequired', 'error']),
     error: z.string().optional().catch(undefined),
+    retryAt: z.string().datetime({ offset: true }).nullish().catch(undefined),
   }),
   fileUrl: z.string(),
   proxyUrl: z.string(),
@@ -123,29 +123,6 @@ function rootPath(target: MediaPreviewTarget): string {
   return `/api/v1/channels/${encodeURIComponent(target.code)}/media-previews/${encodeURIComponent(target.mediaId)}`;
 }
 
-function literalAddress(address: string | null | undefined): string | undefined {
-  if (address == null) return undefined;
-  const host = address.startsWith('[') && address.endsWith(']') ? address.slice(1, -1) : address;
-  const family = isIP(host);
-  if (family === 4) return host;
-  if (family !== 6 || host.includes('%')) return undefined;
-  const ipv6 = new URL(`http://[${host}]`).hostname.slice(1, -1);
-  const [, upperHex, lowerHex] = /^::ffff:([0-9a-f]+):([0-9a-f]+)$/.exec(ipv6) ?? [];
-  if (upperHex === undefined || lowerHex === undefined) return ipv6;
-  const upper = Number.parseInt(upperHex, 16);
-  const lower = Number.parseInt(lowerHex, 16);
-  return [upper >> 8, upper & 255, lower >> 8, lower & 255].join('.');
-}
-
-function isLocalAddress(address: string | null | undefined): boolean {
-  const normalized = literalAddress(address);
-  if (normalized === undefined) return false;
-  if (normalized === '::1' || normalized.startsWith('127.')) return true;
-  return Object.values(networkInterfaces()).some((entries) =>
-    entries?.some(({ address }) => literalAddress(address) === normalized),
-  );
-}
-
 function isLocalPreview(owner: AuthSession, target: MediaPreviewTarget): boolean {
   return isLocalAddress(owner.peerAddress) && isLocalAddress(new URL(target.origin).hostname);
 }
@@ -167,6 +144,7 @@ function validManifest(target: MediaPreviewTarget, value: unknown): Manifest | n
   const manifest = parsed.data;
   if (
     manifest.mediaId !== target.mediaId ||
+    (manifest.proxy.state === 'notRequired' && manifest.browserMode !== 'direct') ||
     (target.fingerprint !== undefined && manifest.fingerprint !== target.fingerprint.toLowerCase())
   )
     return null;
@@ -197,6 +175,7 @@ function proxyRetryAt(response: Response, now: number): number {
 function preparationFailure(code?: string): string {
   switch (code) {
     case 'mediaPreview.proxyTooLarge':
+    case 'mediaPreview.proxyBudgetExceeded':
       return "This media exceeds Playout's preview proxy size limit.";
     case 'mediaPreview.preparationTimedOut':
       return 'Playout timed out while preparing the media proxy.';
@@ -603,6 +582,13 @@ export class MediaPreviewService {
         this.#disableOriginalAttempt(preview);
       }
       preview.manifest = manifest;
+      const declaredRetryAt =
+        manifest.proxy.state === 'retry' ? Date.parse(manifest.proxy.retryAt ?? '') : NaN;
+      // A subsequent catalogue read may briefly report notPrepared. Honor the automatic
+      // worker's last advertised deadline before any manual preparation can be sent.
+      if (Number.isFinite(declaredRetryAt)) {
+        preview.proxyRetryAt = Math.max(preview.proxyRetryAt, declaredRetryAt);
+      }
       if (preview.originalAttempt !== null) return this.#view(preview, 'ready');
       if (manifest.browserMode === 'proxy' && manifest.proxy.state === 'notPrepared' && prepare) {
         if (this.#now() < preview.proxyRetryAt)
@@ -658,6 +644,25 @@ export class MediaPreviewService {
       if (ready) return this.#view(preview, 'ready');
       if (manifest.proxy.state === 'error')
         return this.#view(preview, 'error', { message: preparationFailure(manifest.proxy.error) });
+      if (manifest.proxy.state === 'queued') {
+        return this.#view(preview, 'preparing', {
+          preparationPhase: 'waiting-for-capacity',
+          message:
+            manifest.proxy.error === 'mediaPreview.diskBudget'
+              ? 'Playout is waiting for space in its media proxy cache.'
+              : 'Playout has queued this media proxy.',
+        });
+      }
+      if (manifest.proxy.state === 'retry') {
+        const minutes = Math.ceil((declaredRetryAt - this.#now()) / 60_000);
+        return this.#view(preview, 'preparing', {
+          preparationPhase: 'waiting-for-capacity',
+          message:
+            minutes > 0
+              ? `Playout will retry this media proxy in about ${minutes} min.`
+              : 'Waiting for Playout to retry this media proxy.',
+        });
+      }
       if (manifest.proxy.state === 'preparing')
         return this.#view(preview, 'preparing', { preparationPhase: 'encoding' });
       return this.#view(preview, 'preparing');

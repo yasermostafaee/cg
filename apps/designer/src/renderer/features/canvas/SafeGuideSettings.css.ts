@@ -5,6 +5,8 @@ export const body = style({
   width: 390,
   maxWidth: 'calc(100vw - 32px)',
   display: 'grid',
+  gridTemplateRows: 'auto minmax(0, 1fr) auto',
+  maxHeight: 'calc(100dvh - 36px)',
   gap: 10,
   fontSize: 12,
   color: colors.text,
@@ -15,7 +17,45 @@ export const heading = style({
   alignItems: 'center',
   gap: 8,
 });
-export const choices = style({ display: 'flex', flexWrap: 'wrap', gap: 4 });
+export const scrollBody = style({
+  display: 'grid',
+  alignContent: 'start',
+  minHeight: 0,
+  gap: 10,
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
+  padding: '2px 5px 2px 2px',
+});
+export const choices = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(76px, 100%), 1fr))',
+  maxHeight: 'clamp(64px, 24dvh, 180px)',
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
+  alignContent: 'start',
+  gap: 4,
+  padding: 2,
+});
+export const choice = style({
+  position: 'relative',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: 40,
+  paddingInline: 10,
+  selectors: {
+    '&[aria-checked="true"]': { boxShadow: `inset 0 0 0 2px ${colors.accent}` },
+  },
+});
+export const selectedMark = style({ position: 'absolute', insetInlineStart: 3, top: 3 });
+export const footer = style({
+  display: 'flex',
+  justifyContent: 'flex-end',
+  paddingTop: 6,
+  borderTop: `1px solid ${colors.border}`,
+});
 export const outputSettings = style({
   display: 'grid',
   gap: 6,
@@ -105,6 +145,9 @@ export const ratioControlRow = style({
   gap: 6,
 });
 export const visibleDot = style({
+  position: 'absolute',
+  insetInlineEnd: 4,
+  top: 5,
   width: 6,
   height: 6,
   border: '1px solid currentColor',

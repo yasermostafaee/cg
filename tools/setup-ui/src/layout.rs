@@ -30,6 +30,8 @@ use crate::server::{
 pub const WIN_W: f32 = 800.0;
 pub const WIN_H: f32 = 520.0;
 pub const RAIL_W: f32 = 232.0;
+pub const RAIL_LOGO: Rect = Rect::new((RAIL_W - 48.0) / 2.0, 24.0, 48.0, 48.0);
+pub const RAIL_WORDMARK_Y: f32 = RAIL_LOGO.y + RAIL_LOGO.h + 10.0;
 pub const TITLE_H: f32 = 40.0;
 pub const FOOT_Y: f32 = 456.0;
 pub const X0: f32 = 272.0;
@@ -101,6 +103,13 @@ pub enum Role {
     Text,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextAlign {
+    Left,
+    Center,
+    Right,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
     Text {
@@ -109,8 +118,7 @@ pub enum Item {
         style: Style,
         color: Rgb,
         role: Role,
-        /// Right-aligned in its rect.
-        right: bool,
+        align: TextAlign,
         /// Wraps within its rect's width (else one line, ellipsis at the end).
         wrap: bool,
     },
@@ -304,7 +312,18 @@ impl Builder<'_> {
             style,
             color,
             role: Role::Text,
-            right: false,
+            align: TextAlign::Left,
+            wrap: false,
+        });
+    }
+    fn rail_text(&mut self, y: f32, text: String, style: Style, color: Rgb) {
+        self.items.push(Item::Text {
+            rect: Rect::new(16.0, y, RAIL_W - 32.0, 20.0),
+            text,
+            style,
+            color,
+            role: Role::Text,
+            align: TextAlign::Center,
             wrap: false,
         });
     }
@@ -315,7 +334,7 @@ impl Builder<'_> {
             style: Style::Title,
             color: palette::TEXT,
             role: Role::Heading,
-            right: false,
+            align: TextAlign::Left,
             wrap: false,
         });
     }
@@ -329,7 +348,7 @@ impl Builder<'_> {
             style: Style::Body,
             color,
             role: Role::Text,
-            right: false,
+            align: TextAlign::Left,
             wrap: true,
         });
         h
@@ -855,7 +874,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 style: Style::Readout,
                 color: palette::SPLASH_READOUT,
                 role: Role::Text,
-                right: true,
+                align: TextAlign::Right,
                 wrap: false,
             });
             let can_cancel = !m.progress.engine_started && !m.cancelling;
@@ -935,13 +954,21 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
         }
     }
 
-    // Keep the packaged version in the same place throughout the wizard.
-    b.text(
-        Rect::new(X0, 10.0, 380.0, 20.0),
+    let version_y = RAIL_WORDMARK_Y + 24.0;
+    b.rail_text(
+        version_y,
         format!("Version {}", m.config.version),
         Style::Body,
         palette::TEXT_SECONDARY,
     );
+    if let Some(build_id) = &m.config.build_id {
+        b.rail_text(
+            version_y + 20.0,
+            format!("Build {build_id}"),
+            Style::Readout,
+            palette::TEXT_MUTED,
+        );
+    }
 
     // Help, at the rail's foot: the guide when it is bundled; CG Bridge's status once installed.
     if help_target(m).is_some() {
@@ -1030,6 +1057,7 @@ mod tests {
         let config = Config {
             product: product.id,
             version: "0.10.0".into(),
+            build_id: None,
             engine_name: "e.exe".into(),
             install_bytes: 19_600_000,
             main_files: vec![MainFile {
@@ -1060,6 +1088,7 @@ mod tests {
         assert_eq!(t[0], "Install CG Control?");
         assert!(t.contains(&"Publisher: APASAI"));
         assert!(t.contains(&"Version 0.10.0"));
+        assert!(!t.iter().any(|line| line.starts_with("Build ")));
         assert!(t.contains(&"The playout console · connects to CG Bridge"));
         assert!(t.contains(&WEBVIEW2_LINE));
         assert!(s.items.iter().any(|i| matches!(i, Item::Tile { .. })));
@@ -1094,7 +1123,7 @@ mod tests {
     }
 
     #[test]
-    fn the_packaged_version_stays_visible_on_every_page() {
+    fn the_packaged_version_and_build_stay_centered_under_the_product_name() {
         for product in [&CONTROL, &DESIGNER, &BRIDGE] {
             let mut m = model(
                 product,
@@ -1103,6 +1132,7 @@ mod tests {
                     ..Facts::default()
                 },
             );
+            m.config.build_id = Some("a9e401b".into());
             for page in [
                 Page::Welcome,
                 Page::Location,
@@ -1113,17 +1143,38 @@ mod tests {
             ] {
                 m.page = page;
                 let scene = build(&m, &Fake);
-                assert_eq!(
-                    scene
-                        .texts()
-                        .into_iter()
-                        .filter(|t| *t == "Version 0.10.0")
-                        .count(),
-                    1,
-                    "{:?} on {:?}",
-                    product.id,
-                    page
-                );
+                let labels: Vec<_> = scene
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        Item::Text {
+                            text,
+                            rect,
+                            align,
+                            style,
+                            ..
+                        } if text == "Version 0.10.0" || text == "Build a9e401b" => {
+                            Some((text.as_str(), *rect, *align, *style))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let [("Version 0.10.0", version, version_align, version_style), ("Build a9e401b", build, build_align, build_style)] =
+                    labels.as_slice()
+                else {
+                    panic!(
+                        "expected one version and one build label for {:?} on {page:?}",
+                        product.id
+                    );
+                };
+                for (rect, align) in [(version, version_align), (build, build_align)] {
+                    assert_eq!(*align, TextAlign::Center);
+                    assert_eq!(rect.x + rect.w / 2.0, RAIL_W / 2.0);
+                }
+                assert!(version.y > RAIL_WORDMARK_Y + Style::Body.size());
+                assert!(build.y >= version.bottom());
+                assert!(build.bottom() < scene.rail[0].cy - 11.0);
+                assert!(build_style.size() < version_style.size());
             }
         }
     }

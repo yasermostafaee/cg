@@ -3603,6 +3603,69 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         ];
       }),
     );
+    const target = owner && backupPreviewTarget(owner, channel, previewReadPermitted);
+    if (
+      target &&
+      serverB &&
+      reserveChannel !== null &&
+      reserveHost &&
+      channelCode === target.code &&
+      backupInputs?.complete &&
+      reserveMapCurrent
+    ) {
+      const scope = {
+        channelCode: target.code,
+        apiHost: reserveHost,
+        host: serverB.host,
+        playlistChannel: null,
+      };
+      const candidates = new Map<string, string>();
+      for (const { sourceId, input } of requested) {
+        const logicalId = playoutInputIdOf(sourceId);
+        if (
+          !logicalId ||
+          !input ||
+          input.producer.kind !== 'ndi' ||
+          input.departed ||
+          !canCheckLiveInput(input, channel) ||
+          sources[sourceId]?.B === 'present'
+        )
+          continue;
+        const { matches } = reserveLiveInputIdentity(backupInputs, scope, logicalId);
+        if (matches.length > 0) {
+          const mappedSender = sourceNdiTarget(sourceId, 'B', matches);
+          const local = matches[0]!;
+          const isReserve = (row: { casparHost: string; casparChannel: number }) =>
+            row.casparChannel === reserveChannel && hostJoinsStation(row.casparHost, [serverB.host]);
+          if (
+            mappedSender.kind !== 'ndi' ||
+            mappedSender.senderName !== input.producer.source ||
+            (local.ownOutputOf && isReserve(local.ownOutputOf)) ||
+            (local.compatibleChannels && !local.compatibleChannels.some(isReserve))
+          )
+            continue;
+        }
+        candidates.set(sourceId, input.producer.source);
+      }
+      if (candidates.size) {
+        const proven = await runtime.witnessedNdiOnB(channel, reserveChannel, candidates);
+        const current = backupPreviewTarget(owner, channel, previewReadPermitted);
+        if (
+          !allowed(channel) ||
+          config !== runtime.config() ||
+          catalog !== runtime.sourceCatalog().sources ||
+          !current ||
+          current.origin !== target.origin ||
+          current.code !== target.code ||
+          current.bearer !== target.bearer ||
+          map !== runtime.backupChannelMap() ||
+          reserveChannel !== map.channelOnB(channel)
+        ) {
+          return { engines, sources: {} };
+        }
+        for (const id of proven) sources[id]!.B = 'present';
+      }
+    }
     return { engines, sources };
   };
   const backupReadSelectors = new WeakMap<

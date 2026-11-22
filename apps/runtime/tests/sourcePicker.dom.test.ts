@@ -307,6 +307,117 @@ describe('source availability by server', () => {
     badges(clip!, ['present', 'present']);
   });
 
+  it('keeps the verified media provider when leaving the picker without requesting a picture on the field', async () => {
+    enablePresence(['A', 'B']);
+    const loadPoster = vi.fn(
+      async (): Promise<{
+        ok: true;
+        dataUrl: string;
+        engine: 'B';
+      }> => ({
+        ok: true,
+        dataUrl: 'data:image/jpeg;base64,abcd',
+        engine: 'B',
+      }),
+    );
+    window.cg.sources.mediaThumbnail = loadPoster;
+    const field = await render({
+      channel: 1,
+      choices: [{ value: '', label: 'Default', names: 'md-m-studio1' }],
+    });
+    await settle(20);
+    badges(field, ['present', 'present']);
+    expect(field.querySelector('[data-source-preview-provider]')).toBeNull();
+    expect(loadPoster).not.toHaveBeenCalled();
+
+    const picker = await openPicker(field);
+    await settle(20);
+    const poster = picker.querySelector<HTMLImageElement>(
+      '[data-picker-choice=""] [data-media-thumbnail] img',
+    );
+    if (poster === null) throw new Error('Missing returned poster');
+    act(() => poster.dispatchEvent(new Event('load')));
+    await settle();
+    expect(
+      picker
+        .querySelector('[data-picker-choice=""] [data-source-preview-provider]')
+        ?.getAttribute('data-source-presence-server'),
+    ).toBe('B');
+    const modalReads = loadPoster.mock.calls.length;
+    await closePicker();
+    expect(field.querySelector('img, video')).toBeNull();
+    expect(
+      field
+        .querySelector('[data-source-preview-provider]')
+        ?.getAttribute('data-source-presence-server'),
+    ).toBe('B');
+    expect(document.getElementById(field.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      'Server A: available. Server B: available. Last picture from server B',
+    );
+    await settle(20);
+    expect(loadPoster).toHaveBeenCalledTimes(modalReads);
+  });
+
+  it('marks the sender of the compact input meter without opening a picture preview', async () => {
+    enablePresence(['A', 'B']);
+    window.cg.sources.presence = async () => ({
+      engines: ['A', 'B'],
+      sources: { 'in-studio1': { A: 'missing', B: 'present' } },
+    });
+    let measured = false;
+    const pvw = vi.fn();
+    const thumbnails = vi.fn();
+    const audioLevels: typeof window.cg.sourcePreviews.audioLevels = async () => ({
+      readings: [
+        measured
+          ? {
+              sourceId: 'in-studio1',
+              state: 'measured',
+              engine: 'B',
+              dbFs: [-30, -25],
+              validForMs: 300,
+            }
+          : { sourceId: 'in-studio1', state: 'unknown', engine: 'B' },
+      ],
+    });
+    Object.assign(window.cg, { sourcePreviews: { audioLevels, pvw, thumbnails } });
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(private readonly receive: (entries: { isIntersecting: boolean }[]) => void) {}
+        observe(): void {
+          this.receive([{ isIntersecting: true }]);
+        }
+        disconnect(): void {}
+      },
+    );
+    try {
+      const field = await render({ channel: 1, value: 'in-studio1' });
+      await settle(20);
+      badges(field, ['missing', 'present']);
+      expect(field.querySelector('[data-source-preview-provider]')).toBeNull();
+
+      measured = true;
+      await settle(270);
+      expect(
+        field
+          .querySelector('[data-source-preview-provider]')
+          ?.getAttribute('data-source-presence-server'),
+      ).toBe('B');
+      expect(
+        document.getElementById(field.getAttribute('aria-describedby') ?? '')?.textContent,
+      ).toBe('Server A: unavailable. Server B: available. Preview audio from server B');
+      expect(pvw).not.toHaveBeenCalled();
+      expect(thumbnails).not.toHaveBeenCalled();
+
+      measured = false;
+      await settle(270);
+      expect(field.querySelector('[data-source-preview-provider]')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('keeps availability marks hidden when the station has no Server B', async () => {
     enablePresence(['A']);
     const field = await render({ channel: 1, value: 'in-studio1' });
@@ -474,11 +585,18 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     ['in-studio1', '[data-picker-input="in-newscam"]', '[data-picker-input="in-studio1"]'],
     ['md-m-0001', '[data-picker-media="md-m-0002"]', '[data-picker-media="md-m-0001"]'],
     ['', '[data-picker-input="in-newscam"]', '[data-picker-choice=""]'],
+    ['', '[data-picker-input="in-newscam"]', '[data-picker-input="in-studio1"]'],
   ])(
     'disables Select after returning to the bound value %s',
     async (value, different, original) => {
       const onChange = vi.fn();
-      const panel = await openPicker(await render({ value, onChange }));
+      const panel = await openPicker(
+        await render({
+          value,
+          onChange,
+          choices: [{ value: '', label: 'Default', names: 'in-studio1' }],
+        }),
+      );
       await settle();
       const select = panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]')!;
       expect(select.disabled).toBe(true);
@@ -492,15 +610,15 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     },
   );
 
-  it('opens on inherited media with its effective source highlighted and preserves inheritance until Select', async () => {
+  it('opens on inherited media with its effective source highlighted and keeps inheritance after re-selecting that source', async () => {
     const onChange = vi.fn();
     const field = await render({
-      choices: [{ value: '', label: 'Default', names: 'md-m-recent' }],
+      choices: [{ value: '', label: 'Default', names: 'md-m-0002' }],
       onChange,
     });
     const panel = await openPicker(field);
     expect(panel.querySelector('[data-picker-tab="media"]')).not.toBeNull();
-    const selected = panel.querySelector('[data-picker-media="md-m-recent"]');
+    const selected = panel.querySelector('[data-picker-media="md-m-0002"]');
     expect(selected?.getAttribute('aria-selected')).toBe('true');
     const inherited = panel.querySelector('[data-picker-choice=""]');
     expect(inherited?.getAttribute('aria-pressed')).toBe('true');
@@ -513,14 +631,18 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     expect(onChange).not.toHaveBeenCalled();
     const reopened = await openPicker(field);
     expect(
-      reopened.querySelector('[data-picker-media="md-m-recent"]')?.getAttribute('aria-selected'),
+      reopened.querySelector('[data-picker-media="md-m-0002"]')?.getAttribute('aria-selected'),
     ).toBe('true');
+    const select = reopened.querySelector<HTMLButtonElement>('[data-modal-role="primary"]')!;
     await act(async () =>
-      reopened.querySelector<HTMLElement>('[data-picker-media="md-m-recent"]')?.click(),
+      reopened.querySelector<HTMLElement>('[data-picker-media="md-m-0001"]')!.click(),
     );
+    expect(select.disabled).toBe(false);
+    await act(async () =>
+      reopened.querySelector<HTMLElement>('[data-picker-media="md-m-0002"]')!.click(),
+    );
+    expect(select.disabled).toBe(true);
     expect(onChange).not.toHaveBeenCalled();
-    await confirmPicker(reopened);
-    expect(onChange).toHaveBeenCalledWith('md-m-recent');
   });
 
   it.each(['grid', 'list'])(

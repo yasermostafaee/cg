@@ -77,6 +77,47 @@ describe('live frame transitions', () => {
     }
   });
 
+  it('round-trips complete Focus artwork and requires its authored destination', () => {
+    const rect = { x: 0, y: 0, width: 1920, height: 1080 };
+    const side = { base: rect, from: rect, to: rect, fromOpacity: 1, toOpacity: 0 };
+    const phase: FrameTransitionPhase = {
+      authoredPreset: true,
+      destinationLookId: 'guest-two',
+      durationMs: 200,
+      easing: 'linear',
+      frames: [],
+      focusArtwork: {
+        outgoing: { ...side, cover: { from: rect, to: rect, fromOpacity: 1, toOpacity: 0 } },
+        incoming: { ...side, fromOpacity: 0, toOpacity: 1 },
+        incomingAbove: true,
+      },
+    };
+    expect(readCgControl(withCgControl({}, { frameTransition: phase }))?.frameTransition).toEqual(
+      phase,
+    );
+    for (const invalid of [
+      { ...phase, authoredPreset: undefined },
+      { ...phase, destinationLookId: undefined },
+      { ...phase, focusArtwork: { ...phase.focusArtwork, outgoing: { ...side, toOpacity: 2 } } },
+      {
+        ...phase,
+        focusArtwork: { ...phase.focusArtwork, outgoing: { ...side, base: { ...rect, width: 0 } } },
+      },
+      {
+        ...phase,
+        focusSlide: {
+          viewport: rect,
+          axis: 'x',
+          sign: 1,
+          mode: 'push',
+          fromProgress: 0,
+          toProgress: 1,
+        },
+      },
+    ])
+      expect(FrameTransitionPhaseSchema.safeParse(invalid).success).toBe(false);
+  });
+
   it('cuts by default and switches geometry at zero opacity for Fade alone', () => {
     expect(frameTransitionPhases({ motion: 'cut', fade: false, durationMs: 400 }, 10)).toEqual([]);
     expect(frameTransitionPhases({ motion: 'cut', fade: true, durationMs: 400 }, 10)).toEqual([
@@ -176,6 +217,35 @@ describe('live frame transitions', () => {
     ).toBe(false);
   });
 
+  it('retains a native border suppression list and its explicit release', () => {
+    for (const nativeBorderPlateIds of [['plate-1'], []]) {
+      expect(readCgControl(withCgControl({}, { nativeBorderPlateIds }))).toEqual({
+        nativeBorderPlateIds,
+      });
+    }
+    for (const nativeBorderPlateIds of [['bad space'], [12], Array(129).fill('plate')]) {
+      expect(readCgControl({ [CG_CONTROL_KEY]: { look: 'two', nativeBorderPlateIds } })).toEqual({
+        look: 'two',
+      });
+    }
+  });
+
+  it('decodes native border retirement as an exclusive command', () => {
+    expect(readCgControl(withCgControl({}, { releaseNativeBorderEffectId: 'edge-17' }))).toEqual({
+      releaseNativeBorderEffectId: 'edge-17',
+    });
+    for (const releaseNativeBorderEffectId of ['', 17, 'x'.repeat(257)]) {
+      expect(
+        readCgControl({ [CG_CONTROL_KEY]: { look: 'other', releaseNativeBorderEffectId } }),
+      ).toEqual({ releaseNativeBorderEffectId: '' });
+    }
+    expect(
+      readCgControl({
+        [CG_CONTROL_KEY]: { look: 'other', releaseNativeBorderEffectId: 'edge-17' },
+      }),
+    ).toEqual({ releaseNativeBorderEffectId: 'edge-17' });
+  });
+
   it('accepts immediate hiding and isolated artwork fades without a retained motion target', () => {
     const base = { durationMs: 0, easing: 'linear', frames: [] };
     expect(FrameTransitionPhaseSchema.safeParse(base).success).toBe(false);
@@ -204,6 +274,44 @@ describe('live frame transitions', () => {
     expect(FrameTransitionPhaseSchema.safeParse(phase).success).toBe(true);
     expect(
       FrameTransitionPhaseSchema.safeParse({ ...phase, authoredPreset: undefined }).success,
+    ).toBe(false);
+    const decorationOpacity = [
+      {
+        plateId: 'guest',
+        border: { fromOpacity: 0, toOpacity: 1 },
+        title: { fromOpacity: 1, toOpacity: 0 },
+      },
+    ];
+    const decorationFade = {
+      ...base,
+      easing: 'linear',
+      authoredPreset: true,
+      decorationOpacity,
+    } as const;
+    expect(
+      readCgControl(
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              ...decorationFade,
+              decorationOpacity,
+            },
+          },
+        ),
+      )?.frameTransition?.decorationOpacity,
+    ).toEqual(decorationOpacity);
+    expect(
+      FrameTransitionPhaseSchema.safeParse({
+        ...decorationFade,
+        decorationOpacity: [{ plateId: 'guest' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      FrameTransitionPhaseSchema.safeParse({
+        ...decorationFade,
+        authoredPreset: undefined,
+      }).success,
     ).toBe(false);
     expect(presetTransitionDurations(17, { exit: true, move: true, enter: true })).toEqual({
       exit: 6,

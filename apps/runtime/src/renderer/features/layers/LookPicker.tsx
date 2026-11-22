@@ -117,17 +117,6 @@ export function lookOptionsOf(
     )
     .map((l) => ({
       id: l.id,
-      /*
-      🔴 THE AUTHORED NAME. An earlier version labelled these by ORDINAL on the stated
-      premise that “the carrier holds ids, not display names” — **which is false**:
-      `TemplateLookSchema.name` is `z.string().min(1)`, REQUIRED, and it is what the author
-      typed in the Designer. Numbering them threw away the one label that already means
-      something to the operator (“WIDE”, “SOLO”) and replaced it with a position they would
-      have to learn. The id still rides the tooltip and the accessible name for anyone who
-      needs the authored handle.
-
-      A long name widens the strip rather than the row: the line scrolls inside itself.
-    */
       label: l.name,
       // THIS LOOK's rects, and only this look's — a source absent from a look has no entry
       // (`TemplateLiveSourcesSchema.looks`), so a look's frame count is the size of its map.
@@ -139,11 +128,6 @@ export function lookOptionsOf(
         h: r.height / sceneH,
       })),
     }));
-}
-
-/** The operator's word for a look's frame count — the reference's `· N frames` tooltip. */
-export function frameCountLabel(n: number): string {
-  return n === 1 ? '1 frame' : `${String(n)} frames`;
 }
 
 const styles = {
@@ -206,10 +190,7 @@ const FRAME_SEAM_PX = LOOK_STRIP_PX.thumbGap / 2;
 
 const pct = (f: number): string => `${String(Math.round(f * 10000) / 100)}%`;
 
-/**
- * The look's frame thumbnail. `aria-hidden`: the accessible name and the tooltip already say
- * how many frames, and a screen reader has no use for a picture of where they sit.
- */
+/** The button names the preset. Its geometry thumbnail is decorative. */
 function LookThumb({ frames }: { frames: readonly LookFrame[] }): JSX.Element {
   return (
     <span className="cg-look-thumb" aria-hidden="true" data-look-thumb="">
@@ -269,13 +250,16 @@ export function LookPicker({
 }: Props): JSX.Element {
   const preview = target === 'preview';
   const starting = target === 'next';
+  const targetLabel = { air: 'PGM preset', next: 'Starting preset', preview: 'Preview preset' }[
+    target
+  ];
   return (
     <div
       style={styles.line}
       data-look-picker=""
       data-look-target={target}
       role="group"
-      aria-label={preview ? `Preview look for ${rowName}` : `Look for ${rowName}`}
+      aria-label={`${targetLabel} for ${rowName}`}
     >
       {/*
         The label IS the target statement. `PVW LOOK` rather than a badge or a colour: this
@@ -320,6 +304,7 @@ export function LookPicker({
       <span style={styles.strip} data-look-strip="">
         {looks.map((look) => {
           const live = look.id === activeId;
+          const count = look.frames.length;
           return (
             <Button
               key={look.id}
@@ -358,15 +343,9 @@ export function LookPicker({
               */
               {...(live && onAir ? { 'data-look-onair': '' } : {})}
               disabled={refusal !== undefined}
-              /*
-                The tooltip: this look's OWN frame count (the reference's `· N frames`) and the
-                authored id — the technical handle, relocated here and out of the sentence
-                (golden rule 11). The immediacy clause the reference appends is already on the
-                label's tooltip and is not spelled twice. A refusal replaces it wholesale.
-              */
-              {...(refusal !== undefined
-                ? { title: refusal }
-                : { title: `${frameCountLabel(look.frames.length)} · ${look.id}` })}
+              title={
+                refusal ?? `${look.label} · ${String(count)} ${count === 1 ? 'plate' : 'plates'}`
+              }
               /*
                 🔴 “CURRENT”, never “on air”. The picker says which LOOK is selected; whether
                 the row is on air is the state cell’s claim and its alone. An off-air row’s
@@ -375,10 +354,7 @@ export function LookPicker({
               */
               // `B-151` — and the TARGET, so a screen reader gets the same answer the label
               // gives sighted operators: this press changes the preview, or it changes air.
-              aria-label={
-                `${preview ? 'Preview look' : 'Look'} ${look.label} (${look.id})` +
-                `${live ? ' — current' : ''}`
-              }
+              aria-label={`${look.label} · ${targetLabel}${live ? ' — current' : ''}`}
               data-look-id={look.id}
               data-look-frames={String(look.frames.length)}
               onClick={() => {

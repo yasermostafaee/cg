@@ -97,8 +97,8 @@ const styles = {
    */
   scrimWindow: { zIndex: 1050 },
   dialog: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
+    background: cssVars['--r-form-overlay'],
+    border: `1px solid ${cssVars['--r-form-divider']}`,
     // `STATION-CHROME-02` §0 — from the token home. It was a bare `0.4rem`, which is a
     // radius spelled at a call site: the guard only reads `controls.css`, so this one had
     // no reviewer. Same corner, one declaration.
@@ -233,7 +233,7 @@ const styles = {
     gap: cssVars['--r-modal-head-gap'],
     padding: cssVars['--r-modal-head-pad'],
     background: cssVars['--r-modal-head-bg'],
-    borderBottom: `1px solid ${colors.border}`,
+    borderBottom: `1px solid ${cssVars['--r-form-divider']}`,
     boxSizing: 'border-box' as const,
     flexShrink: 0,
   },
@@ -385,7 +385,7 @@ const styles = {
     gap: cssVars['--r-modal-foot-gap'],
     padding: cssVars['--r-modal-foot-pad'],
     background: cssVars['--r-modal-foot-bg'],
-    borderTop: `1px solid ${colors.border}`,
+    borderTop: `1px solid ${cssVars['--r-form-divider']}`,
     minHeight: cssVars['--r-modal-foot-h-base'],
     boxSizing: 'border-box' as const,
   },

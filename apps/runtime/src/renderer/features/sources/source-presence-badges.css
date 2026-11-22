@@ -34,6 +34,45 @@
   box-shadow: inset 0 0 0 0.5px currentColor;
 }
 
+/* Align A/B at the end of the caption even when an availability tag or check is present. */
+.cg-picker-row > .cg-source-presence,
+.cg-combo-field__value .cg-source-label > .cg-source-presence,
+.cg-combo-field__value .cg-choice-label > .cg-source-presence,
+.cg-setup-source-catalogue .cg-resource__title > .cg-source-presence {
+  order: 1;
+  margin-inline-start: auto;
+}
+
+.cg-picker-row:has(> .cg-source-presence) > .cg-picker-selection-check {
+  margin-inline-start: 0;
+}
+
+.cg-picker .cg-picker-row:has(> .cg-source-presence) > .cg-source-tag,
+.cg-combo-field__value
+  :is(.cg-source-label, .cg-choice-label):has(> .cg-source-presence)
+  > .cg-source-tag {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The optional Preview action must occupy the same column on every media list row. */
+.cg-picker-tab--media .cg-vlist-action-row > :last-child {
+  display: flex;
+  flex: 0 0 6.5rem;
+  justify-content: flex-end;
+}
+
+.cg-picker [data-picker-tab='inputs'][data-input-view='list'] .cg-vlist-action-row > :last-child {
+  flex: none;
+}
+
+.cg-combo-field__value .cg-source-label:has(.cg-source-presence),
+.cg-combo-field__value .cg-choice-label:has(> .cg-source-presence) {
+  inline-size: 100%;
+}
+
 .cg-picker .cg-vlist-option[aria-disabled='true']:has(.cg-source-presence) {
   opacity: 1;
 }

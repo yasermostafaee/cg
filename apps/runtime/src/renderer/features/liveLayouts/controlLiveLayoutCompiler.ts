@@ -10,6 +10,7 @@ import {
   controlLiveLayoutAttachments,
   controlLiveLayoutBorderHidden,
   controlLiveLayoutFocusLookId,
+  controlLiveLayoutFocusRect,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
   controlLiveLayoutPlateBorder,
@@ -693,7 +694,7 @@ export function buildControlLiveLayoutScene(
       name,
       instanceId,
       entered: CUT_LOOK_TRANSITION,
-      allowOperatorAutoLayout: !focused,
+      allowOperatorAutoLayout: true,
       ...(Object.keys(plateFits).length > 0 && { plateFits }),
       ...(Object.keys(plateCropFocuses).length > 0 && { plateCropFocuses }),
     });
@@ -703,11 +704,13 @@ export function buildControlLiveLayoutScene(
     addLook(preset.id, preset.name, controlLiveLayoutRects(layout, preset), preset, false);
   }
   for (const preset of layout.presets) {
+    const focusRect = controlLiveLayoutFocusRect(layout, preset);
+    if (focusRect === undefined) throw new Error('Focus margins must fit within the output.');
     frames.forEach((frame, index) => {
       addLook(
         controlLiveLayoutFocusLookId(preset.id, frame.id),
         'Focus · Plate ' + (index + 1),
-        { [frame.id]: fullFrame },
+        { [frame.id]: focusRect },
         preset,
         true,
       );

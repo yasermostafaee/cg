@@ -346,6 +346,61 @@ async function previewImages(
   };
 }
 
+/** Read a single content-addressed fallback from a stored VCG without expanding other assets. */
+export async function readVerifiedVcgImage(
+  file: VcgThumbnailReader,
+  size: number,
+  assetId: string,
+  mime: 'image/png' | 'image/jpeg',
+  maxBytes: number,
+): Promise<Buffer | null> {
+  const directory = await readDirectory(file, size);
+  if (directory === undefined) return null;
+  const members = previewMembers(directory.bytes, directory.count);
+  if (members === undefined) return null;
+  const json = await readMember(
+    file,
+    members.get(MANIFEST_ENTRY),
+    directory.offset,
+    MAX_MANIFEST_BYTES,
+  );
+  if (json === undefined) return null;
+  try {
+    const manifest = ManifestSchema.safeParse(JSON.parse(json.toString('utf8')));
+    if (!manifest.success) return null;
+    const assets = manifest.data.assetIndex.filter(({ id }) => id === assetId);
+    const asset = assets.length === 1 ? assets[0] : undefined;
+    if (
+      asset === undefined ||
+      asset.kind !== 'image' ||
+      asset.mime !== mime ||
+      asset.bytes > maxBytes
+    ) {
+      return null;
+    }
+    const extension = PREVIEW_IMAGE_ASSET.exec(asset.path)?.[1]?.toLowerCase();
+    if (
+      extension === undefined ||
+      (extension === 'png') !== (mime === 'image/png') ||
+      asset.path.split('/').at(-1)?.split('.')[0]?.toLowerCase() !== asset.sha256.toLowerCase()
+    ) {
+      return null;
+    }
+    const bytes = await readMember(file, members.get(asset.path), directory.offset, maxBytes);
+    if (
+      bytes === undefined ||
+      bytes.length !== asset.bytes ||
+      probeImage(bytes)?.mime !== mime ||
+      createHash('sha256').update(bytes).digest('hex') !== asset.sha256.toLowerCase()
+    ) {
+      return null;
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
 export async function readSharedVcgThumbnail(
   file: VcgThumbnailReader,
   size: number,

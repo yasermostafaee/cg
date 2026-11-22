@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import {
   LookPicker,
-  frameCountLabel,
+  type LookOption,
   lookOptionsOf,
 } from '../src/renderer/features/layers/LookPicker.js';
 import { lookSwitchBanner, lookSwitchRefusal } from '../src/renderer/features/layers/lookSwitch.js';
@@ -61,6 +61,7 @@ const LOOKS = [
 
 async function render(
   over: {
+    looks?: LookOption[];
     activeId?: string | undefined;
     refusal?: string | undefined;
     target?: 'air' | 'preview' | 'next';
@@ -79,7 +80,7 @@ async function render(
         StrictMode,
         null,
         createElement(LookPicker, {
-          looks: LOOKS,
+          looks: over.looks ?? LOOKS,
           activeId: 'activeId' in over ? over.activeId : 'left',
           refusal: over.refusal,
           onPick,
@@ -165,13 +166,11 @@ describe('7.1 — the picker IS the on-air readout', () => {
     expect(onPick).toHaveBeenCalledWith('left');
   });
 
-  it('🔴 the accessible name carries the look id and says which is CURRENT — never “on air”', async () => {
-    // The label is an ordinal an operator can call over talkback; the id is the authored
-    // handle. Both are needed and neither belongs in the other's place.
+  it('the accessible name identifies the preset, its destination and the current selection', async () => {
     const { el } = await render({ activeId: 'right' });
 
-    expect(seg(el, 'right')?.getAttribute('aria-label')).toBe('Look Right pair (right) — current');
-    expect(seg(el, 'left')?.getAttribute('aria-label')).toBe('Look Left pair (left)');
+    expect(seg(el, 'right')?.getAttribute('aria-label')).toBe('Right pair · PGM preset — current');
+    expect(seg(el, 'left')?.getAttribute('aria-label')).toBe('Left pair · PGM preset');
   });
 
   it('an unresolved active look marks nothing rather than guessing', async () => {
@@ -400,17 +399,34 @@ describe('🔴 §4 — frame count, look count and look id are three different t
         c.getAttribute('data-look-frame'),
       ),
     ).toEqual(['l-2', 'l-5']);
-    // The tooltip names the look's own frame count in the operator's words, then the id.
-    expect(segs[0]?.getAttribute('title')).toBe('1 frame · solo');
-    expect(segs[1]?.getAttribute('title')).toBe('2 frames · pair');
+    expect(segs[0]?.getAttribute('title')).toBe('Solo · 1 plate');
+    expect(segs[1]?.getAttribute('title')).toBe('Pair · 2 plates');
     // The thumbnail is decoration for a control that already names its frames.
     expect(segs[0]?.querySelector('[data-look-thumb]')?.getAttribute('aria-hidden')).toBe('true');
     expect(pressed(container)).toEqual(['trio']);
   });
 
-  it('frameCountLabel — one frame, N frames', () => {
-    expect(frameCountLabel(1)).toBe('1 frame');
-    expect(frameCountLabel(6)).toBe('6 frames');
+  it('shows the saved ghabb preset name and sends its generated ID when picked', async () => {
+    const id = 'preset-c2af4b50-171e-43b2-b463-8a363be0bf90';
+    const { el, onPick } = await render({
+      target: 'next',
+      looks: [
+        {
+          id,
+          label: 'Preset 2',
+          frames: [
+            { plateId: 'left', x: 0, y: 0, w: 0.5, h: 1 },
+            { plateId: 'right', x: 0.5, y: 0, w: 0.5, h: 1 },
+          ],
+        },
+      ],
+    });
+    const button = seg(el, id);
+    expect(button?.textContent).toBe('Preset 2');
+    expect(button?.title).toBe('Preset 2 · 2 plates');
+    expect(button?.getAttribute('aria-label')).toBe('Preset 2 · Starting preset');
+    await act(async () => button?.click());
+    expect(onPick).toHaveBeenCalledWith(id);
   });
 });
 
@@ -473,7 +489,7 @@ describe('🔴 5.5 / 7.2 — the second line costs the column model NOTHING', ()
     const { el } = await render();
     const line = el.querySelector('[data-look-picker]');
     expect(line?.getAttribute('role')).toBe('group');
-    expect(line?.getAttribute('aria-label')).toBe('Look for Layer 1');
+    expect(line?.getAttribute('aria-label')).toBe('PGM preset for Layer 1');
   });
 });
 
@@ -575,9 +591,11 @@ describe('B-151 — the picker names its TARGET, because one control serves two'
     // and neither should have to infer it from where the control sits.
     const { el } = await render({ target: 'preview' });
     expect(el.querySelector('[data-look-picker]')?.getAttribute('aria-label')).toBe(
-      'Preview look for Layer 1',
+      'Preview preset for Layer 1',
     );
-    expect(seg(el, 'left')?.getAttribute('aria-label')).toContain('Preview look');
+    expect(seg(el, 'left')?.getAttribute('aria-label')).toBe(
+      'Left pair · Preview preset — current',
+    );
   });
 
   /**

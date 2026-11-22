@@ -9,6 +9,7 @@ import {
   ArrowUpLeft,
   ArrowUpRight,
   CircleDot,
+  Check,
   Plus,
   Trash2,
   RotateCcw,
@@ -24,6 +25,7 @@ import {
 } from '@cg/shared-schema';
 import {
   DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
+  DEFAULT_BROADCAST_GUIDE_PROFILE,
   MAX_BROADCAST_GUIDE_ASPECT_PART,
   MAX_BROADCAST_GUIDE_FRAMES,
   broadcastGuideEditingFrame,
@@ -40,6 +42,7 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Popover } from '../../ui/Popover.js';
+import { Modal, ModalButton } from '../shell/Modal.js';
 import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { designerGuideStore } from './broadcastGuideStore.js';
@@ -63,6 +66,9 @@ export function SafeGuideSettings({
 }): JSX.Element {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const returnToReset = useRef(false);
+  const choices = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   const update = (next: BroadcastGuideProfile): void => {
     designerGuideStore.set(next);
@@ -70,6 +76,15 @@ export function SafeGuideSettings({
   };
   const frames = broadcastGuideFrameSettings(profile);
   const activeFrame = broadcastGuideEditingFrame(profile, frames);
+  useEffect(() => {
+    const list = choices.current;
+    const selected = list?.querySelector<HTMLElement>('[aria-checked="true"]');
+    if (!list || !selected) return;
+    const box = selected.getBoundingClientRect();
+    const bounds = list.getBoundingClientRect();
+    if (box.bottom > bounds.bottom) list.scrollTop += box.bottom - bounds.bottom;
+    else if (box.top < bounds.top) list.scrollTop -= bounds.top - box.top;
+  }, [activeFrame?.id, open, confirmReset]);
   const selectFrame = (frame: BroadcastGuideFrameSetting, nextFrames = frames): void =>
     update({
       ...profile,
@@ -114,21 +129,29 @@ export function SafeGuideSettings({
         ref={anchor}
         variant="bare"
         className={buttonClassName}
-        aria-label="Configure safe guides"
-        title="Configure safe guides"
+        aria-label="Configure safe areas"
+        title="Configure safe areas"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((shown) => !shown)}
+        onClick={() => {
+          returnToReset.current = false;
+          setOpen((shown) => !shown);
+        }}
       >
         <Icon icon={Settings2} size={14} />
       </Control>
-      {open && (
-        <Popover anchor={anchor} aria-label="Safe guides" onClose={close}>
+      {open && !confirmReset && (
+        <Popover
+          anchor={anchor}
+          aria-label="Safe area settings"
+          onClose={close}
+          initialFocusSelector={returnToReset.current ? '[data-safe-area-reset]' : undefined}
+        >
           <div className={s.body}>
             <div className={s.heading}>
-              <strong>Safe guides</strong>
+              <strong>Safe area settings</strong>
               <Control
-                aria-label="Close safe guide settings"
+                aria-label="Close safe area settings"
                 size="sm"
                 variant="bare"
                 onClick={close}
@@ -136,160 +159,252 @@ export function SafeGuideSettings({
                 <Icon icon={X} size={14} />
               </Control>
             </div>
-            <ProjectOutputControls
-              raster={outputRaster}
-              position={outputPosition}
-              compositionResolution={compositionResolution}
-              onEdit={onEdit}
-            />
-            <div className={s.heading}>
-              <span>Reference frames</span>
-              <Button
-                size="sm"
-                onClick={addCustom}
-                disabled={frames.length >= MAX_BROADCAST_GUIDE_FRAMES}
-              >
-                <Icon icon={Plus} size={13} />
-                Add custom frame
-              </Button>
-            </div>
-            <div className={s.choices} role="radiogroup" aria-label="Guide aspect ratio">
-              {frames.map((frame) => {
-                const label =
-                  frame.customAspect === undefined
-                    ? frame.aspect === 'auto'
-                      ? 'Auto'
-                      : frame.aspect
-                    : `${frame.customAspect.width}:${frame.customAspect.height}`;
-                const current = activeFrame?.id === frame.id;
-                return (
-                  <Button
-                    key={frame.id}
-                    size="sm"
-                    role="radio"
-                    title={frame.visible ? 'Visible on canvas' : 'Hidden on canvas'}
-                    aria-checked={current}
-                    selected={current}
-                    onClick={() => selectFrame(frame)}
-                  >
-                    {frame.visible && (
-                      <span className={s.visibleDot} style={{ backgroundColor: frame.color }} />
-                    )}
-                    {label}
-                  </Button>
-                );
-              })}
-            </div>
-            {activeFrame?.aspect === 'custom' && (
-              <div className={s.ratioControlRow}>
-                <div className={s.outputGrid} role="group" aria-label="Custom guide ratio">
-                  <label className={s.outputField}>
-                    <span>Ratio width</span>
-                    <RealtimeNumberInput
-                      className={s.input}
-                      ariaLabel="Custom guide ratio width"
-                      value={customAspect.width}
-                      min={1}
-                      max={MAX_BROADCAST_GUIDE_ASPECT_PART}
-                      step={1}
-                      scrub={false}
-                      onCommit={(value) => changeCustomAspect('width', value)}
-                    />
-                  </label>
-                  <label className={s.outputField}>
-                    <span>Ratio height</span>
-                    <RealtimeNumberInput
-                      className={s.input}
-                      ariaLabel="Custom guide ratio height"
-                      value={customAspect.height}
-                      min={1}
-                      max={MAX_BROADCAST_GUIDE_ASPECT_PART}
-                      step={1}
-                      scrub={false}
-                      onCommit={(value) => changeCustomAspect('height', value)}
-                    />
-                  </label>
-                </div>
-                <Control
-                  variant="bare"
-                  aria-label="Remove custom frame"
-                  title="Remove custom frame"
-                  onClick={removeCustom}
+            <div className={s.scrollBody}>
+              <ProjectOutputControls
+                raster={outputRaster}
+                position={outputPosition}
+                compositionResolution={compositionResolution}
+                onEdit={onEdit}
+              />
+              <div className={s.heading}>
+                <span>Reference frames</span>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={addCustom}
+                  disabled={frames.length >= MAX_BROADCAST_GUIDE_FRAMES}
                 >
-                  <Icon icon={Trash2} size={14} />
-                </Control>
+                  <Icon icon={Plus} size={13} />
+                  Add custom frame
+                </Button>
               </div>
-            )}
-            {activeFrame !== undefined && (
-              <section className={s.frameOptions} aria-label="Selected safe frame settings">
-                <div className={s.heading}>
-                  <label className={s.check}>
-                    <input
-                      className={s.checkbox}
-                      type="checkbox"
-                      checked={activeFrame.visible}
-                      onChange={(event) =>
-                        updateFrame({ ...activeFrame, visible: event.target.checked })
-                      }
-                    />
-                    Show this frame
-                  </label>
-                  <div className={s.colorLabel}>
-                    Frame color
-                    <GuideColorControl
-                      label="Frame color"
-                      value={activeFrame.color}
-                      onChange={(color) => updateFrame({ ...activeFrame, color })}
-                    />
+              <div
+                ref={choices}
+                className={s.choices}
+                role="radiogroup"
+                aria-label="Guide aspect ratio"
+              >
+                {frames.map((frame, index) => {
+                  const label =
+                    frame.customAspect === undefined
+                      ? frame.aspect === 'auto'
+                        ? 'Auto'
+                        : frame.aspect
+                      : `${frame.customAspect.width}:${frame.customAspect.height}`;
+                  const current = activeFrame?.id === frame.id;
+                  const customName =
+                    frame.aspect === 'custom'
+                      ? 'Custom ' +
+                        frames.slice(0, index + 1).filter((f) => f.aspect === 'custom').length
+                      : undefined;
+                  return (
+                    <Button
+                      key={frame.id}
+                      size="sm"
+                      role="radio"
+                      className={s.choice}
+                      aria-label={label}
+                      aria-description={customName}
+                      tabIndex={current ? 0 : -1}
+                      title={frame.visible ? 'Visible on canvas' : 'Hidden on canvas'}
+                      aria-checked={current}
+                      selected={current}
+                      onClick={() => selectFrame(frame)}
+                      onKeyDown={(e) => {
+                        let next: number;
+                        switch (e.key) {
+                          case 'ArrowDown':
+                          case 'ArrowRight':
+                            next = (index + 1) % frames.length;
+                            break;
+                          case 'ArrowUp':
+                          case 'ArrowLeft':
+                            next = (index + frames.length - 1) % frames.length;
+                            break;
+                          case 'Home':
+                            next = 0;
+                            break;
+                          case 'End':
+                            next = frames.length - 1;
+                            break;
+                          default:
+                            return;
+                        }
+                        e.preventDefault();
+                        choices.current
+                          ?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+                          [next]?.focus({ preventScroll: true });
+                        selectFrame(frames[next]!);
+                      }}
+                    >
+                      {current && (
+                        <span className={s.selectedMark}>
+                          <Icon icon={Check} size={12} />
+                        </span>
+                      )}
+                      {customName && <span>{customName}</span>}
+                      <span>{label}</span>
+                      {frame.visible && (
+                        <span
+                          aria-hidden="true"
+                          className={s.visibleDot}
+                          style={{ backgroundColor: frame.color }}
+                        />
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+              {activeFrame?.aspect === 'custom' && (
+                <div className={s.ratioControlRow}>
+                  <div className={s.outputGrid} role="group" aria-label="Custom guide ratio">
+                    <label className={s.outputField}>
+                      <span>Ratio width</span>
+                      <RealtimeNumberInput
+                        className={s.input}
+                        ariaLabel="Custom guide ratio width"
+                        value={customAspect.width}
+                        min={1}
+                        max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+                        step={1}
+                        scrub={false}
+                        onCommit={(value) => changeCustomAspect('width', value)}
+                      />
+                    </label>
+                    <label className={s.outputField}>
+                      <span>Ratio height</span>
+                      <RealtimeNumberInput
+                        className={s.input}
+                        ariaLabel="Custom guide ratio height"
+                        value={customAspect.height}
+                        min={1}
+                        max={MAX_BROADCAST_GUIDE_ASPECT_PART}
+                        step={1}
+                        scrub={false}
+                        onCommit={(value) => changeCustomAspect('height', value)}
+                      />
+                    </label>
                   </div>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    aria-label="Remove custom frame"
+                    title="Remove custom frame"
+                    onClick={removeCustom}
+                  >
+                    <Icon icon={Trash2} size={14} /> Remove
+                  </Button>
                 </div>
-                {activeFrame.borders.map((border) => (
-                  <div className={s.borderRow} key={border.percent}>
+              )}
+              {activeFrame !== undefined && (
+                <section className={s.frameOptions} aria-label="Selected safe frame settings">
+                  <div className={s.heading}>
                     <label className={s.check}>
                       <input
                         className={s.checkbox}
                         type="checkbox"
-                        checked={border.visible}
+                        checked={activeFrame.visible}
                         onChange={(event) =>
-                          updateBorder({ ...border, visible: event.target.checked })
+                          updateFrame({ ...activeFrame, visible: event.target.checked })
                         }
                       />
-                      {border.percent}% {BORDER_LABELS[border.percent]}
+                      Show this frame
                     </label>
-                    <GuideColorControl
-                      label={`${border.percent}% color`}
-                      value={border.color ?? activeFrame.color}
-                      onChange={(color) => updateBorder({ ...border, color })}
-                    />
-                    <Control
-                      variant="bare"
-                      aria-label={`Use frame color for ${border.percent}%`}
-                      title="Use frame color"
-                      disabled={border.color === undefined}
-                      onClick={() =>
-                        updateBorder({ percent: border.percent, visible: border.visible })
-                      }
-                    >
-                      <Icon icon={RotateCcw} size={13} />
-                    </Control>
+                    <div className={s.colorLabel}>
+                      Frame color
+                      <GuideColorControl
+                        label="Frame color"
+                        value={activeFrame.color}
+                        onChange={(color) => updateFrame({ ...activeFrame, color })}
+                      />
+                    </div>
                   </div>
-                ))}
-              </section>
-            )}
-            <details className={s.help}>
-              <summary>About safe areas · EBU R 95</summary>
-              <p>
-                100% is the full reference frame. Action Safe (93%) leaves 3.5% at each edge for
-                important action. Graphics Safe (90%) leaves 5% for text and graphics.
-              </p>
-              <p>
-                EBU R 95 defines Action Safe and Graphics Safe for 16:9 television. Other ratios use
-                proportional guides. 80% is an additional guide with a 10% inset on each side.
-              </p>
-            </details>
-            <p className={s.hint}>Guide settings are shared across projects in this app.</p>
+                  {activeFrame.borders.map((border) => (
+                    <div className={s.borderRow} key={border.percent}>
+                      <label className={s.check}>
+                        <input
+                          className={s.checkbox}
+                          type="checkbox"
+                          checked={border.visible}
+                          onChange={(event) =>
+                            updateBorder({ ...border, visible: event.target.checked })
+                          }
+                        />
+                        {border.percent}% {BORDER_LABELS[border.percent]}
+                      </label>
+                      <GuideColorControl
+                        label={`${border.percent}% color`}
+                        value={border.color ?? activeFrame.color}
+                        onChange={(color) => updateBorder({ ...border, color })}
+                      />
+                      <Control
+                        variant="bare"
+                        aria-label={`Use frame color for ${border.percent}%`}
+                        title="Use frame color"
+                        disabled={border.color === undefined}
+                        onClick={() =>
+                          updateBorder({ percent: border.percent, visible: border.visible })
+                        }
+                      >
+                        <Icon icon={RotateCcw} size={13} />
+                      </Control>
+                    </div>
+                  ))}
+                </section>
+              )}
+              <details className={s.help}>
+                <summary>About safe areas · EBU R 95</summary>
+                <p>
+                  100% is the full reference frame. Action Safe (93%) leaves 3.5% at each edge for
+                  important action. Graphics Safe (90%) leaves 5% for text and graphics.
+                </p>
+                <p>
+                  EBU R 95 defines Action Safe and Graphics Safe for 16:9 television. Other ratios
+                  use proportional guides. 80% is an additional guide with a 10% inset on each side.
+                </p>
+              </details>
+              <p className={s.hint}>Guide settings are shared across projects in this app.</p>
+            </div>
+            <div className={s.footer}>
+              <Button
+                size="sm"
+                data-safe-area-reset=""
+                onClick={() => {
+                  returnToReset.current = true;
+                  setConfirmReset(true);
+                }}
+              >
+                <Icon icon={RotateCcw} size={13} /> Restore defaults
+              </Button>
+            </div>
           </div>
         </Popover>
+      )}
+      {open && confirmReset && (
+        <Modal
+          title="Restore default safe areas?"
+          ariaLabel="Restore default safe areas"
+          onClose={() => setConfirmReset(false)}
+          footer={
+            <>
+              <ModalButton autoFocus onClick={() => setConfirmReset(false)}>
+                Cancel
+              </ModalButton>
+              <ModalButton
+                variant="danger"
+                onClick={() => {
+                  designerGuideStore.set(DEFAULT_BROADCAST_GUIDE_PROFILE);
+                  setConfirmReset(false);
+                }}
+              >
+                Restore defaults
+              </ModalButton>
+            </>
+          }
+        >
+          This removes added frames and restores the default guide ratios, visibility, and colors
+          across Designer projects.
+        </Modal>
       )}
     </>
   );

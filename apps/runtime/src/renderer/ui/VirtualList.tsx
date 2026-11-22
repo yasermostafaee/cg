@@ -78,6 +78,8 @@ export interface VirtualListProps {
   withActions?: boolean;
   /** Lay out a short catalogue in responsive tiles. Large libraries use virtual rows. */
   tiled?: boolean;
+  /** Fill the available flex height and use the measured viewport for virtualisation. */
+  fill?: boolean;
   /** Virtualized tiles for a paged library. A heading spans the full width. */
   columns?: number;
   gap?: number;
@@ -155,6 +157,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     overscan = 6,
     withActions = false,
     tiled = false,
+    fill = false,
     columns,
     gap = 0,
     headingHeight = rowHeight,
@@ -164,7 +167,22 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
 ): JSX.Element {
   const viewport = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
   const nearEndFired = useRef(false);
+  const viewportHeight = fill && measuredHeight > 0 ? measuredHeight : height;
+
+  useEffect(() => {
+    const element = viewport.current;
+    if (!fill || element === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) {
+        const nextHeight = Math.max(0, Math.round(entry.contentRect.height));
+        setMeasuredHeight((previous) => (previous === nextHeight ? previous : nextHeight));
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fill]);
 
   const virtualColumns = columns ?? 1;
   const columnWidth = `calc((100% - ${(virtualColumns - 1) * gap}px) / ${virtualColumns})`;
@@ -190,7 +208,8 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
         if (position === undefined) return;
         const { top, height: itemHeight } = position;
         if (top < el.scrollTop) el.scrollTop = top;
-        else if (top + itemHeight > el.scrollTop + height) el.scrollTop = top + itemHeight - height;
+        else if (top + itemHeight > el.scrollTop + viewportHeight)
+          el.scrollTop = top + itemHeight - viewportHeight;
         setScrollTop(el.scrollTop);
       },
       focus(): void {
@@ -202,12 +221,12 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
         return Math.max(1, getComputedStyle(tiles).gridTemplateColumns.trim().split(/\s+/).length);
       },
     }),
-    [layout, height, tiled, virtualColumns],
+    [layout, viewportHeight, tiled, virtualColumns],
   );
 
   const first = tiled ? 0 : Math.max(0, indexAt(layout.positions, scrollTop, 'bottom') - overscan);
   // Include the whole last visible track, even when the next item starts within the viewport.
-  const lastInView = indexAt(layout.positions, scrollTop + height, 'top');
+  const lastInView = indexAt(layout.positions, scrollTop + viewportHeight, 'top');
   const last = tiled ? rows.length : Math.min(rows.length, lastInView + overscan);
 
   // The next page: once per approach to the end, re-armed when the list grows.
@@ -244,7 +263,13 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       {...(activeIndex !== null ? { 'aria-activedescendant': optionId(id, activeIndex) } : {})}
       className={tiled ? 'cg-vlist cg-vlist--tiles' : 'cg-vlist'}
       {...(data ?? {})}
-      style={tiled ? { maxHeight: height } : { height, maxHeight: height }}
+      style={
+        fill
+          ? { flex: '1 1 0', minHeight: 0, height: 0, maxHeight: 'none' }
+          : tiled
+            ? { maxHeight: height }
+            : { height, maxHeight: height }
+      }
       onScroll={tiled ? undefined : (e) => setScrollTop(e.currentTarget.scrollTop)}
       onKeyDown={onKeyDown}
       onPointerDown={(e) => {

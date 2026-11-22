@@ -17,6 +17,19 @@ keyboard focus and staged-selection treatments.
 - **AND** the permanent selection treatment identifies the staged source
 - **WHEN** the operator navigates with the keyboard **THEN** the active option is brought into view
 
+#### Scenario: The input list fills the source picker
+
+- **WHEN** the operator chooses the Inputs list view
+- **THEN** the list uses the space between the input toolbar and the dialog footer
+- **AND** scrolling the list does not move the footer or leave unused space above it
+
+#### Scenario: The picker is waiting for a routed input's preview
+
+- **GIVEN** the catalogue describes an input as a route and its optional NDI lookup stalls
+- **THEN** the route does not show “Waiting for NDI” without a matching NDI source
+- **AND** after the bounded lookup the route uses the normal Playout preview
+- **AND** an NDI input can still show “Waiting for NDI” while its receiver starts
+
 ### Requirement: Media and source captions SHALL remain compact
 
 The Media tab SHALL provide one library list and an order menu. Media captions and Station setup
@@ -28,6 +41,17 @@ format descriptions SHALL use compact presentation with technical paths omitted 
 - **AND** one order button displays that value and opens a menu containing both choices
 - **AND** captions show duration and resolution with folder paths omitted
 - **AND** the Recent and All media group headings are omitted
+
+#### Scenario: A source card returns to the saved binding
+
+- **GIVEN** the saved binding already resolves to a particular input or media item
+- **WHEN** the operator stages another source and then selects the previously saved source card
+- **THEN** Select is disabled again and the existing binding is preserved, including Default inheritance
+
+#### Scenario: Source titles differ in length
+
+- **GIVEN** A/B presence is shown on cards in the source picker
+- **THEN** the badges retain their position in each card for short and long names in Grid and List
 
 #### Scenario: Station setup reports an input format
 

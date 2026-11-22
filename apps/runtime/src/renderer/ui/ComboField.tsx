@@ -34,6 +34,8 @@ export interface ComboFieldProps {
   /** APPENDED after `cg-field cg-combo-field`, never replacing them. */
   className?: string | undefined;
   title?: string | undefined;
+  /** Complete display text for the shared tooltip when the field clips it. */
+  valueTooltip?: string | undefined;
   /** A finder's attributes (`data-*`). */
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
 }
@@ -50,6 +52,7 @@ export const ComboField = forwardRef<HTMLButtonElement, ComboFieldProps>(functio
     disabled,
     className,
     title,
+    valueTooltip,
     data,
   },
   ref,
@@ -67,6 +70,7 @@ export const ComboField = forwardRef<HTMLButtonElement, ComboFieldProps>(functio
       id={id}
       disabled={disabled}
       title={title}
+      data-field-value={valueTooltip}
       className={['cg-field', 'cg-combo-field', className].filter(Boolean).join(' ')}
       onClick={onOpen}
       onKeyDown={(e) => {
@@ -77,7 +81,9 @@ export const ComboField = forwardRef<HTMLButtonElement, ComboFieldProps>(functio
       }}
       {...(data ?? {})}
     >
-      <span className="cg-combo-field__value">{children}</span>
+      <span className="cg-combo-field__value" data-field-overflow="">
+        {children}
+      </span>
       <Icon icon={ChevronDown} size={14} />
     </button>
   );

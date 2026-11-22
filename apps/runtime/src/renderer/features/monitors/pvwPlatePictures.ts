@@ -478,17 +478,20 @@ export function paintPvwPlatePictures(
   frames: ReadonlyMap<string, PvwSourceFrame>,
   pending?: ReadonlySet<HTMLElement>,
 ): void {
+  const isParkedWithFocus = (node: HTMLElement) =>
+    node.closest('[data-cg-pvw-focus-plane]') !== null;
   const retained = new Map(
-    Array.from(doc.querySelectorAll<HTMLDivElement>('[data-cg-pvw-picture-part]')).map((part) => [
-      part.dataset['cgPvwPicturePart'],
-      part,
-    ]),
+    Array.from(doc.querySelectorAll<HTMLDivElement>('[data-cg-pvw-picture-part]'))
+      .filter((part) => !isParkedWithFocus(part))
+      .map((part) => [part.dataset['cgPvwPicturePart'], part]),
   );
   if (frames.size === 0) {
     for (const part of retained.values()) if (pending?.has(part) !== true) removePicture(part);
     return;
   }
-  const nodes = Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-live-source]'));
+  const nodes = Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-live-source]')).filter(
+    (node) => !isParkedWithFocus(node),
+  );
   const fitted = new Map(plates.map((plate) => [plate.plateId, pictureFor(plate, frames)]));
 
   function addPicture(

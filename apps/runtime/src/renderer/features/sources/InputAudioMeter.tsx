@@ -17,7 +17,7 @@ import { subscribeInputAudio } from './inputAudioDemand.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from './sourceStore.js';
 import './input-audio-meter.css';
-import type { PreviewEngine } from './usePreviewOrigins.js';
+import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 
 const stereoLabels = ['L', 'R'] as const;
 
@@ -44,6 +44,7 @@ export function InputAudioMeter({
   edge = false,
   style,
   previewEngine,
+  onMeterEngineChange,
 }: {
   sourceId: string;
   channel: number | undefined;
@@ -51,6 +52,7 @@ export function InputAudioMeter({
   edge?: boolean;
   style?: CSSProperties;
   previewEngine?: PreviewEngine | undefined;
+  onMeterEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element | null {
   const foreground = useModalForeground();
   useSyncExternalStore(subscribeSources, sourcesVersion);
@@ -72,6 +74,7 @@ export function InputAudioMeter({
     let disposed = false;
     const publish = (reading: SourceAudioReading | undefined): void => {
       clearTimeout(expiry);
+      onMeterEngineChange?.(reading?.state === 'measured' ? reading.engine : undefined);
       setSnapshot((previous) => {
         const previousCount =
           previous?.sourceId === sourceId && previous.channel === meterChannel
@@ -105,7 +108,7 @@ export function InputAudioMeter({
       stop?.();
       publish(undefined);
     };
-  }, [foreground, meterChannel, sourceId]);
+  }, [foreground, meterChannel, sourceId, onMeterEngineChange]);
   if (source === undefined) return null;
   const current =
     snapshot?.channel === meterChannel && snapshot?.sourceId === sourceId ? snapshot : undefined;

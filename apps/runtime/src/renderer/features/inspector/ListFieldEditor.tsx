@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useId, useRef, useState, type ReactNode } from 'react';
 import { GripVertical, Plus, TableProperties, X } from 'lucide-react';
 import {
   fieldOperatorEditable,
@@ -21,6 +21,7 @@ import { writeFieldText } from '../../ui/fieldDigitsInput.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { ImageFieldControl } from './ImageFieldControl.js';
@@ -159,6 +160,7 @@ function StructuredRowEditor({
   fields,
   templateId,
   channel,
+  modalForm,
   onChange,
 }: {
   fieldId: string;
@@ -167,8 +169,10 @@ function StructuredRowEditor({
   fields: readonly ListItemField[];
   templateId?: string | undefined;
   channel?: number | undefined;
+  modalForm: boolean;
   onChange: (key: string, value: unknown) => void;
 }): JSX.Element {
+  const id = useId();
   return (
     <div className="cg-list-item__structured">
       {fields.map((field) => {
@@ -178,8 +182,28 @@ function StructuredRowEditor({
         const ariaLabel = `${fieldId} item ${rowNumber} ${label}`;
         const allowedNumberValues =
           field.type === 'number' ? numberFieldAllowedValues(field) : undefined;
+        const selectId =
+          field.type === 'select' || allowedNumberValues !== undefined
+            ? `${id}-${field.id}`
+            : undefined;
+        const colorControl =
+          field.type === 'color' ? (
+            <ColorInput
+              {...(modalForm
+                ? { appearance: 'swatch' as const }
+                : { className: 'cg-list-cell__color' })}
+              value={typeof value === 'string' ? value : field.default}
+              aria-label={ariaLabel}
+              disabled={!editable}
+              onChange={(next) => onChange(field.id, next)}
+            />
+          ) : null;
         return (
-          <label key={field.id} className="cg-list-cell">
+          <label
+            key={field.id}
+            className={modalForm ? 'cg-form-field cg-list-cell' : 'cg-list-cell'}
+            htmlFor={selectId}
+          >
             <span title={field.id}>
               {label}
               {!editable && <small className="cg-list-cell__lock"> · locked</small>}
@@ -192,8 +216,8 @@ function StructuredRowEditor({
                 onChange={(next) => onChange(field.id, next)}
               />
             ) : field.type === 'select' ? (
-              <select
-                className="cg-field"
+              <SelectInput
+                id={selectId}
                 value={typeof value === 'string' ? value : field.default}
                 aria-label={ariaLabel}
                 disabled={!editable}
@@ -204,7 +228,7 @@ function StructuredRowEditor({
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             ) : field.type === 'multiline' ? (
               <AutoGrowTextarea
                 dir="auto"
@@ -214,8 +238,8 @@ function StructuredRowEditor({
                 onChange={(event) => onChange(field.id, event.currentTarget.value)}
               />
             ) : field.type === 'number' && allowedNumberValues !== undefined ? (
-              <select
-                className="cg-field"
+              <SelectInput
+                id={selectId}
                 value={String(
                   typeof value === 'number' && allowedNumberValues.includes(value)
                     ? value
@@ -230,7 +254,7 @@ function StructuredRowEditor({
                     {numberFieldValueLabel(field, choice)}
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             ) : field.type === 'number' ? (
               <NumericInput
                 className="cg-field"
@@ -248,13 +272,11 @@ function StructuredRowEditor({
                 }}
               />
             ) : field.type === 'color' ? (
-              <ColorInput
-                className="cg-list-cell__color"
-                value={typeof value === 'string' ? value : field.default}
-                aria-label={ariaLabel}
-                disabled={!editable}
-                onChange={(next) => onChange(field.id, next)}
-              />
+              modalForm ? (
+                <span>{colorControl}</span>
+              ) : (
+                colorControl
+              )
             ) : field.type === 'image' ? (
               <ImageFieldControl
                 field={field}
@@ -463,7 +485,11 @@ export function ListFieldEditor({
   }
 
   return (
-    <div style={styles.list} aria-label={`${fieldId} items`}>
+    <div
+      className={expanded ? 'cg-form' : undefined}
+      style={styles.list}
+      aria-label={`${fieldId} items`}
+    >
       {items.length === 0 && <p style={styles.empty}>No items.</p>}
       {items.map((item, i) => {
         const n = String(i + 1);
@@ -534,6 +560,7 @@ export function ListFieldEditor({
                   fields={itemFields}
                   templateId={templateId}
                   channel={channel}
+                  modalForm={expanded}
                   onChange={(key, next) =>
                     onStage(
                       items.map((candidate, index) =>

@@ -67,6 +67,7 @@ export function LiveLayoutEditorFrameOptions({
         value: ControlLiveLayoutPlateOverride | undefined;
         inheritedAspect: number;
         inheritedFit: ControlLiveLayoutFrame['fitMode'];
+        geometryControls?: boolean;
         onChange: (patch: ControlLiveLayoutPlateOverride) => void;
       }
     | undefined;
@@ -165,6 +166,7 @@ export function LiveLayoutEditorFrameOptions({
               value={presetOverrides.value}
               inheritedAspect={presetOverrides.inheritedAspect}
               inheritedFit={`Inherit · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
+              geometryControls={presetOverrides.geometryControls ?? true}
               onChange={presetOverrides.onChange}
             />
             {crop !== undefined && (
@@ -226,7 +228,10 @@ export function LiveLayoutEditorFrameOptions({
                   onChange({
                     fallback: {
                       kind: 'color',
-                      color: fallback?.kind === 'color' ? fallback.color : '#000000',
+                      color:
+                        fallback?.kind === 'color'
+                          ? fallback.color
+                          : liveLayoutArtwork.fallbackColor,
                     },
                   })
                 }
@@ -235,7 +240,7 @@ export function LiveLayoutEditorFrameOptions({
               </Button>
               {fallback?.kind === 'color' && (
                 <ColorInput
-                  className="cg-field"
+                  appearance="swatch"
                   aria-label="Fallback colour"
                   value={fallback.color.slice(0, 7)}
                   onChange={(color) => onChange({ fallback: { kind: 'color', color } })}
@@ -287,12 +292,11 @@ export function LiveLayoutEditorFrameOptions({
           </label>
         </section>
         <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
-          <span>Border</span>
           <div className="cg-live-layout-plate-border-fields">
-            <div>
-              <span>Color</span>
+            <div className="cg-live-layout-plate-border-color">
+              <span>Border</span>
               <ColorInput
-                className="cg-field"
+                appearance="swatch"
                 aria-label="Border color"
                 value={border.color.slice(0, 7)}
                 onChange={(color) => onChange({ border: { ...border, color } })}
@@ -404,7 +408,10 @@ export function LiveLayoutEditorFrameOptions({
                   ))}
                 </div>
               )}
-              <div className="cg-live-layout-frame-mask-values" key={frame.id + ':' + activeIndex}>
+              <div
+                className="cg-form-grid cg-live-layout-frame-mask-values"
+                key={frame.id + ':' + activeIndex}
+              >
                 {MASK_FIELDS.map(({ key, limit, label, min }) => (
                   <LiveLayoutEditorNumber
                     key={key}

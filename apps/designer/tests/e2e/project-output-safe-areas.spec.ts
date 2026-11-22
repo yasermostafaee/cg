@@ -31,14 +31,14 @@ async function resizeComposition(app: DesignerApp, width: number, height: number
 }
 
 async function openSettings(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: 'Configure safe guides', exact: true }).click();
-  const settings = page.getByRole('dialog', { name: 'Safe guides', exact: true });
+  await page.getByRole('button', { name: 'Configure safe areas', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
   await expect(settings).toBeVisible();
   return settings;
 }
 
 async function closeSettings(settings: Locator): Promise<void> {
-  await settings.getByRole('button', { name: 'Close safe guide settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
 }
 
 async function enableSafeAreas(page: Page): Promise<void> {

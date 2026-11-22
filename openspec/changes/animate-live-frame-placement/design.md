@@ -59,6 +59,39 @@ mixer commands after the same delay has elapsed. Shared native seats animate cha
 source fill and clip even when the plate box itself stays fixed. PVW follows the moving plate
 box and preserves the pictured source's aspect on both sides of a regular, unmasked switch.
 
+An authored preset page without mixer pacing shares the native commit deadline. The Bridge
+does not advance it based on a cached interlaced mode or an unread active server. A modern
+page on verified 1080i50 retains mixer-frame sampling. Independent CEF and mixer clocks can
+still yield a frame of visible skew. Target-engine acceptance requires measuring both
+3-to-2 and 2-to-3 switches from the actual PGM output.
+
+An on-air plate can hand off its opaque square border to four native colour producers.
+The Bridge projects the outer plate independently of the picture's Fit and Crop. For each
+movement, fade, arrival or departure, the edges use the related picture's easing, duration
+and channel COMMIT. An arrival starts hidden in the proper geometry; a departure that falls
+back to Fade holds its box while its edges fade. The HTML fallback path remains available
+for plates with no native picture.
+
+A fresh Take can leave four free layers above a bordered picture while preserving picture
+order. The native strokes occupy only the depth between that picture and the next higher
+producer. This lets a higher picture occlude the lower picture and its border together. On a
+verified mirror pair, both member stages must expose the same free logical layers within that
+depth. Each member applies the transform in its own commit on its mapped channel. Neither
+page suppresses any borders until both sets of strips are seated. A stroke under a higher
+producer has its original foreground stroke suppressed before movement begins. An older page, a member
+without the matching picture, or an exhausted live band can still use the existing artwork
+path. A scoped effect token releases the HTML suppression on the correct page. Retirement
+uses the captured session and channel mapping; fresh INFO checks the colour and background
+producer before clearing a temporary slot. A released producer cannot reappear from a
+stranded deferred transform, and its slot stays reserved until that mixer batch is drained.
+
+On verified 1080i50, each mixer gets a bounded readback of a moving edge before the Bridge
+sends the destination page. The readback uses the observed tween position on that member.
+Reserve mixer commands for native borders start their reply timeout at dispatch so earlier
+edge commands cannot consume it. The final 1080i50 handoff keeps the matching native
+stroke on screen for a bounded overlap after the release command. The Bridge reads fresh
+stage ownership before clearing those layers.
+
 On a connection loss, the Bridge reserves any seats the arrival actually started. On recovery it
 mutes and hides those seats before the shared mixer buffer is committed, clears them, and
 reasserts the prior mixer ledger. A guarded update restores the previous preset on the surviving
@@ -71,6 +104,28 @@ settlement and only with confirmed resident artwork and native seat ownership. I
 backup copy and Playout routes stay absent there. A new input that would require preparing new
 seats while switching both engines uses the existing Cut path. After a role change, a deferred
 batch owned by the former engine cannot be committed by another channel operation on its reserve.
+
+## Native fallback proof and acceptance
+
+The sealed `ee531a4a` and `c5ca136e` captures both showed fallback artwork reach a
+different pose from its moving native border. The sealed background page in Chromium resolves
+the recorded effect to the correct fallback wrapper and paints intermediate poses. On 1080i50
+CasparCG, the separate HTML and Mixer paths can present different frames despite sharing a
+deadline. Time offsets alone cannot couple those paints.
+
+A 1080i50 reference capture verifies a decoded static image beneath its picture. The image,
+picture and four edges consume the same deferred Mixer batch. A higher picture occludes the
+plate and its border together. This proof uses a stationary HTTP image producer with FILL and
+CLIP, including the cover geometry for a different image aspect. It does not exercise the
+Bridge's seats or the page handoff.
+
+For Bridge acceptance, reserve a verified fallback layer below the owning picture and above
+lower overlapping pictures. Recover or release only the temporary producer owned by that
+effect and member. Require the native texture on each member participating in the move before
+the artwork page yields coverage. Preserve the existing artwork path when no safe positions
+are available, an asset cannot load, or a member cannot confirm the intended producer. Verify
+both directions on A and B, including a retained fallback, a fallback entering from outside
+the preset, an occupied live layer, and a Stop or promotion during the effect.
 
 ## Rehearsal
 

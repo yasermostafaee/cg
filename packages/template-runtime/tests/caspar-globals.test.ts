@@ -121,17 +121,35 @@ describe('installCasparGlobals', () => {
       },
     );
     const release = withCgControl({}, { frameTransition: null, framePlacements });
+    const focusBackdrop = withCgControl({}, {
+      presetEffectId: 'focus-17',
+      nativeFallbackHold: true,
+      look: 'incoming-backdrop',
+      frameTransition: { authoredPreset: true, durationMs: 400, easing: 'linear', frames: [], hidePresetTitlePlateIds: ['frame-1'] },
+    });
     const preset = withCgControl(
       {},
       { look: 'duo', frameTransition: null, framePlacements, presetTransitionCommit: true },
     );
+    const nativeBorders = withCgControl({}, { nativeBorderPlateIds: ['frame-1'] });
+    const retireBorders = withCgControl({}, { releaseNativeBorderEffectId: 'edge-17' });
 
     try {
       for (const { win, update } of [background, foreground]) {
         win.update?.(JSON.stringify(phase));
+        win.update?.(JSON.stringify(focusBackdrop));
         win.update?.(JSON.stringify(release));
         win.update?.(JSON.stringify(preset));
-        expect(update.mock.calls).toEqual([[phase], [release], [preset]]);
+        win.update?.(JSON.stringify(nativeBorders));
+        win.update?.(JSON.stringify(retireBorders));
+        expect(update.mock.calls).toEqual([
+          [phase],
+          [focusBackdrop],
+          [release],
+          [preset],
+          [nativeBorders],
+          [retireBorders],
+        ]);
       }
       expect(postMessage).not.toHaveBeenCalled();
 

@@ -95,6 +95,11 @@ test('New live layout safe guides fit its active picture and share only view pre
     const layers = page.getByRole('region', { name: 'Layers' });
     await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
     const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+    const layoutName = editor.getByRole('textbox', { name: 'Layout name', exact: true });
+    const layoutField = await layoutName.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, height: style.minHeight };
+    });
     const stage = editor.locator('[data-layout-preview]');
     const toggle = editor.getByRole('button', { name: 'Safe areas', exact: true });
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -128,6 +133,15 @@ test('New live layout safe guides fit its active picture and share only view pre
     await showOnlyGuideFrame(settings, '4:3');
     await settings.getByLabel('Frame color', { exact: true }).fill('#22aaee');
     await settings.getByRole('button', { name: 'Add horizontal guide', exact: true }).click();
+    const position = settings.getByRole('textbox', {
+      name: 'Guide 1 position percent',
+      exact: true,
+    });
+    await expect(position).toHaveCSS('background-color', layoutField.background);
+    await expect(position).toHaveCSS('min-height', layoutField.height);
+    const swatch = settings.getByLabel('Guide 1 color', { exact: true });
+    await expect(swatch).toHaveCSS('background-color', layoutField.background);
+    await expect(swatch).toHaveCSS('width', layoutField.height);
     await settings.getByRole('textbox', { name: 'Guide 1 name', exact: true }).fill('تیتر · 25%');
     await settings
       .getByRole('textbox', { name: 'Guide 1 position percent', exact: true })

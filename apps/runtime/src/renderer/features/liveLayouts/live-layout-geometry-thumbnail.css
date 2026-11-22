@@ -1,0 +1,20 @@
+.cg-live-layout-geometry-thumbnail {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-sunken);
+}
+
+:where(.cg-live-layout-geometry-thumbnail) {
+  inline-size: 2rem;
+}
+
+.cg-live-layout-geometry-thumbnail > span {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--r-surface-sunken);
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.74;
+}

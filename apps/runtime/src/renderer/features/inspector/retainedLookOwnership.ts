@@ -1,4 +1,4 @@
-import { TEMPLATE_PAGE_ALLOWANCE_BYTES, type TemplateInfo } from '@cg/shared-ipc';
+import { sceneFromRetainedPage, type TemplateInfo } from '@cg/shared-ipc';
 import { LookGroupsSchema, SceneSchema } from '@cg/shared-schema';
 import { z } from 'zod';
 import { sharedFrameTitlesOf, type SharedFrameTitles } from './sharedFrameTitles.js';
@@ -19,27 +19,6 @@ const sceneOwnership = z.object({
   ),
 });
 
-/** The generated last script embeds the scene as one JSON line, escaped for HTML. */
-function sceneFromPage(html: string): unknown {
-  const script = html.lastIndexOf('<script>');
-  if (script < 0) return null;
-  const boot = /^<script>\r?\n[ \t]*\(function \(\) \{\r?\n[ \t]*var scene = /.exec(
-    html.slice(script, script + 100),
-  );
-  if (boot === null) return null;
-  const start = script + boot[0].length;
-  const end = html.indexOf('\n', start);
-  if (end < 0 || end - start > TEMPLATE_PAGE_ALLOWANCE_BYTES) return null;
-  if (!/^\r?\n[ \t]*try \{/.test(html.slice(end, end + 32))) return null;
-  const literal = html.slice(start, end).trimEnd();
-  if (!literal.startsWith('{') || !literal.endsWith('};')) return null;
-  try {
-    return JSON.parse(literal.slice(0, -1)) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 export interface RetainedLookFields {
   ownership: ReadonlyMap<string, string>;
   sharedFrameTitles: SharedFrameTitles;
@@ -50,7 +29,7 @@ export function retainedLookFields(info: TemplateInfo, html: string): RetainedLo
   const carrier = info.liveSources;
   if (carrier?.looks === undefined || carrier.looks.length < 2) return null;
   const looks = carrier.looks;
-  const scene = sceneFromPage(html);
+  const scene = sceneFromRetainedPage(html);
   const parsed = sceneOwnership.safeParse(scene);
   if (!parsed.success) return null;
   const group = parsed.data.lookGroups[0];

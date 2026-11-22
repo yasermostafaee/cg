@@ -4,6 +4,7 @@ import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { Tag } from '../../ui/Tag.js';
 import type { FieldPath } from './draftStore.js';
 import { delimitersVersion, listDelimiters, subscribeDelimiters } from './delimiterStore.js';
@@ -279,9 +280,9 @@ export function FromFilePreviewDialog({
       {kind === 'list' && !lockFile && (
         <div style={styles.split}>
           <span>File format</span>
-          <div style={styles.splitControls}>
-            <select
-              className="cg-field cg-file-preview__delimiter"
+          <div className="cg-form" style={styles.splitControls}>
+            <SelectInput
+              className="cg-file-preview__delimiter"
               value={state.format}
               onChange={(event) =>
                 updateSplitConfig(item.itemId, path, {
@@ -293,7 +294,7 @@ export function FromFilePreviewDialog({
               <option value="text">Text / delimiter</option>
               <option value="json">JSON rows</option>
               <option value="csv">CSV rows</option>
-            </select>
+            </SelectInput>
             {state.format === 'text' && (
               <label>
                 <Checkbox
@@ -305,8 +306,8 @@ export function FromFilePreviewDialog({
               </label>
             )}
             {state.format === 'text' && state.split && (
-              <select
-                className="cg-field cg-file-preview__delimiter"
+              <SelectInput
+                className="cg-file-preview__delimiter"
                 value={state.delimiter}
                 onChange={(event) =>
                   updateSplitConfig(item.itemId, path, { delimiter: event.target.value })
@@ -321,7 +322,7 @@ export function FromFilePreviewDialog({
                     {entry.label}
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             )}
           </div>
           {state.format === 'text' ? (

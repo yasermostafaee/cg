@@ -31,7 +31,11 @@ export const BASELINE_CSS = `
 [data-cg-preset-title-key][data-cg-frame-transition-hidden] {
   display: none !important;
 }
-[data-cg-instance-hidden-text] {
+[data-cg-layout-plate-border][data-cg-native-border-hidden] {
+  display: none !important;
+}
+[data-cg-instance-hidden-text]:not([data-cg-decoration-fade]),
+[data-cg-instance-hidden-border]:not([data-cg-decoration-fade]) {
   display: none !important;
 }
 `;

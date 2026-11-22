@@ -117,6 +117,8 @@ interface StripProps {
    * padding, weight and selected underline; what changes is only what the CONTAINER does.
    */
   inPanelBar?: boolean;
+  /** Allow arrows, Home and End to move focus within an inner horizontal strip. */
+  keyboardNavigation?: boolean;
   /**
    * `SETTINGS-MATCH-02` — what sits at the BOTTOM of a vertical rail, under the items.
    *
@@ -182,6 +184,7 @@ export function TabStrip({
   orientation = 'horizontal',
   railWidth = cssVars['--r-setup-rail-w'],
   inPanelBar = false,
+  keyboardNavigation = false,
   foot,
 }: StripProps): JSX.Element {
   const outer = level === 'outer';
@@ -192,7 +195,7 @@ export function TabStrip({
     next tab (wrapping), Home / End to the ends. MANUAL activation — focus moves, and the channel
     changes only on Enter or Space — because switching channels changes what every verb on the
     screen addresses, and an arrow press is not the moment to do that. Every tab stays its own
-    Tab stop, as before. Outer level only: the inner strips and the rail are unchanged.
+    Tab stop. Inner strips may opt in to the same keyboard behavior.
   */
   const moveFocus = (e: KeyboardEvent<HTMLButtonElement>): void => {
     const step =
@@ -251,7 +254,7 @@ export function TabStrip({
                 ? { className: 'cg-rail-tab' }
                 : outer
                   ? { className: 'cg-tab cg-tab--outer', onKeyDown: moveFocus }
-                  : { className: 'cg-tab' })}
+                  : { className: 'cg-tab', onKeyDown: keyboardNavigation ? moveFocus : undefined })}
               onClick={() => onSelect(tab.id)}
             >
               {/* A bare `<svg>`, not a wrapper: the tab's FIRST span stays its label, which is

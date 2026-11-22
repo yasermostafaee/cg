@@ -6,6 +6,7 @@ import type {
   BackupChannelsState,
 } from '@cg/shared-ipc';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { Tag } from '../../ui/Tag.js';
 
 /**
@@ -98,6 +99,7 @@ export function BackupChannelsCard({
         <span className="cg-card__spacer" />
         {mayChange && (
           <AsyncButton
+            variant="primary"
             disabled={!dirty || invalid || saving}
             run={async () => {
               setSaving(true);
@@ -141,9 +143,9 @@ export function BackupChannelsCard({
             >
               <label htmlFor={id}>{`CH ${String(line.channel)} (primary) →`}</label>
               {mayChange ? (
-                <select
+                <SelectInput
                   id={id}
-                  className={`cg-field${rowDirty ? ' is-dirty' : ''}`}
+                  className={rowDirty ? 'is-dirty' : undefined}
                   aria-label={`Backup channel for CH ${String(line.channel)}`}
                   aria-describedby={`${id}-status`}
                   aria-invalid={refusal !== null}
@@ -169,7 +171,7 @@ export function BackupChannelsCard({
                       CH {channel} · {name}
                     </option>
                   ))}
-                </select>
+                </SelectInput>
               ) : (
                 <span id={id}>{choice === null ? defaultChoice : `CH ${value}`}</span>
               )}

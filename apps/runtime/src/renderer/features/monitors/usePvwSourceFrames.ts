@@ -14,6 +14,7 @@ import {
   type NdiReceiver,
 } from '../sources/directNdiPreview.js';
 import { currentSourceCatalog, subscribeSources } from '../sources/sourceStore.js';
+import { usePictureOriginPublisher } from '../sources/observedPictureOrigins.js';
 
 export type PvwSourceFrame = SourcePreviewFrame & {
   snapshotOnly?: true;
@@ -319,7 +320,8 @@ export function usePvwSourceFrames(
           return !foreground ||
             (source.producer.kind === 'ndi' && target?.kind !== 'other') ||
             target?.kind === 'ndi' ||
-            target?.kind === 'pending'
+            target?.kind === 'pending' ||
+            target?.kind === 'blocked'
             ? [source.id]
             : [];
         }),
@@ -398,7 +400,7 @@ export function usePvwSourceFrames(
       }),
     );
   }, [snapshot, channel, sourceIds]);
-  return useMemo(() => {
+  const frames = useMemo(() => {
     if (directIds.size === 0) return passiveFrames;
     const frames = new Map(passiveFrames);
     for (const id of directIds) {
@@ -421,4 +423,21 @@ export function usePvwSourceFrames(
     }
     return frames;
   }, [directIds, directReceivers, targets, directRevision, passiveFrames]);
+  const observePicture = usePictureOriginPublisher(channel);
+  const observed = useRef(new WeakSet<PvwSourceFrame>());
+  useEffect(() => {
+    if (!enabled || !foreground) return;
+    for (const [sourceId, frame] of frames) {
+      if (
+        frame.engine === undefined ||
+        frame.signal === 'absent' ||
+        !hasPvwSourcePicture(frame) ||
+        observed.current.has(frame)
+      )
+        continue;
+      observed.current.add(frame);
+      observePicture(sourceId, frame.engine);
+    }
+  }, [enabled, foreground, frames, observePicture]);
+  return frames;
 }

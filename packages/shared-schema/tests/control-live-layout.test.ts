@@ -3,8 +3,12 @@ import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH,
   ControlLiveLayoutSchema,
+  calculateLiveSourceAutoLayout,
   controlLiveLayoutAttachments,
   controlLiveLayoutBorderHidden,
+  controlLiveLayoutDecorationOpacity,
+  controlLiveLayoutFocusLookId,
+  controlLiveLayoutFocusRect,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutMovePresetFrame,
   controlLiveLayoutPlateAspect,
@@ -208,6 +212,133 @@ describe('live layout preset and plate shape', () => {
   });
 });
 
+describe('live layout margins and custom placement', () => {
+  const zero = { top: 0, right: 0, bottom: 0, left: 0 };
+  const flush = { ...preset, margins: zero, horizontalGap: 0, verticalGap: 0 };
+
+  it('tiles a 16:9 output with four exactly touching 16:9 plates in both layout paths', () => {
+    const expected = [
+      { x: 0, y: 0, width: 960, height: 540 },
+      { x: 960, y: 0, width: 960, height: 540 },
+      { x: 0, y: 540, width: 960, height: 540 },
+      { x: 960, y: 540, width: 960, height: 540 },
+    ];
+    expect(
+      Object.values(controlLiveLayoutRects({ resolution }, { ...flush, arrangement: 'grid-top' })),
+    ).toEqual(expected);
+    const geometry = flush.frameIds.map((id) => ({ id, aspect: 16 / 9 }));
+    expect(
+      calculateLiveSourceAutoLayout(geometry, resolution, 'more-top', flush).map(
+        ({ id: _id, ...rect }) => rect,
+      ),
+    ).toEqual(expected);
+  });
+
+  it.each([
+    ['side-by-side', 2],
+    ['top-and-bottom', 2],
+    ['grid-top', 3],
+    ['grid-bottom', 3],
+    ['host-and-guests', 4],
+    ['grid-top', 4],
+  ] satisfies [ControlLiveLayoutArrangement, number][])(
+    'fills all four margins for %s with %s plates when aspect is free',
+    (arrangement, count) => {
+      const margins = { top: 11, right: 29, bottom: 37, left: 47 };
+      const rects = Object.values(
+        controlLiveLayoutRects(
+          { resolution },
+          {
+            ...flush,
+            arrangement,
+            margins,
+            fill: true,
+            frameIds: flush.frameIds.slice(0, count),
+          },
+        ),
+      );
+      expect(rects).toHaveLength(count);
+      expect(Math.min(...rects.map(({ x }) => x))).toBeCloseTo(47);
+      expect(Math.min(...rects.map(({ y }) => y))).toBeCloseTo(11);
+      expect(Math.max(...rects.map(({ x, width }) => x + width))).toBeCloseTo(1891);
+      expect(Math.max(...rects.map(({ y, height }) => y + height))).toBeCloseTo(1043);
+      expect(rects.reduce((area, { width, height }) => area + width * height, 0)).toBeCloseTo(
+        1844 * 1032,
+      );
+    },
+  );
+
+  it('applies independent margins to a single preset and its Focus look', () => {
+    const focusMargins = { ...zero, top: 27, left: 101 };
+    const single = {
+      ...flush,
+      frameIds: ['host'],
+      fill: true,
+      margins: { ...zero, bottom: 50, right: 100 },
+      focusMargins,
+    };
+    expect(controlLiveLayoutRects({ resolution }, single)['host']).toEqual({
+      x: 0,
+      y: 0,
+      width: 1820,
+      height: 1030,
+    });
+    expect(controlLiveLayoutFocusRect({ resolution }, single)).toEqual({
+      x: 101,
+      y: 27,
+      width: 1819,
+      height: 1053,
+    });
+    expect(controlLiveLayoutFocusRect({ resolution }, flush)).toEqual({
+      x: 0,
+      y: 0,
+      ...resolution,
+    });
+    expect(
+      controlLiveLayoutFocusRect({ resolution }, { focusMargins: { ...zero, top: 1080 } }),
+    ).toBeUndefined();
+  });
+
+  it('retains independently sized overlapping custom plates and validates their records', () => {
+    const custom: ControlLiveLayoutPreset = {
+      ...flush,
+      arrangement: 'custom',
+      customRects: {
+        host: { x: 0.125, y: 0.25, width: 0.625, height: 0.5 },
+        'guest-c': { x: 0.5, y: 0.5, width: 0.5, height: 0.5 },
+      },
+    };
+    const layout = {
+      id: 'custom-layout',
+      name: 'Custom layout',
+      resolution,
+      frameRate: 25,
+      frames: preset.frameIds.map((id) => ({ id, title: id })),
+      presets: [custom],
+      defaultPresetId: custom.id,
+      background: { kind: 'none' },
+      effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+    };
+    const read = ControlLiveLayoutSchema.parse(layout);
+    expect(read.presets).toEqual([custom]);
+    expect(controlLiveLayoutRects(read, custom)).toMatchObject({
+      host: { x: 240, y: 270, width: 1200, height: 540 },
+      'guest-c': { x: 960, y: 540, width: 960, height: 540 },
+    });
+    expect(
+      ControlLiveLayoutSchema.safeParse({
+        ...layout,
+        presets: [
+          {
+            ...custom,
+            customRects: { removed: custom.customRects?.['host'] },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe('authored frame graphics', () => {
   const rect = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
   const attachment = (id: string, frameId: string): ControlLiveLayoutFrameAttachment => ({
@@ -247,6 +378,40 @@ describe('authored frame graphics', () => {
     expect(ControlLiveLayoutSchema.safeParse(withSourceId('in-' + 'a'.repeat(70))).success).toBe(
       false,
     );
+  });
+
+  it('fades the retained title and border independently for both Focus and a named solo preset', () => {
+    const saved = ControlLiveLayoutSchema.parse({
+      ...layout,
+      presets: [
+        { ...pane, hiddenBorders: ['host'], hiddenFocusTitles: ['host'] },
+        { ...solo, hiddenTitles: ['host'] },
+      ],
+    });
+    for (const single of [controlLiveLayoutFocusLookId(pane.id, 'host'), solo.id]) {
+      for (const forward of [true, false]) {
+        expect(
+          controlLiveLayoutDecorationOpacity(
+            saved,
+            forward ? pane.id : single,
+            forward ? single : pane.id,
+            ['host', 'guest-a'],
+            0.25,
+            0.625,
+          ),
+        ).toEqual([
+          {
+            plateId: 'host',
+            title: forward
+              ? { fromOpacity: 0.75, toOpacity: 0.375 }
+              : { fromOpacity: 0.25, toOpacity: 0.625 },
+            border: forward
+              ? { fromOpacity: 0.25, toOpacity: 0.625 }
+              : { fromOpacity: 0.75, toOpacity: 0.375 },
+          },
+        ]);
+      }
+    }
   });
 
   it('returns shared and preset-local graphics in the order the player uses', () => {

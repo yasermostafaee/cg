@@ -53,7 +53,7 @@ export interface TextInputProps {
    * and `number` in particular silently drops Persian digits before `onChange` ever fires
    * (see `NumericInput`, which exists because of it).
    */
-  type?: 'text' | 'password' | undefined;
+  type?: 'text' | 'password' | 'search' | undefined;
   id?: string | undefined;
   name?: string | undefined;
   autoComplete?: string | undefined;

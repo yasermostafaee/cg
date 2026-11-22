@@ -16,6 +16,8 @@ export interface BuildStampResult {
   readonly stampText: string;
 }
 
+export function shortShaOrFallback(cwd: string): string;
+
 /**
  * @param appDir the app's own directory WITH A TRAILING SEPARATOR — normally
  *   `fileURLToPath(new URL('.', import.meta.url))` from that app's `vite.config.ts`.

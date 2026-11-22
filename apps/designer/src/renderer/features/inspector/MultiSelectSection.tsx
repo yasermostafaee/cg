@@ -1,31 +1,14 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  calculateLiveSourceAutoLayout,
-  liveSourceAutoLayoutRowCounts,
   type AnimatableProperty,
   type Element,
   type Fill,
-  type LiveSourceLayoutBias,
-  type LiveSourceLayoutOptions,
-  type TwoPlateLayout,
   type VideoPlaceholderElement,
 } from '@cg/shared-schema';
-import { LayoutGrid } from 'lucide-react';
-import {
-  designerStore,
-  editSceneOf,
-  shallowEqual,
-  useDesignerSelector,
-} from '../../state/store.js';
+import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { renderedTransformAt } from '../../state/slices/arrangements.js';
 import { isAspectLocked } from '../../state/slices/view.js';
 import { Button } from '../../ui/Button.js';
-import { Icon } from '../../ui/Icon.js';
-import {
-  getMeasureVersion,
-  measureElementSceneSize,
-  subscribeMeasure,
-} from '../canvas/measure-element.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField } from './controls.js';
 import { FillField } from './FillPopover.js';
@@ -37,7 +20,7 @@ import {
   type SharedSection,
 } from './shared-properties.js';
 import { clearOrphanColourTrack } from './fill-commit.js';
-import { autoLayoutTargets, autoLayoutTransform } from './live-source-auto-layout.js';
+import { FrameArrange, useFrameArrangeTargets } from './FrameArrange.js';
 import {
   commitCompositionDimension,
   compositionSizeRatio,
@@ -104,60 +87,15 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
   )
     ? elements
     : null;
-  const { project, activeCompositionId, activeArrangementId, currentFrame } = useDesignerSelector(
+  const { project, activeArrangementId, currentFrame } = useDesignerSelector(
     (state) => ({
       project: state.scene,
-      activeCompositionId: state.activeCompositionId,
       activeArrangementId: state.activeArrangementId,
       currentFrame: state.currentFrame,
     }),
     shallowEqual,
   );
-  const scene = useMemo(
-    () => editSceneOf(project, activeCompositionId),
-    [project, activeCompositionId],
-  );
-  const resolution = scene?.resolution ?? null;
-  const measureVersion = useSyncExternalStore(subscribeMeasure, getMeasureVersion);
-  const layoutTargets = useMemo(
-    () =>
-      scene === null
-        ? []
-        : autoLayoutTargets(scene, elements, (element) => {
-            const transform = renderedTransformAt(element, currentFrame);
-            if (element.type !== 'text' || element.fitMode !== 'autosize') return transform;
-            const size = measureElementSceneSize(element.id);
-            return size === null ? transform : { ...transform, size };
-          }),
-    [scene, elements, currentFrame, activeArrangementId, measureVersion],
-  );
-  const shortSide = Math.min(resolution?.width ?? 0, resolution?.height ?? 0);
-  const [horizontalGap, setHorizontalGap] = useState(() => Math.round(shortSide * 0.025));
-  const [verticalGap, setVerticalGap] = useState(() => Math.round(shortSide * 0.025));
-  const [twoPlateLayout, setTwoPlateLayout] = useState<TwoPlateLayout>('horizontal');
-  const [layoutBias, setLayoutBias] = useState<LiveSourceLayoutBias>('more-top');
-  const [reverseLayoutOrder, setReverseLayoutOrder] = useState(false);
-  const layoutOptions: LiveSourceLayoutOptions = {
-    horizontalGap,
-    verticalGap,
-    twoPlateLayout,
-    reverse: reverseLayoutOrder,
-  };
-  const currentRows =
-    layoutTargets.length >= 2 && resolution !== null
-      ? liveSourceAutoLayoutRowCounts(layoutTargets, resolution, layoutBias, layoutOptions)
-      : [];
-  const hasHorizontalNeighbours = currentRows.some((count) => count > 1);
-  const hasVerticalNeighbours = currentRows.length > 1;
-  const topRows =
-    layoutTargets.length >= 2 && resolution !== null
-      ? liveSourceAutoLayoutRowCounts(layoutTargets, resolution, 'more-top', layoutOptions)
-      : [];
-  const bottomRows =
-    layoutTargets.length >= 2 && resolution !== null
-      ? liveSourceAutoLayoutRowCounts(layoutTargets, resolution, 'more-bottom', layoutOptions)
-      : [];
-  const hasRemainderChoice = String(topRows) !== String(bottomRows);
+  const { targets: layoutTargets, resolution, key: arrangeKey } = useFrameArrangeTargets(elements);
   const hasLockedLiveSource = useDesignerSelector((state) =>
     elements.some(
       (element) =>
@@ -232,47 +170,6 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
 
   const inSection = (section: SharedSection): SharedProperty[] =>
     shared.filter((sp) => sp.descriptor.section === section);
-
-  const applyAutoLayout = (
-    bias: LiveSourceLayoutBias,
-    reverse = reverseLayoutOrder,
-    overrides: Partial<LiveSourceLayoutOptions> = {},
-    history: 'discrete' | 'live' = 'discrete',
-  ): void => {
-    if (layoutTargets.length < 2 || resolution === null) return;
-    setLayoutBias(bias);
-    const layout = calculateLiveSourceAutoLayout(layoutTargets, resolution, bias, {
-      horizontalGap,
-      verticalGap,
-      twoPlateLayout,
-      reverse,
-      ...overrides,
-    });
-    const targetsById = new Map(layoutTargets.map((target) => [target.id, target]));
-    const writeLayout = (): void => {
-      for (const item of layout) {
-        const target = targetsById.get(item.id);
-        if (target === undefined) continue;
-        const { position, size, scale, rotation } = autoLayoutTransform(target, item);
-        if (rotation !== undefined) designerStore.commitAnimatable(item.id, 'rotation', rotation);
-        if (scale !== undefined) {
-          designerStore.commitAnimatable(item.id, 'scale.x', scale.x);
-          designerStore.commitAnimatable(item.id, 'scale.y', scale.y);
-        }
-        if (size !== undefined) {
-          designerStore.commitAnimatable(item.id, 'size.w', size.w);
-          designerStore.commitAnimatable(item.id, 'size.h', size.h);
-        }
-        designerStore.commitAnimatable(item.id, 'position.x', position.x);
-        designerStore.commitAnimatable(item.id, 'position.y', position.y);
-      }
-    };
-    // Selects and buttons are isolated one-shot commands. Gap fields are live
-    // scrubbers/inputs, so their consecutive ticks must coalesce until blur or
-    // pointer-up instead of creating one Undo entry per typed digit.
-    if (history === 'discrete') designerStore.runAsSingleHistoryEntry(writeLayout);
-    else writeLayout();
-  };
 
   // Solid fill fans out keyframe-AWARE like the number fields (D-054 — a member with
   // a fill.color track keyframes at the playhead, others write static); a gradient
@@ -374,111 +271,12 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
           {liveSources !== null && (
             <LiveSourceAppearanceSections
               elements={liveSources}
-              resolution={resolution}
+              resolution={resolution ?? null}
               onCommitBoundary={commitBoundary}
             />
           )}
-          {layoutTargets.length >= 2 && resolution !== null && (
-            <CollapseSection title="Auto layout" defaultExpanded>
-              {layoutTargets.length === 2 && (
-                <SelectField
-                  label="layout"
-                  value={twoPlateLayout}
-                  options={['horizontal', 'vertical']}
-                  labels={['Side by side', 'Top and bottom']}
-                  onCommit={(value) => {
-                    setTwoPlateLayout(value);
-                    applyAutoLayout(layoutBias, reverseLayoutOrder, { twoPlateLayout: value });
-                  }}
-                />
-              )}
-              {hasHorizontalNeighbours && (
-                <NumberField
-                  label="horizontal gap"
-                  value={horizontalGap}
-                  min={0}
-                  max={resolution.width}
-                  step={1}
-                  suffix="px"
-                  onCommit={(value) => {
-                    setHorizontalGap(value);
-                    applyAutoLayout(
-                      layoutBias,
-                      reverseLayoutOrder,
-                      { horizontalGap: value },
-                      'live',
-                    );
-                  }}
-                  onCommitBoundary={commitBoundary}
-                />
-              )}
-              {hasVerticalNeighbours && (
-                <NumberField
-                  label="vertical gap"
-                  value={verticalGap}
-                  min={0}
-                  max={resolution.height}
-                  step={1}
-                  suffix="px"
-                  onCommit={(value) => {
-                    setVerticalGap(value);
-                    applyAutoLayout(layoutBias, reverseLayoutOrder, { verticalGap: value }, 'live');
-                  }}
-                  onCommitBoundary={commitBoundary}
-                />
-              )}
-              <div className={ms.layoutActions}>
-                {!hasRemainderChoice ? (
-                  <Button
-                    className={ms.layoutButton}
-                    size="sm"
-                    onClick={() => applyAutoLayout('more-top')}
-                    title="Arrange with equal gaps and centred margins"
-                  >
-                    <Icon icon={LayoutGrid} size={14} />
-                    Arrange evenly
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      className={ms.layoutButton}
-                      size="sm"
-                      onClick={() => applyAutoLayout('more-top')}
-                      title="Put the fuller row at the top"
-                    >
-                      <Icon icon={LayoutGrid} size={14} />
-                      More frames on top
-                    </Button>
-                    <Button
-                      className={ms.layoutButton}
-                      size="sm"
-                      onClick={() => applyAutoLayout('more-bottom')}
-                      title="Put the fuller row at the bottom"
-                    >
-                      <Icon icon={LayoutGrid} size={14} />
-                      More frames on bottom
-                    </Button>
-                  </>
-                )}
-                <Button
-                  className={ms.layoutButton}
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    const reverse = !reverseLayoutOrder;
-                    setReverseLayoutOrder(reverse);
-                    applyAutoLayout(layoutBias, reverse);
-                  }}
-                  title={
-                    layoutTargets.length === 2 && twoPlateLayout === 'vertical'
-                      ? 'Exchange the top and bottom frames'
-                      : 'Exchange frame positions without changing layer order'
-                  }
-                >
-                  Swap frame order
-                </Button>
-              </div>
-            </CollapseSection>
+          {layoutTargets.length >= 2 && resolution !== undefined && (
+            <FrameArrange key={arrangeKey} targets={layoutTargets} resolution={resolution} />
           )}
           {SECTION_ORDER.map((section) => {
             const descs = inSection(section);

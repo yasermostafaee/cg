@@ -684,6 +684,40 @@ export class TemplateRegistry {
     }
   }
 
+  /** The editable package recorded for the exact resident version. */
+  async readSourceForVersion(versionId: string): Promise<Buffer | null> {
+    const sha256 = this.#versions.get(versionId)?.sourceSha256;
+    const source = sha256 === undefined ? undefined : this.#sources.get(sha256);
+    if (source === undefined) return null;
+    if (source.bytes !== null) return source.bytes;
+    const directory = this.#sourcesDir();
+    if (directory === null) return null;
+    const sourcePath = path.join(directory, sha256 + '.vcg');
+    try {
+      if (!(await fsp.lstat(sourcePath)).isFile()) return null;
+      const file = await fsp.open(
+        sourcePath,
+        fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
+      );
+      try {
+        const info = await file.stat();
+        if (!info.isFile() || info.size === 0 || info.size > TEMPLATE_SOURCE_MAX_BYTES) return null;
+        const bytes = Buffer.alloc(info.size);
+        let offset = 0;
+        while (offset < bytes.length) {
+          const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, offset);
+          if (bytesRead === 0) return null;
+          offset += bytesRead;
+        }
+        return createHash('sha256').update(bytes).digest('hex') === sha256 ? bytes : null;
+      } finally {
+        await file.close();
+      }
+    } catch {
+      return null;
+    }
+  }
+
   /** The exact listed version's small preview, reading only bounded archive members. */
   async thumbnailOn(channel: number, templateId: string): Promise<SharedTemplateThumbnail | null> {
     if (this.#thumbnailReads >= 4) return null;

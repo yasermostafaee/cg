@@ -20,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { shortShaOrFallback } from '../../splash-kit/src/buildStamp.mjs';
 import { releaseFiles } from './release-files.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -51,9 +52,10 @@ export function packPlan({ root = REPO, version, outDir, guide = null }) {
     path: rel.replaceAll('/', '\\'),
     bytes: size(path.join(payload, rel)),
   }));
-  const app = (exe) => {
+  const app = (exe, extraFiles = []) => {
     const bytes = size(path.join(root, 'target', 'release', exe));
-    return { mainFiles: [{ path: exe, bytes }], installBytes: bytes };
+    const mainFiles = [{ path: exe, bytes }, ...extraFiles];
+    return { mainFiles, installBytes: mainFiles.reduce((sum, file) => sum + file.bytes, 0) };
   };
   return [
     {
@@ -72,7 +74,10 @@ export function packPlan({ root = REPO, version, outDir, guide = null }) {
       engine: path.join(root, 'target', 'release', 'bundle', 'nsis', names.control.built),
       out: path.join(outDir, names.control.built),
       ...icons('runtime'),
-      ...app('cg-control.exe'),
+      ...app('cg-control.exe', [{
+        path: 'resources\\NDI 6 Runtime.exe',
+        bytes: size(path.join(root, 'apps', 'runtime', 'src-tauri', 'resources', 'NDI 6 Runtime.exe')),
+      }]),
       guide,
     },
     {
@@ -87,7 +92,7 @@ export function packPlan({ root = REPO, version, outDir, guide = null }) {
 }
 
 /** `cg-setup-pack`'s arguments for one product. */
-export function packArgs(item, { version, setupDir }) {
+export function packArgs(item, { version, setupDir, buildId = shortShaOrFallback(REPO) }) {
   const args = [
     '--ui',
     path.join(setupDir, 'cg-setup.exe'),
@@ -102,6 +107,7 @@ export function packArgs(item, { version, setupDir }) {
   ];
   for (const f of item.mainFiles) args.push('--main', `${f.path}=${String(f.bytes)}`);
   args.push('--icon', item.icon, '--tile', item.tile);
+  if (buildId && buildId !== 'nogit') args.push('--build-id', buildId);
   if (item.guide !== null) args.push('--guide', item.guide);
   args.push('--out', item.out);
   return args;
@@ -123,8 +129,9 @@ function main(argv) {
     return 2;
   }
   fs.mkdirSync(outDir, { recursive: true });
+  const buildId = shortShaOrFallback(REPO);
   for (const item of packPlan({ version, outDir, guide })) {
-    const r = spawnSync(path.join(setupDir, 'cg-setup-pack.exe'), packArgs(item, { version, setupDir }), {
+    const r = spawnSync(path.join(setupDir, 'cg-setup-pack.exe'), packArgs(item, { version, setupDir, buildId }), {
       stdio: 'inherit',
     });
     if (r.status !== 0) {

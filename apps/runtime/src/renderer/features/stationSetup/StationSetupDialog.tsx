@@ -51,6 +51,8 @@ import { Icon } from '../../ui/Icon.js';
 import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { SelectInput } from '../../ui/SelectInput.js';
+import { TextInput } from '../../ui/TextInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import { APP_BUILD, APP_BUILD_ID, APP_VERSION } from '../../appVersion.js';
 import historyUrl from '../../../../../../docs/release/index.html?url';
@@ -93,6 +95,7 @@ import {
   stationFieldsChanged,
 } from '../firstRun/stationFields.js';
 import { serverStateWord } from '../status/StatusBar.js';
+import './station-setup-forms.css';
 
 /**
  * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
@@ -425,12 +428,34 @@ function SetupField({
   children: ReactNode;
 }): JSX.Element {
   const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  const control = isValidElement(children)
+    ? (children as ReactElement<Record<string, unknown>>)
+    : null;
+  const controlId = typeof control?.props.id === 'string' ? control.props.id : id;
+  const describedBy =
+    [
+      control?.props['aria-describedby'],
+      hint === undefined ? undefined : hintId,
+      error === null ? undefined : errorId,
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join(' ') || undefined;
+  const labelContent = (
+    <>
+      {label}
+      {optional && <span className="cg-setup-field__optional"> · optional</span>}
+    </>
+  );
   return (
     <div className="cg-setup-field" data-setup-field={id}>
-      <span className="cg-setup-field__label">
-        {label}
-        {optional && <span className="cg-setup-field__optional"> · optional</span>}
-      </span>
+      {readOnlyValue === undefined && control !== null ? (
+        <label className="cg-setup-field__label" htmlFor={controlId}>
+          {labelContent}
+        </label>
+      ) : (
+        <span className="cg-setup-field__label">{labelContent}</span>
+      )}
       {/*
         🔴 § 3(b) — the VALUE stands in for the control when this principal cannot commit.
 
@@ -442,9 +467,15 @@ function SetupField({
         <Tag className="cg-setup-field__value" data-setup-readonly="">
           {readOnlyValue}
         </Tag>
-      ) : isValidElement(children) ? (
-        cloneElement(children as ReactElement<Record<string, unknown>>, {
-          ...(error !== null ? { 'aria-invalid': true, 'aria-describedby': errorId } : {}),
+      ) : control !== null ? (
+        cloneElement(control, {
+          id: controlId,
+          'aria-describedby': describedBy,
+          ...(control.type === TextInput
+            ? { invalid: error === null ? undefined : true }
+            : error !== null
+              ? { 'aria-invalid': true }
+              : {}),
         })
       ) : (
         children
@@ -457,7 +488,9 @@ function SetupField({
       */}
       {readOnlyValue === undefined && after}
       {readOnlyValue === undefined && hint !== undefined && (
-        <p className="cg-setup-field__hint">{hint}</p>
+        <p className="cg-setup-field__hint" id={hintId}>
+          {hint}
+        </p>
       )}
       {readOnlyValue === undefined && error !== null && (
         <p className="cg-setup-field__error" id={errorId} data-field-error="">
@@ -1343,12 +1376,12 @@ export function StationSetupDialog({
         {/* §10.4 — a host is `z.string().min(1)`: a NAME or an address, so letters are legal
             and only the whitespace a paste carries is removed. What cannot be a host is said
             beside the field, not silently deleted (`fieldValue.ts`). */}
-        <input
-          className="cg-field cg-field--mono"
+        <TextInput
+          className="cg-field--mono"
           dir="ltr"
           aria-label={`${prefix} host`}
           value={draft.host}
-          onChange={(e) => set({ ...draft, host: hostValue(e.target.value) })}
+          onChange={(value) => set({ ...draft, host: hostValue(value) })}
         />
       </SetupField>
       <SetupField
@@ -1620,7 +1653,13 @@ export function StationSetupDialog({
           above the footer — which is what `modal-message-in-viewport` measures, and why that
           spec takes its overflow reading here.
         */}
-        <div style={styles.pane} className="cg-setup-pane" data-station-pane="">
+        <div
+          style={styles.pane}
+          className={
+            active === 'candidate-layers' ? 'cg-setup-pane' : 'cg-setup-pane cg-station-setup-forms'
+          }
+          data-station-pane=""
+        >
           {active === 'channel' && (
             <SetupSection id="channel">
               <ChannelSection health={health} />
@@ -1886,7 +1925,7 @@ export function StationSetupDialog({
                     </div>
                     {holdsStationAdmin && (
                       <Button
-                        variant="add"
+                        variant="primary"
                         aria-label="Add backup"
                         onClick={() => setAddingBackup(true)}
                       >
@@ -1985,13 +2024,13 @@ export function StationSetupDialog({
                             }
                           : {})}
                       >
-                        <input
-                          className="cg-field cg-field--mono"
+                        <TextInput
+                          className="cg-field--mono"
                           dir="ltr"
                           aria-label="Graphics host"
                           placeholder="Detect automatically"
                           value={serveHost}
-                          onChange={(e) => setServeHost(hostValue(e.target.value))}
+                          onChange={(value) => setServeHost(hostValue(value))}
                         />
                       </SetupField>
                       <SetupField
@@ -2046,10 +2085,16 @@ export function StationSetupDialog({
                     <>
                       <div className="cg-setup-fields">
                         <div className="cg-setup-field cg-setup-field--full">
-                          <span className="cg-setup-field__label">Strategy</span>
-                          <select
-                            className="cg-field"
+                          <label
+                            className="cg-setup-field__label"
+                            htmlFor="station-redundancy-strategy"
+                          >
+                            Strategy
+                          </label>
+                          <SelectInput
+                            id="station-redundancy-strategy"
                             aria-label="Redundancy strategy"
+                            aria-describedby="station-redundancy-strategy-hint"
                             value={strategy}
                             onChange={(e) =>
                               setStrategy(e.target.value as ConnectionConfig['strategy'])
@@ -2058,8 +2103,8 @@ export function StationSetupDialog({
                             <option value="mirror-sync">mirror-sync</option>
                             <option value="mirror-async">mirror-async</option>
                             <option value="journal-replay">journal-replay</option>
-                          </select>
-                          <p className="cg-setup-field__hint">
+                          </SelectInput>
+                          <p className="cg-setup-field__hint" id="station-redundancy-strategy-hint">
                             How the backup is kept in step while both servers are configured.
                           </p>
                         </div>
@@ -2067,8 +2112,10 @@ export function StationSetupDialog({
 
                       <div className="cg-setup-switch-row">
                         <div className="cg-setup-switch-row__text">
-                          <span className="cg-setup-field__label">Automatic failover</span>
-                          <p className="cg-setup-field__hint">
+                          <label className="cg-setup-field__label" htmlFor="station-auto-failover">
+                            Automatic failover
+                          </label>
+                          <p className="cg-setup-field__hint" id="station-auto-failover-hint">
                             Switch to the backup if the primary becomes unavailable.
                           </p>
                         </div>
@@ -2080,9 +2127,11 @@ export function StationSetupDialog({
                       */}
                         <span className="cg-switch">
                           <input
+                            id="station-auto-failover"
                             type="checkbox"
                             role="switch"
                             aria-label="Auto-failover enabled"
+                            aria-describedby="station-auto-failover-hint"
                             checked={autoFailover}
                             onChange={(e) => setAutoFailover(e.target.checked)}
                           />

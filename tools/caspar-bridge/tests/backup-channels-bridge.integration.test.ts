@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMock } from '@cg/amcp-mock';
+import { createMock, defaultHandlers } from '@cg/amcp-mock';
 import {
   inputSourceId,
   mediaSourceId,
@@ -259,6 +259,112 @@ describe('🔴 R-089 — the fake pair maps itself from the backup engine’s ow
       (await channelTwo.ask(id(), PlayoutSourcePresenceChannel.name, ask)).error,
     ).toBeDefined();
   }, 25_000);
+
+  it('shows an A-defined NDI present on B only when its own seated receiver is decoding fresh video', async () => {
+    const sender = 'STUDIO (Camera 1)';
+    const sourceId = inputSourceId('direct-ndi');
+    const p = await pairStation(scratch(), (station) => {
+      station.playout.setInputs([
+        {
+          id: 'direct-ndi',
+          name: 'Camera',
+          producer: { kind: 'ndi', source: sender },
+          format: '1080i5000',
+          available: true,
+        },
+      ]);
+      station.backup!.playout.setInputs([]);
+    });
+    const runtime = p.bridge.runtime;
+    await until(
+      async () =>
+        (await stateOf(p.admin)).backup?.channels[0]?.state === 'mapped' &&
+        runtime.sourceCatalog().sources.some((input) => input.id === sourceId),
+      'NDI catalogue and B channel',
+    );
+    const ask = (client: Client) =>
+      client.ask(id(), PlayoutSourcePresenceChannel.name, { channel: 1, sourceIds: [sourceId] });
+    const answer = async (b: string) =>
+      expect((await ask(p.admin)).payload).toMatchObject({
+        sources: { [sourceId]: { A: 'present', B: b } },
+      });
+    await answer('missing');
+    await runtime.whenServerHealthy(12_000);
+    await until(async () => runtime.health().backup?.state === 'healthy', 'both native connections');
+    const templateId = 'ndi-test';
+    runtime.templateImport(
+      {
+        ...FURNITURE,
+        templateId,
+        liveSources: {
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+          resolution: { width: 1920, height: 1080 },
+          sources: [
+            {
+              elementId: 'plate',
+              sourceId: 'camera',
+              dynamic: false,
+              rect: { x: 0, y: 0, width: 1920, height: 1080 },
+            },
+          ],
+        },
+      },
+      HTML,
+    );
+    expect(
+      runtime.setSourceAssignments({
+        assignments: [{ channel: 1, templateId, plateId: 'camera', sourceId }],
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      await runtime.loadFixed({ channel: 1, layer: 59 }, 'live-ndi', templateId, {}),
+    ).toMatchObject({ accepted: true });
+    const onAir = await runtime.take('live-ndi');
+    expect(onAir, JSON.stringify(onAir)).toMatchObject({ accepted: true });
+    const seat = runtime.liveLayers().get('live-ndi')![0]!;
+    const b = p.st.backup!.caspar;
+    expect(b.layerState({ channel: 2, layer: seat.slot.layer })?.producer).toBe('ndi');
+    const normal = defaultHandlers().get('INFO')!;
+    let frames = 30;
+    let age = 15;
+    let observed = sender;
+    let reads = 0;
+    b.setHandler('INFO', async (req, context, socket) => {
+      const reply = await normal(req, context, socket);
+      if (req.raw !== 'INFO 2' || reply.kind !== 'ok-line') return reply;
+      reads++;
+      const block = new RegExp('(<layer_' + seat.slot.layer + '>[\\s\\S]*?<foreground>)');
+      return {
+        ...reply,
+        data: reply.data.replace(
+          block,
+          '$1<ndi><name>' +
+            observed +
+            '</name></ndi><media><video-frames>' +
+            frames +
+            '</video-frames><video-age-ms>' +
+            age +
+            '</video-age-ms></media>',
+        ),
+      };
+    });
+    await answer('present');
+    expect(reads).toBeGreaterThan(0);
+    frames = 0;
+    await answer('missing');
+    frames = 90;
+    age = 501;
+    await answer('missing');
+    age = 100;
+    observed = 'STUDIO (Unrelated)';
+    await answer('missing');
+    const denied = await openClient(p.bridge);
+    const { token } = await p.st.playout.issueToken({ user: 'channelTwo' });
+    expect((await denied.authenticate(id(), token)).error).toBeUndefined();
+    const beforeDenied = reads;
+    expect((await ask(denied)).error).toBeDefined();
+    expect(reads).toBe(beforeDenied);
+  }, 35_000);
 
   it('signed in on both engines: CH 1 maps to B’s 2; its programme ticket stays logical; a take reaches B’s 2 and never B’s 1', async () => {
     const p = await pairStation();

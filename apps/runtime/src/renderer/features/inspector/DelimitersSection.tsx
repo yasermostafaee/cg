@@ -173,7 +173,7 @@ export function DelimitersSection({
           Delimiters <span className="cg-setup-count">{String(delimiters.length)}</span>
         </h3>
         {admin && (
-          <Button variant="add" aria-label="Add delimiter" onClick={() => setAdding(true)}>
+          <Button variant="primary" aria-label="Add delimiter" onClick={() => setAdding(true)}>
             <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
             Add delimiter
           </Button>
@@ -390,14 +390,13 @@ function AddDelimiterDialog({
       }}
     >
       <DialogField label="Name" id="delimiter-name" focusFirst>
-        <input
-          className="cg-field"
-          type="text"
+        <TextInput
           dir="auto"
           value={label}
-          onChange={(e) => setLabel(e.target.value)}
+          onChange={setLabel}
           aria-label="New delimiter name"
           placeholder="e.g. tab"
+          data={{ 'data-modal-autofocus': '' }}
         />
       </DialogField>
       <DialogField
@@ -411,12 +410,11 @@ function AddDelimiterDialog({
           </>
         }
       >
-        <input
-          className="cg-field cg-field--mono"
-          type="text"
+        <TextInput
+          className="cg-field--mono"
           dir="ltr"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={setValue}
           aria-label="New delimiter character"
           placeholder="e.g. \t"
         />

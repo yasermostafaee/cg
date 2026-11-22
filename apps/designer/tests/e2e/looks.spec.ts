@@ -232,3 +232,51 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   expect(html).toContain('lookGroups');
   expect(html).toContain('look-2');
 });
+
+test('authors, retains and exports the effect of each preset', async ({ app }) => {
+  await app.newProject('PresetEffects');
+  await app.showCompositions();
+  const home = (await app.page.locator('.cg-comp-row').first().innerText()).trim();
+  await app.addMultiFrameGroup();
+  for (const [index, source] of ['studio', 'guest'].entries()) {
+    await app.addLook();
+    await app.openComposition('preset-' + String(index + 1));
+    await app.addLiveSource({ x: 180, y: 150 });
+    await app.setLiveSourceId(source);
+    await app.deselect();
+    await app.openComposition(home);
+  }
+
+  const picker = app.page.getByLabel('Active preset');
+  const settings = app.inspector.getByRole('button', { name: 'Toggle Preset effect' });
+  const motion = app.inspector.getByRole('combobox', { name: 'Preset motion' });
+  const duration = app.inspector.getByRole('spinbutton', { name: 'Duration (ms)' });
+
+  await picker.selectOption('look-1');
+  await settings.click();
+  await expect(motion).toHaveValue('console');
+  await motion.selectOption('ease-in-out');
+  await app.inspector.getByRole('checkbox', { name: 'Fade' }).check();
+  await duration.fill('620');
+  await duration.press('Enter');
+  await app.inspector.getByRole('combobox', { name: 'Arriving plates' }).selectOption('down');
+  await app.inspector.getByRole('combobox', { name: 'Departing plates' }).selectOption('left');
+
+  await picker.selectOption('look-2');
+  await settings.click();
+  await expect(motion).toHaveValue('console');
+  await motion.selectOption('cut');
+  await picker.selectOption('look-1');
+  await settings.click();
+  await expect(motion).toHaveValue('ease-in-out');
+  await expect(duration).toHaveValue('620');
+  await expect(app.inspector.getByRole('combobox', { name: 'Arriving plates' })).toHaveValue(
+    'down',
+  );
+
+  const { html } = await app.exportHtml();
+  expect(html).toContain('"entered":{"mode":"animate","effect":');
+  expect(html).toContain('"durationMs":620');
+  expect(html).toContain('"enterDirection":"down"');
+  expect(html).toContain('"entered":{"mode":"cut","authored":true}');
+});

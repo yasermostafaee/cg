@@ -35,6 +35,7 @@ function fixture(): string {
   put('tools/bridge-installer/payload/licenses/node.txt', 4);
   put('target/release/cg-control.exe', 700);
   put('target/release/cg-designer.exe', 800);
+  put('apps/runtime/src-tauri/resources/NDI 6 Runtime.exe', 50);
   return scratch;
 }
 
@@ -67,7 +68,10 @@ describe('packPlan', () => {
   it('gives all three products distinct icons and tiles', () => {
     const root = fixture();
     const [bridge, control, designer] = packPlan({ root, version: '0.10.0', outDir: root });
-    expect(control?.mainFiles).toEqual([{ path: 'cg-control.exe', bytes: 700 }]);
+    expect(control?.mainFiles).toEqual([
+      { path: 'cg-control.exe', bytes: 700 },
+      { path: 'resources\\NDI 6 Runtime.exe', bytes: 50 },
+    ]);
     expect(designer?.installBytes).toBe(800);
     expect(bridge?.tile).not.toBe(control?.tile);
     expect(bridge?.icon.endsWith(path.join('setup-ui', 'assets', 'bridge-icon.ico'))).toBe(true);
@@ -77,10 +81,10 @@ describe('packPlan', () => {
 });
 
 describe('packArgs', () => {
-  it('passes the release version, every main file and the guide only when there is one', () => {
+  it('passes the release and build identity, every main file, and the optional guide', () => {
     const root = fixture();
     const bridge = must(packPlan({ root, version: '0.10.0', outDir: root, guide: 'g.pdf' })[0]);
-    const args = packArgs(bridge, { version: '0.10.0', setupDir: 'S' });
+    const args = packArgs(bridge, { version: '0.10.0', setupDir: 'S', buildId: 'a9e401b' });
     expect(args.slice(0, 10)).toEqual([
       '--ui',
       path.join('S', 'cg-setup.exe'),
@@ -95,8 +99,11 @@ describe('packArgs', () => {
     ]);
     expect(args.filter((a) => a === '--main')).toHaveLength(3);
     expect(args).toContain('cg-bridge.exe=1000');
+    expect(args[args.indexOf('--build-id') + 1]).toBe('a9e401b');
     expect(args[args.indexOf('--guide') + 1]).toBe('g.pdf');
     const control = must(packPlan({ root, version: '0.10.0', outDir: root })[1]);
-    expect(packArgs(control, { version: '0.10.0', setupDir: 'S' })).not.toContain('--guide');
+    const withoutBuild = packArgs(control, { version: '0.10.0', setupDir: 'S', buildId: 'nogit' });
+    expect(withoutBuild).not.toContain('--guide');
+    expect(withoutBuild).not.toContain('--build-id');
   });
 });

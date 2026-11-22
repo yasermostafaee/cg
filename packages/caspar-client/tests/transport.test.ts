@@ -36,6 +36,16 @@ async function nextResponse(t: AmcpTransport): Promise<ParsedAmcpResponse> {
 }
 
 describe('AmcpTransport', () => {
+  it('reports the numeric peer only while a hostname connection is established', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    transport = new AmcpTransport();
+    expect(transport.peerAddress).toBeUndefined();
+    await transport.connect('localhost.', mock.amcpPort);
+    expect(transport.peerAddress).toBe(mock.host);
+    transport.destroy();
+    expect(transport.peerAddress).toBeUndefined();
+  });
+
   it('round-trips a VERSION command and parses the 201 ack', async () => {
     const { transport } = await setup();
     const responseP = nextResponse(transport);

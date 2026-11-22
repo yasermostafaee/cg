@@ -3402,7 +3402,7 @@ async function exercisePresetSwitch(
       expect(reserved).toContainEqual(
         expect.stringMatching(/^CG 2-59 UPDATE .*presetTransitionCommit/),
       );
-      expect(reserved).toContainEqual(
+      expect(reserved).not.toContainEqual(
         expect.stringMatching(/^CG 2-59 UPDATE .*hidePresetTitlePlateIds/),
       );
       for (const easing of ['easeinquad', 'easeoutquad']) {
@@ -3658,26 +3658,20 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
     const arriving = element.querySelector<HTMLElement>(
       '[data-cg-preset-departure-key="show-duo/duo-extra"]',
     );
-    const titles = element.querySelectorAll<HTMLElement>(
-      '[data-cg-element-id="show-duo"] [data-cg-preset-title-key]',
-    );
+    const titles = arriving?.querySelectorAll<HTMLElement>('[data-cg-preset-title-key]');
     const unrelated = element.querySelector<HTMLElement>('[data-cg-element-id="unlinked-title"]');
-    if (view === null || arriving === null || unrelated === null || titles.length < 2)
+    if (view === null || arriving === null || unrelated === null || !titles?.length)
       throw new Error('Missing arriving group or its linked titles');
     const end = view.performance.now() + 2_000;
     const observe = () => {
       const opacity = Number(view.getComputedStyle(arriving).opacity);
-      if (opacity > 0 && opacity < 1) {
-        const seenTitle = element.getAttribute('data-holds-arriving-titles') === 'false';
-        element.setAttribute(
-          'data-holds-arriving-titles',
-          String(
-            !seenTitle &&
-              unrelated.getClientRects().length > 0 &&
-              [...titles].every((node) => view.getComputedStyle(node).display === 'none'),
-          ),
-        );
-      }
+      if (
+        opacity > 0 &&
+        opacity < 1 &&
+        unrelated.getClientRects().length > 0 &&
+        [...titles].every((node) => view.getComputedStyle(node).display !== 'none')
+      )
+        element.setAttribute('data-shows-fading-arrival-title', 'true');
       if (view.performance.now() < end) view.requestAnimationFrame(observe);
     };
     view.requestAnimationFrame(observe);
@@ -3690,13 +3684,13 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await expect(title('duo')).toBeVisible();
   await expect(picture('duo')).toHaveAttribute('data-source-id', 'common');
   await expect(preset('duo').locator('[data-cg-live-source="extra"]')).toBeVisible();
-  await expect(body).toHaveAttribute('data-holds-arriving-titles', 'true');
+  await expect(body).toHaveAttribute('data-shows-fading-arrival-title', 'true');
   const phases = await recordedPvwPresetPhases(body);
   const arrival = phases.find(({ look }) => look === 'duo')?.frameTransition;
   expect(arrival?.opacityArtwork).toContainEqual(
     expect.objectContaining({ key: 'show-duo/duo-extra', fromOpacity: 0, toOpacity: 1 }),
   );
-  expect(arrival?.hidePresetTitlePlateIds).toEqual(['common', 'extra']);
+  expect(arrival?.hidePresetTitlePlateIds).toBeUndefined();
   expect(
     phases.some(({ frameTransition: { frames } }) =>
       frames.some(({ toOpacity }) => toOpacity === 0),
@@ -3721,7 +3715,7 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
     if (!outgoing || !shared || !commonTitle) throw new Error('Preset test nodes missing');
     element.dataset['sawRetainedMotion'] = 'false';
     element.dataset['sawDepartingFade'] = 'false';
-    element.dataset['sawMovedHiddenTitle'] = 'false';
+    element.dataset['sawMovedVisibleTitle'] = 'false';
     const view = element.ownerDocument.defaultView;
     if (view === null) return;
     const observe = () => {
@@ -3734,10 +3728,10 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
         view.getComputedStyle(shared).zIndex !== 'auto'
       ) {
         element.dataset['sawRetainedMotion'] = 'true';
-        if (view.getComputedStyle(commonTitle).display === 'none')
-          element.dataset['sawMovedHiddenTitle'] = 'true';
+        if (view.getComputedStyle(commonTitle).display !== 'none')
+          element.dataset['sawMovedVisibleTitle'] = 'true';
       }
-      if (element.dataset['sawMovedHiddenTitle'] !== 'true') view.requestAnimationFrame(observe);
+      if (element.dataset['sawMovedVisibleTitle'] !== 'true') view.requestAnimationFrame(observe);
     };
     view.requestAnimationFrame(observe);
   });
@@ -3745,7 +3739,7 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await expect(picture('solo')).toHaveAttribute('data-source-id', 'common');
   await expect(body).toHaveAttribute('data-saw-departing-fade', 'true');
   await expect(body).toHaveAttribute('data-saw-retained-motion', 'true');
-  await expect(body).toHaveAttribute('data-saw-moved-hidden-title', 'true');
+  await expect(body).toHaveAttribute('data-saw-moved-visible-title', 'true');
   await expect(title('solo')).toBeHidden();
   await expect(unrelatedTitle).toBeVisible();
 
@@ -3946,7 +3940,7 @@ test('Auto layout follows the active preset permission and retains separate cont
     rotation: 0,
   });
   const presets = [
-    { id: 'solo', name: 'Solo', count: 1 },
+    { id: 'solo', name: 'Solo', count: 1, allowOperatorAutoLayout: true },
     { id: 'pair', name: 'Pair', count: 2, allowOperatorAutoLayout: true },
     { id: 'manual-pair', name: 'Manual pair', count: 2, allowOperatorAutoLayout: false },
     { id: 'locked-pair', name: 'Locked pair', count: 2 },
@@ -3957,6 +3951,7 @@ test('Auto layout follows the active preset permission and retains separate cont
   const node = { opacity: 1, visible: true, locked: false, zIndex: 0 };
   const scene = SceneSchema.parse({
     ...base,
+    defaultPosition: { anchor: 'top-left', offset: { x: 0, y: 0 } },
     allowOperatorAutoLayout: true,
     fields: [],
     bindings: [],
@@ -4003,7 +3998,7 @@ test('Auto layout follows the active preset permission and retains separate cont
             routeKey: plate,
             ...(id !== 'locked-pair' && {
               operatorMove: true,
-              operatorPlacement: 'proportional',
+              operatorPlacement: id === 'solo' ? 'free' : 'proportional',
             }),
             transform: transform(140 + (index % 2) * 600, 100 + index * 90, 480, 270),
           })),
@@ -4105,7 +4100,11 @@ test('Auto layout follows the active preset permission and retains separate cont
 
   await expect(visiblePlates).toHaveCount(2);
   await openLayout();
-  await expect(arrangement.locator('option')).toHaveText(['Side by side', 'Top and bottom']);
+  await expect(arrangement.locator('option')).toHaveText([
+    'Side by side',
+    'Top and bottom',
+    'Custom',
+  ]);
   await arrangement.selectOption('vertical');
   await verticalGap.fill('60');
   await swap.click();
@@ -4122,7 +4121,22 @@ test('Auto layout follows the active preset permission and retains separate cont
   ).toBeEnabled();
 
   await choosePreset('solo', 1);
-  await expect(layout).toHaveCount(0);
+  await openLayout();
+  await expect(arrangement.locator('option')).toHaveText(['Single plate', 'Custom']);
+  await layout.getByRole('checkbox', { name: 'Fill available area' }).check();
+  await layout.getByRole('textbox', { name: 'Left', exact: true }).fill('100');
+  await layout.getByRole('textbox', { name: 'Top', exact: true }).fill('50');
+  await expect
+    .poll(async () => (await read())[0])
+    .toMatchObject({ x: 100, y: 50, width: 1820, height: 1030 });
+  await arrangement.selectOption('custom');
+  await expect(layout.getByText('Move or resize the plates in PVW.')).toBeVisible();
+  await expect(
+    pvw.getByRole('button', { name: 'Edit frames in Preview', exact: true }),
+  ).toBeEnabled();
+  await expect
+    .poll(async () => (await read())[0])
+    .toMatchObject({ x: 100, y: 50, width: 1820, height: 1030 });
   await expect(refusal).toHaveCount(0);
   await choosePreset('locked-pair', 2);
   await expect(layout).toHaveCount(0);
@@ -4134,6 +4148,7 @@ test('Auto layout follows the active preset permission and retains separate cont
   await expect(arrangement.locator('option')).toHaveText([
     'More frames on top',
     'More frames on bottom',
+    'Custom',
   ]);
   await arrangement.selectOption('more-bottom');
   await expect
@@ -4161,10 +4176,21 @@ test('Auto layout follows the active preset permission and retains separate cont
 
   await choosePreset('quad', 4);
   await openLayout();
-  await expect(arrangement).toHaveCount(0);
+  await expect(arrangement.locator('option')).toHaveText(['Grid', 'Custom']);
   await expect(horizontalGap).toHaveValue('27');
   await expect(verticalGap).toHaveValue('27');
+  await horizontalGap.fill('0');
+  await verticalGap.fill('0');
+  await layout.getByRole('button', { name: 'Zero margins' }).click();
   await arrange.click();
+  await expect
+    .poll(async () => (await read()).map(({ x, y, width, height }) => [x, y, width, height]))
+    .toEqual([
+      [0, 0, 960, 540],
+      [960, 0, 960, 540],
+      [0, 540, 960, 540],
+      [960, 540, 960, 540],
+    ]);
   await expect
     .poll(async () => {
       const [a, b, c, d] = await read();
@@ -4201,7 +4227,7 @@ test('Auto layout follows the active preset permission and retains separate cont
       const placements = stackItem()?.framePlacements ?? [];
       return presets.map(({ id }) => placements.filter(({ lookId }) => lookId === id).length);
     })
-    .toEqual([0, 2, 0, 0, 3, 4]);
+    .toEqual([1, 2, 0, 0, 3, 4]);
   expect(sent()).toEqual(beforeUpdate);
 });
 

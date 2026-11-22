@@ -1,4 +1,5 @@
 import type { LiveSourceLayerRange } from '@cg/shared-ipc';
+import { PRESET_BORDER_EDGES } from './preset-border-mixer.js';
 
 /**
  * C-015 phase 6 (task 6.0) — **WHICH LAYERS a template's plates go on.**
@@ -211,4 +212,136 @@ export function allocateOrderedLiveLayers(
     for (const upper of seat.successors) upper.predecessors -= 1;
   }
   return placed === seats.length ? chosen : null;
+}
+
+/**
+ * Give fresh pictures room for temporary native strokes above them without changing
+ * their physical order. A native fallback may also need one preceding layer.
+ * Alternate seats exclusively belonging to one plate share this artwork when the depth order allows it.
+ * Keep each original coordinate where the remaining requests
+ * can still fit. Gaps are free coordinates, and can skip reserved layer numbers.
+ *
+ * The caller must keep the compact allocation if the optional gaps cannot fit.
+ * This is only for a cold Take. A resident producer cannot be moved to make room.
+ */
+export function spaceLiveLayersForBorders(
+  layers: readonly number[],
+  borderedSeatIndices: ReadonlySet<number>,
+  isAvailable: (layer: number) => boolean,
+  range: LiveSourceLayerRange,
+  edgeSlots = PRESET_BORDER_EDGES,
+  underlaySeatIndices: ReadonlySet<number> = new Set(),
+  plateBySeat: ReadonlyMap<number, string> = new Map(),
+  order: readonly LiveLayerOrder[] = [],
+  focusSeatIndices: ReadonlySet<number> = new Set(),
+): number[] | null {
+  if (borderedSeatIndices.size === 0 && underlaySeatIndices.size === 0 && focusSeatIndices.size === 0)
+    return [...layers];
+  if (!Number.isInteger(edgeSlots) || edgeSlots < 0) return null;
+
+  const seats = layers.map((layer, index) => ({ layer, index })).sort((a, b) => a.layer - b.layer);
+  const available: number[] = [];
+  for (let layer = range.start; layer <= range.end; layer += 1) {
+    if (isAvailable(layer)) available.push(layer);
+  }
+  type Group = {
+    readonly key: string | undefined;
+    readonly seats: typeof seats;
+    edges: number;
+    underlay: number;
+  };
+  const group = (previous: Group | undefined, seat: (typeof seats)[number]): Group => {
+    const edges = Math.max(
+      borderedSeatIndices.has(seat.index) ? edgeSlots : 0,
+      focusSeatIndices.has(seat.index) ? 1 : 0,
+    );
+    const underlay = underlaySeatIndices.has(seat.index) ? 1 : 0;
+    if (previous !== undefined) {
+      previous.seats.push(seat);
+      previous.edges = Math.max(previous.edges, edges);
+      previous.underlay = Math.max(previous.underlay, underlay);
+      return previous;
+    }
+    return { key: plateBySeat.get(seat.index), seats: [seat], edges, underlay };
+  };
+  const contiguous: Group[] = [];
+  for (const seat of seats) {
+    if (!available.includes(seat.layer)) return null;
+    const key = plateBySeat.get(seat.index);
+    const previous = contiguous.at(-1);
+    if (key !== undefined && key === previous?.key) group(previous, seat);
+    else contiguous.push(group(undefined, seat));
+  }
+
+  // A cold allocation may compact separated variants if every authored depth
+  // constraint survives after collapsing each plate to one group.
+  const compact: Group[] = [];
+  const byPlate = new Map<string, number>();
+  const groupOfSeat = new Map<number, number>();
+  for (const seat of seats) {
+    const key = plateBySeat.get(seat.index);
+    const existing = key === undefined ? undefined : byPlate.get(key);
+    const index = existing ?? compact.length;
+    compact[index] = group(compact[index], seat);
+    groupOfSeat.set(seat.index, index);
+    if (key !== undefined) byPlate.set(key, index);
+  }
+  const groupOrder = order.flatMap(([lower, upper]): LiveLayerOrder[] => {
+    const before = groupOfSeat.get(lower);
+    const after = groupOfSeat.get(upper);
+    return before === undefined || after === undefined || before === after ? [] : [[before, after]];
+  });
+  const arranged =
+    compact.length < contiguous.length
+      ? allocateOrderedLiveLayers(
+          {
+            range: { start: 0, end: compact.length - 1 },
+            isAvailable: () => true,
+            preferred: compact.map(() => undefined),
+          },
+          groupOrder,
+        )
+      : null;
+  const compactGroups =
+    arranged === null
+      ? null
+      : compact.toSorted((a, b) => arranged[compact.indexOf(a)]! - arranged[compact.indexOf(b)]!);
+  const safeOrder = compactGroups?.flatMap((slice) => slice.seats.map(({ index }) => index));
+  const groups =
+    compactGroups !== null &&
+    safeOrder !== undefined &&
+    order.every(([lower, upper]) => safeOrder.indexOf(lower) < safeOrder.indexOf(upper))
+      ? compactGroups
+      : contiguous;
+
+  let remaining = groups.reduce(
+    (count, group) => count + group.seats.length + group.edges + group.underlay,
+    0,
+  );
+  if (remaining > available.length) return null;
+  // A direct Focus dissolve mixes both artwork pages above their picture depths.
+  // Preserve the one-page Slide allocation even if this extra layer cannot fit.
+  const topFocusGroup = groups.findLast(({ seats }) =>
+    seats.some(({ index }) => focusSeatIndices.has(index)),
+  );
+  if (topFocusGroup?.edges === 1 && remaining < available.length) {
+    topFocusGroup.edges += 1;
+    remaining += 1;
+  }
+
+  const spaced: number[] = [];
+  let firstAvailable = 0;
+  for (const group of groups) {
+    const preferred = available.indexOf(group.seats[0]!.layer);
+    const lastAvailable = available.length - remaining + group.underlay;
+    const chosen = Math.min(lastAvailable, Math.max(preferred, firstAvailable + group.underlay));
+    for (const [offset, seat] of group.seats.entries()) {
+      const layer = available[chosen + offset];
+      if (layer === undefined) return null;
+      spaced[seat.index] = layer;
+    }
+    firstAvailable = chosen + group.seats.length + group.edges;
+    remaining -= group.seats.length + group.edges + group.underlay;
+  }
+  return spaced;
 }

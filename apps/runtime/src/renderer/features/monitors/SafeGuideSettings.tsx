@@ -1,5 +1,15 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { MoveHorizontal, MoveVertical, Plus, RotateCcw, Settings2, Trash2, X } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  Check,
+  Eye,
+  MoveHorizontal,
+  MoveVertical,
+  Plus,
+  RotateCcw,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {
   DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT,
   MAX_BROADCAST_GUIDE_FRAMES,
@@ -32,15 +42,43 @@ type GuidePercent = BroadcastGuideFrameSetting['borders'][number]['percent'];
 export function SafeGuideSettings({
   profile,
   onChange,
+  onReset,
 }: {
   profile: BroadcastGuideProfile;
   onChange: (profile: BroadcastGuideProfile) => void;
+  onReset: () => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const frameList = useRef<HTMLDivElement>(null);
+  const resetButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const returnToReset = useRef(false);
   const id = useId();
   const frames = broadcastGuideFrameSettings(profile);
   const editing = broadcastGuideEditingFrame(profile, frames);
+  useLayoutEffect(() => {
+    const list = frameList.current;
+    const selected = list?.querySelector<HTMLElement>('[aria-checked="true"]');
+    if (!list || !selected) return;
+    const frame = selected.getBoundingClientRect();
+    const bounds = list.getBoundingClientRect();
+    if (frame.top < bounds.top) list.scrollTop += frame.top - bounds.top;
+    else if (frame.bottom > bounds.bottom) list.scrollTop += frame.bottom - bounds.bottom;
+  }, [open, editing?.id, confirmReset]);
+  useEffect(() => {
+    if (confirmReset) cancelButton.current?.focus();
+    else if (returnToReset.current) {
+      returnToReset.current = false;
+      resetButton.current?.focus();
+    }
+  }, [confirmReset]);
+  const finishReset = (restore: boolean): void => {
+    if (restore) onReset();
+    returnToReset.current = true;
+    setConfirmReset(false);
+  };
   const selectFrame = (frame: BroadcastGuideFrameSetting, nextFrames = frames): void =>
     onChange({
       ...profile,
@@ -129,247 +167,314 @@ export function SafeGuideSettings({
           anchor={anchor}
           id={id}
           aria-label="Safe area settings"
-          minWidth={400}
+          minWidth={460}
           maxHeight={560}
-          onClose={() => setOpen(false)}
+          onClose={() => (confirmReset ? finishReset(false) : setOpen(false))}
         >
-          <div className="cg-safe-guide-settings">
+          <div className="cg-form cg-safe-guide-settings">
             <header className="cg-safe-guide-settings__heading">
               <strong>Safe area settings</strong>
               <Button
                 variant="icon"
                 aria-label="Close safe area settings"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                  setConfirmReset(false);
+                }}
               >
                 <Icon icon={X} size={14} />
               </Button>
             </header>
-            <span className="cg-safe-guide-settings__label">
-              Select a frame to edit. Visible frames stay on.
-            </span>
-            <div
-              className="cg-safe-guide-settings__frames"
-              role="radiogroup"
-              aria-label="Guide aspect ratio"
-              tabIndex={-1}
-              onKeyDown={(event) => {
-                const current = frames.findIndex((frame) => frame.id === editing?.id);
-                let next = current;
-                if (event.key === 'Home') next = 0;
-                else if (event.key === 'End') next = frames.length - 1;
-                else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-                  const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
-                  const step = (event.key === 'ArrowRight') !== rtl ? 1 : -1;
-                  next = (current + step + frames.length) % frames.length;
-                } else return;
-                event.preventDefault();
-                const frame = frames[next];
-                if (frame === undefined) return;
-                selectFrame(frame);
-                const buttons =
-                  event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]');
-                buttons.item(next)?.focus();
-              }}
-            >
-              {frames.map((frame) => {
-                const customIndex =
-                  frames
-                    .filter((entry) => entry.aspect === 'custom')
-                    .findIndex((entry) => entry.id === frame.id) + 1;
-                const label =
-                  frame.aspect === 'custom'
-                    ? `Custom ${String(customIndex)} (${guideFrameLabel(frame).replace('Custom ', '')})`
-                    : guideFrameLabel(frame);
-                return (
-                  <Button
-                    key={frame.id}
-                    variant={editing?.id === frame.id ? 'accent' : 'neutral'}
-                    role="radio"
-                    aria-label={label}
-                    aria-checked={editing?.id === frame.id}
-                    data-guide-aspect={frame.aspect}
-                    data-guide-frame-id={frame.id}
-                    data-frame-visible={frame.visible}
-                    tabIndex={editing?.id === frame.id ? 0 : -1}
-                    onClick={() => selectFrame(frame)}
-                  >
-                    {frame.aspect === 'custom' ? (
-                      <span className="cg-safe-guide-settings__custom-label">
-                        <span>Custom {customIndex}</span>
-                        <small>{guideFrameLabel(frame).replace('Custom ', '')}</small>
-                      </span>
-                    ) : (
-                      guideFrameLabel(frame)
-                    )}
-                    {frame.visible && (
-                      <span className="cg-safe-guide-settings__visible" aria-hidden>
-                        ●
-                      </span>
-                    )}
-                  </Button>
-                );
-              })}
-            </div>
-            <div className="cg-safe-guide-settings__heading">
-              <Button
-                variant="neutral"
-                aria-label="Add custom safe area"
-                disabled={frames.length >= MAX_BROADCAST_GUIDE_FRAMES}
-                onClick={addCustomFrame}
+            {confirmReset ? (
+              <section
+                className="cg-safe-guide-settings__confirmation"
+                role="group"
+                aria-labelledby={`${id}-question`}
               >
-                <Icon icon={Plus} size={13} /> Add custom
-              </Button>
-              {editing?.aspect === 'custom' && (
-                <Button
-                  variant="neutral"
-                  aria-label="Remove custom safe area"
-                  onClick={removeCustomFrame}
-                >
-                  <Icon icon={Trash2} size={13} /> Remove custom
-                </Button>
-              )}
-            </div>
-            {editing !== undefined && (
+                <strong id={`${id}-question`}>Restore safe area defaults?</strong>
+                <p>
+                  This resets frame ratios, borders and colors, and removes added frames and named
+                  guides from Preview and New live layout.
+                </p>
+                <div className="cg-safe-guide-settings__actions">
+                  <Button variant="neutral" ref={cancelButton} onClick={() => finishReset(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="danger" onClick={() => finishReset(true)}>
+                    Restore defaults
+                  </Button>
+                </div>
+              </section>
+            ) : (
               <>
-                {editing.aspect === 'custom' && (
-                  <CustomAspectFields
-                    key={editing.id}
-                    value={editing.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT}
-                    onChange={(customAspect) => changeFrame({ customAspect })}
-                  />
-                )}
-                <div className="cg-safe-guide-settings__heading">
-                  <label className="cg-safe-guide-settings__check" htmlFor={`${id}-frame`}>
-                    <Checkbox
-                      id={`${id}-frame`}
-                      checked={editing.visible}
-                      onChange={(visible) => changeFrame({ visible })}
-                    />{' '}
-                    Show frame
-                  </label>
-                  <div className="cg-safe-guide-settings__check">
-                    Frame color
+                <div className="cg-safe-guide-settings__scroll">
+                  <div className="cg-safe-guide-settings__legend">
+                    <strong>Edit frame</strong>
+                    <span>
+                      <Icon icon={Eye} size={13} /> Shown in preview
+                    </span>
+                  </div>
+                  <div
+                    className="cg-safe-guide-settings__frames"
+                    ref={frameList}
+                    role="radiogroup"
+                    aria-label="Guide aspect ratio"
+                    tabIndex={-1}
+                    onKeyDown={(event) => {
+                      const current = frames.findIndex((frame) => frame.id === editing?.id);
+                      let next = current;
+                      if (event.key === 'Home') next = 0;
+                      else if (event.key === 'End') next = frames.length - 1;
+                      else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                        const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+                        const step = (event.key === 'ArrowRight') !== rtl ? 1 : -1;
+                        next = (current + step + frames.length) % frames.length;
+                      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                        const columns = getComputedStyle(
+                          event.currentTarget,
+                        ).gridTemplateColumns.split(' ').length;
+                        next = Math.max(
+                          0,
+                          Math.min(
+                            frames.length - 1,
+                            current + (event.key === 'ArrowDown' ? columns : -columns),
+                          ),
+                        );
+                      } else return;
+                      event.preventDefault();
+                      const frame = frames[next];
+                      if (frame === undefined) return;
+                      selectFrame(frame);
+                      const buttons =
+                        event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+                      buttons.item(next)?.focus();
+                    }}
+                  >
+                    {frames.map((frame) => {
+                      const customIndex =
+                        frames
+                          .filter((entry) => entry.aspect === 'custom')
+                          .findIndex((entry) => entry.id === frame.id) + 1;
+                      const label =
+                        frame.aspect === 'custom'
+                          ? `Custom ${String(customIndex)} (${guideFrameLabel(frame).replace('Custom ', '')})`
+                          : guideFrameLabel(frame);
+                      return (
+                        <Button
+                          key={frame.id}
+                          variant="neutral"
+                          active={editing?.id === frame.id}
+                          role="radio"
+                          aria-label={label}
+                          aria-description={
+                            frame.visible ? 'Shown in preview' : 'Hidden in preview'
+                          }
+                          title={`${label} · ${frame.visible ? 'Shown' : 'Hidden'} in preview`}
+                          aria-checked={editing?.id === frame.id}
+                          data-guide-aspect={frame.aspect}
+                          data-guide-frame-id={frame.id}
+                          data-frame-visible={frame.visible}
+                          tabIndex={editing?.id === frame.id ? 0 : -1}
+                          onClick={() => selectFrame(frame)}
+                        >
+                          {editing?.id === frame.id && (
+                            <span className="cg-safe-guide-settings__selected">
+                              <Icon icon={Check} size={12} />
+                            </span>
+                          )}
+                          {frame.aspect === 'custom' ? (
+                            <span className="cg-safe-guide-settings__custom-label">
+                              <span>Custom {customIndex}</span>
+                              <small>{guideFrameLabel(frame).replace('Custom ', '')}</small>
+                            </span>
+                          ) : (
+                            guideFrameLabel(frame)
+                          )}
+                          {frame.visible && (
+                            <span className="cg-safe-guide-settings__visible" aria-hidden>
+                              <Icon icon={Eye} size={12} />
+                            </span>
+                          )}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <div className="cg-safe-guide-settings__actions">
+                    <Button
+                      variant="add"
+                      aria-label="Add custom safe area"
+                      disabled={frames.length >= MAX_BROADCAST_GUIDE_FRAMES}
+                      onClick={addCustomFrame}
+                    >
+                      <Icon icon={Plus} size={13} /> Add custom
+                    </Button>
+                    {editing?.aspect === 'custom' && (
+                      <Button
+                        variant="danger"
+                        aria-label="Remove custom safe area"
+                        onClick={removeCustomFrame}
+                      >
+                        <Icon icon={Trash2} size={13} /> Remove custom
+                      </Button>
+                    )}
+                  </div>
+                  {editing !== undefined && (
+                    <>
+                      {editing.aspect === 'custom' && (
+                        <CustomAspectFields
+                          key={editing.id}
+                          value={editing.customAspect ?? DEFAULT_BROADCAST_GUIDE_CUSTOM_ASPECT}
+                          onChange={(customAspect) => changeFrame({ customAspect })}
+                        />
+                      )}
+                      <div className="cg-safe-guide-settings__heading">
+                        <label className="cg-safe-guide-settings__check" htmlFor={`${id}-frame`}>
+                          <Checkbox
+                            id={`${id}-frame`}
+                            checked={editing.visible}
+                            onChange={(visible) => changeFrame({ visible })}
+                          />{' '}
+                          Show frame
+                        </label>
+                        <label
+                          className="cg-form-field cg-form-field--inline"
+                          htmlFor={`${id}-frame-color`}
+                        >
+                          Frame color
+                          <ColorInput
+                            appearance="swatch"
+                            id={`${id}-frame-color`}
+                            aria-label="Frame color"
+                            value={editing.color}
+                            onChange={(color) => changeFrame({ color })}
+                          />
+                        </label>
+                      </div>
+                      <div
+                        className="cg-safe-guide-settings__borders"
+                        role="group"
+                        aria-label="Safe area borders"
+                      >
+                        {editing.borders.map((border) => (
+                          <div key={border.percent} className="cg-safe-guide-settings__heading">
+                            <label className="cg-safe-guide-settings__check">
+                              <Checkbox
+                                aria-label={`Show ${GUIDE_BORDER_LABELS[border.percent]}`}
+                                checked={border.visible}
+                                onChange={(visible) => changeBorder(border.percent, { visible })}
+                              />
+                              {GUIDE_BORDER_LABELS[border.percent]}
+                            </label>
+                            <div className="cg-safe-guide-settings__colors">
+                              <ColorInput
+                                appearance="swatch"
+                                aria-label={`${GUIDE_BORDER_LABELS[border.percent]} color`}
+                                value={border.color ?? editing.color}
+                                onChange={(color) => changeBorder(border.percent, { color })}
+                              />
+                              <Button
+                                variant="icon"
+                                aria-label={`Use frame color for ${GUIDE_BORDER_LABELS[border.percent]}`}
+                                title="Use frame color"
+                                disabled={border.color === undefined}
+                                onClick={() => inheritBorder(border.percent)}
+                              >
+                                <Icon icon={RotateCcw} size={13} />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <details className="cg-safe-guide-settings__about">
+                    <summary>About safe areas</summary>
+                    <p>
+                      100% marks the full ratio frame. EBU R95 defines Action 93% and Graphics 90%
+                      for 16:9. Other ratios use proportional guides; 80% is an additional guide.
+                    </p>
+                    <p>
+                      Frame visibility, borders and colors are independent. Guides appear only in
+                      Preview and New live layout; they never enter programme output.
+                    </p>
+                  </details>
+                  <div className="cg-safe-guide-settings__heading">
+                    <strong>Named guides</strong>
+                    <span className="cg-safe-guide-settings__label">
+                      {profile.lines.length}/{MAX_BROADCAST_GUIDE_LINES}
+                    </span>
+                  </div>
+                  <span className="cg-safe-guide-settings__label">
+                    Named guides use the selected frame ratio.
+                  </span>
+                  <label
+                    className="cg-form-field cg-form-field--inline"
+                    htmlFor={`${id}-guide-color`}
+                  >
+                    Named guide color
                     <ColorInput
-                      aria-label="Frame color"
-                      className="cg-field cg-safe-guide-settings__color"
-                      value={editing.color}
-                      onChange={(color) => changeFrame({ color })}
+                      appearance="swatch"
+                      id={`${id}-guide-color`}
+                      aria-label="Guide color"
+                      value={profile.color}
+                      onChange={(color) => onChange({ ...profile, color })}
                     />
+                  </label>
+                  <div className="cg-safe-guide-settings__add">
+                    <Button
+                      variant="neutral"
+                      aria-label="Add horizontal guide"
+                      disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
+                      onClick={() => add('y')}
+                    >
+                      <Icon icon={Plus} size={13} />
+                      <Icon icon={MoveHorizontal} size={14} /> Horizontal
+                    </Button>
+                    <Button
+                      variant="neutral"
+                      aria-label="Add vertical guide"
+                      disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
+                      onClick={() => add('x')}
+                    >
+                      <Icon icon={Plus} size={13} />
+                      <Icon icon={MoveVertical} size={14} /> Vertical
+                    </Button>
+                  </div>
+                  <div className="cg-safe-guide-settings__lines">
+                    {profile.lines.map((line, index) => (
+                      <GuideRow
+                        key={line.id}
+                        line={line}
+                        index={index + 1}
+                        color={broadcastGuideColor(profile, line)}
+                        onChange={(patch) => changeLine(line.id, patch)}
+                        onInherit={() =>
+                          onChange({
+                            ...profile,
+                            lines: profile.lines.map((entry) => {
+                              if (entry.id !== line.id) return entry;
+                              const { color, ...inherited } = entry;
+                              return color === undefined ? entry : inherited;
+                            }),
+                          })
+                        }
+                        onRemove={() =>
+                          onChange({
+                            ...profile,
+                            lines: profile.lines.filter((entry) => entry.id !== line.id),
+                          })
+                        }
+                      />
+                    ))}
                   </div>
                 </div>
-                <div
-                  className="cg-safe-guide-settings__borders"
-                  role="group"
-                  aria-label="Safe area borders"
-                >
-                  {editing.borders.map((border) => (
-                    <div key={border.percent} className="cg-safe-guide-settings__heading">
-                      <label className="cg-safe-guide-settings__check">
-                        <Checkbox
-                          aria-label={`Show ${GUIDE_BORDER_LABELS[border.percent]}`}
-                          checked={border.visible}
-                          onChange={(visible) => changeBorder(border.percent, { visible })}
-                        />
-                        {GUIDE_BORDER_LABELS[border.percent]}
-                      </label>
-                      <div className="cg-safe-guide-settings__colors">
-                        <ColorInput
-                          aria-label={`${GUIDE_BORDER_LABELS[border.percent]} color`}
-                          className="cg-field cg-safe-guide-settings__color"
-                          value={border.color ?? editing.color}
-                          onChange={(color) => changeBorder(border.percent, { color })}
-                        />
-                        <Button
-                          variant="icon"
-                          aria-label={`Use frame color for ${GUIDE_BORDER_LABELS[border.percent]}`}
-                          title="Use frame color"
-                          disabled={border.color === undefined}
-                          onClick={() => inheritBorder(border.percent)}
-                        >
-                          <Icon icon={RotateCcw} size={13} />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <footer className="cg-safe-guide-settings__footer">
+                  <Button variant="ghost" ref={resetButton} onClick={() => setConfirmReset(true)}>
+                    <Icon icon={RotateCcw} size={13} /> Restore defaults…
+                  </Button>
+                </footer>
               </>
             )}
-            <details className="cg-safe-guide-settings__about">
-              <summary>About safe areas</summary>
-              <p>
-                100% marks the full ratio frame. EBU R95 defines Action 93% and Graphics 90% for
-                16:9. Other ratios use proportional guides; 80% is an additional guide.
-              </p>
-              <p>
-                Frame visibility, borders and colors are independent. Guides appear only in Preview
-                and New live layout; they never enter programme output.
-              </p>
-            </details>
-            <div className="cg-safe-guide-settings__heading">
-              <strong>Named guides</strong>
-              <span className="cg-safe-guide-settings__label">
-                {profile.lines.length}/{MAX_BROADCAST_GUIDE_LINES}
-              </span>
-            </div>
-            <span className="cg-safe-guide-settings__label">
-              Named guides use the selected frame ratio.
-            </span>
-            <div className="cg-safe-guide-settings__heading">
-              Named guide color
-              <ColorInput
-                aria-label="Guide color"
-                className="cg-field cg-safe-guide-settings__color"
-                value={profile.color}
-                onChange={(color) => onChange({ ...profile, color })}
-              />
-            </div>
-            <div className="cg-safe-guide-settings__add">
-              <Button
-                variant="neutral"
-                aria-label="Add horizontal guide"
-                disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
-                onClick={() => add('y')}
-              >
-                <Icon icon={Plus} size={13} />
-                <Icon icon={MoveHorizontal} size={14} /> Horizontal
-              </Button>
-              <Button
-                variant="neutral"
-                aria-label="Add vertical guide"
-                disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
-                onClick={() => add('x')}
-              >
-                <Icon icon={Plus} size={13} />
-                <Icon icon={MoveVertical} size={14} /> Vertical
-              </Button>
-            </div>
-            <div className="cg-safe-guide-settings__lines">
-              {profile.lines.map((line, index) => (
-                <GuideRow
-                  key={line.id}
-                  line={line}
-                  index={index + 1}
-                  color={broadcastGuideColor(profile, line)}
-                  onChange={(patch) => changeLine(line.id, patch)}
-                  onInherit={() =>
-                    onChange({
-                      ...profile,
-                      lines: profile.lines.map((entry) => {
-                        if (entry.id !== line.id) return entry;
-                        const { color, ...inherited } = entry;
-                        return color === undefined ? entry : inherited;
-                      }),
-                    })
-                  }
-                  onRemove={() =>
-                    onChange({
-                      ...profile,
-                      lines: profile.lines.filter((entry) => entry.id !== line.id),
-                    })
-                  }
-                />
-              ))}
-            </div>
           </div>
         </Popover>
       )}
@@ -403,9 +508,13 @@ function CustomAspectFields({
     }
   };
   return (
-    <div className="cg-safe-guide-settings__ratio" role="group" aria-label="Custom reference ratio">
-      <label htmlFor={`${id}-width`}>
-        <span className="cg-safe-guide-settings__label">Width</span>
+    <div
+      className="cg-form-grid cg-safe-guide-settings__ratio"
+      role="group"
+      aria-label="Custom reference ratio"
+    >
+      <label className="cg-form-field" htmlFor={`${id}-width`}>
+        <span>Width</span>
         <NumericInput
           className="cg-field"
           id={`${id}-width`}
@@ -422,8 +531,8 @@ function CustomAspectFields({
           }}
         />
       </label>
-      <label htmlFor={`${id}-height`}>
-        <span className="cg-safe-guide-settings__label">Height</span>
+      <label className="cg-form-field" htmlFor={`${id}-height`}>
+        <span>Height</span>
         <NumericInput
           className="cg-field"
           id={`${id}-height`}
@@ -470,60 +579,65 @@ function GuideRow({
   const label = `Guide ${String(index)}`;
   return (
     <div className="cg-safe-guide-settings__line" data-custom-guide-row={line.id}>
-      <Checkbox
-        aria-label={`Show ${label.toLowerCase()}`}
-        checked={line.visible}
-        onChange={(visible) => onChange({ visible })}
-      />
-      <span
-        className="cg-safe-guide-settings__axis"
-        title={line.axis === 'y' ? 'Horizontal' : 'Vertical'}
-      >
-        <Icon icon={line.axis === 'y' ? MoveHorizontal : MoveVertical} size={14} />
-      </span>
-      <TextInput
-        aria-label={`${label} name`}
-        value={line.name}
-        onChange={(name) => onChange({ name })}
-        maxLength={80}
-        dir="auto"
-      />
-      <div className="cg-safe-guide-settings__position">
-        <NumericInput
-          className="cg-field"
-          aria-label={`${label} position percent`}
-          value={position}
-          decimal
-          maxLength={8}
-          aria-invalid={!valid}
-          onValueChange={setPosition}
-          onBlur={savePosition}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') savePosition();
-          }}
+      <div className="cg-safe-guide-settings__line-heading">
+        <Checkbox
+          aria-label={`Show ${label.toLowerCase()}`}
+          checked={line.visible}
+          onChange={(visible) => onChange({ visible })}
         />
-        <span>%</span>
-      </div>
-      <div className="cg-safe-guide-settings__colors">
-        <ColorInput
-          aria-label={`${label} color`}
-          className="cg-field cg-safe-guide-settings__color"
-          value={color}
-          onChange={(color) => onChange({ color })}
-        />
-        <Button
-          variant="icon"
-          aria-label={`Use guide color for ${label.toLowerCase()}`}
-          title="Use guide color"
-          disabled={line.color === undefined}
-          onClick={onInherit}
+        <span
+          className="cg-safe-guide-settings__axis"
+          title={line.axis === 'y' ? 'Horizontal' : 'Vertical'}
         >
-          <Icon icon={RotateCcw} size={13} />
+          <Icon icon={line.axis === 'y' ? MoveHorizontal : MoveVertical} size={14} />
+        </span>
+        <TextInput
+          className="cg-safe-guide-settings__line-name"
+          aria-label={`${label} name`}
+          value={line.name}
+          onChange={(name) => onChange({ name })}
+          maxLength={80}
+          dir="auto"
+        />
+      </div>
+      <div className="cg-safe-guide-settings__line-controls">
+        <div className="cg-safe-guide-settings__position">
+          <NumericInput
+            className="cg-field"
+            aria-label={`${label} position percent`}
+            value={position}
+            decimal
+            maxLength={8}
+            aria-invalid={!valid}
+            onValueChange={setPosition}
+            onBlur={savePosition}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') savePosition();
+            }}
+          />
+          <span>%</span>
+        </div>
+        <div className="cg-safe-guide-settings__colors">
+          <ColorInput
+            appearance="swatch"
+            aria-label={`${label} color`}
+            value={color}
+            onChange={(color) => onChange({ color })}
+          />
+          <Button
+            variant="icon"
+            aria-label={`Use guide color for ${label.toLowerCase()}`}
+            title="Use guide color"
+            disabled={line.color === undefined}
+            onClick={onInherit}
+          >
+            <Icon icon={RotateCcw} size={13} />
+          </Button>
+        </div>
+        <Button variant="icon" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
+          <Icon icon={Trash2} size={14} />
         </Button>
       </div>
-      <Button variant="icon" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
-        <Icon icon={Trash2} size={14} />
-      </Button>
     </div>
   );
 }

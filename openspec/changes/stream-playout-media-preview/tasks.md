@@ -1,5 +1,11 @@
 # Tasks
 
+- [x] Handle the Playout .22 queued, retry and notRequired manifest states in CG Bridge.
+      The existing 46 focused integration checks cover queue polling, retry deadlines,
+      same-owner B stream access and guarded direct playback.
+- [ ] Verify first Play and Seek for Islands and Mountains from a separate CG Control
+      workstation with both station engines on .22.
+
 - [x] Separate explicit row Play from selection; retain one request through preparation and resume the existing player without resetting seek/listening.
 - [x] Verify pending Pause/Stop/foreground/source/tab cancellation and native one-click Grid/List playback alongside the existing transport and binding guards: 78 focused tests, Runtime typecheck/scoped lint/build, and 4 fresh Edge cases passed, including actual advancing Range video in both views after delayed proxy preparation.
 

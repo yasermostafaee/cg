@@ -84,9 +84,12 @@ describe('Auto layout frame eligibility', () => {
     expect(frameAutoLayoutAvailability(live, 'pair')).toEqual({ kind: 'hidden' });
   });
 
-  it('uses only the active preset and returns its frames in declaration order', () => {
+  it('arranges a single plate and returns the selected preset in declaration order', () => {
     const live = carrier();
-    expect(frameAutoLayoutAvailability(live, undefined)).toEqual({ kind: 'hidden' });
+    expect(frameAutoLayoutAvailability(live, undefined)).toMatchObject({
+      kind: 'eligible',
+      frames: [{ id: 'left', target: { frameKey: 'solo/left' } }],
+    });
     expect(frameAutoLayoutAvailability(live, 'pair')).toEqual({
       kind: 'eligible',
       frames: [

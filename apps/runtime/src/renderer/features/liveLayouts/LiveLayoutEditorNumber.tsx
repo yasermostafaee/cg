@@ -24,7 +24,7 @@ export function LiveLayoutEditorNumber({
   const [typed, setTyped] = useState<string>();
   const typing = useRef(false);
   return (
-    <label>
+    <label className="cg-form-field">
       {label}
       <NumericInput
         className="cg-field"

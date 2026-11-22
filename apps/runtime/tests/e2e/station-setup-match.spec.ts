@@ -150,21 +150,7 @@ test('§1 — the frame AND the rail are one size on every tab, and clamp to the
   }
 });
 
-/**
- * 🔴 DEFECT 1 — **THE CARD IS RAISED OFF THE GROUND, NOT SUNK INTO IT.**
- *
- * The reference paints a `#191e25` card on a `#15191f` frame — one step LIGHTER. The app
- * painted `#0b1017` (`--r-surface-sunken`, the darkest value in the whole palette) on
- * `#141b25`, so the depth was inverted and every box in the dialog read as a hole.
- *
- * ⚠ Asserted as a RELATION first and as values second. The relation is the defect — a card
- * that is darker than its own dialog — and it is what survives a later retune of either value;
- * the exact numbers are then pinned so the relation cannot be satisfied by two near-identical
- * greys.
- */
-test('§2 — a card is lighter than the dialog it sits on, and the table bands are the drawing’s', async ({
-  app,
-}) => {
+test('§2 — Station setup separates its MAM surfaces and keeps the table bands', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
@@ -184,21 +170,18 @@ test('§2 — a card is lighter than the dialog it sits on, and the table bands 
     };
   });
 
-  // 🔴 THE RELATION — the defect, stated the way the owner saw it.
-  expect(
+  expect(luminance(paint.rail), 'the rail is darker than the card').toBeLessThan(
     luminance(paint.card),
-    'a card must sit ABOVE the dialog ground, not below it',
-  ).toBeGreaterThan(luminance(paint.frame));
-  // …and the rail is the one surface that IS below it, which is what makes it read as a side.
-  expect(luminance(paint.rail), 'the rail is the sunken column').toBeLessThan(
+  );
+  expect(luminance(paint.card), 'the card follows the darker MAM surface').toBeLessThan(
     luminance(paint.frame),
   );
 
   // …then the measured values, so the relation cannot be met by two greys a hair apart.
-  expect(paint.frame).toBe('rgb(21, 25, 31)');
-  expect(paint.card).toBe('rgb(25, 30, 37)');
-  expect(paint.rail).toBe('rgb(17, 21, 27)');
-  expect(paint.cardLine).toBe('rgb(43, 50, 60)');
+  expect(paint.frame).toBe('rgb(24, 29, 35)');
+  expect(paint.card).toBe('rgb(20, 23, 29)');
+  expect(paint.rail).toBe('rgb(14, 18, 22)');
+  expect(paint.cardLine).toBe('rgb(38, 44, 51)');
   expect(paint.radius).toBe('12px');
   /*
     A card HEAD has no ground of its own — it is the card's, separated by a rule. Asserted
@@ -503,8 +486,8 @@ test('§8 — every add/edit/remove is the same 480 frame, with a verb that name
   */
   expect(addRecord.size).toBe('record');
   expect(addRecord.w, 'the reference’s `.sub-dialog` — min(480, 100vw − 32)').toBe(480);
-  expect(addRecord.bg, 'the family’s own ground').toBe('rgb(21, 25, 31)');
-  expect(addRecord.footBg, 'its footer band, a step under the body').toBe('rgb(18, 23, 30)');
+  expect(addRecord.bg, 'the MAM overlay ground').toBe('rgb(24, 29, 35)');
+  expect(addRecord.footBg, 'the footer shares the overlay ground').toBe(addRecord.bg);
   /* A SUB layer lays the lighter scrim, so the dialog it was opened from stays visible.
      `SETTINGS-POLISH-04` §7 — the reference's `.sub-dialog::backdrop{background:#0306099e}`,
      whose `9e` is 0.62: still lighter than the base scrim's 0.76, which is the role's whole

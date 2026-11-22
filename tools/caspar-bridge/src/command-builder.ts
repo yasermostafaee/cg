@@ -524,6 +524,12 @@ export class CommandBuilder {
    * method ever disagree again, `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts`
    * is the test that fails: it asserts BOTH halves against the SAME value.
    */
+  /** A solid, quiet native producer for one preset border edge. */
+  playSolidColor(slot: CommandSlot, rgb: string): string {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(rgb)) throw new Error('Invalid native border colour');
+    return `PLAY ${target(slot)} ${rgb}`;
+  }
+
   playSource(
     slot: CommandSlot,
     producer: SourceProducer,

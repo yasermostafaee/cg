@@ -10,13 +10,13 @@ import {
 import type { CSSProperties, Ref } from 'react';
 import type { CgPage, FieldValues, FitRect, Position, Raster } from '@cg/shared-schema';
 import {
+  authoredLookEffect,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutSoloTarget,
   pageMediaPath,
   positionQuery,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
-  CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   withCgControl,
   type ControlLiveLayout,
   type FrameTransitionPhase,
@@ -57,6 +57,7 @@ import {
   frameTransitionPreference,
 } from '../inspector/frameTransitionPreference.js';
 import { effectiveInputTransition } from '../inspector/inputTransitionPreference.js';
+import { rowEffectOverrides } from '../inspector/rowEffectOverrides.js';
 import {
   rehearsalPlacementPhases,
   rehearsalPresetPlan,
@@ -563,7 +564,11 @@ export function RehearsalFrame({
       controlLiveLayout === undefined
         ? undefined
         : effectiveLayoutEffects(itemId, controlLiveLayout);
-    const effect = layoutEffects?.focus ?? frameTransitionPreference();
+    const effect =
+      layoutEffects?.focus ??
+      rowEffectOverrides(itemId)?.preset ??
+      authoredLookEffect(look?.entered) ??
+      frameTransitionPreference();
     const canAnimatePreset =
       visible &&
       playing &&
@@ -636,8 +641,8 @@ export function RehearsalFrame({
             },
             effect,
             presetFramePeriodMs,
-            controlLiveLayout === undefined && html.includes(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER),
             liveSources.resolution,
+            controlLiveLayout,
           )
         : undefined;
     if (plan === undefined) {
@@ -682,7 +687,7 @@ export function RehearsalFrame({
         commit(plan.prepareEnter);
         return sendFramePhase(update, plan.enter);
       }
-      // Enter the new preset and hold its titles in the same page update.
+      // Enter the new preset with its own authored graphics.
       commit(plan.enter);
       return plan.enter?.durationMs ?? 0;
     });

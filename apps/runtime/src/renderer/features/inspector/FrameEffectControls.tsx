@@ -82,7 +82,7 @@ export function FrameEffectControls({
 }: {
   disabled: boolean;
   label?: string;
-  preset?: { itemId: string; value: FrameTransition } | undefined;
+  preset?: { itemId: string; value: FrameTransition; defaultLabel?: string } | undefined;
 }): JSX.Element {
   const controlId = useId();
   const consoleDefault = useFrameTransitionPreference();
@@ -123,7 +123,9 @@ export function FrameEffectControls({
           }}
         >
           {preset !== undefined && (
-            <option value="default">Layout default ({MOTION_LABELS[preset.value.motion]})</option>
+            <option value="default">
+              {preset.defaultLabel ?? 'Layout default'} ({MOTION_LABELS[preset.value.motion]})
+            </option>
           )}
           {FrameTransitionSchema.shape.motion.options.map((value) => (
             <option key={value} value={value}>

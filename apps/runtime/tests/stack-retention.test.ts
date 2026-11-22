@@ -744,6 +744,7 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     activeLookId: 'solo',
     lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
     frozenAssignment: { 'l-1': 'studio-1' },
+    foregroundLayer: 79,
     previewPlateCrops: [{ token: 'a'.repeat(64), focus: { x: 0.25, y: 0.5 } }],
     framePlacements: [
       {

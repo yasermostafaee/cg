@@ -21,10 +21,13 @@ function forSource(presence: SourcePresenceView | null, sourceId: string | null 
 export function sourcePresenceDescription(
   presence: SourcePresenceView | null,
   sourceId: string | null | undefined,
+  originDescription?: string,
 ): string | undefined {
-  return forSource(presence, sourceId)
-    ?.map(({ label }) => label)
-    .join('. ');
+  const servers = forSource(presence, sourceId);
+  if (servers === null) return undefined;
+  const availability = servers.map(({ label }) => label);
+  if (originDescription !== undefined) availability.push(originDescription);
+  return availability.join('. ');
 }
 
 export function SourcePresenceBadges({
@@ -32,17 +35,19 @@ export function SourcePresenceBadges({
   sourceId,
   accessible = true,
   previewEngine,
+  originDescription = previewEngine === undefined
+    ? undefined
+    : `Preview from server ${previewEngine}`,
 }: {
   presence: SourcePresenceView | null;
   sourceId: string | null | undefined;
   accessible?: boolean;
   previewEngine?: PreviewEngine | undefined;
+  originDescription?: string | undefined;
 }): JSX.Element | null {
   const servers = forSource(presence, sourceId);
   if (servers === null) return null;
-  const label =
-    servers.map(({ label: state }) => state).join('. ') +
-    (previewEngine === undefined ? '' : `. Preview from server ${previewEngine}`);
+  const label = sourcePresenceDescription(presence, sourceId, originDescription);
   return (
     <span
       className="cg-source-presence"
@@ -58,7 +63,11 @@ export function SourcePresenceBadges({
           data-source-presence-server={server}
           data-source-presence-state={state}
           data-source-preview-provider={previewEngine === server ? '' : undefined}
-          title={previewEngine === server ? `${title}. Preview from server ${server}` : title}
+          title={
+            previewEngine === server && originDescription !== undefined
+              ? `${title}. ${originDescription}`
+              : title
+          }
         >
           {server}
         </span>

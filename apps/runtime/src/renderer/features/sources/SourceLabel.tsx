@@ -6,6 +6,7 @@ import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
 import { InputAudioMeter } from './InputAudioMeter.js';
+import type { PreviewEngine, PreviewOriginChanged } from './usePreviewOrigins.js';
 import { SourcePresenceBadges } from './SourcePresenceBadges.js';
 import {
   currentSourceCatalog,
@@ -86,6 +87,9 @@ export function SourceLabel({
   meterChannel,
   presence = null,
   presenceAccessible = true,
+  previewEngine,
+  originDescription,
+  onMeterEngineChange,
 }: {
   /** The bound catalogue id. Empty or unknown renders {@link fallback} — never the id. */
   sourceId: string | null | undefined;
@@ -96,6 +100,9 @@ export function SourceLabel({
   meterChannel?: number | undefined;
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
+  previewEngine?: PreviewEngine | undefined;
+  originDescription?: string | undefined;
+  onMeterEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const source = labelledSource(sourceId);
@@ -124,19 +131,26 @@ export function SourceLabel({
         the Playout shows it, even when it starts with a Latin word (`NDI کانالِ ۱ (APASAI)`). This
         box sizes to its text, so its direction also puts a cut name's ellipsis at the name's END.
       */}
-      <bdi className="cg-source-label__name" dir={directionOf(source.name)}>
+      <bdi className="cg-source-label__name" dir={directionOf(source.name)} data-field-overflow="">
         {source.name}
       </bdi>
       {media && meta && source.durationMs !== undefined && (
         <span className="cg-source-label__meta">{formatMediaDuration(source.durationMs)}</span>
       )}
       {!media && sourceId && meterChannel !== undefined && (
-        <InputAudioMeter sourceId={sourceId} channel={meterChannel} name={source.name} />
+        <InputAudioMeter
+          sourceId={sourceId}
+          channel={meterChannel}
+          name={source.name}
+          onMeterEngineChange={onMeterEngineChange}
+        />
       )}
       <SourcePresenceBadges
         presence={presence}
         sourceId={sourceId}
         accessible={presenceAccessible}
+        previewEngine={previewEngine}
+        originDescription={originDescription}
       />
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>

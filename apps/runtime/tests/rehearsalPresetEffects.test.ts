@@ -1,4 +1,10 @@
-import { FrameTransitionPhaseSchema, type LiveSourceRect } from '@cg/shared-schema';
+import {
+  CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  ControlLiveLayoutSchema,
+  FrameTransitionPhaseSchema,
+  controlLiveLayoutFocusLookId,
+  type LiveSourceRect,
+} from '@cg/shared-schema';
 import type { TemplateLook } from '@cg/shared-ipc';
 import { describe, expect, it } from 'vitest';
 import { rehearsalPresetPlan } from '../src/renderer/features/monitors/rehearsalPresetEffects.js';
@@ -42,7 +48,6 @@ describe('PVW preset arrivals', () => {
       after,
       { ...effect, exitDirection: 'up', enterDirection: 'right' },
       40,
-      false,
       raster,
     );
 
@@ -86,12 +91,14 @@ describe('PVW preset arrivals', () => {
         },
       ],
     });
-    for (const phase of [...plan!.exit, plan!.prepareEnter, plan!.enter])
+    for (const phase of [...plan!.exit, plan!.prepareEnter, plan!.enter]) {
       expect(FrameTransitionPhaseSchema.safeParse(phase).success).toBe(true);
+      expect(phase?.hidePresetTitlePlateIds).toBeUndefined();
+    }
   });
 
   it('keeps a fade-only arrival free of geometry changes and preparation updates', () => {
-    const plan = rehearsalPresetPlan(before, after, effect, 40, false, raster);
+    const plan = rehearsalPresetPlan(before, after, effect, 40, raster);
     expect(plan?.prepareEnter).toBeUndefined();
     expect(plan?.enter).toMatchObject({
       frames: [],
@@ -104,5 +111,61 @@ describe('PVW preset arrivals', () => {
         },
       ],
     });
+  });
+
+  it('fades a retained title in while its border fades out on return from Focus', () => {
+    const layout = ControlLiveLayoutSchema.parse({
+      id: 'layout',
+      name: 'Panel',
+      resolution: raster,
+      frameRate: 25,
+      frames: [
+        { id: 'host', title: 'Host' },
+        { id: 'guest', title: 'Guest' },
+      ],
+      presets: [
+        {
+          id: 'panel',
+          name: 'Panel',
+          frameIds: ['host', 'guest'],
+          arrangement: 'side-by-side',
+          horizontalGap: 0,
+          verticalGap: 0,
+          reverse: false,
+          hiddenTitles: [],
+          hiddenFocusTitles: ['host'],
+          hiddenBorders: ['host'],
+        },
+      ],
+      defaultPresetId: 'panel',
+      background: { kind: 'none' },
+      effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+    });
+    const focus = preset(controlLiveLayoutFocusLookId('panel', 'host'), {
+      host: { x: 0, y: 0, ...raster },
+    });
+    const panel = preset('panel', { host: left, guest: right });
+
+    for (const [from, to, start, end] of [
+      [focus, panel, 0, 1],
+      [panel, focus, 1, 0],
+    ] as const) {
+      const plan = rehearsalPresetPlan(from, to, effect, 40, raster, layout);
+      const movement = plan?.exit.filter(
+        ({ decorationOpacity }) => decorationOpacity !== undefined,
+      );
+      expect(movement?.[0]?.decorationOpacity?.[0]).toMatchObject({
+        plateId: 'host',
+        title: { fromOpacity: start },
+        border: { fromOpacity: 1 - start },
+      });
+      expect(movement?.at(-1)?.decorationOpacity?.[0]).toMatchObject({
+        title: { toOpacity: end },
+        border: { toOpacity: 1 - end },
+      });
+      expect(movement?.every((phase) => FrameTransitionPhaseSchema.safeParse(phase).success)).toBe(
+        true,
+      );
+    }
   });
 });

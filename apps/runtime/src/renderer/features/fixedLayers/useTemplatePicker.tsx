@@ -39,6 +39,7 @@ import {
 import type { AggregatedFields } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { TextInput } from '../../ui/TextInput.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -1525,16 +1526,16 @@ export function useTemplatePicker(
             where it is: the tools row still reaches the divider, and the one door still ends it.
           */}
               <div className="cg-tpl-tools" data-template-tools="">
-                <label className="cg-tpl-search">
+                <label className="cg-tpl-search" htmlFor="template-search">
                   <Icon icon={Search} size={16} />
-                  <input
+                  <TextInput
+                    id="template-search"
                     type="search"
-                    className="cg-field"
                     placeholder="Search templates…"
                     aria-label="Search templates"
                     autoComplete="off"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={setQuery}
                   />
                 </label>
                 {/*

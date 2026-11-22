@@ -26,6 +26,8 @@ export interface SendOptions extends EnqueueOptions {
     queue: ServerSession['queue'];
     /** Bridge holds this channel's lease and is settling its own quarantined DEFER buffer. */
     settleMixer?: true;
+    /** The caller re-read this peer's retained HTML page before removing it at this slot. */
+    foregroundCleanup?: true;
     /** Engine-local line independently resolved and guarded by the caller, never journaled. */
     verifiedLine?: { readonly line: string; readonly current: () => boolean };
   };

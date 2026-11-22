@@ -79,9 +79,16 @@ export function InputThumbnail({
   );
   const target = ndiTargets.get(sourceId);
   const direct = confirmedNdiTarget(target);
-  const waitForNdi = ndiCandidate && (!inView || target?.kind === 'pending');
-  const knownNdi = ndiCandidate && source.producer.kind === 'ndi' && target?.kind !== 'other';
-  const directChosen = direct !== undefined || waitForNdi || knownNdi;
+  const resolvingTarget = ndiCandidate && target?.kind === 'pending';
+  const waitForNdi = ndiCandidate && inView && source.producer.kind === 'ndi' && resolvingTarget;
+  const knownNdi = ndiCandidate && source.producer.kind === 'ndi' && target?.kind === 'ndi';
+  // Route inputs need one identity lookup before a direct NDI receiver can be opened.
+  // Offscreen routes must not be mislabeled as waiting for NDI or hold up the normal preview.
+  const waitForTarget = ndiCandidate && inView && resolvingTarget;
+  const directChosen = direct !== undefined || waitForTarget || knownNdi;
+  const previewBlocked = target?.kind === 'blocked';
+  // Let the same visibility decision start the identity lookup before a snapshot can subscribe.
+  const passiveBlocked = (ndiCandidate && !inView) || previewBlocked;
   const directReceiver = useNdiReceivers(ndiTargets, foreground && inView).get(sourceId);
   const control = useLiveInputCheck();
   const check = control?.check;
@@ -90,9 +97,11 @@ export function InputThumbnail({
     check?.surface === inputCheck.surface &&
     check.sourceId === sourceId;
   const element = useRef<HTMLElement | null>(null);
+  const [tile, setTile] = useState<HTMLElement | null>(null);
   const image = useRef<HTMLImageElement>(null);
-  const attach = useCallback((tile: HTMLElement | null) => {
-    element.current = tile;
+  const attach = useCallback((node: HTMLElement | null) => {
+    element.current = node;
+    setTile(node);
   }, []);
   const [snapshot, setSnapshot] = useState<{
     channel: number;
@@ -106,7 +115,7 @@ export function InputThumbnail({
     engine?: PreviewEngine;
   }>();
   const frame =
-    snapshot?.channel === previewChannel && snapshot?.frame.sourceId === sourceId
+    !previewBlocked && snapshot?.channel === previewChannel && snapshot?.frame.sourceId === sourceId
       ? snapshot.frame
       : undefined;
   const src =
@@ -115,6 +124,7 @@ export function InputThumbnail({
       : undefined;
   const picture = src === undefined || src === brokenPicture ? null : src;
   const awaitingPicture =
+    !previewBlocked &&
     frame === undefined &&
     foreground &&
     canRequestPicture &&
@@ -160,29 +170,29 @@ export function InputThumbnail({
   }, [snapshot, foreground, active]);
 
   useEffect(() => {
-    const tile = element.current;
     if (
       !foreground ||
       !ndiCandidate ||
       tile === null ||
       typeof IntersectionObserver === 'undefined'
-    )
-      return;
-    const observer = new IntersectionObserver((entries) =>
-      setInView(entries.at(-1)?.isIntersecting === true),
-    );
-    observer.observe(tile);
-    return () => {
-      observer.disconnect();
+    ) {
       setInView(false);
-    };
-  }, [foreground, ndiCandidate, sourceId]);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      // A passive image and a direct player have different nodes. A final
+      // callback from the detached image must not stop the replacement.
+      if (element.current === tile) setInView(entries.at(-1)?.isIntersecting === true);
+    });
+    observer.observe(tile);
+    return () => observer.disconnect();
+  }, [foreground, ndiCandidate, sourceId, tile]);
 
   useEffect(() => {
-    const tile = element.current;
     if (
       !foreground ||
       !canRequestPicture ||
+      passiveBlocked ||
       directChosen ||
       previewChannel === undefined ||
       active ||
@@ -193,7 +203,7 @@ export function InputThumbnail({
     let observing = true;
     let unsubscribe: (() => void) | undefined;
     const observer = new IntersectionObserver((entries) => {
-      if (!observing) return;
+      if (!observing || element.current !== tile) return;
       if (entries.at(-1)?.isIntersecting === true) {
         unsubscribe ??= subscribeInputThumbnail({
           channel: previewChannel,
@@ -223,12 +233,14 @@ export function InputThumbnail({
   }, [
     active,
     directChosen,
+    passiveBlocked,
     foreground,
     previewChannel,
     sourceId,
     checkable,
     canRequestPicture,
     pictureRequestKey,
+    tile,
   ]);
 
   if (directChosen) {
@@ -239,6 +251,8 @@ export function InputThumbnail({
         receiver={directReceiver}
         engine={direct?.engine}
         connecting={waitForNdi || (direct !== undefined && directReceiver === undefined)}
+        resolvingTarget={waitForTarget && source.producer.kind !== 'ndi'}
+        visible={inView}
         onPreviewEngineChange={onPreviewEngineChange}
         onPick={onCheck === undefined ? undefined : () => onCheck(source)}
       />
@@ -337,7 +351,7 @@ export function InputThumbnail({
             ? decodedOrigin.engine
             : undefined
         }
-        channel={meterChannel}
+        channel={passiveBlocked ? undefined : meterChannel}
         name={sourceDisplayName(source.name, 'input')}
       />
     </span>
@@ -350,6 +364,8 @@ function DirectNdiInputTile({
   receiver,
   engine,
   connecting,
+  resolvingTarget,
+  visible,
   onPreviewEngineChange,
   onPick,
 }: {
@@ -358,6 +374,8 @@ function DirectNdiInputTile({
   receiver: NdiReceiver | undefined;
   engine: PreviewEngine | undefined;
   connecting: boolean;
+  resolvingTarget: boolean;
+  visible: boolean;
   onPreviewEngineChange: PreviewOriginChanged | undefined;
   onPick: (() => void) | undefined;
 }): JSX.Element {
@@ -369,13 +387,17 @@ function DirectNdiInputTile({
   const audible = receiver !== undefined && receiver === listening;
   const caption = live
     ? 'Direct NDI'
-    : connecting || (receiver !== undefined && picture.state === 'connecting')
-      ? 'Waiting for NDI'
-      : picture.state === 'no-signal'
-        ? 'No NDI signal'
-        : picture.state === 'error'
-          ? (picture.message ?? 'Direct NDI unavailable')
-          : 'Direct NDI unavailable';
+    : resolvingTarget
+      ? 'Checking source…'
+      : !visible
+        ? 'Preview paused'
+        : connecting || (receiver !== undefined && picture.state === 'connecting')
+          ? 'Waiting for NDI'
+          : picture.state === 'no-signal'
+            ? 'No NDI signal'
+            : picture.state === 'error'
+              ? (picture.message ?? 'Direct NDI unavailable')
+              : 'Direct NDI unavailable';
   useEffect(() => {
     const part = canvas.current;
     if (receiver === undefined || part === null) return;

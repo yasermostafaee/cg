@@ -12,6 +12,7 @@ import {
   DEFAULT_LIVE_CROP_FOCUS,
   DEFAULT_LIVE_FIT_MODE,
   controlLiveLayoutBorderHidden,
+  controlLiveLayoutFocusRect,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutPlateBorder,
   controlLiveLayoutPlateCropFocus,
@@ -74,7 +75,7 @@ interface CropEditor {
 const DEFAULT_SHOT_FIT: ShotFit = { contain: 1, crop: DEFAULT_LIVE_CROP_FOCUS };
 
 interface View {
-  presetId: string;
+  preset: ControlLiveLayoutPreset;
   focused: string | undefined;
   soloFrameId: string | undefined;
   rects: Rects;
@@ -344,15 +345,22 @@ function ShotInput({
 function ShotBorder({
   input,
   raster,
+  hidden,
 }: {
   input: ControlLiveLayoutFrame;
   raster: Resolution;
+  hidden: boolean;
 }): JSX.Element | null {
   const border = controlLiveLayoutPlateBorder(input, raster);
   if (border === undefined) return null;
   const scaled = (pixels: number) => `${String((pixels / raster.height) * 100)}cqh`;
   return (
-    <div className="cg-live-layout-shot-decoration" aria-hidden="true">
+    <div
+      className="cg-live-layout-shot-decoration"
+      data-shot-border=""
+      aria-hidden="true"
+      style={{ opacity: hidden ? 0 : 1 }}
+    >
       <div
         className="cg-live-layout-shot-border"
         style={{
@@ -484,6 +492,7 @@ export function LiveLayoutEditorPreview({
   attachmentSources,
   onFocus,
   placementEditor,
+  stagePlacementEditor,
   cropEditor,
 }: {
   channel: number;
@@ -500,6 +509,7 @@ export function LiveLayoutEditorPreview({
   attachmentSources: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
   onFocus: (frameId: string) => void;
   placementEditor?: ReactNode;
+  stagePlacementEditor?: ReactNode;
   cropEditor?: CropEditor | undefined;
 }): JSX.Element {
   const stage = useRef<HTMLDivElement>(null);
@@ -521,7 +531,10 @@ export function LiveLayoutEditorPreview({
   });
   const soloFrameId = frameOrder.length === 1 ? frameOrder[0] : undefined;
   const activeSingle = focused ?? soloFrameId;
-  const visible: Rects = focused === undefined ? geometry : { [focused]: full };
+  const visible: Rects =
+    focused === undefined
+      ? geometry
+      : { [focused]: controlLiveLayoutFocusRect(layout, preset) ?? full };
 
   // The editor has no programme target. Its retained DOM shots can reuse the
   // frame clock and focus effects without calling a play or preset command.
@@ -542,8 +555,8 @@ export function LiveLayoutEditorPreview({
       });
     }
     const before = previous.current;
-    previous.current = { presetId: preset.id, focused, soloFrameId, rects: visible, fits };
-    if (before === undefined || (before.focused === focused && before.presetId === preset.id))
+    previous.current = { preset, focused, soloFrameId, rects: visible, fits };
+    if (before === undefined || (before.focused === focused && before.preset.id === preset.id))
       return;
 
     active.current.forEach((animation) => animation.cancel());
@@ -553,10 +566,28 @@ export function LiveLayoutEditorPreview({
     const { focus, switch: change } = layout.effects;
     const previousSingle = before.focused ?? before.soloFrameId;
     const switching =
-      before.presetId === preset.id &&
+      before.preset.id === preset.id &&
       focused !== undefined &&
       previousSingle !== undefined &&
       focused !== previousSingle;
+    const animateDecorations = (shot: HTMLElement, id: string, duration: number): void => {
+      if (before.rects[id] === undefined || duration <= 0) return;
+      const leaves = visible[id] === undefined;
+      for (const [selector, hidden] of [
+        ['[data-shot-title]', controlLiveLayoutTitleHidden],
+        ['[data-shot-border]', controlLiveLayoutBorderHidden],
+      ] as const) {
+        const from = hidden(before.preset, id, before.focused !== undefined) ? 0 : 1;
+        const authored = hidden(preset, id, focused !== undefined) ? 0 : 1;
+        if (from === authored) continue;
+        const node = shot.querySelector<HTMLElement>(selector);
+        if (typeof node?.animate !== 'function') continue;
+        // A departing plate keeps its own decorations until its wrapper leaves.
+        active.current.push(
+          node.animate([{ opacity: from }, { opacity: leaves ? from : authored }], { duration }),
+        );
+      }
+    };
 
     if (switching && change.mode !== 'motion') {
       if (change.mode === 'cut') return;
@@ -592,6 +623,7 @@ export function LiveLayoutEditorPreview({
                   ];
         if (typeof shot.animate === 'function') {
           active.current.push(shot.animate(keys, { duration: change.durationMs }));
+          animateDecorations(shot, id, change.durationMs);
         }
       }
       return;
@@ -620,7 +652,7 @@ export function LiveLayoutEditorPreview({
           : (visible[id] ?? geometry[id] ?? collapsed);
       const shared = shownBefore && shownAfter;
       const activeFocus =
-        focused === id || (before.focused === id && before.presetId === preset.id);
+        focused === id || (before.focused === id && before.preset.id === preset.id);
       const zIndex = activeFocus || shared ? '3' : shownAfter ? '2' : '1';
       const previousFit = before.fits.get(id) ?? DEFAULT_SHOT_FIT;
       const nextFit = fits.get(id) ?? DEFAULT_SHOT_FIT;
@@ -637,6 +669,7 @@ export function LiveLayoutEditorPreview({
       );
       if (keys.length > 0 && typeof shot.animate === 'function') {
         active.current.push(shot.animate(keys, { duration }));
+        animateDecorations(shot, id, duration);
       }
     }
   });
@@ -777,14 +810,17 @@ export function LiveLayoutEditorPreview({
                   </div>
                 );
               })}
-              {!titleHidden && (
-                <div className="cg-live-layout-shot-titles">
-                  {controlLiveLayoutFrameTexts(input, layout).map(({ id, text, style }) => (
-                    <ShotTitle key={id} title={text} style={style} raster={raster} />
-                  ))}
-                </div>
-              )}
-              {!borderHidden && <ShotBorder input={input} raster={raster} />}
+              <div
+                className="cg-live-layout-shot-titles"
+                data-shot-title=""
+                aria-hidden={titleHidden}
+                style={{ opacity: titleHidden ? 0 : 1 }}
+              >
+                {controlLiveLayoutFrameTexts(input, layout).map(({ id, text, style }) => (
+                  <ShotTitle key={id} title={text} style={style} raster={raster} />
+                ))}
+              </div>
+              <ShotBorder input={input} raster={raster} hidden={borderHidden} />
               {activeShot && canCrop && sourceAspect !== null && cropEditor?.frameId === id && (
                 <CropDragSurface
                   editor={cropEditor}
@@ -792,7 +828,7 @@ export function LiveLayoutEditorPreview({
                   label={focusLabel}
                 />
               )}
-              {activeSingle === undefined && activeShot && (
+              {activeSingle === undefined && activeShot && stagePlacementEditor === undefined && (
                 <Button
                   className="cg-live-layout-focus-action"
                   variant="neutral"
@@ -808,6 +844,7 @@ export function LiveLayoutEditorPreview({
             </div>
           );
         })}
+        {stagePlacementEditor}
         {guideProfile !== undefined && (
           <FittedSafeAreaGuides
             width={raster.width}

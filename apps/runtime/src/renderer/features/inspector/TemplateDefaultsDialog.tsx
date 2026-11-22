@@ -190,14 +190,6 @@ export function TemplateDefaultsDialog({
       }
     >
       <div data-defaults-body="">
-        {/*
-          🔴 THE DRAWING'S SHAPE (gh3, owner 2026-09-14): an intro naming the template, one
-          row per plate, and the timing line under them.
-
-          ⚠ The drawing stacks each label ABOVE its box (`.field.full`); ours leads with it on
-          the same line, on the owner's later call — «لیبل اینپوتها در خط جدا نباشه
-          قبلش باشه بهتره» — so the dialog and the Inspector's own inputs read the same way.
-        */}
         <p style={styles.intro} data-defaults-intro="">
           Edit the starting source mappings for{' '}
           <strong>
@@ -218,22 +210,26 @@ export function TemplateDefaultsDialog({
         ) : (
           <>
             <InputCatalogueServer server={currentSourceCatalog().inputsServer} />
-            {plates.map((plate) => {
-              const label = plateDisplayName(plate.sourceId, plates, layout);
-              const authored = authoredDefaults?.[plate.sourceId];
-              const picked = valueOf(plate.sourceId);
-              return (
-                <div key={plate.elementId} style={styles.field}>
-                  <label htmlFor={`plate-default-${plate.sourceId}`} style={styles.fieldLabel}>
-                    <IsolatedName>{label}</IsolatedName>
-                  </label>
-                  {/*
+            <div className="cg-form cg-form-rows">
+              {plates.map((plate) => {
+                const label = plateDisplayName(plate.sourceId, plates, layout);
+                const authored = authoredDefaults?.[plate.sourceId];
+                const picked = valueOf(plate.sourceId);
+                return (
+                  <div key={plate.elementId} className="cg-form-row">
+                    <label
+                      htmlFor={`plate-default-${plate.sourceId}`}
+                      className="cg-form-row__label"
+                    >
+                      <IsolatedName>{label}</IsolatedName>
+                    </label>
+                    {/*
                   🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER. It only returns a choice; this
                   dialog's own model is unchanged — the choice is staged, and `Save defaults`
                   commits it. Template-wide, so no channel gates the inputs here.
                 */}
-                  <span className="cg-source-field">
                     <SourcePicker
+                      className="cg-form-row__control"
                       id={`plate-default-${plate.sourceId}`}
                       aria-label={`Default source for ${label}`}
                       data={{ 'data-defaults-select': plate.sourceId }}
@@ -248,10 +244,10 @@ export function TemplateDefaultsDialog({
                     />
                     {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}
                     <MediaPlaybackControl sourceId={picked || authored || ''} />
-                  </span>
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
             {/*
               §3 — WHAT IT CHANGES AND THAT NO PLAYOUT COMMAND IS SENT, in our words rather
               than the prototype's "Only the sample configuration changes here" — which is
@@ -277,32 +273,6 @@ const styles = {
     fontSize: 'var(--r-text-md)',
     lineHeight: 1.5,
     margin: '0 0 var(--r-space-6)',
-  },
-  /*
-   * 🔴 **LABEL BEFORE THE BOX, ON ONE LINE — owner, 2026-09-14:** «لیبل اینپوتها در خط
-   * جدا نباشه قبلش باشه بهتره.»
-   *
-   * A two-column grid rather than a stack, and it is the shape that satisfies BOTH of the
-   * owner's calls at once: the label LEADS on the same line, and `1fr` gives the box every
-   * pixel the label does not take — which is what «تمام صفحه کن مثل gh2» asked for. A
-   * label stacked above (the drawing's `.field.full`) spends a whole line per field, and in a
-   * panel this tall that is the space the move was made to reclaim.
-   *
-   * ⚠ The label column is `auto`: it takes the widest label and no more, so every box in the
-   * section starts on the SAME vertical without anyone choosing a number.
-   */
-  field: {
-    display: 'grid',
-    gridTemplateColumns: 'auto minmax(0, 1fr)',
-    columnGap: 'var(--r-space-3)',
-    alignItems: 'center',
-    marginBottom: 'var(--r-space-3)',
-  },
-  fieldLabel: {
-    color: colors.textSecondary,
-    fontSize: 'var(--r-text-sm)',
-    fontWeight: 'var(--r-weight-medium)',
-    whiteSpace: 'nowrap' as const,
   },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-md)', margin: 0 },
   foot: {

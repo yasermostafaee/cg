@@ -44,6 +44,7 @@ import {
 } from './MediaThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
+import { useLastPictureOrigin, usePictureOriginPublisher } from './observedPictureOrigins.js';
 import { useSourcePreviewRoute } from '../../hooks/useProgramTopology.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
@@ -132,6 +133,10 @@ export function ChoiceLabel({
   showPicture = true,
   presence = null,
   presenceAccessible = true,
+  previewEngine,
+  originDescription,
+  onMeterEngineChange,
+  observePicture,
 }: {
   choice: SourceChoice;
   meterChannel?: number | undefined;
@@ -139,8 +144,12 @@ export function ChoiceLabel({
   showPicture?: boolean;
   presence?: SourcePresenceView | null;
   presenceAccessible?: boolean;
+  previewEngine?: PreviewEngine | undefined;
+  originDescription?: string | undefined;
+  onMeterEngineChange?: PreviewOriginChanged | undefined;
+  observePicture?: ((sourceId: string, engine: PreviewEngine) => void) | undefined;
 }): JSX.Element {
-  const { origins, publish } = usePreviewOrigins();
+  const { origins, publish } = usePreviewOrigins(observePicture);
   if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
   if (choice.names === null) {
     return <span className="cg-choice-label">{`${choice.label} (none set)`}</span>;
@@ -152,7 +161,7 @@ export function ChoiceLabel({
   const input = meterChannel === undefined ? undefined : inputAudioSource(choice.names);
   return (
     <span className="cg-choice-label" data-choice-names={choice.names}>
-      <span className="cg-choice-label__words">
+      <span className="cg-choice-label__words" data-field-overflow="">
         {`${choice.label} (`}
         <bdi dir={directionOf(name)} data-choice-name="">
           {name}
@@ -169,7 +178,12 @@ export function ChoiceLabel({
         />
       )}
       {input !== undefined && !showPicture && (
-        <InputAudioMeter sourceId={sourceId} channel={meterChannel} name={name} />
+        <InputAudioMeter
+          sourceId={sourceId}
+          channel={meterChannel}
+          name={name}
+          onMeterEngineChange={onMeterEngineChange}
+        />
       )}
       {source?.origin === 'media' && mediaThumbnail !== undefined && (
         <MediaThumbnail
@@ -183,7 +197,8 @@ export function ChoiceLabel({
         presence={presence}
         sourceId={choice.names}
         accessible={presenceAccessible}
-        previewEngine={origins.get(choice.names)}
+        previewEngine={showPicture ? origins.get(choice.names) : previewEngine}
+        originDescription={originDescription}
       />
       {!offered && (
         <Tag
@@ -255,7 +270,7 @@ export function SourcePicker({
   const [draft, setDraft] = useState<string | null>(null);
 
   const choice = choices.find((c) => c.value === value);
-  const known = labelledSource(value) !== null;
+  const boundSource = labelledSource(value);
 
   const close = useCallback(() => {
     setDraft(null);
@@ -269,8 +284,46 @@ export function SourcePicker({
   };
   const thumbnailChannel = previewChannel ?? channel;
   const previewRoute = useSourcePreviewRoute(thumbnailChannel);
-  const showingChoice = choice !== undefined && (value === '' || !known);
+  const showingChoice = choice !== undefined && (value === '' || boundSource === null);
   const selectedSource = showingChoice ? choice.names : value;
+  const pictureOrigin = useLastPictureOrigin(thumbnailChannel, selectedSource);
+  const [meterOrigin, setMeterOrigin] = useState<{
+    route: string | undefined;
+    channel: number | undefined;
+    sourceId: typeof selectedSource;
+    engine: PreviewEngine;
+  }>();
+  const onMeterEngineChange = useCallback(
+    (engine: PreviewEngine | undefined): void => {
+      setMeterOrigin((previous) => {
+        if (engine === undefined) return undefined;
+        if (
+          previous?.engine === engine &&
+          previous.route === previewRoute &&
+          previous.channel === thumbnailChannel &&
+          previous.sourceId === selectedSource
+        )
+          return previous;
+        return { route: previewRoute, channel: thumbnailChannel, sourceId: selectedSource, engine };
+      });
+    },
+    [previewRoute, thumbnailChannel, selectedSource],
+  );
+  const measuredEngine =
+    meterOrigin?.route === previewRoute &&
+    meterOrigin?.channel === thumbnailChannel &&
+    meterOrigin?.sourceId === selectedSource
+      ? meterOrigin?.engine
+      : undefined;
+  const previewEngine = pictureOrigin ?? measuredEngine;
+  const originDescription =
+    pictureOrigin !== undefined
+      ? `Last picture from server ${pictureOrigin}`
+      : measuredEngine !== undefined
+        ? `Preview audio from server ${measuredEngine}`
+        : undefined;
+  const fallback = choices[0] !== undefined ? choiceText(choices[0]) : 'None';
+  const displayValue = showingChoice ? choiceText(choice) : (boundSource?.name ?? fallback);
   const posterIdentity = JSON.stringify(
     currentSourceCatalog().sources.find((source) => source.id === selectedSource),
   );
@@ -283,7 +336,11 @@ export function SourcePicker({
     thumbnailChannel,
     selectedSource ? [selectedSource] : [],
   );
-  const presenceDescription = sourcePresenceDescription(selectedPresence, selectedSource);
+  const presenceDescription = sourcePresenceDescription(
+    selectedPresence,
+    selectedSource,
+    originDescription,
+  );
   const presenceDescriptionId = `${base}-source-presence`;
 
   return (
@@ -302,6 +359,7 @@ export function SourcePicker({
         id={id}
         className={className}
         title={title}
+        valueTooltip={displayValue}
         // The bound value as a finder reads it — a catalogue id, never shown.
         data={{ ...data, 'data-picker-value': value }}
       >
@@ -313,6 +371,9 @@ export function SourcePicker({
               showPicture={false}
               presence={selectedPresence}
               presenceAccessible={false}
+              previewEngine={previewEngine}
+              originDescription={originDescription}
+              onMeterEngineChange={onMeterEngineChange}
             />
           </span>
         ) : (
@@ -321,7 +382,10 @@ export function SourcePicker({
             meterChannel={thumbnailChannel}
             presence={selectedPresence}
             presenceAccessible={false}
-            fallback={choices[0] !== undefined ? choiceText(choices[0]) : 'None'}
+            previewEngine={previewEngine}
+            originDescription={originDescription}
+            onMeterEngineChange={onMeterEngineChange}
+            fallback={fallback}
           />
         )}
       </ComboField>
@@ -357,7 +421,7 @@ export function SourcePicker({
             channel={channel}
             previewChannel={thumbnailChannel}
             loadThumbnail={loadThumbnail}
-            onPick={setDraft}
+            onPick={(next) => setDraft(showingChoice && next === selectedSource ? value : next)}
             initialTab={isMediaId(selectedSource ?? '') ? 'media' : 'inputs'}
           />
         </Modal>
@@ -410,6 +474,7 @@ function PickerPanel({
     choices.flatMap(({ names }) => (names ? [names] : [])),
   );
   const { inputCheck } = useInputCheckSurface(previewChannel, tab === 'inputs');
+  const observePicture = usePictureOriginPublisher(previewChannel);
   const chooseInput = (value: string, sourceId = value): void => {
     onPick(value);
     const source = inputs.find(({ id }) => id === sourceId);
@@ -448,6 +513,7 @@ function PickerPanel({
                 meterChannel={previewChannel}
                 mediaThumbnail={loadThumbnail}
                 presence={choicePresence}
+                observePicture={observePicture}
               />
             </Button>
           ))}
@@ -610,7 +676,8 @@ function InputsTab({
   onViewChange: (view: InputView) => void;
 }): JSX.Element {
   const [filter, setFilter] = useState('');
-  const { origins, publish } = usePreviewOrigins();
+  const observePicture = usePictureOriginPublisher(previewChannel);
+  const { origins, publish } = usePreviewOrigins(observePicture);
   const list = useRef<VirtualListHandle>(null);
   const tiled = view === 'grid';
   const needle = filter.trim().toLowerCase();
@@ -692,12 +759,12 @@ function InputsTab({
   const keys = useListKeys(rows, list, pick, tiled);
   return (
     <div className="cg-picker-tab" data-picker-tab="inputs" data-input-view={view}>
-      <div className="cg-picker-input-bar">
+      <div className="cg-picker-input-bar cg-form cg-form-toolbar">
         <InputCatalogueServer server={server} />
         <InputViewSwitch view={view} onChange={onViewChange} />
       </div>
       {inputs.length > FILTER_OVER && (
-        <div className="cg-picker-controls">
+        <div className="cg-picker-controls cg-form cg-form-toolbar">
           <TextInput
             value={filter}
             onChange={setFilter}
@@ -733,6 +800,7 @@ function InputsTab({
           data={{ 'data-picker-list': '', 'data-modal-autofocus': '' }}
           withActions={inputCheck !== undefined}
           tiled={tiled}
+          fill={!tiled}
         />
       )}
     </div>
@@ -984,7 +1052,8 @@ function MediaTab({
   const requestPreview = useCallback((selection: MediaPreviewSelection): void => {
     setPreview({ ...selection, playRequest: ++playSequence.current });
   }, []);
-  const { origins, publish } = usePreviewOrigins();
+  const observePicture = usePictureOriginPublisher(previewChannel);
+  const { origins, publish } = usePreviewOrigins(observePicture);
   const grid = view === 'grid';
   const { ref: resultsRef, width } = useElementWidth<HTMLDivElement>();
   const resultsWidth = width ?? 1100;
@@ -1084,7 +1153,7 @@ function MediaTab({
       data-media-view={view}
     >
       <div className="cg-picker-media-results" ref={resultsRef}>
-        <div className="cg-picker-controls">
+        <div className="cg-picker-controls cg-form cg-form-toolbar">
           <TextInput
             ref={search}
             value={media.q}

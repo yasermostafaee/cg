@@ -204,6 +204,44 @@ the on-air swap); no other tab strip SHALL change.
 - **WHEN** the picker is open **THEN** the first tab's text starts at the same distance from the panel's left
   edge as the first row's text, and not at the edge
 
+### Requirement: Source forms SHALL align repeated plate fields
+
+The Source defaults dialog, Inspector Plate inputs and Live source for this row dialog SHALL use shared
+label and control columns. In each group, both edges of the source fields SHALL align across short and
+long plate names. Longer labels SHALL wrap within a bounded column. When a plate has a Playback action,
+the action SHALL sit in a shared trailing column. Related status and transport SHALL sit below the
+corresponding control.
+
+#### Scenario: Mixed label lengths and a media action
+
+- **WHEN** a source group shows short and long plate names and only one plate is bound to media
+- **THEN** the source fields share both column edges, the media action fits beside its field and
+  the group fits the available width.
+
+### Requirement: Clipped field values SHALL reveal their full display text
+
+The shared tooltip SHALL reveal clipped form values on hover or keyboard focus. It SHALL read the
+current text or selected option label. Source fields SHALL reveal the source's display name or the
+complete inherited choice text. Password fields SHALL remain excluded, including while revealed by
+their visibility control.
+
+#### Scenario: A source name does not fit the field
+
+- **WHEN** a source field clips a source name and the pointer rests over the field
+- **THEN** the full choice appears in the tooltip while the picker stays closed.
+
+### Requirement: Form selection SHALL use the primary accent
+
+CG Control dialogs and Inspector forms SHALL share the MAM dark form palette for inputs, primary
+actions and focus. A checked Settings checkbox and a switched-on toggle SHALL use the same accent as
+the primary button. This treatment SHALL preserve form geometry and the dedicated broadcast colors
+on Layers, PVW and PGM.
+
+#### Scenario: Checked controls match the primary action
+
+- **WHEN** a Settings form shows a checked checkbox or an on-state switch
+- **THEN** its checked fill and the form's primary action use the same interactive accent.
+
 ### Requirement: Every operator name SHALL be laid out in its own direction, in its own isolate
 
 A name the console shows SHALL be drawn in its own inline isolate inside an LTR line — every source,

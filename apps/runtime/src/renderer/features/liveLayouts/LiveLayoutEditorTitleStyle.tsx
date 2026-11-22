@@ -12,6 +12,7 @@ import {
 } from '@cg/shared-schema';
 import { liveLayoutArtwork } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { ColorInput } from '../../ui/ColorInput.js';
 import { FileInput } from '../../ui/FileInput.js';
@@ -66,12 +67,13 @@ function Choice<T extends string>({
   choices: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
 }): JSX.Element {
+  const id = useId();
   return (
-    <label>
+    <label className="cg-form-field" htmlFor={id}>
       {label}
-      <select
+      <SelectInput
+        id={id}
         aria-label={label}
-        className="cg-field"
         value={value}
         onChange={(event) => {
           const choice = choices.find((item) => item.value === event.currentTarget.value);
@@ -83,7 +85,7 @@ function Choice<T extends string>({
             {choice.label}
           </option>
         ))}
-      </select>
+      </SelectInput>
     </label>
   );
 }
@@ -101,10 +103,10 @@ function TitleColor({
   const alpha = value.slice(7);
   return (
     <>
-      <div className="cg-live-layout-title-field">
+      <div className="cg-form-field cg-live-layout-title-field">
         <span>{label}</span>
         <ColorInput
-          className="cg-field"
+          appearance="swatch"
           aria-label={label}
           value={color}
           onChange={(next) => onChange(next + alpha)}
@@ -156,7 +158,7 @@ function ShadowFields({
         Enabled
       </label>
       {value !== null && (
-        <div className="cg-live-layout-title-fields">
+        <div className="cg-form-grid cg-live-layout-title-fields">
           <LiveLayoutEditorNumber
             label={label + ' X (px)'}
             value={toTenths(value.offsetX)}
@@ -303,7 +305,7 @@ export function LiveLayoutEditorTitleStyle({
         </Button>
       )}
       <div key={sharedSelection ? 'shared' : frameId}>
-        <div className="cg-live-layout-title-fields">
+        <div className="cg-form-grid cg-live-layout-title-fields">
           {numbers.map(({ label, key, min, max }) => (
             <LiveLayoutEditorNumber
               key={key}
@@ -392,7 +394,7 @@ export function LiveLayoutEditorTitleStyle({
         </div>
         <details className="cg-live-layout-title-subsection">
           <summary>Advanced</summary>
-          <div className="cg-live-layout-title-fields">
+          <div className="cg-form-grid cg-live-layout-title-fields">
             <Choice
               label="Digits"
               value={title.digits}
@@ -416,7 +418,7 @@ export function LiveLayoutEditorTitleStyle({
               Stroke
             </label>
             {stroke !== null && (
-              <div className="cg-live-layout-title-fields">
+              <div className="cg-form-grid cg-live-layout-title-fields">
                 <LiveLayoutEditorNumber
                   label="Stroke width (px)"
                   value={toTenths(stroke.width)}

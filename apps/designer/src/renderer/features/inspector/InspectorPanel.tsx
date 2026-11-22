@@ -1,15 +1,21 @@
-import { flattenElements, resolveOperatorAutoLayout } from '@cg/shared-schema';
+import { defaultLookOf, flattenElements, resolveOperatorAutoLayout } from '@cg/shared-schema';
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Control } from '../../ui/Control.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { projectLookGroupHomeId, registeredLookForComposition } from '../../state/slices/looks.js';
+import {
+  projectLookGroup,
+  projectLookGroupHomeId,
+  registeredLookForComposition,
+} from '../../state/slices/looks.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput, SelectField, VectorField } from './controls.js';
 import { CheckRow, DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
+import { SinglePlateArrange } from './FrameArrange.js';
+import { PresetEffectSettings } from './PresetEffectSettings.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
 import { LooksSection } from './LooksSection.js';
@@ -90,7 +96,7 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       {(hasLivePlates || scene.allowLivePlateOverlap !== undefined) && (
         <LivePlateCompositionSettings composition={scene} />
       )}
-      <PresetAutoLayoutSetting />
+      <PresetSettings />
       <PlayoutSection scene={scene} />
       {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
           of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}
@@ -102,22 +108,31 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
   );
 }
 
-function PresetAutoLayoutSetting(): JSX.Element | null {
+function PresetSettings(): JSX.Element | null {
   const project = useDesignerSelector((state) => state.scene);
   const compositionId = useDesignerSelector((state) => state.activeCompositionId);
   const activeLookId = useDesignerSelector((state) => state.activeLookId);
-  if (project === null || compositionId === null) return null;
-  const preset = registeredLookForComposition(project, compositionId, activeLookId);
-  if (preset === undefined) return null;
+  const group = projectLookGroup(project);
+  if (project === null || group === undefined) return null;
   const homeId = projectLookGroupHomeId(project);
+  const preset =
+    compositionId === homeId
+      ? (group.looks.find(({ id }) => id === activeLookId) ?? defaultLookOf(group))
+      : compositionId === null
+        ? undefined
+        : registeredLookForComposition(project, compositionId, activeLookId);
+  if (preset === undefined) return null;
   const home = homeId === null ? project : project.compositions?.find((doc) => doc.id === homeId);
   return (
-    <CheckRow
-      label="Allow Auto layout in CG Control"
-      title="This preset needs at least two frames with Allow move enabled and Resize unlocked."
-      checked={resolveOperatorAutoLayout(preset, home?.allowOperatorAutoLayout)}
-      onChange={(allowed) => designerStore.setLookOperatorAutoLayout(preset.id, allowed)}
-    />
+    <>
+      <CheckRow
+        label="Allow Auto layout in CG Control"
+        title="Enable Allow move and unlock Resize on the plates the operator can arrange."
+        checked={resolveOperatorAutoLayout(preset, home?.allowOperatorAutoLayout)}
+        onChange={(allowed) => designerStore.setLookOperatorAutoLayout(preset.id, allowed)}
+      />
+      <PresetEffectSettings key={preset.id} preset={preset} />
+    </>
   );
 }
 
@@ -151,6 +166,9 @@ function ElementInspector({
         <CollapseSection title="Transform" pinned>
           <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
         </CollapseSection>
+      )}
+      {(element.type === 'video-placeholder' || element.type === 'composition') && (
+        <SinglePlateArrange element={element} />
       )}
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
       <LiveForegroundSection element={element} scene={scene} />

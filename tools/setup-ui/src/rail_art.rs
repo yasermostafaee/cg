@@ -658,6 +658,7 @@ mod tests {
             let config = Config {
                 product: id,
                 version: "0.11.4".into(),
+                build_id: None,
                 engine_name: "e.exe".into(),
                 install_bytes: 1,
                 main_files: vec![MainFile {

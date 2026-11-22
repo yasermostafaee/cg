@@ -317,6 +317,7 @@ function DelayControl({
       */}
       <span className="cg-field cg-num-unit">
         <NumericInput
+          appearance="bare"
           value={typed}
           onValueChange={(gapSeconds) => {
             stageTiming(item.itemId, { gapSeconds });

@@ -202,18 +202,21 @@ describe('mixed Designer Auto layout', () => {
     const slot = calculateLayout(targets, resolution, 'more-top').find(
       ({ id }) => id === 'instance',
     )!;
-    const adjusted = {
-      ...instance,
-      transform: { ...instance.transform, ...autoLayoutTransform(target, slot) },
-    };
-    const [flattenedPlate] = flattenElements({
-      ...scene,
-      layers: [layer('preset-layer', [adjusted])],
-    }).filter(({ element }) => element.id === plate.id);
-    expect(flattenedPlate?.rect.x).toBeCloseTo(slot.x);
-    expect(flattenedPlate?.rect.y).toBeCloseTo(slot.y);
-    expect(flattenedPlate?.rect.width).toBeCloseTo(slot.width);
-    expect(flattenedPlate?.rect.height).toBeCloseTo(slot.height);
+    expect(target).toMatchObject({ kind: 'composition', containsPlate: true });
+    for (const cell of [slot, { ...slot, x: 0, y: 0, width: 960, height: 1080 }]) {
+      const adjusted = {
+        ...instance,
+        transform: { ...instance.transform, ...autoLayoutTransform(target, cell) },
+      };
+      const [flattenedPlate] = flattenElements({
+        ...scene,
+        layers: [layer('preset-layer', [adjusted])],
+      }).filter(({ element }) => element.id === plate.id);
+      expect(flattenedPlate?.rect.x).toBeCloseTo(cell.x);
+      expect(flattenedPlate?.rect.y).toBeCloseTo(cell.y);
+      expect(flattenedPlate?.rect.width).toBeCloseTo(cell.width);
+      expect(flattenedPlate?.rect.height).toBeCloseTo(cell.height);
+    }
   });
 
   it('keeps the right-edge pin and rotation of an auto-sized RTL title', () => {

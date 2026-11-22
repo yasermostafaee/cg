@@ -2,13 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * THE Runtime's tooltip — one global mechanism, inherited by every control that
- * already carries a `title`.
+ * carries a `title` or displays a clipped field value.
  *
  * Ported deliberately from the Designer's `features/shell/InputTooltip.tsx`
  * rather than invented here: one operator uses both apps, and a second tooltip
  * with its own delay, placement and look would be a second visual language.
- * What is shared is the RENDERING contract (delay, placement, suppression of the
- * OS bubble, the dark chip); the TEXT stays per-control, as a plain `title`.
+ * The same bubble presents both control descriptions and clipped field values.
  *
  * WHY EVENT DELEGATION AND NOT A `<Tooltip>` WRAPPER. This is the whole point of
  * the item that asked for it: a wrapper is per-button wiring, so the next
@@ -41,8 +40,58 @@ const DELAY_MS = 450;
 /** Gap between the bubble and the target / the viewport edge, in px. */
 const MARGIN = 8;
 
+interface TipTarget {
+  el: HTMLElement;
+  text: string;
+  nativeTitle?: HTMLElement;
+  fieldValue?: true;
+}
+
+const VALUE_FIELD_SELECTOR =
+  'input.cg-field, select.cg-field, textarea.cg-field, [data-field-value]';
+
+function overflowsInline(el: Element): boolean {
+  return el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1;
+}
+
+function clippedFieldValue(field: HTMLElement): string | undefined {
+  if (field instanceof HTMLInputElement) {
+    if (field.type !== 'text' && field.type !== 'search' && field.type !== 'number') return;
+    if (field.closest('.cg-password') !== null) return;
+    return overflowsInline(field) ? field.value : undefined;
+  }
+  if (field instanceof HTMLTextAreaElement) {
+    return overflowsInline(field) || field.scrollHeight > field.clientHeight + 1
+      ? field.value
+      : undefined;
+  }
+  if (field instanceof HTMLSelectElement) {
+    if (field.multiple || field.size > 1 || field.clientWidth === 0) return;
+    const label = field.selectedOptions[0]?.label;
+    if (label === undefined || label === '') return;
+    const { font, fontSize, paddingInlineStart, paddingInlineEnd, appearance } =
+      window.getComputedStyle(field);
+    const canvas = field.ownerDocument.createElement('canvas').getContext('2d');
+    if (canvas === null) return;
+    canvas.font = font;
+    // A native closed select retains the arrow within its client width.
+    const arrowWidth = appearance === 'none' ? 0 : Number.parseFloat(fontSize) + 4;
+    const available =
+      field.clientWidth -
+      Number.parseFloat(paddingInlineStart) -
+      Number.parseFloat(paddingInlineEnd) -
+      arrowWidth;
+    return canvas.measureText(label).width > available ? label : undefined;
+  }
+  if (field.getAttribute('aria-expanded') === 'true') return;
+  return [...field.querySelectorAll('[data-field-overflow]')].some(overflowsInline)
+    ? field.dataset['fieldValue']
+    : undefined;
+}
+
 interface Tip {
   text: string;
+  fieldValue?: true;
   /**
    * The target's box in viewport coords. The bubble centres on `cx` and sits
    * above `top`, flipping below `bottom` when there is no room.
@@ -77,28 +126,52 @@ export function Tooltip(): JSX.Element | null {
       setTip(null);
     }
 
-    /** The nearest ancestor carrying a non-empty `title`, and that title. */
-    function resolve(target: Element | null): { el: HTMLElement; text: string } | null {
+    function resolve(target: Element | null): TipTarget | null {
       if (target === null) return null;
       const titled = target.closest('[title]');
-      if (titled instanceof HTMLElement && titled.title.trim() !== '') {
-        return { el: titled, text: titled.title };
+      const nativeTitle = titled instanceof HTMLElement ? titled : undefined;
+      const field = target.closest(VALUE_FIELD_SELECTOR);
+      if (
+        field instanceof HTMLElement &&
+        (nativeTitle === undefined || nativeTitle === field || !field.contains(nativeTitle))
+      ) {
+        const text = clippedFieldValue(field);
+        if (text !== undefined && text.trim() !== '') {
+          return {
+            el: field,
+            text,
+            fieldValue: true,
+            ...(nativeTitle !== undefined && { nativeTitle }),
+          };
+        }
+      }
+      if (nativeTitle !== undefined && nativeTitle.title.trim() !== '') {
+        return { el: nativeTitle, text: nativeTitle.title, nativeTitle };
       }
       return null;
     }
 
-    function show(found: { el: HTMLElement; text: string }): void {
-      // Blank the native title immediately, so the OS bubble never double-renders.
-      if (found.el.hasAttribute('title') && suppressed.current?.el !== found.el) {
+    function show(found: TipTarget): void {
+      const { el, nativeTitle, fieldValue } = found;
+      // Suppress the OS bubble while the app renders the same hover target.
+      if (nativeTitle !== undefined && suppressed.current?.el !== nativeTitle) {
         restoreTitle();
-        suppressed.current = { el: found.el, title: found.el.title };
-        found.el.title = '';
+        suppressed.current = { el: nativeTitle, title: nativeTitle.title };
+        nativeTitle.title = '';
       }
-      const rect = found.el.getBoundingClientRect();
-      const text = found.text.trim();
       cancel();
       timer.current = window.setTimeout(() => {
-        setTip({ text, cx: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom });
+        if (!el.isConnected) return;
+        const text = fieldValue ? clippedFieldValue(el) : found.text.trim();
+        if (text === undefined || text.trim() === '') return;
+        const rect = el.getBoundingClientRect();
+        setTip({
+          text,
+          cx: rect.left + rect.width / 2,
+          top: rect.top,
+          bottom: rect.bottom,
+          ...(fieldValue && { fieldValue }),
+        });
       }, DELAY_MS);
     }
 
@@ -131,6 +204,8 @@ export function Tooltip(): JSX.Element | null {
     window.addEventListener('pointerout', hide, true);
     window.addEventListener('pointerdown', hide, true);
     window.addEventListener('wheel', hide, true);
+    window.addEventListener('input', hide, true);
+    window.addEventListener('change', hide, true);
     window.addEventListener('focusin', onFocusIn, true);
     window.addEventListener('focusout', hide, true);
     // Escape dismisses, like every other transient surface in this app.
@@ -144,6 +219,8 @@ export function Tooltip(): JSX.Element | null {
       window.removeEventListener('pointerout', hide, true);
       window.removeEventListener('pointerdown', hide, true);
       window.removeEventListener('wheel', hide, true);
+      window.removeEventListener('input', hide, true);
+      window.removeEventListener('change', hide, true);
       window.removeEventListener('focusin', onFocusIn, true);
       window.removeEventListener('focusout', hide, true);
       window.removeEventListener('keydown', onKeyDown, true);
@@ -184,7 +261,8 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
     <div
       ref={ref}
       role="tooltip"
-      className="cg-tooltip"
+      dir={tip.fieldValue ? 'auto' : undefined}
+      className={tip.fieldValue ? 'cg-tooltip cg-tooltip--value' : 'cg-tooltip'}
       style={{
         left: pos?.left ?? 0,
         top: pos?.top ?? 0,

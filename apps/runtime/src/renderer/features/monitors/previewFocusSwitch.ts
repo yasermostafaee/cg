@@ -49,11 +49,12 @@ function artworkNode(doc: Document, side: FrameSide): HTMLElement | undefined {
 interface PicturePlane {
   node: HTMLDivElement;
   bounds: FitRect;
+  restore: () => void;
 }
 
-/** Capture one authored wrapper in its visible output-pixel box, including its own linked title. */
-function capturePlane(
-  doc: Document,
+/** Move the authored subtree as one visual unit, keeping its media and animation instances. */
+function mountPlane(
+  viewport: HTMLElement,
   root: HTMLElement,
   role: 'incoming' | 'outgoing',
 ): PicturePlane | undefined {
@@ -61,26 +62,22 @@ function capturePlane(
   const localWidth = root.offsetWidth;
   const localHeight = root.offsetHeight;
   if (width <= 0 || height <= 0 || localWidth <= 0 || localHeight <= 0) return undefined;
-  const copy = root.cloneNode(true) as HTMLElement;
-  for (const node of [copy, ...copy.querySelectorAll<HTMLElement>('*')]) {
-    node.removeAttribute('id');
-    // The clone is an effect plane, not a second authored or live-source element.
-    node.removeAttribute('data-cg-live-source');
-    node.removeAttribute('data-cg-pvw-picture-part');
-    node.removeAttribute('data-cg-frame-artwork');
-    node.removeAttribute('data-cg-preset-departure-key');
-    node.removeAttribute('data-cg-preset-title-key');
-  }
-  Object.assign(copy.style, {
+  const temporaryStyles = {
     position: 'absolute',
     top: '0',
     left: '0',
     width: `${String(localWidth)}px`,
     height: `${String(localHeight)}px`,
-    transformOrigin: '0 0',
+    'transform-origin': '0 0',
     transform: `scale(${String(width / localWidth)}, ${String(height / localHeight)})`,
+  };
+  const restoreStyles = Object.entries(temporaryStyles).map(([property, value]) => {
+    const before = root.style.getPropertyValue(property);
+    const priority = root.style.getPropertyPriority(property);
+    root.style.setProperty(property, value);
+    return () => root.style.setProperty(property, before, priority);
   });
-  const plane = doc.createElement('div');
+  const plane = viewport.ownerDocument.createElement('div');
   plane.dataset['cgPvwFocusPlane'] = role;
   plane.style.cssText = 'position:absolute;pointer-events:none;transform-origin:0 0';
   Object.assign(plane.style, {
@@ -89,8 +86,18 @@ function capturePlane(
     width: `${String(width)}px`,
     height: `${String(height)}px`,
   });
-  plane.append(copy);
-  return { node: plane, bounds: { x, y, width, height } };
+  const origin = viewport.ownerDocument.createComment('Focus plate');
+  root.before(origin);
+  viewport.append(plane);
+  plane.append(root);
+  return {
+    node: plane,
+    bounds: { x, y, width, height },
+    restore: () => {
+      for (const reset of restoreStyles) reset();
+      origin.replaceWith(root);
+    },
+  };
 }
 
 function motionTransform(
@@ -218,7 +225,7 @@ export function previewFocusSwitch({
   let done = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let viewport: HTMLDivElement | undefined;
-  let reveal: (() => void) | undefined;
+  const planes: PicturePlane[] = [];
   let animations: Animation[] = [];
 
   const finish = (commitTarget = false): void => {
@@ -226,8 +233,8 @@ export function previewFocusSwitch({
     done = true;
     clearTimeout(timer);
     for (const animation of animations) animation.cancel();
+    for (const plane of planes) plane.restore();
     viewport?.remove();
-    reveal?.();
     settled(commitTarget);
   };
 
@@ -246,34 +253,29 @@ export function previewFocusSwitch({
       finish(true);
       return;
     }
-    const outgoingNode = artworkNode(doc, before);
-    const outgoing =
-      outgoingNode === undefined ? undefined : capturePlane(doc, outgoingNode, 'outgoing');
-    commit();
-    const incomingNode = artworkNode(doc, after);
-    const incoming =
-      incomingNode === undefined ? undefined : capturePlane(doc, incomingNode, 'incoming');
-    if (
-      outgoing === undefined ||
-      incoming === undefined ||
-      incomingNode === undefined ||
-      typeof incoming.node.animate !== 'function'
-    ) {
-      finish(true);
-      return;
-    }
     viewport = doc.createElement('div');
     viewport.dataset['cgPvwFocusSwitch'] = effects.switch.mode;
     viewport.style.cssText =
       'position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:2147483647';
     viewport.setAttribute('aria-hidden', 'true');
-    viewport.append(outgoing.node, incoming.node);
     doc.body.append(viewport);
-    const visibility = incomingNode.style.visibility;
-    incomingNode.style.visibility = 'hidden';
-    reveal = () => {
-      incomingNode.style.visibility = visibility;
-    };
+    const outgoingNode = artworkNode(doc, before);
+    const outgoing =
+      outgoingNode === undefined ? undefined : mountPlane(viewport, outgoingNode, 'outgoing');
+    if (outgoing !== undefined) planes.push(outgoing);
+    commit();
+    const incomingNode = artworkNode(doc, after);
+    const incoming =
+      incomingNode === undefined ? undefined : mountPlane(viewport, incomingNode, 'incoming');
+    if (incoming !== undefined) planes.push(incoming);
+    if (
+      outgoing === undefined ||
+      incoming === undefined ||
+      typeof incoming.node.animate !== 'function'
+    ) {
+      finish(true);
+      return;
+    }
     const duration = Math.max(1, Math.round(effects.switch.durationMs / period)) * period;
     animations =
       effects.switch.mode === 'motion'

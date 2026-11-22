@@ -3,6 +3,7 @@ import { DEFAULT_OSC_PORT } from '@cg/shared-ipc';
 import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
 import { AMCP_PORT } from '../firstRun/firstRunStation.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { TextInput } from '../../ui/TextInput.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
 
 /**
@@ -70,15 +71,16 @@ export function BackupServerDialog({
     >
       {/* §8a — the host takes the row on its own, and the two ports share the next one. */}
       <DialogField label="Host address" id="backup-host" error={hostBad} focusFirst>
-        <input
-          className="cg-field cg-field--mono"
-          type="text"
+        <TextInput
+          className="cg-field--mono"
           dir="ltr"
           value={host}
           aria-label="New backup host"
+          invalid={hostBad === null ? undefined : true}
+          data={{ 'data-modal-autofocus': '' }}
           /* `CLIENT-TEST-RELEASE-01` — a documentation address (RFC 5737), never a real station's. */
           placeholder="192.0.2.11"
-          onChange={(e) => setHost(hostValue(e.target.value))}
+          onChange={(value) => setHost(hostValue(value))}
         />
       </DialogField>
       <div className="cg-setup-fields">

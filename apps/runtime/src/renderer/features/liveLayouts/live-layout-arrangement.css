@@ -14,14 +14,6 @@
   background: var(--r-surface-sunken);
 }
 
-.cg-live-layout-arrangement-glyph > span {
-  position: absolute;
-  border: 1px solid var(--r-surface-sunken);
-  border-radius: 2px;
-  background: currentColor;
-  opacity: 0.74;
-}
-
 .cg-live-layout-arrange-buttons [aria-pressed='true'] .cg-live-layout-arrangement-glyph {
   color: var(--r-accent);
 }
@@ -57,4 +49,37 @@
 
 .cg-live-layout-gap-control > span {
   font-size: var(--r-text-sm);
+}
+
+.cg-live-layout-margin-row {
+  display: grid;
+  gap: var(--r-space-2);
+  min-width: 0;
+  color: var(--r-text-secondary);
+}
+
+.cg-live-layout-margin-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--r-space-2);
+}
+
+.cg-live-layout-margin-fields > label {
+  display: grid;
+  gap: var(--r-space-1);
+  min-width: 0;
+  inline-size: 4.25rem;
+}
+
+.cg-live-layout-margin-fields .cg-field {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.cg-live-layout-arrange-fill {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  width: fit-content;
 }

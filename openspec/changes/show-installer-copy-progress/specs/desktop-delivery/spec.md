@@ -24,7 +24,8 @@ the progress display. Reduced-motion settings SHALL stop the activity animation.
 #### Scenario: The wizard changes page
 
 - **WHEN** the operator moves between setup pages or the engine reports a new installation phase
-- **THEN** CG Setup shows the packaged version in the same place in the title bar
+- **THEN** CG Setup shows the packaged version centred below the logo and product name in the left rail on every page
+- **AND** when the package carries a source revision, the same short build ID used by the apps appears below the version in smaller text
 
 #### Scenario: Recognise Designer and Control
 
