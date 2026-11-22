@@ -51,9 +51,11 @@
 - [x] Start two isolated full Engine .26 hosts from the supplied installer and verify the
       first-run, administrator session and CG license endpoints. Both hosts report Missing
       CG licensing and reject the CG operator session with `403 cg_not_licensed`.
+- [x] Confirm the administrator setup session and a valid CG licence for one channel on test B
+      (`21.43`). Its programme is active and `apasai-r1` has no managed group configured.
 - [ ] Capture B's real programme output after an owner-only Play and after transfer on an
-      isolated licensed Playout Engine/Core pair. Live test A accepted a system administrator
-      session. B's administrator session is unavailable, so neither station channel was migrated.
+      isolated licensed Playout Engine/Core pair. The test station needs concurrent administrator
+      sessions and a full Engine restart on both members after staged setup.
 - [ ] Verify recovery from a documented pre-admission refusal and establish journal retention.
 - [ ] Verify whole-layout state and a mirrored media plate with the real CG Bridge and the
       managed contract on an isolated channel.
