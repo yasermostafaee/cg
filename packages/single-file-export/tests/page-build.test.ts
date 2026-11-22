@@ -10,7 +10,11 @@ import {
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CG_MANAGED_SEQUENCE_RESUME_PAGE_MARKER_NAME,
+  CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
   CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+  SequenceElementSchema,
+  managedResumePageCountFromHtml,
   CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
   type Scene,
 } from '@cg/shared-schema';
@@ -45,15 +49,18 @@ const SCENE = {
 } as unknown as Scene;
 
 /** The shell with a stable capability probe in place of the actual runtime bundle. */
-async function exportedShell(): Promise<string> {
+async function exportedShell(
+  scene = SCENE,
+  runtimeVersion = CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+): Promise<string> {
   const { html } = await new ExporterSingleFile({
-    cgJsIife: '/* ' + CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION + ' */',
+    cgJsIife: '/* ' + runtimeVersion + ' */',
     cgJsLottieIife: '',
     cgCss: '',
     fontsCss: '',
     assets: { get: async () => null, bytes: async () => null } as unknown as ImageAssetSource,
     fetchUrl: async () => new ArrayBuffer(0),
-  }).produce(SCENE);
+  }).produce(scene);
   return html;
 }
 
@@ -90,6 +97,82 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
 
   it('advertises the managed resume capability in the first 1024 bytes of an eligible export', async () => {
     expect((await exportedShell()).slice(0, 1024)).toContain(CG_MANAGED_STATIC_RESUME_PAGE_MARKER);
+  });
+
+  it('stamps the authored sequence count only with the matching runtime adapter', async () => {
+    const sequence = SequenceElementSchema.parse({
+      id: 'sequence',
+      name: 'Sequence',
+      type: 'sequence',
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 600, h: 160 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      color: '#FFFFFF',
+      direction: 'ltr',
+      font: {
+        family: 'Arial',
+        style: 'normal',
+        weight: 400,
+        size: 36,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      advance: 'manual',
+      repeat: 1,
+      transitionIn: 'none',
+      transitionOut: 'none',
+      items: [
+        { id: 'a', text: 'One' },
+        { id: 'b', text: 'Two' },
+      ],
+    });
+    const scene: Scene = {
+      ...SCENE,
+      layers: [
+        {
+          id: 'main',
+          name: 'Main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [sequence],
+        },
+      ],
+    };
+    const version = CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION;
+    const marker =
+      '<meta name="' + CG_MANAGED_SEQUENCE_RESUME_PAGE_MARKER_NAME + '" content="2" />';
+    for (const html of [
+      await exportedShell(scene, version),
+      buildVcgIndexHtml(scene, [], [], false, version),
+    ]) {
+      expect(html.slice(0, 1024)).toContain(marker);
+      expect(managedResumePageCountFromHtml(html)).toBe(2);
+      expect(
+        managedResumePageCountFromHtml(html.replace(marker, marker.replace('2', '-1'))),
+      ).toBeUndefined();
+      expect(
+        managedResumePageCountFromHtml(html.replace(marker, CG_MANAGED_STATIC_RESUME_PAGE_MARKER)),
+      ).toBe(1);
+    }
+    for (const invalidHead of [
+      '<head></head><body>' + marker + '</body>',
+      '<head><!-- ' + marker + ' --></head>',
+      '<head><script>const probe = ' + JSON.stringify(marker) + '</script></head>',
+      '<head>' + marker + marker + '</head>',
+    ]) {
+      expect(managedResumePageCountFromHtml('<html>' + invalidHead + '</html>')).toBeUndefined();
+    }
+    expect(managedResumePageCountFromHtml(await exportedShell(scene))).toBeUndefined();
+    expect(managedResumePageCountFromHtml(await exportedShell())).toBe(1);
   });
 
   it('keeps the live frame capability markers in the first 1024 bytes of export', async () => {

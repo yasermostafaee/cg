@@ -88,7 +88,8 @@ export interface TemplateRuntime {
   /** Resolves when fonts, assets, and DOM setup are complete. */
   readonly ready: Promise<void>;
 
-  /** Available to External CG v2 for the static page shapes accepted by this runtime. */
+  /** Available to External CG v2 for authored pages with an absolute settled state. */
+  readonly managedResumePageCount?: number;
   applyManagedState?(snapshot: unknown): Promise<void>;
 
   /**

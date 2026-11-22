@@ -14,6 +14,8 @@ return of each of those engines and identify the control owner when the status c
   CG v2 API. Store the exact request before sending it and resolve uncertain outcomes by receipt.
 - Connect Play, Update, Stop and Clear to the opt-in static HTML pilot. Restore Control rows
   from Playout's applied state and allow a fresh HTML renderer to resume that state.
+- Connect Next for one finite manual cut sequence. Recover its absolute page from Playout's
+  applied layout and keep field edits independent of page turns.
 - Verify that Playout prepares the reserve and transfers the graphic on a real isolated
   Engine/Core pair before station use.
 

@@ -19,13 +19,13 @@ const snapshot = {
 };
 
 // This page runs the exported template, whose globals differ from CG Control's IPC globals.
-type BroadcastWindow = {
+interface BroadcastWindow {
   apasaiCg?: { applyState: (value: unknown) => Promise<void> };
   cg?: {
     play: (value: unknown) => Promise<void>;
     on: (event: string, listener: () => void) => void;
   };
-};
+}
 
 async function prepareScene(page: Page, html: string): Promise<void> {
   await page.setViewportSize({ width: 1920, height: 1080 });
@@ -67,7 +67,10 @@ test('an exported static template recovers a Persian caption on a fresh page wit
   const { html } = await exporter.produce(scene);
 
   await prepareScene(page, html);
-  await page.evaluate((data) => (window as unknown as BroadcastWindow).cg?.play(data), snapshot.data);
+  await page.evaluate(
+    (data) => (window as unknown as BroadcastWindow).cg?.play(data),
+    snapshot.data,
+  );
   await expect(title(page)).toHaveText(snapshot.data.anchor);
   await expect(page.locator('body')).toHaveAttribute('data-entered', '1');
   await page.evaluate(async () => {
@@ -89,11 +92,14 @@ test('an exported static template recovers a Persian caption on a fresh page wit
   await expect(replica.locator('body')).not.toHaveAttribute('data-entered', '1');
   expect(await replica.evaluate(() => document.fonts.status)).toBe('loaded');
 
-  await replica.evaluate((value) => (window as unknown as BroadcastWindow).apasaiCg?.applyState(value), {
-    ...snapshot,
-    revision: 9,
-    visibility: 'stopped',
-  });
+  await replica.evaluate(
+    (value) => (window as unknown as BroadcastWindow).apasaiCg?.applyState(value),
+    {
+      ...snapshot,
+      revision: 9,
+      visibility: 'stopped',
+    },
+  );
   await expect(title(replica)).toBeHidden();
   await replica.evaluate(
     (value) => (window as unknown as BroadcastWindow).apasaiCg?.applyState(value),

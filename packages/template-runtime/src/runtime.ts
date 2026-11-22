@@ -29,7 +29,7 @@ import {
   readCgControl,
   sequenceStepsByOperator,
   stripCgControl,
-  supportsManagedStaticResume,
+  managedResumePlan,
   type CgControl,
   type CgLiveFallback,
   type CgPage,
@@ -577,6 +577,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // step compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
   // paints nothing, which is the safe direction on air. See `RenderMode`.
   const mode = options.mode ?? 'output';
+  const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
+  const managedPlan =
+    mode === 'output' && outputPass === 'full' ? managedResumePlan(scene) : undefined;
+  if (managedPlan !== undefined) scene = managedPlan.scene;
   const onOutputPosition = mode === 'output' ? options.onOutputPosition : undefined;
   let editCountdowns = mode === 'author' && options.editCountdowns === true;
   // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
@@ -593,7 +597,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   }
   const stepPlan = stepPlanOf(scene);
 
-  const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
   const holdsLiveFallback =
     mode === 'output' && outputPass !== 'foreground' && !isPvwRehearsal(doc);
   const lookGroup = lookGroupOf(scene);
@@ -3457,20 +3460,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   };
 
   const managed =
-    mode === 'output' && outputPass === 'full' && supportsManagedStaticResume(scene)
-      ? createManagedStaticStage(scene, {
+    managedPlan === undefined
+      ? undefined
+      : createManagedStaticStage(scene, managedPlan.pageCount, {
           stage: built.container,
           ready,
           ...(options.assetUrls === undefined ? {} : { assetUrls: options.assetUrls }),
           ...(options.skipFontLoad === undefined ? {} : { skipFontLoad: options.skipFontLoad }),
           canApply: () => machine.state === 'pending',
           applyAssetUrls,
-        })
-      : undefined;
+        });
 
   const runtime: TemplateRuntime = {
     ready,
-    ...(managed === undefined ? {} : { applyManagedState: managed.applyState }),
+    ...(managed === undefined || managedPlan === undefined
+      ? {}
+      : { applyManagedState: managed.applyState, managedResumePageCount: managedPlan.pageCount }),
 
     async play(data, _opts?: PlayOptions): Promise<void> {
       if (machine.state === 'removed') {

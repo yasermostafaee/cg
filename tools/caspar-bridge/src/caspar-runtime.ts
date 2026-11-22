@@ -19,7 +19,7 @@ import {
   type ServerSessionState,
 } from '@cg/caspar-client';
 import {
-  CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
+  managedResumePageCountFromHtml,
   FieldValuesSchema,
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
@@ -463,6 +463,9 @@ import {
   resolveServeOverride,
   storedServeOverride,
 } from './serve-host-config.js';
+
+const managedSequencePageKey = 'managed-sequence';
+type ManagedRowOperation = 'take' | 'update' | 'stop' | 'out' | 'page';
 
 /** R-010 — the `connections.set-config` response shape. */
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
@@ -7527,27 +7530,28 @@ export class CasparRuntime {
   #managedTemplate(
     item: StackItemState,
     slot: CommandSlot,
-  ): { versionId: string; key: string; sha256: string } | undefined {
+  ): { versionId: string; key: string; sha256: string; pageCount: number } | undefined {
     const version =
       this.#templates.heldVersion(item.itemId) ??
       this.#templates.versionOn(slot.channel, item.templateId);
     const html = version === null ? null : this.#templates.htmlOf(version);
     const key = version === null ? null : this.#templates.serveKeyOf(version);
-    const head = html?.match(/<head>[\s\S]*?<\/head>/i)?.[0];
-    if (
-      version === null ||
-      html === null ||
-      key === null ||
-      !head?.includes(CG_MANAGED_STATIC_RESUME_PAGE_MARKER)
-    ) {
-      return undefined;
-    }
-    return { versionId: version, key, sha256: createHash('sha256').update(html).digest('hex') };
+    if (version === null || html === null || key === null) return undefined;
+    const pageCount = managedResumePageCountFromHtml(html);
+    return pageCount === undefined
+      ? undefined
+      : {
+          versionId: version,
+          key,
+          pageCount,
+          sha256: createHash('sha256').update(html).digest('hex'),
+        };
   }
 
   #settleManagedRow(
     itemId: string,
     layer: ManagedHtmlLayer | undefined,
+    pageCount: number,
     absent: 'keep' | 'clear' = 'keep',
     stagedFields?: FieldValues,
   ): void {
@@ -7576,6 +7580,7 @@ export class CasparRuntime {
       this.#reconciler.applyIntent({ kind, itemId }, seq);
       this.#reconciler.applyAck(seq, true);
     }
+    if (pageCount > 1) this.#setPageIndex(itemId, managedSequencePageKey, layer?.page ?? 0);
     this.#markDirty(itemId);
   }
 
@@ -7584,31 +7589,42 @@ export class CasparRuntime {
     if (pilot === undefined) return;
     const rows = this.#reconciler.snapshot().flatMap((item) => {
       const slot = this.#slots.get(item.itemId);
-      return slot?.channel === pilot.channel
-        ? [{ rowId: item.itemId, layer: slot.layer, item, slot }]
-        : [];
+      if (slot?.channel !== pilot.channel) return [];
+      const template = this.#managedTemplate(item, slot);
+      return [
+        { rowId: item.itemId, layer: slot.layer, template, pageCount: template?.pageCount ?? 1 },
+      ];
     });
     if (rows.length === 0) return;
     try {
       const mapped = await pilot.stack.inspectRows(rows);
-      rows.forEach(({ rowId, item, slot }, index) => {
+      rows.forEach(({ rowId, template, pageCount }, index) => {
         const layer = mapped[index];
-        const template = layer === undefined ? undefined : this.#managedTemplate(item, slot);
         if (layer !== undefined && template?.sha256 !== layer.template.version) {
           this.#reconciler.setUnverifiable(rowId, true);
           return;
         }
-        if (template !== undefined) this.#templates.hold(rowId, template.versionId);
-        this.#settleManagedRow(rowId, layer);
+        if (layer !== undefined && template !== undefined)
+          this.#templates.hold(rowId, template.versionId);
+        this.#settleManagedRow(rowId, layer, pageCount);
       });
     } catch {
       for (const { rowId } of rows) this.#reconciler.setUnverifiable(rowId, true);
     }
   }
 
-  async #applyManaged(
+  #applyManaged(
     itemId: string,
-    operation: 'take' | 'update' | 'stop' | 'out',
+    operation: ManagedRowOperation,
+    update?: { fields: FieldValues; mergeMode: 'merge' | 'replace' },
+  ): Promise<TakeVerdict> {
+    const apply = () => this.#applyManagedImpl(itemId, operation, update);
+    return operation === 'take' ? apply() : this.#withPageQueue(itemId, apply);
+  }
+
+  async #applyManagedImpl(
+    itemId: string,
+    operation: ManagedRowOperation,
     update?: { fields: FieldValues; mergeMode: 'merge' | 'replace' },
   ): Promise<TakeVerdict> {
     const pilot = this.#managedCg;
@@ -7635,13 +7651,18 @@ export class CasparRuntime {
       const item = this.#reconciler.get(itemId);
       if (item === null) return { accepted: false, errorCode: 'unknown-item' };
       const withFields = operation === 'take' || operation === 'update';
-      const template = withFields ? this.#managedTemplate(item, slot) : undefined;
+      const template = this.#managedTemplate(item, slot);
       if (withFields && template === undefined) {
         return {
           accepted: false,
           errorCode: 'managed-cg-static-only',
           message: 'Reimport a static template with managed recovery support.',
         };
+      }
+      const pageCount = template?.pageCount ?? 1;
+      const currentPage = this.#pageIndexes.get(itemId)?.[managedSequencePageKey] ?? 0;
+      if (operation === 'page' && pageCount < 2) {
+        return { accepted: false, errorCode: 'managed-cg-static-only' };
       }
       let manifest: ManagedTemplate | undefined;
       if (operation === 'take' && template !== undefined) {
@@ -7684,6 +7705,11 @@ export class CasparRuntime {
         operation,
         rowId: itemId,
         layer: slot.layer,
+        pageCount,
+        ...(operation === 'page' && {
+          expectedPage: currentPage,
+          targetPage: pageTarget(currentPage, pageCount, false, 'next'),
+        }),
         ...(manifest !== undefined && { template: manifest }),
         ...(template !== undefined && {
           expectedData: item.fields,
@@ -7709,7 +7735,13 @@ export class CasparRuntime {
       if (template !== undefined && result.layer !== undefined)
         this.#templates.hold(itemId, template.versionId);
       if (operation === 'out') this.#templates.release(itemId);
-      this.#settleManagedRow(itemId, result.layer, operation === 'out' ? 'clear' : 'keep', data);
+      this.#settleManagedRow(
+        itemId,
+        result.layer,
+        pageCount,
+        operation === 'out' ? 'clear' : 'keep',
+        data,
+      );
       return { accepted: true };
     } catch (error) {
       return {
@@ -9895,11 +9927,13 @@ export class CasparRuntime {
    * gate is the UI's to hold and this path stays a thin verb.
    */
   async nextItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
-    if (this.#managedCg !== undefined) return { accepted: false, errorCode: 'managed-cg-static-only' };
     return this.#audited('next', this.#itemDetail(itemId), () => this.#nextItemImpl(itemId));
   }
 
   async #nextItemImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    if (this.#managedCg !== undefined) {
+      return this.#applyManaged(itemId, 'page');
+    }
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);

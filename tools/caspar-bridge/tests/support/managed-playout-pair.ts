@@ -94,6 +94,7 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
   let failWriteReply = false;
   let differentBundle = false;
   let badWriteReply = false;
+  let pausedLayout: Promise<void> | undefined;
   let expired = false;
   let exposeReplicaReceipt = false;
   let hideOriginalReceipt = false;
@@ -212,6 +213,11 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
         for await (const chunk of req) body += String(chunk);
         const command = managedLayoutCommandSchema.parse(JSON.parse(body));
         posts.push({ engine, command });
+        if (pausedLayout !== undefined) {
+          const pause = pausedLayout;
+          pausedLayout = undefined;
+          await pause;
+        }
         const reserved = new ManagedCgJournal(directory).get(groupId);
         if (
           reserved?.commandId !== command.commandId ||
@@ -291,6 +297,15 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
     reads,
     requests,
     staged,
+    pauseNextLayout() {
+      let resume: (() => void) | undefined;
+      pausedLayout = new Promise((resolve) => {
+        resume = resolve;
+      });
+      const release = () => resume?.();
+      cleanup.push(release);
+      return release;
+    },
     seedLayout(layers: readonly ManagedLayoutLayer[]) {
       appliedLayers = layers;
       revision += 1;
@@ -322,6 +337,7 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
     },
     restoreResponse() {
       failWriteReply = false;
+      badWriteReply = false;
     },
     corruptResponse() {
       badWriteReply = true;

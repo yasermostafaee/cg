@@ -5225,6 +5225,11 @@ applied template state after a Bridge restart. The static HTML pilot passed on a
 - WHEN an opt-in channel is served by External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
 - WHEN the Bridge restarts with an applied static graphic THEN Control restores its confirmed
   data and on-air state. A freshly prepared renderer shows the applied data without playing the entrance.
+- WHEN an eligible finite manual cut sequence shows a page THEN Next uses the absolute
+  page in Playout's applied layout, including after a restart or owner transfer. The last page
+  holds and Stop returns the sequence to its first page.
+- WHEN the reserve Core restarts with a confirmed manual Cut page THEN Playout restores the
+  same page and applied fields to the reserve's programme without a new Bridge layout command.
 - WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
 - WHEN a backup is healthy but a row has media or live inputs unavailable there THEN Layers keeps
   the template name and a short backup status. Inspector expands to show the affected inputs and reasons.

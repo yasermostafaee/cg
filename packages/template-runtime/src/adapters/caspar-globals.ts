@@ -1,5 +1,6 @@
 import {
   CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+  CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
   readCgControl,
   stripCgControl,
   withCgControl,
@@ -67,7 +68,9 @@ export function installCasparGlobals(
               key === 'framePlacements' ||
               key === 'nativeFallbackHold' ||
               key === 'presetEffectId' ||
-              (key === 'look' && control.presetEffectId !== undefined && control.frameTransition?.authoredPreset === true),
+              (key === 'look' &&
+                control.presetEffectId !== undefined &&
+                control.frameTransition?.authoredPreset === true),
           )))
     ) {
       return;
@@ -135,7 +138,10 @@ export function installCasparGlobals(
   win.cg = runtime;
   if (runtime.applyManagedState !== undefined) {
     win.apasaiCg = {
-      version: CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+      version:
+        (runtime.managedResumePageCount ?? 1) > 1
+          ? CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION
+          : CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
       applyState: runtime.applyManagedState,
     };
   } else {

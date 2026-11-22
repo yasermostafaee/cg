@@ -1187,12 +1187,13 @@ The full output adapter exposes `window.apasaiCg.applyState` for resumable stati
 Eligibility and the emitted HTML marker come from the shared schema. Both exporters check
 the runtime bundle capability before advertising recovery.
 
-The managed callback builds fresh DOM from the authored scene and absolute field data. It
+The managed callback builds fresh DOM from the authored scene, absolute field data and page. It
 prepares the required fonts and decodes images off screen, then publishes visibility and
 the complete field pose in one browser task. Playout applies the layer transform. A failed
-prepare leaves the previous view in place. The managed page does not enter a legacy play or
-start a timeline. Timed content, authored keyframes, looks, and page changes require a
-separate resume contract.
+prepare leaves the previous view in place. The managed page displays the applied pose directly.
+A finite authored manual Cut sequence declares its page count and selects the requested item
+before building the candidate. The static marker still represents one page. Timed content,
+authored keyframes, looks and operator-edited books require a separate resume contract.
 
 ## Extension points — "how do I add X"
 

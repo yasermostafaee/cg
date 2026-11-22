@@ -18,6 +18,7 @@ import {
   discardMissingSceneElementBindings,
   hasNextStep,
   hasSoundEffects,
+  managedResumePageCount,
   pageListsOf,
   TEMPLATE_TIMING_VERSION,
   templateTimingOf,
@@ -385,7 +386,7 @@ export async function produceTemplateDelivery(
     // scene, by the canonical predicate the Designer's transport also uses.
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
     // the bridge persists it and every browser gets the same answer.
-    hasNext: hasNextStep(scene, scene.compositions),
+    hasNext: hasNextStep(scene, scene.compositions) || (managedResumePageCount(scene) ?? 0) > 1,
     // `D-165` — the row's speaker mark: derived HERE, once, by the one predicate.
     ...(hasSoundEffects(scene, scene.compositions) ? { hasSound: true } : {}),
     // `R-100` — the template's PAGE LISTS, at this same one moment and for `hasNext`'s reason:

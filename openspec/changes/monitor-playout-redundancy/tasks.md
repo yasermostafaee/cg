@@ -62,10 +62,20 @@
 - [ ] Verify whole-layout state and a mirrored media plate with the real CG Bridge and the
       managed contract on an isolated channel.
 - [ ] Inspect B's authenticated D11 match for the flagged media on the target station.
-- [ ] Extend the pilot to sequence pages and verify Next and page recovery on a real isolated
-      redundant channel.
-- [ ] Verify the managed export adapter with real graphics and collect acceptance for cold
-      recovery, masked multi-plate presets, authored outros and physical programme output.
+- [x] Verify one finite authored manual Cut sequence. Chromium covers its Persian second page
+      on a fresh renderer, Next from the applied page after restart and the end-of-sequence and
+      Stop semantics. The real .26 pair rendered Next on both PGM outputs after one layout
+      submission to A. Update, Bridge restart and warm handoff preserved page 1 (zero-based).
+      Clear removed the test layer from both members and returned ownership to A.
+- [x] Restart the physical .26 reserve Core while the authored sequence shows its second page.
+      Playout's fresh Core generation kept applied revision 19 and restored the page and edited
+      text to B's PGM before handoff, with zero new Bridge layout commands. The first sampled
+      frame was blank at 393 ms after API confirmation. The next sample at 825 ms matched
+      the reference page. In the same run, warm handoff and cleanup also passed.
+- [ ] Integrate editable picture books with replica-safe assets and verify their page recovery
+      after a physical Core restart.
+- [ ] Verify the managed export adapter with additional real graphics and collect acceptance
+      for masked multi-plate presets, authored outros and physical programme output.
 
 ## Backup input status
 

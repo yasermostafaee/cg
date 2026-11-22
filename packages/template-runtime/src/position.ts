@@ -1,5 +1,6 @@
 import {
   ANCHOR_FRACTIONS,
+  managedResumePlan,
   outputLetterbox,
   outputScale,
   outputTranslate,
@@ -213,6 +214,9 @@ export function applyOutputPosition(scene: Scene, options: ApplyOutputPositionOp
   const doc = options.doc ?? document;
   const stage = doc.querySelector<HTMLElement>('.cg-stage');
   if (stage === null) return;
+  // Retained managed wrappers draw their entry composition at its authored placement.
+  if (scene.entryCompositionId !== undefined && scene.layers.length === 0)
+    scene = managedResumePlan(scene)?.scene ?? scene;
   // The raster is resolved BEFORE html/body are resized below. `innerWidth` is
   // a viewport measurement and so is not actually perturbed by sizing the
   // document element — but reading the geometry first means a second call

@@ -62,3 +62,34 @@ for the pilot.
 - **THEN** Control restores the row's data and on-air status from that layout
 - **AND** the exported HTML can apply the same complete state on a fresh renderer without
   replaying the entrance
+
+### Requirement: Managed manual sequences use an absolute page
+
+The Bridge SHALL validate the authored page count before advancing a supported finite manual
+cut sequence. It SHALL send the destination page in a complete managed layout. A page turn
+SHALL preserve the graphic instance, fields and unrelated layout layers.
+
+#### Scenario: Next after the Bridge restarts or ownership transfers
+
+- **WHEN** a supported manual sequence is showing and the Bridge restores its applied layout
+- **THEN** the next press advances from the confirmed page and only the current owner receives the layout
+- **AND** a fresh renderer displays the applied page without replaying an entrance or earlier pages
+
+#### Scenario: The reserve Core restarts on a confirmed sequence page
+
+- **WHEN** Playout restores the applied layout after a reserve Core restart
+- **THEN** the reserve's fresh renderer shows the same page and applied fields on its programme
+- **AND** Bridge submits no new layout to cause the recovery
+
+#### Scenario: Next at the last page and Stop
+
+- **WHEN** Next is pressed while the last page is shown
+- **THEN** the page stays visible and Bridge submits no new layout
+- **WHEN** the operator stops the sequence
+- **THEN** the stopped layout records the first page for the next Play
+
+#### Scenario: Stop is pressed during an in-flight Next
+
+- **WHEN** a page turn is awaiting confirmation and the operator presses Stop on that row
+- **THEN** Bridge processes the stop after the preceding command settles
+- **AND** an unresolved command continues to fence further writes

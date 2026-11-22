@@ -1,4 +1,12 @@
-import { CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION, type Scene } from '@cg/shared-schema';
+import {
+  CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
+  CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+  SequenceElementSchema,
+  managedResumePageCount,
+  withPageLists,
+  type Scene,
+  type SequenceElement,
+} from '@cg/shared-schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installCasparGlobals } from '../src/adapters/caspar-globals.js';
 import { createRuntime } from '../src/runtime.js';
@@ -14,7 +22,39 @@ const state = {
   resumeWithoutReplay: true,
 };
 
-describe('External CG static graphic recovery', () => {
+function sequenceScene(overrides: Partial<SequenceElement> = {}): Scene {
+  const scene = structuredClone(lowerThirdScene);
+  const layer = scene.layers[0];
+  if (layer?.children[1]?.type !== 'text') throw new Error('Fixture has no title.');
+  const { font, transform, opacity, locked, zIndex } = layer.children[1];
+  layer.children.push(
+    SequenceElementSchema.parse({
+      id: 'chapters',
+      name: 'Chapters',
+      type: 'sequence',
+      transform,
+      visible: true,
+      color: '#FFFFFF',
+      direction: 'rtl',
+      font,
+      opacity,
+      locked,
+      zIndex,
+      advance: 'manual',
+      repeat: 1,
+      transitionIn: 'none',
+      transitionOut: 'none',
+      items: [
+        { id: 'a', text: 'صفحهٔ اول' },
+        { id: 'b', text: 'صفحهٔ دوم' },
+      ],
+      ...overrides,
+    }),
+  );
+  return scene;
+}
+
+describe('External CG settled graphic recovery', () => {
   let cleanup: (() => void) | undefined;
 
   beforeEach(() => {
@@ -100,6 +140,80 @@ describe('External CG static graphic recovery', () => {
     await managedApi().applyState(state);
     expect(document.querySelector('[data-cg-element-id="name"]')?.textContent).toBe('Studio');
     expect(document.body.classList.contains('cg-pending')).toBe(false);
+  });
+
+  it('applies a nonzero absolute sequence page on a cold replica without a legacy Next or entrance', async () => {
+    const scene = sequenceScene();
+    const runtime = boot(scene);
+    const play = vi.fn();
+    runtime.on('play.start', play);
+    const selectedPage = '[data-cg-element-id="chapters"] [data-cg-sequence-item]';
+    expect(managedApi().version).toBe(CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION);
+    await managedApi().applyState({ ...state, page: 1 });
+    expect(document.querySelector(selectedPage)?.textContent).toBe('صفحهٔ دوم');
+    expect(document.querySelector('[data-cg-element-id="name"]')?.textContent).toBe('Studio');
+    expect(document.body.classList.contains('cg-pending')).toBe(false);
+    await expect(managedApi().applyState({ ...state, page: 2 })).rejects.toThrow('sequence page');
+    expect(document.querySelector(selectedPage)?.textContent).toBe('صفحهٔ دوم');
+
+    expect(runtime.next).toBeTypeOf('function');
+    await runtime.next?.();
+    await managedApi().applyState({ ...state, revision: 2, page: 0, data: {} });
+    expect(document.querySelector(selectedPage)?.textContent).toBe('صفحهٔ اول');
+    expect(document.querySelector('[data-cg-element-id="name"]')?.textContent).toBe('سارا نادری');
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('resolves the entry in a retained wrapper using its own layers, fields and timing', async () => {
+    const pageScene = sequenceScene();
+    const entry = {
+      id: 'entry',
+      name: pageScene.name,
+      resolution: { width: 1280, height: 720 },
+      frameRange: pageScene.frameRange,
+      editorBackdrop: pageScene.editorBackdrop,
+      layers: pageScene.layers,
+      fields: pageScene.fields,
+      bindings: pageScene.bindings,
+    };
+    const wrapped = {
+      ...pageScene,
+      layers: [],
+      fields: [],
+      bindings: [],
+      entryCompositionId: entry.id,
+      compositions: [entry],
+    };
+    expect(managedResumePageCount(wrapped)).toBe(2);
+    expect(
+      managedResumePageCount({
+        ...wrapped,
+        compositions: [{ ...entry, lifecycle: { outPoint: 15 } }],
+      }),
+    ).toBeUndefined();
+
+    boot(wrapped);
+    await managedApi().applyState({ ...state, page: 1 });
+    expect(document.querySelector<HTMLElement>('.cg-stage')?.style.width).toBe('1280px');
+    expect(document.querySelector('[data-cg-element-id="chapters"]')?.textContent).toBe(
+      'صفحهٔ دوم',
+    );
+    expect(document.querySelector('[data-cg-element-id="name"]')?.textContent).toBe('Studio');
+  });
+
+  it('only accepts authored finite cuts and refuses operator-replaceable picture lists', () => {
+    expect(managedResumePageCount(sequenceScene({ advance: 'auto' }))).toBeUndefined();
+    expect(managedResumePageCount(sequenceScene({ repeat: 'infinite' }))).toBeUndefined();
+    expect(managedResumePageCount(sequenceScene({ transitionIn: 'fade' }))).toBeUndefined();
+    expect(managedResumePageCount(sequenceScene({ operatorSteps: false }))).toBeUndefined();
+    const pictureSequence = sequenceScene({
+      items: [
+        { id: 'photo-a', kind: 'image', assetId: 'photo1' },
+        { id: 'photo-b', kind: 'image', assetId: 'photo2' },
+      ],
+    });
+    expect(managedResumePageCount(pictureSequence)).toBe(2);
+    expect(managedResumePageCount(withPageLists(pictureSequence))).toBeUndefined();
   });
 
   it('offers no managed callback for scenes whose layers are driven by frame timing', async () => {

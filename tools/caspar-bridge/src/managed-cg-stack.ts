@@ -14,13 +14,20 @@ export type ManagedHtmlLayer = Extract<ManagedLayoutLayer, { kind: 'html' }>;
 export interface ManagedCgStackRow {
   readonly rowId: string;
   readonly layer: number;
+  /** Verified authored page count of the retained template. Static rows have one page. */
+  readonly pageCount?: number;
 }
 
 export interface ManagedCgStackIntent extends ManagedCgStackRow {
-  readonly operation: 'take' | 'update' | 'stop' | 'out' | 'clear' | 'next';
+  readonly operation: 'take' | 'update' | 'stop' | 'out' | 'clear' | 'page';
   readonly template?: ManagedTemplate;
   readonly expectedTemplateVersion?: string;
   readonly expectedData?: Readonly<Record<string, unknown>>;
+  /** Absolute zero-based page pins for a resident page turn. */
+  readonly expectedPage?: number;
+  readonly targetPage?: number;
+  /** Absolute zero-based page selected before seating a new graphic. */
+  readonly initialPage?: number;
   /** Complete applied values. An update never merges values from an earlier layout. */
   readonly data?: Readonly<Record<string, unknown>>;
 }
@@ -36,6 +43,20 @@ export type ManagedCgStackOutcome =
   | { readonly status: 'unchanged'; readonly layer: ManagedHtmlLayer | undefined };
 
 const fullRaster = { x: 0, y: 0, width: 1, height: 1 };
+const largestPage = 1_000_000;
+
+function pageInRange(page: number | undefined, count: number | undefined): page is number {
+  const pageCount = count ?? 1;
+  return (
+    Number.isSafeInteger(pageCount) &&
+    pageCount >= 1 &&
+    pageCount <= largestPage + 1 &&
+    page !== undefined &&
+    Number.isSafeInteger(page) &&
+    page >= 0 &&
+    page < pageCount
+  );
+}
 
 /** A retained CG row keeps its graphic identity across Bridge and Playout restarts. */
 function instanceId(rowId: string): string {
@@ -58,10 +79,12 @@ function findRow(
   if (
     existing.kind !== 'html' ||
     existing.graphicInstanceId !== graphicInstanceId ||
-    (existing.page ?? 0) !== 0 ||
     !existing.template.resumeWithoutReplay
   ) {
     throw new Error('The managed layer is occupied by another graphic.');
+  }
+  if (!pageInRange(existing.page ?? 0, row.pageCount)) {
+    throw new Error('The applied page is outside the retained managed template.');
   }
   return existing;
 }
@@ -104,8 +127,16 @@ export class ManagedCgStack {
 
   async apply(intent: ManagedCgStackIntent): Promise<ManagedCgStackOutcome> {
     const operation = intent.operation;
-    if (operation === 'next') {
-      throw new Error('A managed static graphic has no next page.');
+    if (
+      operation === 'page' &&
+      (!pageInRange(intent.expectedPage, intent.pageCount) ||
+        !pageInRange(intent.targetPage, intent.pageCount) ||
+        intent.expectedTemplateVersion === undefined)
+    ) {
+      throw new Error('A managed page turn requires valid authored pages and a retained template.');
+    }
+    if (operation === 'take' && !pageInRange(intent.initialPage ?? 0, intent.pageCount)) {
+      throw new Error('The starting page is outside the retained managed template.');
     }
 
     // Capture the complete operator intent before querying the remote Engine.
@@ -113,7 +144,10 @@ export class ManagedCgStack {
     let desired: ManagedHtmlLayer | undefined;
     const outcome = await this.commands.editLayout((layout) => {
       const current = findRow(layout, captured);
-      if (current !== undefined && (operation === 'take' || operation === 'update')) {
+      if (
+        current !== undefined &&
+        (operation === 'take' || operation === 'update' || operation === 'page')
+      ) {
         if (
           captured.expectedData !== undefined &&
           !isDeepStrictEqual(current.data ?? {}, captured.expectedData)
@@ -144,8 +178,16 @@ export class ManagedCgStack {
     return { status: 'rolledBack', result: outcome.result };
   }
 
-  async inspect(rowId: string, layer: number): Promise<ManagedHtmlLayer | undefined> {
-    return findRow(await this.commands.readAppliedLayout(), { rowId, layer });
+  async inspect(
+    rowId: string,
+    layer: number,
+    pageCount?: number,
+  ): Promise<ManagedHtmlLayer | undefined> {
+    return findRow(await this.commands.readAppliedLayout(), {
+      rowId,
+      layer,
+      pageCount: pageCount ?? 1,
+    });
   }
 
   async inspectRows(
@@ -161,9 +203,7 @@ export class ManagedCgStack {
 
   private nextLayer(
     current: ManagedHtmlLayer | undefined,
-    intent: ManagedCgStackIntent & {
-      operation: Exclude<ManagedCgStackIntent['operation'], 'next'>;
-    },
+    intent: ManagedCgStackIntent,
   ): ManagedHtmlLayer | undefined {
     switch (intent.operation) {
       case 'take': {
@@ -180,7 +220,7 @@ export class ManagedCgStack {
             layer: intent.layer,
             graphicInstanceId: instanceId(intent.rowId),
             template,
-            page: 0,
+            page: intent.initialPage ?? 0,
             transform: { fill: fullRaster, crop: fullRaster },
             animationOrigin: new Date(this.now()).toISOString(),
           }),
@@ -191,8 +231,20 @@ export class ManagedCgStack {
       case 'update':
         if (intent.data === undefined) throw new Error('Update requires complete graphic data.');
         return current === undefined ? undefined : htmlLayer({ ...current, data: intent.data });
+      case 'page':
+        if (current?.visibility !== 'shown') {
+          throw new Error('The managed graphic must be on air to change its applied page.');
+        }
+        if ((current.page ?? 0) !== intent.expectedPage) {
+          throw new Error('The managed page changed on Playout. Refresh the row before retrying.');
+        }
+        return intent.targetPage === (current.page ?? 0)
+          ? current
+          : htmlLayer({ ...current, page: intent.targetPage });
       case 'stop':
-        return current === undefined ? undefined : { ...current, visibility: 'stopped' };
+        return current === undefined
+          ? undefined
+          : { ...current, visibility: 'stopped', ...((intent.pageCount ?? 1) > 1 && { page: 0 }) };
       case 'out':
       case 'clear':
         return undefined;

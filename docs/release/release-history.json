@@ -97,6 +97,10 @@
         {
           "fa": "در پایلوت External CG v2 برای قالب‌های ثابت HTML، فرمان‌های Play، Update، Stop و Clear به مالک فعلی Playout می‌رسند. آزمون روی جفت واقعی .26 نشان داد که Play به A می‌رسد و خود Playout گرافیک را روی B رندر می‌کند. گرافیک پس از انتقال مالکیت روی B باقی ماند و CG Control متن به‌روزشده را پس از راه‌اندازی دوبارهٔ Bridge بازیابی کرد.",
           "en": "In the External CG v2 pilot for static HTML templates, Play, Update, Stop and Clear go to the current Playout owner. On a real .26 pair, Play reached A and Playout rendered the graphic on B. The graphic survived ownership transfer, and CG Control restored the updated caption after a Bridge restart."
+        },
+        {
+          "fa": "در پایلوت External CG v2، دکمهٔ Next یک توالی محدودِ دستی با Cut را صفحه‌به‌صفحه پیش می‌برد. Bridge پس از راه‌اندازی دوباره ادامه را از شمارهٔ صفحهٔ تأییدشده در Playout انجام می‌دهد. آخرین صفحه ثابت می‌ماند و Stop توالی را از صفحهٔ اول آماده می‌کند. در آزمون .26، خود Playout صفحهٔ دوم را پس از ری‌استارت Core سرور B در PGM بازیابی کرد.",
+          "en": "In the External CG v2 pilot, Next advances a finite manual Cut sequence. After restart, Bridge continues from the page confirmed by Playout. The final page holds and Stop resets the sequence for a fresh Play. On the .26 pair, Playout restored page two to B’s programme after its Core restarted."
         }
       ],
       "fixes": [

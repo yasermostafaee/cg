@@ -156,13 +156,118 @@ it('applies managed row controls to the full layout and recovers absolute state 
     visibility: 'stopped',
     data: { title: 'new' },
   });
-  await expect(restarted.apply({ ...row, operation: 'next' })).rejects.toThrow('no next page');
+  await expect(
+    restarted.apply({
+      ...row,
+      operation: 'page',
+      expectedPage: 0,
+      targetPage: 1,
+      expectedTemplateVersion: html.template.version,
+    }),
+  ).rejects.toThrow('valid authored pages');
   expect(await restarted.apply({ ...row, operation: 'out' })).toMatchObject({
     status: 'applied',
     layer: undefined,
   });
   expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A', 'A', 'B']);
   expect(pair.posts[3]?.command.layout).toEqual([html]);
+});
+
+it('changes the absolute sequence page only on the owner and recovers it after handoff', async () => {
+  const pair = await playoutPair(cleanup);
+  pair.seedLayout([html]);
+  const stack = new ManagedCgStack(pair.executor());
+  const row = { rowId: 'retained-sequence', layer: 81, pageCount: 4 };
+  const data = { title: 'On all pages' };
+  await stack.apply({ ...row, operation: 'take', template: html.template, data, initialPage: 1 });
+  const seated = pair.posts[0]?.command.layout[1];
+  expect(seated?.page).toBe(1);
+
+  const turn = {
+    ...row,
+    operation: 'page' as const,
+    expectedTemplateVersion: html.template.version,
+    expectedPage: 1,
+    targetPage: 2,
+  };
+  pair.corruptResponse();
+  const pending = await stack.apply(turn);
+  expect(pending).toMatchObject({ status: 'pending' });
+  expect(pair.posts[1]?.command.layout).toEqual([html, { ...seated, page: 2 }]);
+  await expect(stack.apply({ ...turn, targetPage: 3 })).resolves.toEqual(pending);
+  expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A']);
+
+  pair.switchOwner();
+  pair.useReplicaEvidence();
+  const restarted = new ManagedCgStack(pair.executor());
+  expect(await restarted.recoverPending()).toMatchObject({ status: 'applied' });
+  expect(pair.posts).toHaveLength(2);
+  expect(await restarted.inspectRows([row])).toEqual([{ ...seated, page: 2 }]);
+  expect(await restarted.inspect(row.rowId, row.layer, row.pageCount)).toEqual({
+    ...seated,
+    page: 2,
+  });
+  await expect(restarted.inspect(row.rowId, row.layer)).rejects.toThrow('outside the retained');
+  pair.restoreResponse();
+  expect(await restarted.apply({ ...turn, expectedPage: 2, targetPage: 1 })).toMatchObject({
+    status: 'applied',
+    layer: { page: 1 },
+  });
+  expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A', 'B']);
+  expect(pair.posts[2]?.command.layout).toEqual([html, seated]);
+});
+
+it('rejects stale, invalid and stopped page turns and preserves a sequence on normal edits', async () => {
+  const pair = await playoutPair(cleanup);
+  const stack = new ManagedCgStack(pair.executor());
+  const row = { rowId: 'sequence-bounds', layer: 81, pageCount: 3 };
+  const turn = {
+    ...row,
+    operation: 'page' as const,
+    expectedTemplateVersion: html.template.version,
+    expectedPage: 0,
+    targetPage: 1,
+  };
+  await expect(stack.apply(turn)).rejects.toThrow('must be on air');
+  await expect(
+    stack.apply({ ...row, operation: 'take', template: html.template, data: {}, initialPage: 3 }),
+  ).rejects.toThrow('starting page');
+  expect(pair.posts).toHaveLength(0);
+  await stack.apply({ ...row, operation: 'take', template: html.template, data: {} });
+  await expect(stack.apply({ ...turn, expectedPage: 1 })).rejects.toThrow('page changed');
+  await expect(stack.apply({ ...turn, expectedTemplateVersion: 'different' })).rejects.toThrow(
+    'version on Playout',
+  );
+  for (const targetPage of [-1, 1.25, 3]) {
+    await expect(stack.apply({ ...turn, targetPage })).rejects.toThrow('valid authored pages');
+  }
+  await expect(stack.apply({ ...turn, targetPage: 0 })).resolves.toMatchObject({
+    status: 'unchanged',
+  });
+  expect(pair.posts).toHaveLength(1);
+  expect(pair.journal().get(groupId)).toBeUndefined();
+
+  await expect(stack.apply({ ...turn, targetPage: 2 })).resolves.toMatchObject({
+    status: 'applied',
+    layer: { page: 2 },
+  });
+  await expect(stack.apply({ ...turn, expectedPage: 2, targetPage: 1 })).resolves.toMatchObject({
+    status: 'applied',
+    layer: { page: 1 },
+  });
+  await expect(
+    stack.apply({ ...row, operation: 'update', data: { title: 'Edited' } }),
+  ).resolves.toMatchObject({
+    status: 'applied',
+    layer: { page: 1, data: { title: 'Edited' } },
+  });
+  await expect(stack.apply({ ...row, operation: 'stop' })).resolves.toMatchObject({
+    status: 'applied',
+    layer: { page: 0, visibility: 'stopped' },
+  });
+  await expect(stack.apply(turn)).rejects.toThrow('must be on air');
+  expect(pair.posts).toHaveLength(5);
+  expect(pair.journal().get(groupId)).toBeUndefined();
 });
 
 it.each(['makeAppliedStatePending', 'makeAppliedStateStale'] as const)(

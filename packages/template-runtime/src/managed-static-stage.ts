@@ -1,11 +1,13 @@
 import {
   FieldValuesSchema,
   stripCgControl,
+  type Element,
   type NestedFieldValues,
   type Scene,
 } from '@cg/shared-schema';
 import { applyScopedFieldValues } from './bindings.js';
 import { buildScene } from './scene-builder.js';
+import { fitSequenceTextInk } from './sequence-text-ink.js';
 import { fitAllText } from './text-fit.js';
 
 export interface ManagedStaticStage {
@@ -22,7 +24,10 @@ interface StageOptions {
   readonly applyAssetUrls: (stage: HTMLElement, urls?: Readonly<Record<string, string>>) => void;
 }
 
-function snapshotOf(value: unknown): { visibility: 'shown' | 'stopped'; data: NestedFieldValues } {
+function snapshotOf(
+  value: unknown,
+  pageCount: number,
+): { visibility: 'shown' | 'stopped'; data: NestedFieldValues; page: number } {
   if (value === null || typeof value !== 'object')
     throw new Error('Invalid managed graphic state.');
   const state = value as Record<string, unknown>;
@@ -34,13 +39,40 @@ function snapshotOf(value: unknown): { visibility: 'shown' | 'stopped'; data: Ne
     typeof graphicInstanceId !== 'string' ||
     graphicInstanceId === '' ||
     (visibility !== 'shown' && visibility !== 'stopped') ||
-    page !== 0 ||
+    typeof page !== 'number' ||
+    !Number.isSafeInteger(page) ||
+    page < 0 ||
+    page >= pageCount ||
     resumeWithoutReplay !== true
   ) {
-    throw new Error('Managed graphic state requires a resumable static page.');
+    throw new Error(
+      pageCount === 1
+        ? 'Managed graphic state requires a resumable static page.'
+        : 'Managed graphic state has an invalid sequence page.',
+    );
   }
   const data = FieldValuesSchema.parse(state['data'] === undefined ? {} : state['data']);
-  return { visibility, data: stripCgControl(data) as NestedFieldValues };
+  return { visibility, data: stripCgControl(data) as NestedFieldValues, page };
+}
+
+function sceneAtPage(scene: Scene, page: number): Scene {
+  if (page === 0) return scene;
+
+  function selectPage(element: Element): Element {
+    if (element.type === 'container')
+      return { ...element, children: element.children.map(selectPage) };
+    if (element.type !== 'sequence') return element;
+    const item = element.items[page];
+    if (item === undefined) throw new Error('Managed graphic sequence page is unavailable.');
+    // The scene builder already renders the first item at rest, using the shared sequence
+    // text and image renderers. Select the requested item before building the candidate DOM.
+    return { ...element, items: [item] };
+  }
+
+  return {
+    ...scene,
+    layers: scene.layers.map((layer) => ({ ...layer, children: layer.children.map(selectPage) })),
+  };
 }
 
 async function waitForImages(stage: HTMLElement): Promise<void> {
@@ -75,7 +107,11 @@ async function waitForStageFonts(stage: HTMLElement): Promise<void> {
  * Core owns the mixer transform and animation origin. The static page stages absolute field
  * values on an unpainted DOM, then publishes the complete pose in a single browser task.
  */
-export function createManagedStaticStage(scene: Scene, options: StageOptions): ManagedStaticStage {
+export function createManagedStaticStage(
+  scene: Scene,
+  pageCount: number,
+  options: StageOptions,
+): ManagedStaticStage {
   const { stage, ready, assetUrls, skipFontLoad, canApply, applyAssetUrls } = options;
   const doc = stage.ownerDocument;
   let active = false;
@@ -86,7 +122,7 @@ export function createManagedStaticStage(scene: Scene, options: StageOptions): M
     const parent = stage.parentNode;
     if (!canApply() || parent === null) throw new Error('Managed graphic page is unavailable.');
 
-    const candidate = buildScene(scene, doc);
+    const candidate = buildScene(sceneAtPage(scene, snapshot.page), doc);
     applyAssetUrls(candidate.container, assetUrls);
     applyScopedFieldValues(scene, scene, snapshot.data, candidate.scopeTree, assetUrls);
     candidate.container.style.position = 'absolute';
@@ -101,6 +137,9 @@ export function createManagedStaticStage(scene: Scene, options: StageOptions): M
       if (!canApply() || stage.parentNode !== parent)
         throw new Error('Managed graphic page is unavailable.');
       fitAllText(candidate.container);
+      candidate.container
+        .querySelectorAll<HTMLElement>('[data-cg-sequence-text]')
+        .forEach(fitSequenceTextInk);
       // Keep the existing stage element and its output placement. One synchronous DOM task
       // replaces all children, so intermediate or asset-less states are never painted.
       while (stage.firstChild !== null) stage.removeChild(stage.firstChild);
@@ -118,7 +157,7 @@ export function createManagedStaticStage(scene: Scene, options: StageOptions): M
       return active;
     },
     async applyState(value) {
-      const snapshot = snapshotOf(value);
+      const snapshot = snapshotOf(value, pageCount);
       const applying = last.then(() => apply(snapshot));
       last = applying.catch(() => undefined);
       await applying;
