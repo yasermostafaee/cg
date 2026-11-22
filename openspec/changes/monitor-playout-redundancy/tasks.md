@@ -35,6 +35,13 @@
 - [x] Review the `.12` OpenAPI, actual requests and two/four Core evidence. The Playout
       harness applied the complete Live, video and HTML layout, transferred control and
       preserved the previous image on a forced rollback. Real CG acceptance remains open.
+- [x] Implement owner-only External CG v2 layout transport and a durable per-group command journal.
+      Exercise ownership transfer, a lost reply, receipt reconciliation, stale recovery and restart
+      with two isolated HTTP Engine fixtures.
+- [x] Verify template preparation accepts matching bundle hashes from each configured member.
+- [ ] Build complete managed snapshots from the operator's channel stack, wire per-Engine operator
+      sessions and bundle preparation, and block legacy raw mutations for the mapped channels.
+- [ ] Verify recovery from a documented pre-admission refusal and establish journal retention.
 - [ ] Verify whole-layout state and a mirrored media plate with the real CG Bridge and the
       managed contract on an isolated channel.
 - [ ] Inspect B's authenticated D11 match for the flagged media on the target station.

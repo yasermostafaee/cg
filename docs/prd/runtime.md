@@ -5211,6 +5211,9 @@ is no verified ownership map.
 **What:** Show separate PGM pictures and signals for the configured engine and up to three reserves
 of the selected channel. Identify the verified active engine and listen to a single programme return.
 Send CG commands to the active engine after its external-graphics transfer contract is verified.
+The first integration stage accepts a complete, prepared channel layout. It verifies the owner
+and keeps the original request in a durable command journal. Operator command dispatch and
+absolute template recovery require separate integration and station acceptance.
 
 **Acceptance:**
 

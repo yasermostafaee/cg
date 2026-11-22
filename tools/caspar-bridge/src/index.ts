@@ -34,6 +34,14 @@ export {
 export { playoutHostOf } from './bridge.js';
 // `DESKTOP-APPS-01-B` B1.4 — every bridge request to the Playout: server-side, no Origin, no proxy.
 export { playoutFetch } from './playout-http.js';
+export { ManagedCgCommands } from './managed-cg-commands.js';
+export type {
+  ManagedCgCommandsOptions,
+  ManagedCgEndpoint,
+  ManagedCgOutcome,
+} from './managed-cg-commands.js';
+export { ManagedCgJournal } from './managed-cg-journal.js';
+export type { ManagedLayoutLayer, ManagedResult, ManagedTemplate } from './managed-cg-contract.js';
 export type { AuthGateState, BridgeHandle, BridgeOptions, StackProvenance } from './bridge.js';
 // `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack store (its record is
 // `@cg/shared-schema`'s `retainedFromStackItem`, shared with the console's display copy).

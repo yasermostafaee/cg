@@ -128,6 +128,27 @@ command while testing; an operator may not bypass it by issuing a new ID or clea
 journal. Replica readiness is per member and per applied revision. A successful result
 on the owner does not imply every reserve is ready to take control.
 
+## Managed layout transport and command recovery
+
+The .16 installer provides the owner, receipt and layout contracts. The .22 API publishes the
+corresponding command request model. The executor accepts a complete layout with prepared
+templates for an explicitly configured group. Each API origin uses its own operator session.
+It selects one self-confirmed owner after checking the configured member mappings, lease and
+fence and checking for conflicting observations. The lowest allowed layer anchors the layout.
+Template preparation checks version, Engine identity and bundle hash across configured members.
+
+Before posting, the executor persists the command ID, original member, local channel and exact
+serialized body. A pending command blocks further writes in the group after restart or owner
+transfer. The executor looks up the same ID on configured members and reconciles a verified
+non-terminal receipt on the original Engine. A matching applied or rolled-back decision closes
+the reservation. Timeouts, conflicting results and absent receipts keep the reservation.
+
+The test fixture serves two independent HTTP origins with different channel codes and physical
+numbers. Before enabling the managed path, integrate whole-channel state, prepare and verify
+assets on every member, and implement absolute HTML state for exported scenes. The write guard
+must also cover raw AMCP at enqueue/dispatch, including replay and recovery. Confirm refusal
+and ambiguous-result recovery semantics on the installed Engine before enabling the station.
+
 ## Legacy reserve observations after the D11 fix
 
 The operator confirmed both files now render on B with CG 1.2.10. Their A/B programme
