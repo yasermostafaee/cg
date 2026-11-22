@@ -451,6 +451,9 @@ importers:
 
   packages/shared-schema:
     dependencies:
+      '@cg/text-shaping':
+        specifier: workspace:*
+        version: link:../text-shaping
       zod:
         specifier: ^3.23.8
         version: 3.25.76

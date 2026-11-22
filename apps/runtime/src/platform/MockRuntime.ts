@@ -1,4 +1,4 @@
-import { isOnAirStatus, ownsLiveSeats } from '@cg/shared-schema';
+import { isOnAirStatus, operatorFieldUpdateRefusal, ownsLiveSeats } from '@cg/shared-schema';
 import type {
   AuditEntry,
   InputTransition,
@@ -769,6 +769,13 @@ export class MockRuntime {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
     if (position !== undefined) return { accepted: false, errorCode: 'live-position-unavailable' };
+    const fieldRefusal = operatorFieldUpdateRefusal(
+      this.#templateOfItem(itemId, item.templateId),
+      item.fields,
+      fields,
+      mergeMode,
+    );
+    if (fieldRefusal !== undefined) return { accepted: false, ...fieldRefusal };
     // `R-100` parity — refuse a bad page list before recording EITHER half of this atomic update.
     const pageRefusal = this.#refusePageLists(item.templateId, itemId, fields);
     if (pageRefusal !== null) return { accepted: false, ...pageRefusal };

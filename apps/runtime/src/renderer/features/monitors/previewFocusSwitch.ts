@@ -215,7 +215,7 @@ export function previewFocusSwitch({
   doc: Document;
   before: FrameSide;
   after: FrameSide;
-  layout: ControlLiveLayout;
+  layout: Pick<ControlLiveLayout, 'effects' | 'resolution'>;
   period: number;
   pictureReady: () => boolean;
   commit: () => void;

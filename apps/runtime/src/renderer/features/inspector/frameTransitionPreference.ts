@@ -56,7 +56,7 @@ export function setFrameTransitionPreference(change: Partial<FrameTransition>): 
 
 export function effectiveLayoutEffects(
   itemId: string,
-  layout: ControlLiveLayout,
+  layout: Pick<ControlLiveLayout, 'effects'>,
 ): ControlLiveLayoutEffects {
   const override = rowEffectOverrides(itemId);
   if (override === undefined) return layout.effects;

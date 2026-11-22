@@ -192,6 +192,11 @@ size==visualBBox invariant holds. The pure per-set math lives in
 [`path-structure.ts`](path-structure.ts) (unit-tested via
 `tests/store-path-morph.test.ts`).
 
+The Look slice writes Focus destinations and effects to the origin Look in the project document.
+Destinations reference registered solo Looks by ID. `deleteCompositionAndLinkedLooks` removes their
+references in the same edit that deletes the Look. Export derives the available shortcuts from the
+resulting live plate geometry and route keys.
+
 ## Adding to the store
 
 - **A new action on an existing domain** → add the method to that slice's object.

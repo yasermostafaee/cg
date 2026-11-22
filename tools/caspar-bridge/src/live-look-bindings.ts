@@ -3,8 +3,8 @@ import {
   effectiveOverridesForLook,
   lookPlateRects,
   resolvePlateSourcesForLook,
+  templateFocusTarget,
 } from '@cg/shared-ipc';
-import { controlLiveLayoutFocusTarget } from '@cg/shared-schema';
 import type { ControlLiveLayout, LiveSourceDeclaration } from '@cg/shared-schema';
 
 /**
@@ -135,9 +135,8 @@ export function resolveLookBindings(input: {
   const focuses: string[] = [];
   for (const lookId of lookIdsOf(input.carrier)) {
     if (
-      input.controlLiveLayout !== undefined &&
       lookId !== undefined &&
-      controlLiveLayoutFocusTarget(input.controlLiveLayout, lookId) !== undefined
+      templateFocusTarget(input.carrier, input.controlLiveLayout, lookId) !== undefined
     ) {
       focuses.push(lookId);
     } else {
@@ -158,10 +157,7 @@ export function resolveLookBindings(input: {
       preview and the wire cannot answer differently: a test asserts they agree for the same
       input, which two independent implementations would satisfy right up until they did not.
     */
-    const focus =
-      input.controlLiveLayout === undefined || lookId === undefined
-        ? undefined
-        : controlLiveLayoutFocusTarget(input.controlLiveLayout, lookId);
+    const focus = templateFocusTarget(input.carrier, input.controlLiveLayout, lookId);
     const resolvedIds = resolvePlateSourcesForLook({
       templateId: input.templateId,
       plateIds: input.carrier.sources.map((d) => d.sourceId),

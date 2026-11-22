@@ -7,15 +7,13 @@ import {
 } from '@cg/shared-ipc';
 
 /**
- * 🔴 `FIELD-FIXES-01` L — **WHICH OF ANOTHER SYSTEM'S LAYERS A CHANNEL'S NOTICE SPEAKS FOR, AND
- * WHEN THE OPERATOR HAS HEARD IT.** The ONE place the rule lives: the notice strips
+ * `FIELD-FIXES-01` L — which occupied layers a channel notice lists and when it reappears.
+ * The notice strips
  * (`OrphanLayersBanner`) and the strip's mark (`orphanWarningChannels`) both read it.
  *
- * - **Below CG's bands** (1–49, `isInCgBands`) a producer that is not ours is the Playout's, and
- *   NORMAL: its playlist plays on a low layer practically all the time. No notice and no mark; the
- *   Station layers tab lists it, as it always has. (The owner's channel 1 carried a permanent blue
- *   notice for layer 1-5.)
- * - **Inside CG's bands** (50 and up) it is a real conflict: the notice and the mark stand, and each
+ * - **Below CG's bands** (1–49, `isInCgBands`) occupancy is listed on the Station layers tab
+ *   without a notice or tab mark. Playout playlists normally occupy low layers.
+ * - **Inside CG's bands** (50 and up) an unclaimed producer raises a notice and tab mark. Each
  *   strip — the graphic one and the video one (`R-015`'s split, {@link isOrphanedGraphic}) — is
  *   DISMISSIBLE. A dismissal records what that strip showed, as `layer:producer`; the strip returns
  *   when it holds anything else — a NEW layer, or a DIFFERENT producer on a layer — and not
@@ -30,8 +28,8 @@ import {
  */
 
 /**
- * `R-015` — an orphaned GRAPHIC (an html producer): the alert strip, with its Clear. Anything else
- * is another system's output — video, a feed — and never offers one ("not html" fails safe).
+ * `R-015` — an orphaned graphic has an HTML producer. Other kinds use the video strip.
+ * The observed producer kind does not identify its origin.
  */
 export function isOrphanedGraphic(o: OrphanLayer): boolean {
   return o.producer === 'html';

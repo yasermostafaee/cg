@@ -510,8 +510,7 @@ function FieldMeta({
           onCommit={(v) => patch({ title: v })}
           resetKey={element.id}
         />
-        <TextField
-          label="Description"
+        <DescriptionField
           value={field.description ?? ''}
           onCommit={(v) => patch({ description: v })}
           resetKey={element.id}
@@ -578,8 +577,7 @@ function FieldMeta({
           onCommit={(v) => patch({ title: v })}
           resetKey={element.id}
         />
-        <TextField
-          label="Description"
+        <DescriptionField
           value={field.description ?? ''}
           onCommit={(v) => patch({ description: v })}
           resetKey={element.id}
@@ -636,8 +634,7 @@ function FieldMeta({
         onCommit={(v) => patch({ title: v })}
         resetKey={element.id}
       />
-      <TextField
-        label="Description"
+      <DescriptionField
         value={field.description ?? ''}
         onCommit={(v) => patch({ description: v })}
         resetKey={element.id}
@@ -1295,6 +1292,33 @@ function FileSourceRow({
         </>
       )}
     </>
+  );
+}
+
+function DescriptionField({
+  value,
+  onCommit,
+  resetKey,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  resetKey: string;
+}): JSX.Element {
+  return (
+    <TextField
+      label="Description"
+      value={value}
+      onCommit={onCommit}
+      resetKey={resetKey}
+      dir="auto"
+      trailing={
+        <InfoTip title="Description">
+          <p>
+            Write a short instruction for the operator. It appears beside this field in CG Control.
+          </p>
+        </InfoTip>
+      }
+    />
   );
 }
 

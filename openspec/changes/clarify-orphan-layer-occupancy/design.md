@@ -13,6 +13,9 @@ the page after Stop requires confirmation that its own outro ended.
 
 - The alert and each row identify HTML occupancy outside the stack. The warning directs the
   operator to Program to check the output.
+- The video notice reports its channel-layer and producer kind without claiming a second system
+  placed the producer. The same CG Bridge can seat a route, and the occupancy report carries no
+  creator identity. The bridge ledger continues to exclude owned seats from the notice.
 - Clear confirmations name each target and describe the removal of its producer. Clear continues
   through the existing per-layer command and its current guards.
 - A bank Clear and an orphan Clear both update a matching bound row when the current primary

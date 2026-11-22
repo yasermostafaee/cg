@@ -2,13 +2,11 @@
 
 ### Requirement: Orphan-layer warning surface with per-layer Clear
 
-The Runtime UI SHALL split the bridge's orphan-layer set by observed producer kind, because the two
-kinds mean opposite things to a graphics operator (R-015), and SHALL speak only for the layers
-inside CG's bands (`FIELD-FIXES-01` L).
+The Runtime UI SHALL split the bridge's orphan-layer set by observed producer kind (R-015).
+The occupancy notices SHALL cover layers inside CG's bands (`FIELD-FIXES-01` L).
 
-A layer BELOW CG's bands (1–49) carrying a producer this system did not place is the Playout's, and
-normal: it SHALL raise no strip and no mark on its channel's tab, and it SHALL be listed on the
-Station layers tab, as before.
+An occupied layer below CG's bands (1–49) SHALL be listed on the Station layers tab. Its
+occupancy SHALL raise no strip or channel tab mark.
 
 An orphaned **`html`** layer inside the bands SHALL surface in a strip with `role="alert"` and the
 accessible name "HTML producers outside your stack". Each row SHALL name the channel-layer, report
@@ -22,8 +20,9 @@ never clear a layer without the operator's explicit confirmation.
 
 A **non-`html`** layer inside the bands — a video, a plate or any other producer that nothing in this
 station's ledger holds — SHALL surface as NEUTRAL information: a separate strip in the surface's normal
-text tones (never amber, never the on-air red), without `role="alert"`, naming the channel-layer and the
-observed producer kind and saying it was placed by another system. Unrecognised producer kinds SHALL be
+text tones (never amber, never the on-air red), with `role="status"` and the accessible name
+"Video producers outside your stack". The notice SHALL name the channel-layer and observed producer
+kind. Producer origin is unknown. Unrecognised producer kinds SHALL be
 presented exactly as video. `RELEASE-091-01` (DELTA B, B3, `B-292`) — because a layer in 50–99 is ours
 to manage (plates this system seats are not `html`, and one left behind by another station, a lost ledger
 or a crashed session has no other surface), each such row inside 50–99 SHALL offer a Clear control gated
@@ -81,9 +80,11 @@ NOT AT ALL when their subset is empty — no idle noise.
   each, in turn, and none to 1-120 or to the channel
 - **WHEN** a non-`html` layer is above the bands (1-120) **THEN** its row offers no Clear and says it is not
   clearable from here (the control)
+- **WHEN** the bridge publishes an unclaimed `route` producer inside CG's bands **THEN** the neutral
+  strip reports the layer and producer kind without attributing the producer to another system
 - **WHEN** a plate layer is held by this station's ledger **THEN** it is not listed (the control)
 
-#### Scenario: Below CG's bands another system's layer is normal
+#### Scenario: Occupancy below CG's bands is listed on Station layers
 
 - **WHEN** the bridge publishes an `ffmpeg` producer on layer 5 **THEN** no strip and no tab mark
   appear, and the Station layers tab lists the layer
@@ -94,6 +95,6 @@ NOT AT ALL when their subset is empty — no idle noise.
 
 - **WHEN** the operator dismisses the strip naming layer 90 and the console reloads **THEN** the strip
   and its mark stay dismissed
-- **WHEN** a foreign producer then appears on layer 91 **THEN** the strip returns naming layers 90 and
+- **WHEN** an unclaimed producer then appears on layer 91 **THEN** the strip returns naming layers 90 and
   91, and the mark returns with it
 - **WHEN** a layer leaves the strip, or the same set is observed again **THEN** it stays dismissed

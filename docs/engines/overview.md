@@ -256,6 +256,12 @@ mixer. It moves the pictures' attached graphics with their frames and clips the 
 as the entering frame reveals itself. Existing pages receive this phase after their runtime rebuild
 adds the Focus slide capability marker.
 
+Designer writes optional Focus settings to the originating Look in the project. VCG import
+carries the settings from the verified scene after checking that each destination still displays
+exactly the origin's matching plate. CG Control uses the carrier to build the numbered controls.
+The Bridge uses the same carrier to resolve the originating preset's input bindings and plan
+Focus, direct switches and Return. The authored solo composition supplies its own crop and artwork.
+
 **Countdown steps (`D-141`, `DELTA-RUN-NEXT-VERSION-01-A` … `-F`) are compiled by the runtime, from
 the scene.** A countdown flips one attribute on its scope root per step crossing; `step-css.ts` turns
 the steps' changes into one stylesheet of inherited custom properties at boot, and `step-effects.ts`

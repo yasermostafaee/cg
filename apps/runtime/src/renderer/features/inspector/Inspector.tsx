@@ -11,7 +11,6 @@ import {
   authoredFileDelimiter,
   authoredFileFormat,
   bridgeTextSourcePath,
-  controlLiveLayoutFocusTarget,
   fieldAllowsFileSource,
   fieldDigitsOf,
   fieldTypeTakesFileSource,
@@ -20,7 +19,7 @@ import {
   numberFieldAllowedValues,
   numberFieldValueLabel,
   isOnAirStatus,
-  numberFieldValueError,
+  operatorFieldError,
   lockedBridgeTextSourcePath,
   type CompositionFieldGroup,
   type DynamicField,
@@ -29,7 +28,12 @@ import {
   type ImageFit,
   type StackItemState,
 } from '@cg/shared-schema';
-import { activeLookOf, controlLiveLayoutFieldDefaults, type TemplateInfo } from '@cg/shared-ipc';
+import {
+  activeLookOf,
+  controlLiveLayoutFieldDefaults,
+  templateFocusTarget,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { airStateVisual, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
@@ -60,13 +64,13 @@ import {
   subscribeFromFile,
 } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
+import { FieldDescription } from './FieldDescription.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { ImageFieldControl } from './ImageFieldControl.js';
 import { CountdownTargetField } from './CountdownTargetField.js';
 import { SequenceRowsEditor, sequenceRowsPageSets } from './SequenceRowsEditor.js';
 import { BookBlock } from '../book/BookBlock.js';
 import { bookTitle } from '../book/bookFacts.js';
-import { fieldPatternRefusal } from './patternCheck.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
@@ -602,8 +606,8 @@ export function Inspector({
   const looks = lookCarrier?.looks ?? [];
   const previewPin = previewLookPin(itemId);
   const programmeFocus =
-    rehearsing === true && resolvedInfo?.controlLiveLayout !== undefined
-      ? controlLiveLayoutFocusTarget(resolvedInfo.controlLiveLayout, item.activeLookId)
+    rehearsing === true
+      ? templateFocusTarget(lookCarrier, resolvedInfo?.controlLiveLayout, item.activeLookId)
       : undefined;
   const editingLook =
     looks.find((look) => look.id === previewPin) ??
@@ -1201,7 +1205,8 @@ function FieldEditor({
   const dirty = affectedPaths.some((target) =>
     isFieldDirty(itemId, target, valueAt(item.fields, target)),
   );
-  const patternLine = fieldPatternRefusal(field, value);
+  const fieldRefusal =
+    dirty && kind !== 'number' && field !== null ? operatorFieldError(field, value) : undefined;
   const unstage = (): void => {
     if (titlePaths === undefined) unstageField(itemId, path);
     else unstageFieldBatch(itemId, titlePaths);
@@ -1287,6 +1292,7 @@ function FieldEditor({
         <span style={styles.fieldName} data-field-heading={fieldId}>
           <IsolatedName>{label}</IsolatedName>
         </span>
+        <FieldDescription label={label} description={field?.description} />
         {dirty && (
           <span className="cg-dirty-dot" aria-label={`${fieldId} has unapplied edits`}>
             ●
@@ -1336,12 +1342,9 @@ function FieldEditor({
             The difference is not cosmetic bookkeeping: a list is the only kind
             with a second footer control to share a row with. */}
         {fromFileKind !== undefined && (kind !== 'list' || fileOnly) && fromFile}
-        {/* 🔴 `R-101` — a STAGED value its field's pattern refuses says so here, under it, in the
-            form's own words; Update sends nothing while it stands (`applyDraft`). An applied value
-            is not this press's to judge, so only a draft is checked. */}
-        {dirty && patternLine !== null && (
+        {fieldRefusal !== undefined && (
           <p style={styles.refusal} data-field-refusal={fieldId}>
-            {patternLine}
+            {fieldRefusal.line}
           </p>
         )}
       </div>
@@ -1533,8 +1536,8 @@ function FieldControl({
  * - Text that is not a number WITHDRAWS the draft (`unstageField`) instead of leaving the last
  *   parsing prefix staged. Measured before: `۱۲a` sent 12 and `۱٬۲۳۴` sent 1, with nothing on
  *   screen saying so. Now Update leaves this field exactly as it is on air.
- * - Only an IMPOSSIBLE text is refused aloud, in one line. A half-typed one (empty, `-`, `۱٬`)
- *   stages nothing and says nothing — refuse the impossible, never the incomplete.
+ * - Incomplete numeric input stays local. Clearing a required value stages an empty draft, and a
+ *   parsed number stages as typed so its authored limits can refuse the complete Update.
  *
  * `FIELD-DIGITS-01` — the box is written in the FIELD's digits (`fieldDigitsOf`): the author's set,
  * `latin` for a field that carries none (what air draws for it), and as typed only while the
@@ -1574,11 +1577,15 @@ function NumberField({
   // resolved after the box first rendered. The writer is idempotent and one-for-one.
   const shown = writeFieldDigits(text, digits, 'number');
   const reading = readLocalizedNumber(shown);
-  const rangeRefusal =
-    reading.kind === 'number' && field?.type === 'number'
-      ? numberFieldValueError(field, reading.value)
+  const constraintRefusal =
+    field?.type === 'number'
+      ? reading.kind === 'number'
+        ? operatorFieldError(field, reading.value)?.line
+        : dirty && shown.trim() === ''
+          ? operatorFieldError(field, '')?.line
+          : undefined
       : undefined;
-  const refusal = reading.kind === 'invalid' ? NOT_A_NUMBER : rangeRefusal;
+  const refusal = reading.kind === 'invalid' ? NOT_A_NUMBER : constraintRefusal;
   const refused = refusal !== undefined;
   // R-020 — the shared NumericInput (type="text" under the hood: a `type="number"` box drops
   // Persian digits before script sees them). `step`/`min`/`max` are not rendered: on the old
@@ -1621,18 +1628,13 @@ function NumberField({
           setText(raw);
           const reading = readLocalizedNumber(raw);
           if (reading.kind === 'number') {
-            const error =
-              field?.type === 'number' ? numberFieldValueError(field, reading.value) : undefined;
-            if (error === undefined) {
-              setSeen(reading.value); // our own edit — don't let the resync reseed over it
-              onStage(reading.value);
-            } else {
-              setSeen(applied);
-              onUnstage();
-            }
+            setSeen(reading.value);
+            onStage(reading.value);
+          } else if (field?.required === true && raw.trim() === '') {
+            setSeen('');
+            onStage('');
           } else {
-            // The withdrawn draft makes the effective value the APPLIED one; seeing it first
-            // keeps the resync from overwriting the text the operator is still editing.
+            // Keep in-progress input while the draft falls back to the applied value.
             setSeen(applied);
             onUnstage();
           }

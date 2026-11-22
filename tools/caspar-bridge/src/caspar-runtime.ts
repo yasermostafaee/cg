@@ -90,7 +90,13 @@ import type {
   StackItemTimingOverride,
   TakeRefusal,
 } from '@cg/shared-schema';
-import { isOnAirStatus, isRetainedOnAir, ownsLiveSeats, withCgControl } from '@cg/shared-schema';
+import {
+  isOnAirStatus,
+  isRetainedOnAir,
+  operatorFieldUpdateRefusal,
+  ownsLiveSeats,
+  withCgControl,
+} from '@cg/shared-schema';
 import type { CgPage } from '@cg/shared-schema';
 import { PageStore } from './page-store.js';
 import {
@@ -105,6 +111,8 @@ import {
   requiredBankFor,
   sortBanks,
   controlLiveLayoutFieldDefaults,
+  designerFocusSettingsBetween,
+  templateFocusTarget,
   withoutInheritedControlLiveLayoutFields,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
   // the browser's MockRuntime can read the SAME map without dragging `node:net`
@@ -9220,6 +9228,8 @@ export class CasparRuntime {
 
     const info = this.#templates.infoOf(page.version);
     if (info === null) return unavailable;
+    const fieldRefusal = operatorFieldUpdateRefusal(info, item.fields, fields, mergeMode);
+    if (fieldRefusal !== undefined) return { accepted: false, ...fieldRefusal };
     const pageRefusal = this.#refusePageLists(itemId, fields, info);
     if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
     const merged = mergeMode === 'replace' ? fields : { ...item.fields, ...fields };
@@ -9369,6 +9379,15 @@ export class CasparRuntime {
     lookBindings?: LookSourceBindings,
     inputTransition?: InputTransition,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    const item = this.#reconciler.get(itemId);
+    if (item !== null) {
+      const held = this.#templates.heldVersion(itemId);
+      const info =
+        (held === undefined ? null : this.#templates.infoOf(held)) ??
+        this.#templateOfItem(itemId, item.templateId);
+      const fieldRefusal = operatorFieldUpdateRefusal(info, item.fields, fields, mergeMode);
+      if (fieldRefusal !== undefined) return { accepted: false, ...fieldRefusal };
+    }
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -11187,10 +11206,7 @@ export class CasparRuntime {
         catalog: this.#sourceCatalog,
         overrides: this.#effectiveOverridesFor(
           itemId,
-          template.controlLiveLayout === undefined || lookId === undefined
-            ? lookId
-            : (controlLiveLayoutFocusTarget(template.controlLiveLayout, lookId)?.presetId ??
-                lookId),
+          templateFocusTarget(carrier, template.controlLiveLayout, lookId)?.presetId ?? lookId,
         ),
         // `ROUTE-PLATES-01` — so an entry this row's channel may not show is named as such.
         channel: slot.channel,
@@ -14474,9 +14490,12 @@ export class CasparRuntime {
     if (page === undefined || baseline === undefined) return undefined;
     const metadata = this.#templates.infoOf(page.version);
     const layout = metadata?.controlLiveLayout;
-    if (layout === undefined) return undefined;
-    const from = controlLiveLayoutSoloTarget(layout, fromLookId);
-    const to = controlLiveLayoutFocusTarget(layout, toLook.id);
+    const carrier = metadata?.liveSources;
+    if (carrier === undefined) return undefined;
+    const from = layout === undefined
+      ? templateFocusTarget(carrier, layout, fromLookId)
+      : controlLiveLayoutSoloTarget(layout, fromLookId);
+    const to = templateFocusTarget(carrier, layout, toLook.id);
     if (from === undefined || to === undefined || from.presetId !== to.presetId) return undefined;
 
     const visible = baseline.filter((record) => record.held !== true);
@@ -14546,8 +14565,8 @@ export class CasparRuntime {
               ? undefined
               : {
                   destinationLookId: toLook.id,
-                  resolution: layout.resolution,
-                  outputReference: metadata?.liveSources?.outputReference,
+                  resolution: layout?.resolution ?? carrier.resolution,
+                  outputReference: carrier.outputReference,
                   position: this.#effectivePosition(itemId, metadata?.liveSources?.defaultPosition),
                 },
           )
@@ -14563,7 +14582,6 @@ export class CasparRuntime {
               frames,
             );
     if (movement === undefined) return undefined;
-    const carrier = metadata?.liveSources;
     if (movement.slide !== undefined && carrier !== undefined && fromLook !== undefined) {
       const placements = this.#framePlacements.get(itemId);
       const masks = this.#maskPlacements.get(itemId);
@@ -15443,7 +15461,10 @@ export class CasparRuntime {
       focusPage?: true;
       focusUnderlay?: boolean;
     };
-    type ArtworkSource = { source: NormalizedRect; remainder?: NormalizedRect };
+    interface ArtworkSource {
+      source: NormalizedRect;
+      remainder?: NormalizedRect;
+    }
     let retainedArtworkActive = false;
     let focusPreparationError: string | undefined;
     let focusPagesActive = false;
@@ -15950,11 +15971,11 @@ export class CasparRuntime {
       }
       return current();
     };
-    type MixerEndpoint = {
+    interface MixerEndpoint {
       layer: number;
       property: 'FILL' | 'CLIP' | 'OPACITY';
       values: readonly number[];
-    };
+    }
     const focusWitnesses = new Map<string, MixerEndpoint>();
     const moveWitnesses = new Map<string, MixerEndpoint>();
     const watchMixer = (
@@ -18659,10 +18680,11 @@ export class CasparRuntime {
     return this.#withLiveSeatLock(itemId, async () => {
       const previousLookId = this.activeLookId(itemId);
       const layout = template?.controlLiveLayout;
-      const fromFocus =
-        layout === undefined ? undefined : controlLiveLayoutSoloTarget(layout, previousLookId);
-      const toFocus =
-        layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, lookId);
+      const carrier = template?.liveSources;
+      const fromFocus = layout === undefined
+        ? templateFocusTarget(carrier, layout, previousLookId)
+        : controlLiveLayoutSoloTarget(layout, previousLookId);
+      const toFocus = templateFocusTarget(carrier, layout, lookId);
       if (toFocus !== undefined && (fromFocus?.presetId ?? previousLookId) !== toFocus.presetId) {
         return {
           ok: false,
@@ -18675,16 +18697,34 @@ export class CasparRuntime {
         toFocus !== undefined &&
         fromFocus.presetId === toFocus.presetId &&
         fromFocus.frameId !== toFocus.frameId;
+      const designerEffects =
+        layout === undefined
+          ? designerFocusSettingsBetween(carrier, previousLookId, lookId)?.effects
+          : undefined;
+      const authoredSwitch = directFocus ? designerEffects?.switch : undefined;
       const inputOverride = directFocus ? focusInputTransition : undefined;
       const focusSlide =
         inputOverride === undefined
-          ? requestedFocusSlide
+          ? (requestedFocusSlide ??
+            (authoredSwitch?.mode === 'push' || authoredSwitch?.mode === 'slide-over'
+              ? { ...authoredSwitch, mode: authoredSwitch.mode }
+              : undefined))
           : isInputSlideMode(inputOverride.mode)
             ? { ...inputOverride, mode: inputOverride.mode }
             : undefined;
       const transition: FrameTransition | undefined =
         inputOverride === undefined
-          ? requestedTransition ?? (layout === undefined ? authoredLookEffect(look.entered) : undefined)
+          ? (requestedTransition ??
+            (authoredSwitch?.mode === 'cut' || authoredSwitch?.mode === 'fade'
+              ? {
+                  motion: 'cut',
+                  fade: authoredSwitch.mode === 'fade',
+                  durationMs: authoredSwitch.durationMs,
+                }
+              : authoredSwitch?.mode === 'motion' && designerEffects !== undefined
+                ? { ...designerEffects.focus, durationMs: authoredSwitch.durationMs }
+                : designerEffects?.focus) ??
+            (layout === undefined ? authoredLookEffect(look.entered) : undefined))
           : {
               motion: 'cut',
               fade: inputOverride.mode === 'fade',
@@ -18693,7 +18733,7 @@ export class CasparRuntime {
       const focusDissolve =
         directFocus &&
         focusSlide === undefined &&
-        (inputOverride?.mode ?? layout?.effects.switch.mode) === 'fade' &&
+        (inputOverride?.mode ?? layout?.effects.switch.mode ?? authoredSwitch?.mode) === 'fade' &&
         transition?.motion === 'cut' &&
         transition.fade;
       if (focusSlide !== undefined && !directFocus) {
@@ -22024,9 +22064,8 @@ export class CasparRuntime {
     const template = this.#templates.getOn(itemSlot.channel, templateId);
     const declaration = template?.liveSources?.sources.find((s) => s.sourceId === plateId);
     const bindingLookId =
-      template?.controlLiveLayout === undefined
-        ? lookId
-        : (controlLiveLayoutFocusTarget(template.controlLiveLayout, lookId)?.presetId ?? lookId);
+      templateFocusTarget(template?.liveSources, template?.controlLiveLayout, lookId)?.presetId ??
+      lookId;
     if (declaration === undefined) {
       return {
         ok: false,

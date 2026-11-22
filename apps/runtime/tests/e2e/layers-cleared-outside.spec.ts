@@ -254,17 +254,20 @@ test('🔴 B-292 — video another client left in our bands is listed and clears
   const { handle, server } = await boot();
   await openConsole(page, handle.url);
 
-  for (const layer of [70, 71, 72, 120]) {
+  for (const layer of [70, 72, 120]) {
     expect(
       await otherClient(server, `PLAY 1-${String(layer)} "C:/Media/left-${String(layer)}.mov"`),
     ).toMatch(/^202 /);
   }
+  expect(await otherClient(server, 'PLAY 1-71 "route://2"')).toMatch(/^202 /);
   const from = server.receivedCommands().length;
 
-  const strip = page.getByRole('status', { name: 'Layers in use by other systems' });
+  const strip = page.getByRole('status', { name: 'Video producers outside your stack' });
   for (const layer of [70, 71, 72, 120]) {
     await expect(strip).toContainText(`Layer 1-${String(layer)} is carrying video`);
   }
+  await expect(strip).toContainText('Layer 1-71 is carrying video (route).');
+  await expect(strip).not.toContainText('placed by another system');
   // CONTROL — above the bands: listed, no CLEAR, and it says so.
   await expect(strip.getByRole('button', { name: 'Clear layer 1-120' })).toHaveCount(0);
   await expect(strip).toContainText('Not clearable from here.');

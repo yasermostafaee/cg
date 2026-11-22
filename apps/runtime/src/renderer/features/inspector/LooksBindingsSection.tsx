@@ -1,7 +1,8 @@
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { useId, useSyncExternalStore } from 'react';
 import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
-import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-schema';
+import type { StackItemState } from '@cg/shared-schema';
+import { templateFocusTarget } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
@@ -258,13 +259,10 @@ export function LooksBindingsSection({
   const mediaStateOf = useMediaState();
   const carrier = info?.liveSources;
   const layout = info?.controlLiveLayout;
-  const allLooks = carrier?.looks ?? [];
-  const looks =
-    layout === undefined
-      ? allLooks
-      : allLooks.filter(({ id }) => controlLiveLayoutFocusTarget(layout, id) === undefined);
-  const focus =
-    layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, editingLook?.id);
+  const looks = (carrier?.looks ?? []).filter(
+    ({ id }) => templateFocusTarget(carrier, layout, id) === undefined,
+  );
+  const focus = templateFocusTarget(carrier, layout, editingLook?.id);
   const inputLook =
     focus === undefined ? editingLook : looks.find(({ id }) => id === focus.presetId);
   // A template with no LOOKS gets no section — its plates have one answer, and the flat list

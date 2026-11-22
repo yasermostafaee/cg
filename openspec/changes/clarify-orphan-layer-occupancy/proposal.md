@@ -1,11 +1,12 @@
 ## Why
 
-The HTML occupancy warning tells the operator that a producer is on air and suggests a previous
-session left it behind. The bridge reports only the observed producer kind and layer.
+The original HTML occupancy warning inferred output visibility and producer origin. The video
+notice also inferred that another system placed an unclaimed producer. The bridge reports the
+observed producer kind and layer.
 
 ## What Changes
 
-- Identify HTML producers outside the stack and ask the operator to check Program before clearing.
+- Identify HTML and video producers outside the stack. Ask the operator to check Program before clearing an HTML producer.
 - Describe producer removal in the per-layer and batch Clear confirmations.
 - Keep the existing confirmation, reachability and layer scope for each Clear.
 - Synchronize a row's Play indication with a layer-addressed Clear acknowledged by its primary.
@@ -14,7 +15,7 @@ session left it behind. The bridge reports only the observed producer kind and l
 
 ### Modified Capabilities
 
-- `runtime-ui`: HTML occupancy warnings and Clear confirmation wording.
+- `runtime-ui`: Occupancy notices and Clear confirmation wording.
 - `runtime-caspar-bridge`: authoritative stack status after a layer-addressed Clear.
 
 ## Impact

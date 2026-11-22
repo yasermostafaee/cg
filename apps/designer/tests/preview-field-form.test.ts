@@ -36,10 +36,10 @@ describe('PreviewFieldForm helpers', () => {
   });
 
   it('validates text minLength / maxLength / pattern / required', () => {
-    expect(validateField(textField({ minLength: 3 }), 'ab')).toMatch(/Min 3/);
-    expect(validateField(textField({ maxLength: 3 }), 'abcd')).toMatch(/Max 3/);
+    expect(validateField(textField({ minLength: 3 }), 'ab')).toBe('Enter at least 3 characters.');
+    expect(validateField(textField({ maxLength: 3 }), 'abcd')).toBe('Enter at most 3 characters.');
     expect(validateField(textField({ pattern: '^x' }), 'yz')).toMatch(/match/);
-    expect(validateField(textField({ required: true }), '')).toBe('Required');
+    expect(validateField(textField({ required: true }), '')).toBe('A value is required.');
     expect(
       validateField(textField({ minLength: 1, maxLength: 5, pattern: '^h' }), 'hello'),
     ).toBeNull();

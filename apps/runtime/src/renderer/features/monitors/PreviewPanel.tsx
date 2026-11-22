@@ -21,11 +21,13 @@ import {
   lookOperatorMasks,
   activeLookOf,
   controlLiveLayoutDefaults,
+  designerFocusPreset,
+  templateFocusTarget,
   REFERENCE_RASTER,
   sourceAspect,
   videoModeFramePeriodMs,
 } from '@cg/shared-ipc';
-import { controlLiveLayoutFocusTarget, isOnAirStatus } from '@cg/shared-schema';
+import { isOnAirStatus } from '@cg/shared-schema';
 import { Panel } from '../../ui/Panel.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
@@ -218,10 +220,7 @@ export function PreviewPanel({
       if (item === undefined) continue;
       const info = templates.get(item.templateId, rehearsal.channel);
       const live = info?.liveSources;
-      const focus =
-        info?.controlLiveLayout === undefined
-          ? undefined
-          : controlLiveLayoutFocusTarget(info.controlLiveLayout, item.activeLookId);
+      const focus = templateFocusTarget(live, info?.controlLiveLayout, item.activeLookId);
       preservePreviewLookPin(
         item.itemId,
         live === undefined
@@ -259,17 +258,11 @@ export function PreviewPanel({
           const controlLiveLayout = info?.controlLiveLayout;
           const pinned = previewLookPin(item.itemId);
           const cue = live?.looks?.some(({ id }) => id === pinned) ? pinned : undefined;
-          const programmeFocus =
-            controlLiveLayout === undefined
-              ? undefined
-              : controlLiveLayoutFocusTarget(controlLiveLayout, item.activeLookId);
+          const programmeFocus = templateFocusTarget(live, controlLiveLayout, item.activeLookId);
           const lookSelection = cue ?? programmeFocus?.presetId ?? item.activeLookId;
           const activeLookId =
             live === undefined ? undefined : activeLookOf(live, lookSelection)?.id;
-          const focus =
-            controlLiveLayout === undefined
-              ? undefined
-              : controlLiveLayoutFocusTarget(controlLiveLayout, activeLookId);
+          const focus = templateFocusTarget(live, controlLiveLayout, activeLookId);
           const hasEditableFrame =
             live !== undefined && Object.keys(lookOperatorFrames(live, activeLookId)).length > 0;
           const frameDraft = snapshotFramePlacementDraft(item.itemId);
@@ -578,10 +571,13 @@ export function PreviewPanel({
     caption's own component is mounted.
   */
   const renderableCount = subjects.filter((s) => pageByItem.get(s.itemId)?.kind === 'page').length;
+  const focusSubjects = subjects.filter(
+    (subject) =>
+      subject.controlLiveLayout !== undefined ||
+      designerFocusPreset(subject.liveSources, subject.activeLookId) !== undefined,
+  );
   const selectedLayout =
-    subjects.find(
-      (subject) => subject.itemId === selectedItemId && subject.controlLiveLayout !== undefined,
-    ) ?? subjects.find((subject) => subject.controlLiveLayout !== undefined);
+    focusSubjects.find((subject) => subject.itemId === selectedItemId) ?? focusSubjects[0];
   // Each row's template in the operator's words — the one naming rule (`templateName`, rule 11).
   const templateNames = new Map(
     subjects.map((s) => {
@@ -775,9 +771,10 @@ export function PreviewPanel({
           <PreviewNdiAudio inputs={transport.directNdiInputs} />
         )}
       </div>
-      {selectedLayout?.controlLiveLayout !== undefined && (
+      {selectedLayout !== undefined && (
         <ControlLayoutFocus
           layout={selectedLayout.controlLiveLayout}
+          liveSources={selectedLayout.liveSources}
           current={selectedLayout.activeLookId}
           target="Preview"
           rowName={subjects.length > 1 ? selectedLayout.rowName : undefined}

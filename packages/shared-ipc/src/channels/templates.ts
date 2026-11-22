@@ -3,6 +3,7 @@ import {
   CompositionFieldGroupSchema,
   ControlLiveLayoutSchema,
   DynamicFieldSchema,
+  DesignerPresetFocusSchema,
   IdSchema,
   ImageFitSchema,
   LiveCropFocusSchema,
@@ -17,6 +18,7 @@ import {
   PositionSchema,
   PresetTransitionFrameSchema,
   ResolutionSchema,
+  controlLiveLayoutFocusTarget,
   framePlacementFits,
   liveRevealMaskFromRects,
   liveRevealRects,
@@ -26,6 +28,7 @@ import {
 } from '@cg/shared-schema';
 import type {
   ControlLiveLayout,
+  DesignerPresetFocus,
   LiveCropFocus,
   LiveFitMode,
   LiveFramePlacement,
@@ -107,6 +110,7 @@ export const TemplateLookSchema = z.object({
   instanceId: z.string().min(1).optional(),
   /** Authored entry behavior. Console transition preferences travel on the switch request. */
   entered: LookTransitionSchema,
+  presetFocus: DesignerPresetFocusSchema.optional(),
   /** The effective CG Control Auto layout permission for this preset. */
   allowOperatorAutoLayout: z.boolean().optional(),
   /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
@@ -198,6 +202,54 @@ export const TemplateLiveSourcesSchema = z.object({
   foregroundOverlay: z.literal(true).optional(),
 });
 export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
+
+/** Resolve the exact origin of a Designer-authored Focus destination. */
+export function designerFocusTarget(
+  live: TemplateLiveSources | undefined,
+  lookId: string | undefined,
+) {
+  if (lookId === undefined) return undefined;
+  for (const look of live?.looks ?? []) {
+    const frameId = Object.keys(look.presetFocus?.targets ?? {}).find(
+      (plate) => look.presetFocus?.targets[plate] === lookId,
+    );
+    if (frameId !== undefined) return { presetId: look.id, frameId };
+  }
+  return undefined;
+}
+
+export function templateFocusTarget(
+  live: TemplateLiveSources | undefined,
+  layout: ControlLiveLayout | undefined,
+  lookId: string | undefined,
+): { presetId: string; frameId: string } | undefined {
+  return layout === undefined
+    ? designerFocusTarget(live, lookId)
+    : controlLiveLayoutFocusTarget(layout, lookId);
+}
+
+export function designerFocusPreset(
+  live: TemplateLiveSources | undefined,
+  lookId: string | undefined,
+): TemplateLook | undefined {
+  if (live === undefined) return undefined;
+  const origin = designerFocusTarget(live, lookId)?.presetId ?? lookId;
+  const look = activeLookOf(live, origin);
+  return look?.presetFocus === undefined ? undefined : look;
+}
+
+/** Designer Focus effects apply only to entering, switching or returning within one origin. */
+export function designerFocusSettingsBetween(
+  live: TemplateLiveSources | undefined,
+  fromLookId: string | undefined,
+  toLookId: string | undefined,
+): DesignerPresetFocus | undefined {
+  const origin = designerFocusPreset(live, fromLookId);
+  if (origin === undefined || toLookId === undefined || fromLookId === toLookId) return undefined;
+  if (toLookId === origin.id || Object.values(origin.presetFocus?.targets ?? {}).includes(toLookId))
+    return origin.presetFocus;
+  return undefined;
+}
 
 /**
  * 🔴 **`B-151` — THE ONE RESOLUTION of "which look is this row showing", for every consumer
@@ -928,7 +980,10 @@ export const TEMPLATE_SOURCE_MAX_BYTES = 44 * 1024 * 1024;
 export const TEMPLATE_PAGE_ALLOWANCE_BYTES = 4 * 1024 * 1024;
 
 /** The generated last script embeds the scene as one JSON line, escaped for HTML. */
-export function sceneFromRetainedPage(html: string, maxLength = TEMPLATE_PAGE_ALLOWANCE_BYTES): unknown {
+export function sceneFromRetainedPage(
+  html: string,
+  maxLength = TEMPLATE_PAGE_ALLOWANCE_BYTES,
+): unknown {
   const script = html.lastIndexOf('<script>');
   if (script < 0) return null;
   const boot = /^<script>\r?\n[ \t]*\(function \(\) \{\r?\n[ \t]*var scene = /.exec(

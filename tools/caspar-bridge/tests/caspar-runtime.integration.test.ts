@@ -116,6 +116,61 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
   // slow-but-correct run cannot be killed mid-flight.
 }, 30000);
 
+it('rejects an invalid field on Update without changing the row or sending CG UPDATE', async () => {
+  const oscPort = await freeUdpPort();
+  const server = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+  mock = server;
+  const rowRuntime = new CasparRuntime(
+    connectionFor(server.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
+  runtime = rowRuntime;
+  rowRuntime.start();
+  await rowRuntime.startServing();
+  rowRuntime.templateImport(
+    {
+      templateId: 'lower-third',
+      templateType: 'lower-third',
+      fields: [
+        {
+          id: 'text',
+          label: 'Text',
+          type: 'text',
+          default: 'New text',
+          required: true,
+          minLength: 2,
+          maxLength: 8,
+        },
+      ],
+    },
+    '<!doctype html><html><body>served</body></html>',
+  );
+  await rowRuntime.whenServerHealthy(HEALTH_MS);
+  expect((await rowRuntime.load('item1', 'lower-third', { text: 'New text' })).accepted).toBe(true);
+  expect((await rowRuntime.take('item1')).accepted).toBe(true);
+
+  const wire = () =>
+    server.receivedCommands().filter(({ line }) => line.startsWith('CG 1-10 UPDATE '));
+  const before = wire().length;
+  const fields = () => rowRuntime.stackSnapshot().find(({ itemId }) => itemId === 'item1')?.fields;
+  expect(await rowRuntime.update('item1', { text: '', other: 'no' }, 'merge')).toEqual({
+    accepted: false,
+    errorCode: 'invalid-field',
+    message: 'Not sent: Text — A value is required.',
+  });
+  expect(await rowRuntime.update('item1', { text: '123456789' }, 'merge')).toMatchObject({
+    accepted: false,
+    errorCode: 'invalid-field',
+  });
+  expect(fields()).toEqual({ text: 'New text' });
+  expect(wire()).toHaveLength(before);
+
+  expect((await rowRuntime.update('item1', { text: 'سلام' }, 'merge')).accepted).toBe(true);
+  expect(fields()?.text).toBe('سلام');
+  expect(wire().length).toBeGreaterThan(before);
+}, 30000);
+
 it('reports health from the real session state', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 20 });

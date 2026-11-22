@@ -1,5 +1,6 @@
 import type { TemplateLiveSources } from '@cg/shared-ipc';
-import { controlLiveLayoutFocusTarget, type ControlLiveLayout } from '@cg/shared-schema';
+import type { ControlLiveLayout } from '@cg/shared-schema';
+import { templateFocusTarget } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { colors, cssVars, LOOK_STRIP_PX } from '../../theme.js';
 
@@ -112,9 +113,7 @@ export function lookOptionsOf(
   const sceneW = live.resolution.width > 0 ? live.resolution.width : 1;
   const sceneH = live.resolution.height > 0 ? live.resolution.height : 1;
   return looks
-    .filter(
-      (look) => layout === undefined || controlLiveLayoutFocusTarget(layout, look.id) === undefined,
-    )
+    .filter((look) => templateFocusTarget(live, layout, look.id) === undefined)
     .map((l) => ({
       id: l.id,
       label: l.name,

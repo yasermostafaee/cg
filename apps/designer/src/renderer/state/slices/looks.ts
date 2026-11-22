@@ -5,6 +5,7 @@ import {
   lookGroupOf,
   uniqueInstanceName,
   type Composition,
+  type DesignerPresetFocus,
   type Element,
   type Layer,
   type Look,
@@ -522,6 +523,18 @@ export const looksSlice = {
       scene: writeProjectGroup(project, {
         ...group,
         looks: group.looks.map((look) => (look.id === id ? { ...look, entered } : look)),
+      }),
+    });
+  },
+
+  setPresetFocus(id: string, presetFocus: DesignerPresetFocus): void {
+    const project = current.scene;
+    const group = projectLookGroup(project);
+    if (project === null || group === undefined) return;
+    set({
+      scene: writeProjectGroup(project, {
+        ...group,
+        looks: group.looks.map((look) => (look.id === id ? { ...look, presetFocus } : look)),
       }),
     });
   },

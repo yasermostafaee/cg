@@ -4,6 +4,7 @@ import {
   compositionClosure,
   migrateGlobalFieldsToCompositions,
   type AssetEntry,
+  type DynamicField,
   type FontReference,
   type Manifest,
   type Scene,
@@ -648,7 +649,7 @@ export class RuntimeApp {
  * the fixture readable, complete enough to verify + unpack + surface a field in
  * the Inspector. Mirrors `@cg/vcg-format`'s test fixture (a Persian lower-third).
  */
-function fixtureScene(): Scene {
+function fixtureScene(anchorDescription?: string): Scene {
   return {
     schemaVersion: 1,
     id: 'scene-e2e-1',
@@ -768,6 +769,7 @@ function fixtureScene(): Scene {
       {
         id: 'anchor',
         label: 'Anchor name',
+        ...(anchorDescription !== undefined && { description: anchorDescription }),
         required: true,
         type: 'text',
         default: 'سارا نادری',
@@ -800,8 +802,9 @@ function fixtureScene(): Scene {
 export async function buildValidVcg(
   templateId = 'tpl-e2e-1',
   thumbnail?: Uint8Array,
+  anchorDescription?: string,
 ): Promise<Uint8Array> {
-  const scene = fixtureScene();
+  const scene = fixtureScene(anchorDescription);
   const fontDeps: readonly FontReference[] = scene.fonts;
   const assetIndex: readonly AssetEntry[] = [];
   const manifestExtras = {
@@ -1568,7 +1571,12 @@ export async function buildPagedRepeaterVcg(
  * `R-101` — a verifiable `.vcg` whose text field `azanTime` ("Azan time") carries the Designer's
  * `Time (HH:MM)` preset as its `pattern`, bound into the fixture's text, as an azan template's is.
  */
-export async function buildPatternFieldVcg(templateId = 'tpl-e2e-pattern'): Promise<Uint8Array> {
+export async function buildPatternFieldVcg(
+  templateId = 'tpl-e2e-pattern',
+  constraints: Partial<
+    Pick<Extract<DynamicField, { type: 'text' }>, 'required' | 'minLength' | 'maxLength'>
+  > = {},
+): Promise<Uint8Array> {
   const scene = fixtureScene();
   const text = scene.layers[0]?.children[0];
   if (text === undefined || text.type !== 'text') throw new Error('fixture scene has no text');
@@ -1582,6 +1590,7 @@ export async function buildPatternFieldVcg(templateId = 'tpl-e2e-pattern'): Prom
       type: 'text',
       default: '20:32',
       pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$',
+      ...constraints,
     },
   ];
   scene.bindings = [
@@ -1779,11 +1788,24 @@ export async function buildCountdownVcg(
  * alongside the text `anchor`, so the number control's staged multi-digit typing
  * can be exercised (a remount-on-keystroke would drop focus and lose digits).
  */
-export async function buildNumberFieldVcg(templateId = 'tpl-e2e-number'): Promise<Uint8Array> {
+export async function buildNumberFieldVcg(
+  templateId = 'tpl-e2e-number',
+  constraints: Partial<
+    Pick<Extract<DynamicField, { type: 'number' }>, 'required' | 'min' | 'max'>
+  > = {},
+): Promise<Uint8Array> {
   const scene = fixtureScene();
   scene.fields = [
     ...scene.fields,
-    { id: 'fontSize', label: 'Font size', required: false, type: 'number', default: 5, step: 1 },
+    {
+      id: 'fontSize',
+      label: 'Font size',
+      required: false,
+      type: 'number',
+      default: 5,
+      step: 1,
+      ...constraints,
+    },
   ];
   scene.bindings = [
     ...scene.bindings,

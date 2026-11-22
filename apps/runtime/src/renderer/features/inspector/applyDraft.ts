@@ -1,5 +1,6 @@
 import {
   isOnAirStatus,
+  operatorFieldRefusals,
   type FieldValue,
   type FieldValues,
   type InputTransition,
@@ -13,7 +14,6 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
-import { patternRefusalsOf } from './patternCheck.js';
 import { frameTransitionPreference } from './frameTransitionPreference.js';
 import { inputTransitionRequest } from './inputTransitionPreference.js';
 import {
@@ -61,23 +61,17 @@ export function applyDraft(
    * `undefined` is a real answer — an old import states no mode — and admits no timing.
    */
   playout?: TemplateInfo['playout'] | undefined,
-  /** `R-101` — the template's field form, so a staged value its pattern refuses is never sent. */
+  /** `R-101` — the template's field form for validating staged field values. */
   template?:
     | Pick<TemplateInfo, 'fields' | 'groups' | 'liveSources' | 'controlLiveLayout'>
     | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
-  /*
-    🔴 `R-101` — **A VALUE ITS FIELD'S PATTERN REFUSES IS NOT SENT, AND NEITHER IS THE REST OF THE
-    PRESS.** Checked here, on the ONE path the Inspector's Update and the row's UPDATE share, so the
-    two cannot disagree. Nothing leaves this console: one press is one commit, and half of it on air
-    with the mistyped half dropped is not what the operator pressed. The field says why, under it.
-  */
-  const refused = template === undefined ? [] : patternRefusalsOf(template, sent);
-  const first = refused[0];
+  // Check the whole draft before any part of Update can change the row.
+  const first = template === undefined ? undefined : operatorFieldRefusals(template, sent)[0];
   if (first !== undefined) {
     reportCommandError(`Not sent: ${first.label} — ${first.line}`);
-    return Promise.resolve({ accepted: false, errorCode: 'pattern' });
+    return Promise.resolve({ accepted: false, errorCode: first.code });
   }
   const appliedPosition = appliedPositionOf(item, template?.liveSources?.defaultPosition);
   const sentPosition =

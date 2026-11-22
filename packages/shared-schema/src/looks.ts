@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ControlLiveLayoutEffectsSchema } from './control-live-layout.js';
 import { LiveSourceIdSchema } from './elements.js';
 import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
 import {
@@ -90,6 +91,13 @@ export function authoredLookEffect(entered?: LookTransition): FrameTransition | 
   return undefined;
 }
 
+/** Focus destinations are real authored solo looks, keyed by the plate's route key. */
+export const DesignerPresetFocusSchema = z.object({
+  targets: z.record(LiveSourceIdSchema, IdSchema),
+  effects: ControlLiveLayoutEffectsSchema,
+});
+export type DesignerPresetFocus = z.infer<typeof DesignerPresetFocusSchema>;
+
 /** One look: a named reference to the composition INSTANCE that is its sub-scene. */
 export const LookSchema = z.object({
   id: IdSchema,
@@ -98,6 +106,7 @@ export const LookSchema = z.object({
   instanceId: z.string().min(1),
   /** How this look is entered — a property of the look being ENTERED (§13.6.2's scope). */
   entered: LookTransitionSchema.default(CUT_LOOK_TRANSITION),
+  presetFocus: DesignerPresetFocusSchema.optional(),
   /** Whether this preset grants CG Control's Auto layout tool. Omission uses the legacy output setting. */
   allowOperatorAutoLayout: z.boolean().optional(),
   /** Overrides for reused plate artwork whose input fit differs in this look. */

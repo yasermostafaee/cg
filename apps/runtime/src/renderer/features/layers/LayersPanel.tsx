@@ -2,13 +2,10 @@ import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.j
 import { useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { silenceHasTarget } from './panicReport.js';
-import {
-  controlLiveLayoutFocusTarget,
-  isOnAirStatus,
-  type StackItemState,
-} from '@cg/shared-schema';
+import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
   controlLiveLayoutDefaults,
+  templateFocusTarget,
   isPlaylistOutput,
   resolvePlateSourcesForLook,
   type EmptiedAirRow,
@@ -941,9 +938,9 @@ export function LayersPanel({
     const item = items.find((i) => i.itemId === itemId);
     if (item === undefined) return null;
     const channel = itemChannelOf(item, slots, defaultsChannel);
-    const layout = templates.get(item.templateId, channel)?.controlLiveLayout;
-    const focus =
-      layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, item.activeLookId);
+    const template = templates.get(item.templateId, channel);
+    const layout = template?.controlLiveLayout;
+    const focus = templateFocusTarget(template?.liveSources, layout, item.activeLookId);
     const catalogId = resolvePlateSourcesForLook({
       templateId: item.templateId,
       plateIds: [plateId],

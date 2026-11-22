@@ -5778,6 +5778,151 @@ it('applies the destination Designer effect to an ordinary mirrored preset switc
   }
 });
 
+it.each(['fade', 'push'] as const)(
+  'uses the Designer Focus and %s effects on A/B and restores the exact origin',
+  async (mode) => {
+    const left = { x: 0, y: 270, width: 960, height: 540 };
+    const right = { ...left, x: 960 };
+    const base = template(
+      [
+        { id: 'guest-1', rect: left },
+        { id: 'guest-2', rect: right },
+      ],
+      true,
+    );
+    const look = (id: string, rects: Record<string, PlateSpec['rect']>) => ({
+      id,
+      name: id,
+      entered: { mode: 'cut' as const, authored: true as const },
+      rects,
+      transitionFrames: Object.fromEntries(
+        Object.keys(rects).map((plate) => [
+          plate,
+          { frameKey: id + '/' + plate, elementId: 'el-' + plate, artworkId: 'art-' + plate },
+        ]),
+      ),
+    });
+    const r = await boot({
+      template: {
+        ...base,
+        liveSources: {
+          ...base.liveSources!,
+          defaultLookId: 'duo',
+          looks: [
+            {
+              ...look('duo', { 'guest-1': left, 'guest-2': right }),
+              presetFocus: {
+                targets: { 'guest-1': 'solo-left', 'guest-2': 'solo-right' },
+                effects: {
+                  focus: { motion: 'ease-out', fade: false, durationMs: 240 },
+                  switch: { mode, direction: 'left', durationMs: 320 },
+                },
+              },
+            },
+            look('solo-left', { 'guest-1': FULL_FRAME }),
+            look('solo-right', { 'guest-2': FULL_FRAME }),
+          ],
+        },
+      },
+      html: PRESET_TITLE_HOLD_HTML + CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
+      mirrorChannel: 2,
+      catalog: catalog({
+        layerRange: { start: 60, end: 69 },
+        sources: ['src-a', 'src-b', 'src-c'].map((id) => ({
+          id,
+          name: id,
+          format: '1080i5000',
+          producer: { kind: 'ndi', source: id },
+        })),
+      }),
+      assignments: assign([
+        ['guest-1', 'src-a'],
+        ['guest-2', 'src-b'],
+      ]),
+    });
+    const item = 'item-1';
+    const bindings = { duo: { 'guest-1': 'src-c' }, 'solo-left': { 'guest-1': 'src-a' } };
+    await r.load(item, 'lower-third', {});
+    expect(await r.update(item, {}, 'merge', bindings)).toMatchObject({ accepted: true });
+    expect(await r.take(item)).toMatchObject({ accepted: true });
+    await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
+    expect(r.activeLookId(item)).toBe('duo');
+    const engines = [mock!, backup!];
+    const activeSeats = () =>
+      r
+        .liveLayers()
+        .get(item)!
+        .filter(({ held }) => held !== true);
+    const origin = activeSeats();
+    const leftSeat = origin.find(({ sourceId }) => sourceId === 'guest-1')!;
+    const rightSeat = origin.find(({ sourceId }) => sourceId === 'guest-2')!;
+    expect(leftSeat.producer).toBe('[NDI] "src-c"');
+    const initialRects = engines.map((engine, index) =>
+      origin.map(({ slot }) => engine.layerRenderedRect({ ...slot, channel: index + 1 })),
+    );
+
+    const switchTo = async (id: string) => {
+      const marks = engines.map((engine) => engine.receivedCommands().length);
+      const result = await r.setActiveLook(item, id);
+      expect(result).toEqual({ ok: true });
+      expect(r.activeLookId(item)).toBe(id);
+      return engines.map((engine, index) => {
+        const lines = engine
+          .receivedCommands()
+          .slice(marks[index]!)
+          .map(({ line }) => line);
+        for (const { slot } of origin) {
+          const wireSlot = String(index + 1) + '-' + String(slot.layer);
+          expect(lines.some((line) => line.startsWith('PLAY ' + wireSlot + ' '))).toBe(false);
+          expect(lines).not.toContain('CLEAR ' + wireSlot);
+        }
+        expect(engine.stagedMixerCount(index + 1)).toBe(0);
+        return lines;
+      });
+    };
+
+    const expectFocusMotion = (lines: readonly string[]) => {
+      expect(lines.some((line) => / (?:FILL|CLIP) .* 6 easeoutquad DEFER$/.test(line))).toBe(true);
+    };
+    const entering = await switchTo('solo-left');
+    entering.forEach(expectFocusMotion);
+    expect(activeSeats()).toMatchObject([{ slot: leftSeat.slot, producer: leftSeat.producer }]);
+    const direct = await switchTo('solo-right');
+    expect(activeSeats()).toMatchObject([{ slot: rightSeat.slot, producer: rightSeat.producer }]);
+    for (const lines of direct) {
+      const phases = lines.flatMap((line) => nativeBorderControl(line)?.frameTransition ?? []);
+      if (mode === 'push') {
+        expect(phases).toContainEqual(
+          expect.objectContaining({
+            destinationLookId: 'solo-right',
+            durationMs: 320,
+            focusSlide: expect.objectContaining({
+              mode: 'push',
+              axis: 'x',
+              sign: -1,
+              toProgress: 1,
+            }),
+          }),
+        );
+      } else {
+        expect(lines.some((line) => / OPACITY [01] 8 linear DEFER$/.test(line))).toBe(true);
+      }
+    }
+
+    const returning = await switchTo('duo');
+    returning.forEach(expectFocusMotion);
+    expect(activeSeats().map(({ slot, producer }) => ({ slot, producer }))).toEqual(
+      origin.map(({ slot, producer }) => ({ slot, producer })),
+    );
+    expect(
+      engines.map((engine, index) =>
+        origin.map(({ slot }) => engine.layerRenderedRect({ ...slot, channel: index + 1 })),
+      ),
+    ).toEqual(initialRects);
+    expect(r.stackSnapshot()[0]?.lookSourceOverride).toEqual(bindings);
+  },
+);
+
 it('keeps a fit-only preset phase aligned on each engine when the primary acknowledgement is delayed', async () => {
   const base = presetEffectTemplate();
   const live = base.liveSources!;

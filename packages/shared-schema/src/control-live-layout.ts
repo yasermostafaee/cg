@@ -300,7 +300,7 @@ export const ControlLiveLayoutSwitchModeSchema = z.enum([
 ]);
 export type ControlLiveLayoutSwitchMode = z.infer<typeof ControlLiveLayoutSwitchModeSchema>;
 
-const ControlLiveLayoutEffectsSchema = z.object({
+export const ControlLiveLayoutEffectsSchema = z.object({
   focus: FrameTransitionSchema,
   switch: z.object({
     mode: ControlLiveLayoutSwitchModeSchema,

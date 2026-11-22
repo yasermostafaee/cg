@@ -7019,7 +7019,7 @@ Rehearse. Keep the elapsed readout available while stopped.
 - WHEN the operator pauses ordinary playback THEN elapsed time stands still until Resume.
 - WHEN playback ends, including after a Rehearse outro, THEN elapsed time resets.
 
-## [ ] D-218 — Author Focus controls for Designer live layouts ⟨priority: medium — owner, 2026-11-15⟩
+## [~] D-218 — Author Focus controls for Designer live layouts ⟨priority: medium — owner, 2026-11-15⟩
 
 **What:** Let Designer authors enable numbered per-frame Focus in CG Control and set Focus, Return and solo switch effects for their presets.
 **Why:** Authored live layouts such as 3ghab need the operator shortcuts available to Control-authored layouts while retaining their own linked artwork.
@@ -7028,3 +7028,5 @@ Rehearse. Keep the elapsed readout available while stopped.
 - WHEN the author enables Focus and exports a preset with valid frame destinations THEN CG Control offers numbered Focus controls for the configured frames in PVW and PGM.
 - WHEN the operator selects Focus, switches solo frames or returns THEN the applicable Designer-authored effect runs and Return restores the original preset with its input, title, crop and mask geometry.
 - WHEN a graphic belongs to a frame in the authored destination THEN it follows the frame and its per-preset visibility throughout the supported Focus workflow.
+
+**Change:** `openspec/changes/author-designer-focus-effects/`. The author associates each numbered Focus shortcut with an existing single-plate preset carrying the same source key.

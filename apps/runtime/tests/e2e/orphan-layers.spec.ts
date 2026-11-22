@@ -9,8 +9,8 @@ import { test, expect } from './fixtures/runtime.js';
  *
  * R-015 — the seed also carries VIDEO layers: inside CG's bands one renders as
  * NEUTRAL information (role="status", never an alert), and it survives the html
- * orphan's Clear — a video layer is another system's output and reads as a
- * normal fact of the console. `B-292` superseded its "NO Clear control": inside
+ * orphan's Clear. The video notice reports occupancy without attributing ownership.
+ * `B-292` superseded its "NO Clear control": inside
  * 50–99 it carries its own confirm-gated CLEAR.
  *
  * `FIELD-FIXES-01` L — and the seed straddles CG's bands: `ffmpeg` on 1-5 is the Playout's
@@ -27,7 +27,9 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   await expect(page.getByRole('alert', { name: 'HTML producers outside your stack' })).toHaveCount(
     0,
   );
-  await expect(page.getByRole('status', { name: 'Layers in use by other systems' })).toHaveCount(0);
+  await expect(
+    page.getByRole('status', { name: 'Video producers outside your stack' }),
+  ).toHaveCount(0);
 
   // Re-boot with the seeded orphan + video layers (init scripts apply on the next navigation).
   await page.addInitScript(() => {
@@ -44,7 +46,7 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   // R-015 — the video layer inside the bands reads as NORMAL: a status strip, not an alert,
   // naming the kind. (L — the one on layer 5 is not in it at all.) `B-292` SUPERSEDED "with no
   // Clear control in it": inside 50–99 the row carries its own CLEAR.
-  const videoStrip = page.getByRole('status', { name: 'Layers in use by other systems' });
+  const videoStrip = page.getByRole('status', { name: 'Video producers outside your stack' });
   await expect(videoStrip).toBeVisible();
   await expect(videoStrip).toContainText('Layer 1-90 is carrying video (ffmpeg)');
   await expect(videoStrip).not.toContainText('Layer 1-5 ');
@@ -101,7 +103,7 @@ test('🔴 FIELD-FIXES-01 L — layer 5 is the Playout’s: no notice, no mark, 
   await declareSecondChannel(page);
 
   const graphicStrip = page.getByRole('alert', { name: 'HTML producers outside your stack' });
-  const videoStrip = page.getByRole('status', { name: 'Layers in use by other systems' });
+  const videoStrip = page.getByRole('status', { name: 'Video producers outside your stack' });
   const markOnOne = page.locator('#channel-1 [data-tab-signal]');
 
   // CONTROL — inside the bands: layer 90's notice and channel 1's mark.
@@ -133,16 +135,18 @@ test('🔴 FIELD-FIXES-01 L — layer 5 is the Playout’s: no notice, no mark, 
   await expect(graphicStrip).toHaveCount(0);
   await expect(markOnOne).toHaveCount(0);
 
-  // A foreign producer APPEARS on layer 91: the video strip returns with its mark; the graphic
-  // strip, whose set did not change, stays dismissed.
+  // An unclaimed route appears: the video strip returns with its mark while
+  // the dismissed graphic strip stays hidden.
   await page.evaluate(() => {
     (
       window as unknown as {
         CG_TEST_ORPHAN_APPEARS: (o: { channel: number; layer: number; producer: string }) => void;
       }
-    ).CG_TEST_ORPHAN_APPEARS({ channel: 1, layer: 91, producer: 'ffmpeg' });
+    ).CG_TEST_ORPHAN_APPEARS({ channel: 1, layer: 91, producer: 'route' });
   });
-  await expect(videoStrip).toContainText('Layer 1-91 is carrying video (ffmpeg)');
+  await expect(videoStrip).toContainText('Layer 1-91 is carrying video (route).');
+  await expect(videoStrip).not.toContainText('placed by another system');
+  await expect(videoStrip.getByRole('button', { name: 'Clear layer 1-91' })).toBeVisible();
   await expect(videoStrip).toContainText('Layer 1-90 is carrying video (ffmpeg)');
   await expect(markOnOne).toHaveAttribute('data-tab-signal', 'warning');
   await expect(graphicStrip).toHaveCount(0);

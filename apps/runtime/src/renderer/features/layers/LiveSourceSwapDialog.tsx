@@ -4,9 +4,10 @@ import { useState, useSyncExternalStore } from 'react';
 import {
   controlLiveLayoutDefaults,
   resolvePlateSourcesForLook,
+  templateFocusTarget,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-schema';
+import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { ChoiceLabel, SourcePicker } from '../sources/SourcePicker.js';
@@ -94,9 +95,7 @@ export function LiveSourceSwapDialog({
   const layout = template.controlLiveLayout;
   const lookId = item.activeLookId ?? template.liveSources?.defaultLookId;
   const bindingLookId =
-    layout === undefined
-      ? lookId
-      : (controlLiveLayoutFocusTarget(layout, lookId)?.presetId ?? lookId);
+    templateFocusTarget(template.liveSources, layout, lookId)?.presetId ?? lookId;
   // Removing the top-level patch restores the preset input or the row's frozen default.
   const revertedSources = resolvePlateSourcesForLook({
     templateId: template.templateId,

@@ -9,6 +9,10 @@
 - [x] 1.5 Correct the confirmed delivered versions `1.0.0`, `1.1.0`, `1.2.4` and `1.2.5` to published
       in both languages, including the stale internal-test title and summary for `1.1.0`.
 
+- [x] 1.6 Record customer delivery of `1.2.12/c770cab9` on 2026-11-22. Compare the exact
+      delivered and later installer snapshots and retain the post-delivery changes under `next`,
+      targeting `1.2.13`. Regenerate the public history from the delivered entry.
+
 ## 2. Generator and delivery
 
 - [x] 2.1 Generate a standalone responsive bilingual page with features and fixes grouped per version
@@ -46,3 +50,8 @@
       boundaries. The current one-page history has disabled navigation in both languages and apps.
 - [x] 3.10 The local `1.2.11/317580f7` Bridge, Control and Designer installers passed checksum,
       version, embedded-engine, guide, product-tile and executable-icon verification.
+
+- [x] 3.11 Compare the `1.2.12` features and fixes with the delivered source snapshot. Six release-history tests
+      passed. Edge verified the delivered build in public history, the hidden draft and the local task board.
+
+- [x] 3.12 The operator confirmed synchronized caption and picture fades in `1.2.12/baf7c69a`. The build request moves accepted changes into `1.2.13` while pending station and Linux checks stay under `next`.

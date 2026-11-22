@@ -34,11 +34,9 @@ import {
 
 /**
  * 🔴 `MULTI-CHANNEL-01` §2 L — the channels whose view this banner WARNS in: an owned-slot
- * occupancy, or a notice about another system's content that stands. `FIELD-FIXES-01` L: that is
- * content INSIDE CG's bands, in a strip the operator has not dismissed — either strip, graphic or
- * video, because inside the bands both are a conflict with ours. Below the bands it is the
- * Playout's, and marks nothing. One rule with the strips below (`foreignNotice.ts`), never a
- * second copy.
+ * occupancy warning or a notice about an unclaimed producer. `FIELD-FIXES-01` L: either strip,
+ * graphic or video, marks only occupied layers inside CG's bands in a notice the operator has
+ * not dismissed. The same rule drives the strips below (`foreignNotice.ts`).
  *
  * `B-292` — and a layer of ours cleared outside CG Control, while its strip stands.
  */
@@ -125,14 +123,12 @@ const styles = {
  * occupancy sweep (a passive OSC tap compared against owned slots): each row
  * names a layer that has a producer but is NOT on the operator's stack.
  *
- * R-015 — the set SPLITS by observed producer kind, because the two kinds
- * mean opposite things to a graphics operator:
+ * R-015 — the set splits by observed producer kind:
  *
  *   - `html` — an HTML producer outside the stack. The observation supplies
  *     its kind and location. The warning strip offers confirm-gated Clear.
- *   - anything else (`ffmpeg`, `decklink`, … — "not html" fails safe) —
- *     another system's output: a video, a program feed. Rendered as NEUTRAL
- *     information, never an alert.
+ *   - anything else (`route`, `ffmpeg`, `decklink`, …) — a neutral video notice.
+ *     The producer kind and layer are observed. Its origin is unknown.
  *
  * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B3 — the owner, 2026-09-29) SUPERSEDES R-015's "no Clear on a
  * video layer" INSIDE THE THREE BANDS: "this system only ever places HTML" stopped being true with
@@ -152,8 +148,7 @@ const styles = {
  *
  * `FIELD-FIXES-01` L — both strips speak only for layers INSIDE CG's bands, and each is
  * DISMISSIBLE: the operator's dismissal holds until the strip holds a new layer or a different
- * producer (`foreignNotice.ts`). Another system's layer below the bands is the Playout's and
- * normal — it is listed on the Station layers tab, never here.
+ * producer (`foreignNotice.ts`). Layers below the bands are listed on the Station layers tab.
  *
  * B-056 — the same banner also renders the owned-slot occupancy warnings as
  * a DISTINCT strip: a load's adopt-CLEAR missed the primary over observed
@@ -249,8 +244,8 @@ export function OrphanLayersBanner({
     );
 
   /*
-    `FIELD-FIXES-01` L — only what the notice speaks for: another system's content INSIDE CG's
-    bands, in a strip the operator has not dismissed.
+    `FIELD-FIXES-01` L — the notice lists unclaimed producers inside CG's bands in a strip
+    the operator has not dismissed.
   */
   const noticed = noticedForeign(orphans, dismissals);
   // `B-292` — a layer of ours cleared outside CG Control, in a strip the operator has not dismissed.
@@ -421,11 +416,12 @@ export function OrphanLayersBanner({
         <div
           style={{ ...styles.neutralStrip, ...styles.dismissible }}
           role="status"
-          aria-label="Layers in use by other systems"
+          aria-label="Video producers outside your stack"
         >
           <div style={styles.lines}>
             {foreignLayers.map((o) => {
               const name = `${String(o.channel)}-${String(o.layer)}`;
+              const canClear = offersClear(o);
               return (
                 <div key={name} style={styles.row}>
                   {/*
@@ -433,19 +429,16 @@ export function OrphanLayersBanner({
                     producer (`offersClear`, the bridge's own rule). Above them it still offers
                     none, and says so.
                   */}
-                  {offersClear(o) ? (
-                    <>
-                      <span>
-                        Layer {name} is carrying video ({o.producer}) — placed by another system.
-                      </span>
-                      {clearButton(o)}
-                    </>
-                  ) : (
-                    <span>
-                      Layer {name} is carrying video ({o.producer}) — placed by another system.{' '}
-                      <span style={styles.detail}>Not clearable from here.</span>
-                    </span>
-                  )}
+                  <span>
+                    Layer {name} is carrying video ({o.producer}).
+                    {!canClear && (
+                      <>
+                        {' '}
+                        <span style={styles.detail}>Not clearable from here.</span>
+                      </>
+                    )}
+                  </span>
+                  {canClear && clearButton(o)}
                 </div>
               );
             })}

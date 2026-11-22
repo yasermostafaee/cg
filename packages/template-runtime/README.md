@@ -177,11 +177,12 @@ mixer. A `CgControl.nativeBorderPlateIds` array replaces the suppression set for
 instances. An empty array restores the authored borders. The background pass and rehearsal
 ignore this control. A fresh Take or a settled stop clears the set.
 
-For a Control-authored Focus Push or Slide over, the Bridge sends the scene-space aperture,
+For a Focus Push or Slide over, the Bridge sends the scene-space aperture,
 direction and progress of each native mixer segment in the `focusSlide` artwork phase.
 The page clips both solo compositions to their visible part of the aperture and translates the
 complete frame artwork, including attached graphics and visible titles. Look commit and recovery
-release the temporary clips and transforms.
+release the temporary clips and transforms. Designer-authored destinations use their ordinary
+registered Look IDs in the same page effect payload.
 
 `CgControl.maskPlacements` replaces the fallback's editable clip windows by exact plate, preset and
 authored window. A shared plate arrives as one placement per eligible preset. The SVG clip is

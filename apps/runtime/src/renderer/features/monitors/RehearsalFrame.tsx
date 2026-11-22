@@ -11,7 +11,6 @@ import type { CSSProperties, Ref } from 'react';
 import type { CgPage, FieldValues, FitRect, Position, Raster } from '@cg/shared-schema';
 import {
   authoredLookEffect,
-  controlLiveLayoutFocusTarget,
   controlLiveLayoutSoloTarget,
   pageMediaPath,
   positionQuery,
@@ -25,6 +24,8 @@ import {
 } from '@cg/shared-schema';
 import {
   activeLookOf,
+  designerFocusSettingsBetween,
+  templateFocusTarget,
   framePlacementRects,
   lookOperatorFrames,
   pageTarget,
@@ -560,10 +561,12 @@ export function RehearsalFrame({
       running?.cancel();
     }
     if (current?.payload === payload && current.lookId === lookId) return;
+    const priorFocus = templateFocusTarget(liveSources, controlLiveLayout, previousLook?.id);
+    const targetFocus = templateFocusTarget(liveSources, controlLiveLayout, look?.id);
+    const layoutSettings =
+      controlLiveLayout ?? designerFocusSettingsBetween(liveSources, previousLook?.id, look?.id);
     const layoutEffects =
-      controlLiveLayout === undefined
-        ? undefined
-        : effectiveLayoutEffects(itemId, controlLiveLayout);
+      layoutSettings === undefined ? undefined : effectiveLayoutEffects(itemId, layoutSettings);
     const effect =
       layoutEffects?.focus ??
       rowEffectOverrides(itemId)?.preset ??
@@ -580,9 +583,12 @@ export function RehearsalFrame({
       look !== undefined &&
       previousLook !== undefined &&
       previousLook.id !== look.id;
-    if (canAnimatePreset && controlLiveLayout !== undefined && layoutEffects !== undefined) {
-      const from = controlLiveLayoutSoloTarget(controlLiveLayout, previousLook.id);
-      const to = controlLiveLayoutFocusTarget(controlLiveLayout, look.id);
+    if (canAnimatePreset && layoutEffects !== undefined) {
+      const from =
+        controlLiveLayout === undefined
+          ? priorFocus
+          : controlLiveLayoutSoloTarget(controlLiveLayout, previousLook.id);
+      const to = targetFocus;
       if (
         from !== undefined &&
         to !== undefined &&
@@ -602,7 +608,10 @@ export function RehearsalFrame({
           doc,
           before: { look: previousLook, frameId: from.frameId, anchor: anchors[from.frameId] },
           after: { look, frameId: to.frameId, anchor: anchors[to.frameId] },
-          layout: { ...controlLiveLayout, effects: layoutEffects },
+          layout: {
+            resolution: controlLiveLayout?.resolution ?? liveSources.resolution,
+            effects: layoutEffects,
+          },
           period: presetFramePeriodMs,
           pictureReady: () => {
             const sourceId = livePlatesRef.current.find(

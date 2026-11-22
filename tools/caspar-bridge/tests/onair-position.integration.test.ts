@@ -117,7 +117,15 @@ async function boot(template = TEMPLATE, html = HTML, redundant = false): Promis
 }
 
 it('applies position and fields to the same resident programme page and keeps the previous values on refusal', async () => {
-  await boot(POSITION_TEMPLATE, POSITION_HTML);
+  await boot(
+    {
+      ...POSITION_TEMPLATE,
+      fields: [
+        { id: 'headline', label: 'Headline', type: 'text', required: true, default: 'Before' },
+      ],
+    },
+    POSITION_HTML,
+  );
   const row = () => runtime!.stackSnapshot().find((item) => item.itemId === 'item1');
   await expect(
     runtime!.load('item1', 'lower-third', { headline: 'before' }),
@@ -137,6 +145,17 @@ it('applies position and fields to the same resident programme page and keeps th
       .slice(baseline)
       .map(({ line }) => line)
       .filter((line) => /^(CG |MIXER |PLAY |CLEAR )/.test(line));
+
+  const beforeInvalid = row();
+  await expect(
+    runtime!.update('item1', { headline: '  ' }, 'merge', undefined, POSITION),
+  ).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'invalid-field',
+    message: 'Not sent: Headline — A value is required.',
+  });
+  expect(row()).toEqual(beforeInvalid);
+  expect(cgWrites()).toEqual([]);
 
   await expect(runtime!.update('item1', {}, 'merge', undefined, POSITION)).resolves.toEqual({
     accepted: true,

@@ -7,7 +7,7 @@ import {
 } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, pack } from '@cg/vcg-format';
-import { expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
  * ⭐ **SESSION BO — the Inspector's PLATE INPUTS section, driven through the real UI.**
@@ -673,4 +673,104 @@ test('🔴 FIELD-FIXES-01 C — a REFUSED take does not claim air for its look; 
   const onAirBadge = app.inspector.locator('[data-look-live="two"]');
   await expect(onAirBadge).toContainText('ON AIR NOW');
   await expect(onAirBadge).toHaveAttribute('data-look-badge', 'on-air');
+});
+
+test.describe('D-218 Designer-authored Focus', () => {
+  test.use({ playoutSources: E2E_PLAYOUT });
+
+  test('runs the authored direct effect in PVW and keeps PGM independent', async ({ app }) => {
+    const page = app.page;
+    const templateId = 'tpl-designer-focus';
+    const scene = lookFieldScene();
+    const group = scene.lookGroups?.[0];
+    const origin = group?.looks[0];
+    if (group === undefined || origin === undefined) throw new Error('Missing Focus fixture');
+    origin.presetFocus = {
+      targets: { 'plate-1': 'look-2', 'plate-2': 'look-3' },
+      effects: {
+        focus: { motion: 'cut', fade: false, durationMs: 400 },
+        switch: { mode: 'fade', direction: 'left', durationMs: 1000 },
+      },
+    };
+    for (const [compositionIndex, plate] of [
+      [1, 'plate-1'],
+      [2, 'plate-2'],
+    ] as const) {
+      const layer = scene.compositions?.[compositionIndex]?.layers[0];
+      if (layer === undefined) throw new Error('Missing Focus destination');
+      layer.children = layer.children.flatMap<Element>((child) => {
+        if (child.type !== 'video-placeholder') return [child];
+        if (child.routeKey !== plate) return [];
+        return [{ ...child, transform: lookFixtureTransform(0, 0, 1920, 1080) }];
+      });
+    }
+
+    const liveSources = buildTemplateLiveSources(scene);
+    expect(liveSources.looks?.[0]?.presetFocus).toEqual(origin.presetFocus);
+    const html = await generatedLookPage(scene);
+    await page.evaluate(
+      async ({ templateId, liveSources, html }) => {
+        await window.cg.sources.setConfig({ layerRange: { start: 60, end: 79 } });
+        await window.cg.sources.setAssignments({
+          assignments: [
+            { templateId, plateId: 'plate-1', sourceId: 'in-studio-1' },
+            { templateId, plateId: 'plate-2', sourceId: 'in-studio-2' },
+          ],
+        });
+        await window.cg.templates.import({
+          template: {
+            templateId,
+            name: 'Designer Focus',
+            templateType: 'lower-third',
+            fields: [],
+            liveSources,
+          },
+          html,
+        });
+        const readPage = window.cg.templates.page;
+        window.cg.templates.page = (id, channel) =>
+          id === templateId
+            ? Promise.resolve({ kind: 'page', html, source: 'bridge' })
+            : readPage(id, channel);
+      },
+      { templateId, liveSources, html },
+    );
+
+    await app.showMonitors();
+    const row = app.layerRow(await app.loadTemplate(templateId));
+    const programmePreset = () =>
+      page.evaluate(
+        async (id) =>
+          (await window.cg.stack.snapshot()).find((item) => item.templateId === id)?.activeLookId,
+        templateId,
+      );
+    await expect.poll(programmePreset).toBe('look-1');
+    await expect(row.locator('[data-look-id]')).toHaveCount(1);
+    await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+    await page
+      .locator('[data-pvw-controls]')
+      .getByRole('button', { name: 'PLAY', exact: true })
+      .click();
+
+    const preview = page.getByRole('group', { name: 'Preview Focus', exact: true });
+    const focus1 = preview.getByRole('button', { name: 'Focus plate 1 in Preview' });
+    const focus2 = preview.getByRole('button', { name: 'Focus plate 2 in Preview' });
+    const returnToOrigin = preview.getByRole('button', { name: 'Return to Preset 1' });
+    const stage = page.frameLocator('iframe[data-rehearsal-frame]');
+    const transition = stage.locator('[data-cg-pvw-focus-switch="fade"]');
+
+    await focus1.click();
+    await expect(focus1).toHaveAttribute('aria-pressed', 'true');
+    await expect(stage.locator('[data-cg-element-id="look-2-plate-1"]')).toBeVisible();
+    await focus2.click();
+    await expect(transition).toBeVisible();
+    await expect(transition.locator('[data-cg-pvw-focus-plane]')).toHaveCount(2);
+    await expect(transition).toHaveCount(0);
+    await expect(focus2).toHaveAttribute('aria-pressed', 'true');
+    await returnToOrigin.click();
+    await expect(returnToOrigin).toHaveCount(0);
+    await expect(stage.locator('[data-cg-element-id="look-1-plate-2"]')).toBeVisible();
+
+    expect(await programmePreset()).toBe('look-1');
+  });
 });

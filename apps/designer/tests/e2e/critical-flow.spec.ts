@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { unpack } from '@cg/vcg-format';
 import { test, expect } from './fixtures/designer.js';
 
 /**
@@ -42,4 +44,31 @@ test.describe('Designer critical flow', () => {
     // The exported HTML embeds the bound field as a GDD data key.
     expect(html.toLowerCase()).toContain('headline');
   });
+});
+
+test('Description explains its use in CG Control and survives VCG export', async ({ app }) => {
+  await app.newProject('Described field');
+  await app.addTextElement({ x: 240, y: 140 });
+  await app.setDataKey('headline');
+
+  await app.inspector.getByRole('button', { name: 'About Description' }).click();
+  const help = app.page.getByRole('dialog', { name: 'Description' });
+  await expect(
+    help.getByText('It appears beside this field in CG Control.', { exact: false }),
+  ).toBeVisible();
+  await help.getByRole('button', { name: 'Close' }).click();
+
+  const description = app.inspector.getByRole('textbox', { name: 'Description', exact: true });
+  const text = 'عنوان خبر را وارد کنید.';
+  await description.fill(text);
+  await description.press('Enter');
+  await expect(description).toHaveValue(text);
+  await expect(description).toHaveCSS('direction', 'rtl');
+
+  const downloadReady = app.page.waitForEvent('download');
+  await app.compositionActionBar.getByRole('button', { name: 'Export .vcg' }).click();
+  const path = await (await downloadReady).path();
+  if (path === null) throw new Error('VCG download has no file path');
+  const { scene } = await unpack(await readFile(path));
+  expect(scene.fields.find(({ id }) => id === 'headline')?.description).toBe(text);
 });

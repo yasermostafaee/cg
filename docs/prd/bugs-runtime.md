@@ -14160,3 +14160,28 @@ The row stays ON PVW, but the rehearsal has stopped and requires Play again.
 
 **Expected / regression:** Maximizing and restoring PGM keeps the active PVW page and playback
 state. On return, the same rehearsal continues from its current state. No playout command is sent.
+
+## [~] B-445 — Video producer notices claim another system placed the route ⟨priority: high — owner, 2026-11-22⟩ — `openspec/changes/clarify-orphan-layer-occupancy/`
+
+**Repro / Actual:** While showing a live layout on PGM, CG Control intermittently lists route
+producers on layers 1-61, 1-66 and 1-71 as placed by another system. The operator observed a
+single CG Control. The bridge's notice identifies occupied coordinates outside its current
+ledger. Its producer kind does not establish who placed it.
+
+**Expected / regression:** An unclaimed route notice names the observed layer and producer kind.
+A route held by the bridge ledger stays out of the strip. Clear remains explicit and
+confirmation-gated for eligible layers. DOM and browser tests exercise an unclaimed route. The
+station check still needs a matching ledger and CasparCG stage capture to determine why those
+particular routes lacked a claim.
+
+## [~] B-446 — Apply the authored dynamic field rules in CG Control ⟨priority: high — owner, 2026-11-22⟩ — `openspec/changes/validate-authored-field-updates/`
+
+**Repro / Actual:** Load the operator's exported `text.vcg` with Required set, clear the
+text field and press Update. The package carries Required and its Persian Description.
+Update accepted an empty draft. The field did not expose the description.
+
+**Expected / regression:** A field with an invalid changed value explains its rule.
+Update leaves the full draft pending and leaves the previously applied data in force.
+Exercise Required, min/max length, existing Persian-digit pattern behavior, nested
+fields and the Bridge update path. The authored Description is available as field
+help in CG Control, with its purpose stated in Designer.

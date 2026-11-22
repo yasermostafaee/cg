@@ -12,6 +12,7 @@ import {
   resolveDefaultPosition,
 } from '@cg/shared-schema';
 import type {
+  DesignerPresetFocus,
   FieldBinding,
   FlatElement,
   LiveCropFocus,
@@ -280,6 +281,7 @@ export interface TemplateLookCarrier {
   name: string;
   instanceId: string;
   entered: LookTransition;
+  presetFocus?: DesignerPresetFocus | undefined;
   allowOperatorAutoLayout?: boolean | undefined;
   rects: Record<string, LiveSourceRect>;
   platePaintOrder?: string[] | undefined;
@@ -648,6 +650,10 @@ export function collectLookCarrier(scene: Scene): {
     });
   }
 
+  const claimedFocusLooks = new Set<string>();
+  const focusOrigins = new Set(
+    group.looks.filter(({ presetFocus }) => presetFocus !== undefined).map(({ id }) => id),
+  );
   return {
     sources,
     looks: group.looks.map((l) => {
@@ -661,11 +667,33 @@ export function collectLookCarrier(scene: Scene): {
       );
       const order = relevantPlateOrder(paintOrder, rects, reveals, operatorFramesByLook.has(l.id));
       const departureGroups = transitionGroupsByLook.get(l.id);
+      const targets = Object.fromEntries(
+        Object.entries(l.presetFocus?.targets ?? {}).filter(([plate, target]) => {
+          const targetRects = rectsByLook.get(target);
+          if (
+            Object.keys(rects).length < 2 ||
+            rects[plate] === undefined ||
+            targetRects === undefined ||
+            Object.keys(targetRects).length !== 1 ||
+            targetRects[plate] === undefined ||
+            target === group.defaultLookId ||
+            focusOrigins.has(target) ||
+            claimedFocusLooks.has(target)
+          )
+            return false;
+          claimedFocusLooks.add(target);
+          return true;
+        }),
+      );
       return {
         id: l.id,
         name: l.name,
         instanceId: l.instanceId,
         entered: l.entered,
+        ...(l.presetFocus !== undefined &&
+          Object.keys(targets).length > 0 && {
+            presetFocus: { ...l.presetFocus, targets },
+          }),
         ...(l.allowOperatorAutoLayout !== undefined && {
           allowOperatorAutoLayout: l.allowOperatorAutoLayout,
         }),

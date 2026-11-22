@@ -15,6 +15,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput, SelectField, VectorField } from './controls.js';
 import { CheckRow, DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
 import { SinglePlateArrange } from './FrameArrange.js';
+import { PresetFocusSettings } from './PresetFocusSettings.js';
 import { PresetEffectSettings } from './PresetEffectSettings.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
@@ -132,6 +133,12 @@ function PresetSettings(): JSX.Element | null {
         onChange={(allowed) => designerStore.setLookOperatorAutoLayout(preset.id, allowed)}
       />
       <PresetEffectSettings key={preset.id} preset={preset} />
+      <PresetFocusSettings
+        key={'focus-' + preset.id}
+        project={project}
+        preset={preset}
+        homeId={homeId}
+      />
     </>
   );
 }

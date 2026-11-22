@@ -214,7 +214,8 @@ describe('live layout preset and plate shape', () => {
 
 describe('live layout margins and custom placement', () => {
   const zero = { top: 0, right: 0, bottom: 0, left: 0 };
-  const flush = { ...preset, margins: zero, horizontalGap: 0, verticalGap: 0 };
+  const flushOptions = { margins: zero, horizontalGap: 0, verticalGap: 0 };
+  const flush = { ...preset, ...flushOptions };
 
   it('tiles a 16:9 output with four exactly touching 16:9 plates in both layout paths', () => {
     const expected = [
@@ -228,7 +229,7 @@ describe('live layout margins and custom placement', () => {
     ).toEqual(expected);
     const geometry = flush.frameIds.map((id) => ({ id, aspect: 16 / 9 }));
     expect(
-      calculateLiveSourceAutoLayout(geometry, resolution, 'more-top', flush).map(
+      calculateLiveSourceAutoLayout(geometry, resolution, 'more-top', flushOptions).map(
         ({ id: _id, ...rect }) => rect,
       ),
     ).toEqual(expected);

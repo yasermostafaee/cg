@@ -61,6 +61,30 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   // The successful load selects the row and surfaces its field schema.
   await expect(row).toHaveAttribute('aria-pressed', 'true');
   await expect(app.inspector.getByText('Anchor name')).toBeVisible();
+  await expect(
+    app.inspector.getByRole('button', { name: 'Description for Anchor name' }),
+  ).toHaveCount(0);
+});
+
+test('an imported field Description is available in Control with its authored direction', async ({
+  app,
+}) => {
+  const text = 'نام گوینده را وارد کنید.';
+  await app.importVcg(
+    'description.vcg',
+    await buildValidVcg('tpl-description', undefined, text),
+    84,
+  );
+  const trigger = app.inspector.getByRole('button', { name: 'Description for Anchor name' });
+  await trigger.focus();
+  await trigger.press('Enter');
+  const help = app.page.getByRole('dialog', { name: 'Description for Anchor name' });
+  const note = help.getByText(text, { exact: true });
+  await expect(note).toBeVisible();
+  await expect(note).toHaveCSS('direction', 'rtl');
+  await app.page.keyboard.press('Escape');
+  await expect(help).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
 /*

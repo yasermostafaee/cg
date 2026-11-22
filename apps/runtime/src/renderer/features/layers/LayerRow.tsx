@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import {
   activeLookOf,
+  designerFocusSettingsBetween,
+  templateFocusTarget,
   LAYER_SHORTCUT_VERBS,
   type FixedSlotState,
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import {
   authoredLookEffect,
-  controlLiveLayoutFocusTarget,
   controlLiveLayoutSoloTarget,
   isOnAirStatus,
   type InputSlideTransition,
@@ -407,7 +408,8 @@ export function LayerRow({
     (`looks-none-authored`); it is not this control’s job to explain it.
   */
   const layout = template?.controlLiveLayout;
-  const looks = lookOptionsOf(template?.liveSources, layout);
+  const liveSources = template?.liveSources;
+  const looks = lookOptionsOf(liveSources, layout);
   const [switchingLayout, setSwitchingLayout] = useState(false);
   // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
   // rule: with either hop down the switch cannot leave the browser, so an enabled picker
@@ -423,10 +425,12 @@ export function LayerRow({
    * straight back off the published stack, so what it shows is what the bridge did.
    */
   const switchLook = async (item: StackItemState, lookId: string): Promise<void> => {
-    if (layout !== undefined && switchingLayout) return;
-    if (layout !== undefined) setSwitchingLayout(true);
-    const programmeFocus =
-      layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, item.activeLookId);
+    const programmeFocus = templateFocusTarget(liveSources, layout, item.activeLookId);
+    const to = templateFocusTarget(liveSources, layout, lookId);
+    const layoutSettings =
+      layout ?? designerFocusSettingsBetween(liveSources, item.activeLookId, lookId);
+    if (layoutSettings !== undefined && switchingLayout) return;
+    if (layoutSettings !== undefined) setSwitchingLayout(true);
     preservePreviewLookPin(
       item.itemId,
       template?.liveSources === undefined
@@ -444,7 +448,9 @@ export function LayerRow({
     */
     try {
       const layoutEffects =
-        layout === undefined ? undefined : effectiveLayoutEffects(item.itemId, layout);
+        layoutSettings === undefined
+          ? undefined
+          : effectiveLayoutEffects(item.itemId, layoutSettings);
       const authoredEffect = authoredLookEffect(
         template?.liveSources?.looks?.find(({ id }) => id === lookId)?.entered,
       );
@@ -453,9 +459,8 @@ export function LayerRow({
         layoutEffects?.focus ?? override ?? authoredEffect ?? frameTransitionPreference();
       const from =
         layout === undefined
-          ? undefined
+          ? programmeFocus
           : controlLiveLayoutSoloTarget(layout, item.activeLookId ?? layout.defaultPresetId);
-      const to = layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, lookId);
       const direct =
         from !== undefined &&
         to !== undefined &&
@@ -478,7 +483,7 @@ export function LayerRow({
       const onProgramme = !legacyPreview && isOnAirStatus(item);
       const transition =
         onProgramme &&
-        (layout !== undefined ||
+        (layoutSettings !== undefined ||
           (item.onAirPresetTransition === true &&
             (override !== undefined ||
               authoredEffect !== undefined ||
@@ -502,7 +507,7 @@ export function LayerRow({
         lookSwitchRefusal(undefined, err instanceof Error ? err.message : undefined),
       );
     } finally {
-      if (layout !== undefined) setSwitchingLayout(false);
+      if (layoutSettings !== undefined) setSwitchingLayout(false);
     }
   };
 
@@ -1414,9 +1419,10 @@ export function LayerRow({
           }}
         />
       )}
-      {layout !== undefined && item !== null && state.tone === 'onair' && canOperate && (
+      {item !== null && state.tone === 'onair' && canOperate && (
         <ControlLayoutFocus
           layout={layout}
+          liveSources={liveSources}
           current={item.activeLookId}
           target="Programme"
           disabled={switchingLayout || item.pending || lookRefusal !== undefined}

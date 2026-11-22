@@ -183,7 +183,18 @@ export function deleteCompositionAndLinkedLooks(
         removedLookIds.push(look.id);
         removedLookNames.push(look.name);
       }
-      const looks = group.looks.filter((look) => !linkedInstanceIds.has(look.instanceId));
+      const removedIds = new Set(removed.map(({ id }) => id));
+      const looks = group.looks
+        .filter((look) => !linkedInstanceIds.has(look.instanceId))
+        .map((look) => {
+          const focus = look.presetFocus;
+          if (focus === undefined || !Object.values(focus.targets).some((id) => removedIds.has(id)))
+            return look;
+          const targets = Object.fromEntries(
+            Object.entries(focus.targets).filter(([, id]) => !removedIds.has(id)),
+          );
+          return { ...look, presetFocus: { ...focus, targets } };
+        });
       const next = { ...group, looks };
       if (removed.some((look) => look.id === group.defaultLookId)) {
         if (looks[0] !== undefined) next.defaultLookId = looks[0].id;

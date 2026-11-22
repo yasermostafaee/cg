@@ -9,6 +9,7 @@ import {
   numberFieldAllowedValues,
   numberFieldValueLabel,
   numberFieldValueError,
+  operatorFieldError,
   type AggregatedFields,
   type DynamicField,
   type FieldDigits,
@@ -18,7 +19,7 @@ import {
   type NestedFieldValues,
 } from '@cg/shared-schema';
 import { TriangleAlert } from 'lucide-react';
-import { valueMatchesPattern, writeFieldDigits, type DigitSet } from '@cg/text-shaping';
+import { writeFieldDigits, type DigitSet } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
 import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { Button } from '../../ui/Button.js';
@@ -755,31 +756,12 @@ function listItems(value: FieldValue | undefined, fallback: readonly ListItem[])
 
 /** Validation message for a value against a field's constraints, or null if valid. */
 export function validateField(field: DynamicField, value: FieldValue | undefined): string | null {
-  if (field.type === 'list') {
-    return field.required && listItems(value, field.default).length === 0 ? 'Required' : null;
+  const candidate = field.type === 'list' ? listItems(value, field.default) : value;
+  const error = operatorFieldError(field, candidate);
+  if (error?.code === 'pattern' && (field.type === 'text' || field.type === 'multiline')) {
+    return `Doesn't match ${field.pattern ?? ''}`;
   }
-  if (field.type !== 'text' && field.type !== 'multiline') return null;
-  const str = asString(value);
-  if (field.required && str === '') return 'Required';
-  const len = [...str].length;
-  if (field.minLength !== undefined && len < field.minLength) {
-    return `Min ${String(field.minLength)} characters`;
-  }
-  if (field.type === 'text' && field.maxLength !== undefined && len > field.maxLength) {
-    return `Max ${String(field.maxLength)} characters`;
-  }
-  /*
-    `PERSIAN-DIGITS-01` — a pattern is written with Latin classes (`[0-9]`, `\d`), and the author
-    types on a Persian keyboard: the `Time (HH:MM)` preset refused `۲۱:۳۰`. So a value is accepted
-    when it matches as typed OR with its digits, `٫` and `٬` read as Latin. The VALUE is not
-    rewritten, and no stored pattern is — templates already exported carry the old presets, and
-    reading the value is the fix that reaches them. `R-101` — the rule is `valueMatchesPattern`
-    now, the one CG Control asks too; an invalid pattern is a field-config issue, not a value error.
-  */
-  if (field.pattern !== undefined && !valueMatchesPattern(field.pattern, str)) {
-    return `Doesn't match ${field.pattern}`;
-  }
-  return null;
+  return error?.line ?? null;
 }
 
 function asString(v: FieldValue | undefined): string {

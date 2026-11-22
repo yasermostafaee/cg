@@ -4388,3 +4388,11 @@ B-433 through B-437 are already present in the tracked bug headings. The next fr
 - B-442 — Short Sequence boxes clip the Persian glyph ink of a fitting line, `docs/prd/bugs-runtime.md`.
 
 - B-443 — Edits to a reused plate mask stay in one preset, `docs/prd/bugs-runtime.md`.
+
+### 2026-11-22 — Video occupancy notices take B-445
+
+- B-445 — Report route occupancy without attributing it to another system, `docs/prd/bugs-runtime.md`.
+
+### 2026-11-22 — Dynamic field rules take B-446
+
+- B-446 — Apply authored dynamic field rules and expose descriptions in CG Control, `docs/prd/bugs-runtime.md`.

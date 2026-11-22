@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { PATTERN_PRESETS, type StackItemState } from '@cg/shared-schema';
+import {
+  operatorFieldError,
+  operatorFieldRefusals,
+  PATTERN_PRESETS,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { valueMatchesPattern } from '@cg/text-shaping';
 import { __resetDraftsForTest, stageField } from '../src/renderer/features/inspector/draftStore.js';
 import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
-import {
-  fieldPatternRefusal,
-  patternRefusalLine,
-  patternRefusalsOf,
-} from '../src/renderer/features/inspector/patternCheck.js';
 import * as feedback from '../src/renderer/features/status/commandFeedback.js';
 import { vi } from 'vitest';
 
@@ -49,18 +49,20 @@ describe('🔴 R-101 — the one rule (shared with the Designer’s preview form
   });
 
   it('the line names the form in the operator’s words, never the regex', () => {
-    expect(patternRefusalLine(TIME)).toBe('Not a Time (HH:MM), e.g. 21:30.');
-    expect(patternRefusalLine('^x+$')).toBe('Not in the form this field takes.');
-    expect(fieldPatternRefusal(azan, '20:32')).toBeNull();
-    expect(fieldPatternRefusal({ ...azan, pattern: undefined } as never, '25:00')).toBeNull();
+    expect(operatorFieldError(azan, '25:00')?.line).toBe('Not a Time (HH:MM), e.g. 21:30.');
+    expect(operatorFieldError({ ...azan, pattern: '^x+$' }, 'abc')?.line).toBe(
+      'Not in the form this field takes.',
+    );
+    expect(operatorFieldError(azan, '20:32')).toBeUndefined();
+    expect(operatorFieldError({ ...azan, pattern: undefined }, '25:00')).toBeUndefined();
   });
 
   it('every staged refusal is found, inside a composition group too', () => {
-    expect(patternRefusalsOf(TEMPLATE, { azan: '25:00', clock: { inner: '99:99' } })).toEqual([
-      { label: 'Azan time', line: 'Not a Time (HH:MM), e.g. 21:30.' },
-      { label: 'Inner time', line: 'Not a Time (HH:MM), e.g. 21:30.' },
+    expect(operatorFieldRefusals(TEMPLATE, { azan: '25:00', clock: { inner: '99:99' } })).toEqual([
+      { label: 'Azan time', code: 'pattern', line: 'Not a Time (HH:MM), e.g. 21:30.' },
+      { label: 'Inner time', code: 'pattern', line: 'Not a Time (HH:MM), e.g. 21:30.' },
     ]);
-    expect(patternRefusalsOf(TEMPLATE, { azan: '۲۰:۳۲', title: 'anything' })).toEqual([]);
+    expect(operatorFieldRefusals(TEMPLATE, { azan: '۲۰:۳۲', title: 'anything' })).toEqual([]);
   });
 });
 

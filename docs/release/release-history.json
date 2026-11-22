@@ -3,16 +3,157 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.13",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۱۳",
+        "en": "Release 1.2.13"
+      },
+      "date": "2026-11-22",
+      "status": "development",
+      "summary": {
+        "fa": "بیلد آزمایشی شامل تغییرات بعد از تحویل ۱.۲.۱۲، بیلد c770cab9، با افکت مستقل Focus در Designer و بهبود گذار قاب‌ها.",
+        "en": "Test candidate with the changes after delivery of 1.2.12 build c770cab9, including independent Designer Focus effects and refined plate transitions."
+      },
+      "features": [
+        {
+          "fa": "در Arrange دیزاینر، اینسپکتور و New live layout، حاشیهٔ هر ضلع جدا از فاصلهٔ بین قاب‌ها تنظیم می‌شود. چهار قاب ۱۶:۹ می‌توانند تمام تصویر ۱۶:۹ را بپوشانند. برای جای‌گذاری و اندازهٔ دلخواه از Custom استفاده کنید. New live layout برای Focus حاشیهٔ جدا دارد.",
+          "en": "In Designer, Inspector and New live layout, Arrange separates the four output margins from the gaps between plates. Four 16:9 plates can tile a 16:9 output. Custom allows independent positioning and sizing. New live layout has separate Focus margins."
+        },
+        {
+          "fa": "در Designer، هر پریست می‌تواند افکت ورود، مدت، Fade و جهت آمدن و رفتن قاب‌ها را جداگانه ذخیره کند. CG Control هنگام انتخاب پریست، تنظیم ذخیره‌شده را در PVW و PGM اعمال می‌کند.",
+          "en": "Designer presets can save their own entrance motion, duration, fade and plate arrival/departure directions. CG Control uses those settings when switching to the preset in PVW and PGM."
+        },
+        {
+          "fa": "در Composition Inspector دیزاینر، از Focus effects برای وصل‌کردن هر قاب به پریست تک‌قابِ همان منبع استفاده کنید. Fade، Push، Slide over، Cut و حرکت، مدت و جهت تعویض Focus در VCG ذخیره می‌شوند. تنظیم Focus و Return هم مستقل از افکت ورود عادی پریست ذخیره می‌شود.",
+          "en": "In the Designer composition Inspector, Focus effects links each plate to a matching single-plate preset. The exported VCG carries Cut, Fade, Push, Slide over or Motion with switch duration and direction, and separate Focus and Return settings."
+        },
+        {
+          "fa": "در Inspector نرم‌افزار CG Control، دکمهٔ اطلاعات کنار نام فیلد متن Description قالب را نشان می‌دهد. کنار Description در Designer راهنمای کاربرد آن اضافه شده است.",
+          "en": "CG Control shows the template’s authored Description through the info button beside a field in Inspector. Designer explains where Description appears."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "تعویض پریست B پس از وقفهٔ موقت تأیید سرور دوباره همگام می‌شود. در Inspector کادر A/B منشأ تصویر یا ویومتر را مشخص می‌کند و تصویر معتبر NDI در PGM در وضعیت حضور منبع B لحاظ می‌شود.",
+          "en": "Server B resumes preset updates after a temporary confirmation gap. In Inspector, the outline identifies the server providing the picture or audio meter. Verified NDI video in PGM is reflected in B source availability."
+        },
+        {
+          "fa": "در تنظیمات Safe Area در Designer، PVW و New Layout، فهرست قاب‌های سفارشی اسکرول می‌شود و قاب در حال ویرایش با تیک مشخص است. افزودن و حذف قاب ظاهر جداگانه دارند. با Restore defaults و تأیید آن می‌توانید تنظیمات راهنما را به پیش‌فرض برگردانید.",
+          "en": "In Designer, PVW and New Layout, the Safe Area frame list scrolls and a checkmark identifies the frame being edited. Add and Remove have distinct controls. Restore defaults asks for confirmation before resetting the guides."
+        },
+        {
+          "fa": "در خروجی 1080i، هنگام تعویض بین پریست دوقاب و سه‌قاب یا برگشت از فوکوس، کادر، عنوان‌ها و گرافیک پلیت با تصویر حرکت می‌کنند. نسخهٔ ثابتی از آن‌ها پیش از رسیدن پلیت در مقصد دیده نمی‌شود.",
+          "en": "On 1080i programme output, switching between two- and three-plate presets or returning from Focus keeps the border, titles and imported artwork with the moving picture. This removes the stationary copy that used to appear at the destination."
+        },
+        {
+          "fa": "هنگام برگشت از فوکوس در پخش دوسروره، هر موتور تا رسیدن پس‌زمینهٔ جایگزین به موقعیت و شفافیت نهایی صبر می‌کند. این تغییر از ظاهر شدن زودهنگام پس‌زمینه در قاب مقصد روی سرور رزرو جلوگیری می‌کند.",
+          "en": "On a paired playout, each engine waits for the arriving fallback to reach its final position and opacity before restoring the preset background. This addresses an early flash behind the moving plate on the standby return."
+        },
+        {
+          "fa": "در نخستین تعویض پریست پس از بارگذاری، هر سرور رسیدن تصویر، کادر و نوشته‌های پلیت به موقعیت نهایی را بررسی می‌کند. پس‌زمینهٔ جایگزینِ پریست قبلی در طول حرکت پشت قاب‌ها ظاهر نمی‌شود.",
+          "en": "On the first preset change after loading a layout, each engine checks that the picture, border and captions have reached their final positions. The previous preset’s fallback stays hidden behind moving plates."
+        },
+        {
+          "fa": "CG Control هنگام تازه‌خوانی فهرست ورودی‌ها اتصال NDI را حفظ می‌کند. تصویر و صدای PVW و پنجرهٔ انتخاب منبع در طول تازه‌خوانی ادامه دارند.",
+          "en": "CG Control keeps its NDI receiver connected during input-list refresh, preserving preview picture and audio in PVW and the source chooser."
+        },
+        {
+          "fa": "در تعویض مستقیم Focus روی PGM، افکت حرکت یا Dissolve همراه کادر، عنوان‌ها و گرافیک متصل اجرا می‌شود و ورودی‌های آماده سر جای خود می‌مانند. گرافیک متحرک شفاف در صورت نیاز از مسیر تک‌تصویری رندر می‌شود.",
+          "en": "Direct PGM Focus switches move or dissolve borders, titles and attached artwork together while keeping seated picture producers. Translucent animated artwork can use the single rendered feed."
+        },
+        {
+          "fa": "نسخه و شناسهٔ کوتاه بیلد در نصاب‌های ویندوز زیر لوگو و نام محصول دیده می‌شوند.",
+          "en": "Windows Setup shows the release version and short build ID beneath the product logo and name."
+        },
+        {
+          "fa": "گرافیک قاب و fallback در لایه‌های رزروشده جا می‌گیرند. اگر لایهٔ لازم آزاد نباشد، رندر HTML قاب را می‌کشد. روی مدیای جایگزینِ کدر، نوار رنگی اضافی ظاهر نمی‌شود.",
+          "en": "Plate borders and fallbacks use available reserved layers, with an HTML border when native slots are unavailable. Opaque fallback media no longer shows extra color bars."
+        },
+        {
+          "fa": "پیام اشغال لایه در CG Control شمارهٔ کانال و لایه و نوع تصویر را نشان می‌دهد. نوع Route به‌تنهایی به سیستم دیگری نسبت داده نمی‌شود.",
+          "en": "CG Control reports the occupied channel-layer and video producer kind without claiming an unassigned route was placed by another system."
+        },
+        {
+          "fa": "مقدار خالی فیلد اجباری، طول متن یا تعداد خطوط نامعتبر، الگوی نامعتبر و عدد خارج از محدوده قبل از Update مشخص می‌شوند. تا اصلاح مقدار، همهٔ ویرایش‌های همان Update در پیش‌نویس می‌مانند.",
+          "en": "Update rejects blank required values, invalid text lengths, line counts, patterns and out-of-range numbers. The entire edit stays pending until the invalid value is corrected."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
+      "version": "next",
+      "title": {
+        "fa": "نسخهٔ بعدی",
+        "en": "Next release"
+      },
+      "date": "2026-11-22",
+      "status": "development",
+      "summary": {
+        "fa": "آزمون‌های باز نسخهٔ ۱.۲.۱۳.",
+        "en": "Outstanding acceptance checks for 1.2.13."
+      },
+      "features": [],
+      "fixes": [],
+      "planned": [
+        {
+          "fa": "Focus، تغییر پریست و تصویر A/B را با نصاب ۱.۲.۱۳ روی ایستگاه بررسی کنید. هم‌زمانی محوشدن عنوان و تصویر در بیلد baf7c69a با آزمون کاربر تأیید شد.",
+          "en": "Verify Focus, preset changes and A/B pictures on the target station using 1.2.13. The operator confirmed synchronized caption and picture fades in build baf7c69a."
+        },
+        {
+          "fa": "آزمون نصب خودکار NDI Runtime روی رایانهٔ تازه و تأیید Linux E2E برای بیلد بعدی.",
+          "en": "Verify automatic NDI Runtime installation on a clean workstation and run Linux E2E for the next build."
+        },
+        {
+          "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
+          "en": "On the target Playout PGM output, verify titles and shapes over live plates, preserved input assignments across presets, Mask and Revert, and plate fallback."
+        },
+        {
+          "fa": "تصویر، متر و شنود ورودی زنده در PVW و انتخاب‌گر ورودی روی ایستگاه Playout آزموده شوند. تغییر یا بستن پیش‌نمایش باید مستقل از PGM و Playlist بماند.",
+          "en": "Verify live picture, meter and optional sound in PVW and the source picker on the target station. Switching or closing a check must leave PGM and Playlist independent."
+        },
+        {
+          "fa": "تطابق برش انتخاب‌شده در Pan با فریم اول Take روی ایستگاه آزموده شود.",
+          "en": "Verify that the crop selected in PVW matches the first frame of Take on the station."
+        },
+        {
+          "fa": "نمایش هم‌زمان ورودی‌ها، Playlist و Media در PVW و بندانگشتی‌ها با حساب اپراتور روی 21.32 آزموده شود.",
+          "en": "Verify simultaneous live, Playlist and Media pictures in PVW and source pickers on 21.32 with an operator account."
+        },
+        {
+          "fa": "تنظیم بهرهٔ خروجی اصلی Playlist و بی‌صدابودن کپی آن در قاب روی ایستگاه آزموده شوند.",
+          "en": "Verify original Playlist gain and muted frame copies on the target station."
+        },
+        {
+          "fa": "مسیر Share را در چیدمان دو سروری با هویت سرویس Bridge و قاب‌های Crop edges را در PGM سرور هدف بررسی کنید.",
+          "en": "Verify the UNC share under the Bridge service identity and Crop edges in PGM on the target two-server station."
+        },
+        {
+          "fa": "اگر وضعیت دکمهٔ Play دوباره با خروجی فرق داشت، لاگ Bridge و وضعیت لایه را در همان زمان ثبت کنید.",
+          "en": "If the Play indication differs from the output again, capture the contemporaneous Bridge log and layer state."
+        },
+        {
+          "fa": "روی موتور مقصد، پس از جابه‌جایی و تغییر اندازهٔ قاب در Frames، هم‌ترازی تصویر، عنوان، ماسک و تصویر جایگزین را در Take و Update on air بررسی کنید.",
+          "en": "On the target engine, verify that picture, title, mask and fallback stay aligned on Take and Update on air after moving and resizing a frame."
+        },
+        {
+          "fa": "در صورت تکرار پیام روی لایه‌های ۱-۶۱، ۱-۶۶ یا ۱-۷۱، وضعیت لایه و مالکیت Bridge هم‌زمان از سرور فعال ایستگاه ثبت شود.",
+          "en": "If the notice recurs on layers 1-61, 1-66 or 1-71, capture layer occupancy and Bridge ownership together on the active station engine."
+        }
+      ],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.12",
       "title": {
         "fa": "نسخهٔ ۱.۲.۱۲",
         "en": "Release 1.2.12"
       },
-      "date": "2026-11-18",
-      "status": "prepared",
+      "date": "2026-11-22",
+      "status": "published",
       "summary": {
-        "fa": "نام‌گذاری یکسان Crawl و راهنماهای امن قابل تنظیم در Designer، PVW و پیش‌نمایش New live layout.",
-        "en": "Consistent Crawl naming and configurable safe guides in Designer, PVW and the New live layout preview."
+        "fa": "بیلد c770cab9 در ۲۲ نوامبر ۲۰۲۶ تحویل شد. تغییرات این نسخه شامل نام‌گذاری Crawl، راهنماهای امن، پیش‌نمایش NDI و بهبود گذار قاب‌هاست.",
+        "en": "Build c770cab9 was delivered on November 22, 2026. This release includes consistent Crawl naming, safe guides, NDI preview and improvements to plate transitions."
       },
       "features": [
         {
@@ -82,29 +223,9 @@
         {
           "fa": "پس‌زمینهٔ طرح و تصویر fallback در دکمه‌های انتخاب فایل بندانگشتی دارند. پیش‌نمایش طرح ذخیره‌شده در Templates هم تصویر fallback پلیت را نشان می‌دهد.",
           "en": "Layout backgrounds and fallback pictures have thumbnails in the file pickers. Saved layout previews in Templates also show the plate's fallback picture."
-        },
-        {
-          "fa": "در Arrange دیزاینر، اینسپکتور و New live layout، حاشیهٔ هر ضلع جدا از فاصلهٔ بین قاب‌ها تنظیم می‌شود. چهار قاب ۱۶:۹ می‌توانند تمام تصویر ۱۶:۹ را بپوشانند. برای جای‌گذاری و اندازهٔ دلخواه از Custom استفاده کنید. New live layout برای Focus حاشیهٔ جدا دارد.",
-          "en": "In Designer, Inspector and New live layout, Arrange separates the four output margins from the gaps between plates. Four 16:9 plates can tile a 16:9 output. Custom allows independent positioning and sizing. New live layout has separate Focus margins."
-        },
-        {
-          "fa": "در Designer، هر پریست می‌تواند افکت ورود، مدت، Fade و جهت آمدن و رفتن قاب‌ها را جداگانه ذخیره کند. CG Control هنگام انتخاب پریست، تنظیم ذخیره‌شده را در PVW و PGM اعمال می‌کند.",
-          "en": "Designer presets can save their own entrance motion, duration, fade and plate arrival/departure directions. CG Control uses those settings when switching to the preset in PVW and PGM."
         }
       ],
       "fixes": [
-        {
-          "fa": "تعویض پریست B پس از وقفهٔ موقت تأیید سرور دوباره همگام می‌شود. در Inspector کادر A/B منشأ تصویر یا ویومتر را مشخص می‌کند و تصویر معتبر NDI در PGM در وضعیت حضور منبع B لحاظ می‌شود.",
-          "en": "Server B resumes preset updates after a temporary confirmation gap. In Inspector, the outline identifies the server providing the picture or audio meter. Verified NDI video in PGM is reflected in B source availability."
-        },
-        {
-          "fa": "پیش‌نمایش NDI هنگام تازه‌خوانی فهرست ورودی‌ها پیوسته می‌ماند. کادر و عنوان‌های پلیت در گذار بین Focus و پریست محو یا ظاهر می‌شوند. شمارهٔ نسخه و شناسهٔ بیلد زیر نام نرم‌افزار در نصاب دیده می‌شوند.",
-          "en": "NDI preview stays connected during source-list refresh. Plate borders and titles fade in or out during Focus and preset transitions. Installers show the version and build beneath the product name."
-        },
-        {
-          "fa": "در تنظیمات Safe Area در Designer، PVW و New Layout، فهرست قاب‌های سفارشی اسکرول می‌شود و قاب در حال ویرایش با تیک مشخص است. افزودن و حذف قاب ظاهر جداگانه دارند. با Restore defaults و تأیید آن می‌توانید تنظیمات راهنما را به پیش‌فرض برگردانید.",
-          "en": "In Designer, PVW and New Layout, the Safe Area frame list scrolls and a checkmark identifies the frame being edited. Add and Remove have distinct controls. Restore defaults asks for confirmation before resetting the guides."
-        },
         {
           "fa": "عرض کادر و مقادیر برش با انتخاب پلیت یا پریست از تنظیمات همان پلیت خوانده می‌شوند.",
           "en": "Border width and crop controls read the selected plate and preset's values."
@@ -120,18 +241,6 @@
         {
           "fa": "عنوان، متن‌های اضافی و گرافیک‌های واردشدهٔ هر پلیت در تعویض پریست همراه پلیت جابه‌جا یا محو می‌شوند. نمایش متن‌ها از تنظیمات همان پریست و فوکوس پیروی می‌کند.",
           "en": "Plate titles, additional captions and imported graphics move and fade with their plate during preset changes. Text visibility follows the authored preset and Focus settings."
-        },
-        {
-          "fa": "در خروجی 1080i، هنگام تعویض بین پریست دوقاب و سه‌قاب یا برگشت از فوکوس، کادر، عنوان‌ها و گرافیک پلیت با تصویر حرکت می‌کنند. نسخهٔ ثابتی از آن‌ها پیش از رسیدن پلیت در مقصد دیده نمی‌شود.",
-          "en": "On 1080i programme output, switching between two- and three-plate presets or returning from Focus keeps the border, titles and imported artwork with the moving picture. This removes the stationary copy that used to appear at the destination."
-        },
-        {
-          "fa": "هنگام برگشت از فوکوس در پخش دوسروره، هر موتور تا رسیدن پس‌زمینهٔ جایگزین به موقعیت و شفافیت نهایی صبر می‌کند. این تغییر از ظاهر شدن زودهنگام پس‌زمینه در قاب مقصد روی سرور رزرو جلوگیری می‌کند.",
-          "en": "On a paired playout, each engine waits for the arriving fallback to reach its final position and opacity before restoring the preset background. This addresses an early flash behind the moving plate on the standby return."
-        },
-        {
-          "fa": "در نخستین تعویض پریست پس از بارگذاری، هر سرور رسیدن تصویر، کادر و نوشته‌های پلیت به موقعیت نهایی را بررسی می‌کند. پس‌زمینهٔ جایگزینِ پریست قبلی در طول حرکت پشت قاب‌ها ظاهر نمی‌شود.",
-          "en": "On the first preset change after loading a layout, each engine checks that the picture, border and captions have reached their final positions. The previous preset’s fallback stays hidden behind moving plates."
         },
         {
           "fa": "در جابه‌جایی مستقیم بین فوکوس‌ها، حرکت یا محوشدن روی کل گرافیک متصل به پلیت اعمال می‌شود. اگر ورودی NDI قطع باشد، پس‌زمینهٔ جایگزین سازگار در همان فرمان حرکت تصویر جابه‌جا می‌شود.",
@@ -1235,56 +1344,6 @@
         }
       ],
       "planned": [],
-      "downloadBaseUrl": null
-    },
-    {
-      "version": "next",
-      "title": {
-        "fa": "نسخهٔ بعدی",
-        "en": "Next release"
-      },
-      "date": "2026-11-12",
-      "status": "development",
-      "summary": {
-        "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
-        "en": "This section tracks outstanding acceptance checks and features still in progress."
-      },
-      "features": [],
-      "fixes": [],
-      "planned": [
-        {
-          "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
-          "en": "On the target Playout PGM output, verify titles and shapes over live plates, preserved input assignments across presets, Mask and Revert, and plate fallback."
-        },
-        {
-          "fa": "تصویر، متر و شنود ورودی زنده در PVW و انتخاب‌گر ورودی روی ایستگاه Playout آزموده شوند. تغییر یا بستن پیش‌نمایش باید مستقل از PGM و Playlist بماند.",
-          "en": "Verify live picture, meter and optional sound in PVW and the source picker on the target station. Switching or closing a check must leave PGM and Playlist independent."
-        },
-        {
-          "fa": "تطابق برش انتخاب‌شده در Pan با فریم اول Take روی ایستگاه آزموده شود.",
-          "en": "Verify that the crop selected in PVW matches the first frame of Take on the station."
-        },
-        {
-          "fa": "نمایش هم‌زمان ورودی‌ها، Playlist و Media در PVW و بندانگشتی‌ها با حساب اپراتور روی 21.32 آزموده شود.",
-          "en": "Verify simultaneous live, Playlist and Media pictures in PVW and source pickers on 21.32 with an operator account."
-        },
-        {
-          "fa": "تنظیم بهرهٔ خروجی اصلی Playlist و بی‌صدابودن کپی آن در قاب روی ایستگاه آزموده شوند.",
-          "en": "Verify original Playlist gain and muted frame copies on the target station."
-        },
-        {
-          "fa": "مسیر Share را در چیدمان دو سروری با هویت سرویس Bridge و قاب‌های Crop edges را در PGM سرور هدف بررسی کنید.",
-          "en": "Verify the UNC share under the Bridge service identity and Crop edges in PGM on the target two-server station."
-        },
-        {
-          "fa": "اگر وضعیت دکمهٔ Play دوباره با خروجی فرق داشت، لاگ Bridge و وضعیت لایه را در همان زمان ثبت کنید.",
-          "en": "If the Play indication differs from the output again, capture the contemporaneous Bridge log and layer state."
-        },
-        {
-          "fa": "روی موتور مقصد، پس از جابه‌جایی و تغییر اندازهٔ قاب در Frames، هم‌ترازی تصویر، عنوان، ماسک و تصویر جایگزین را در Take و Update on air بررسی کنید.",
-          "en": "On the target engine, verify that picture, title, mask and fallback stay aligned on Take and Update on air after moving and resizing a frame."
-        }
-      ],
       "downloadBaseUrl": null
     },
     {

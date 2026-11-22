@@ -317,7 +317,7 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL; `B-292`: ins
   const labels = (el: ParentNode): (string | null)[] =>
     [...clears(el)].map((b) => b.getAttribute('aria-label'));
   const neutralStrip = (el: ParentNode): Element | null =>
-    el.querySelector('[aria-label="Layers in use by other systems"]');
+    el.querySelector('[aria-label="Video producers outside your stack"]');
 
   it('a video layer renders in the NEUTRAL strip — no alert role, kind named — and, inside the bands, carries a CLEAR', async () => {
     stubBridge();
@@ -328,7 +328,7 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL; `B-292`: ins
     expect(neutral).not.toBeNull();
     expect(neutral?.getAttribute('role')).toBe('status');
     expect(el.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
-    expect(el.textContent).toContain('placed by another system');
+    expect(el.textContent).not.toContain('placed by another system');
     expect(el.textContent).not.toContain('Not clearable from here');
     expect(
       [...(neutral?.querySelectorAll('button') ?? [])].map((b) => b.getAttribute('aria-label')),
@@ -343,6 +343,14 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL; `B-292`: ins
     expect(neutral?.textContent).toContain('Not clearable from here.');
     // The affordance does not exist — not disabled, ABSENT.
     expect(clears(el)).toHaveLength(0);
+  });
+
+  it('reports a route outside the stack without attributing it to another system', async () => {
+    stubBridge();
+    const el = await renderBanner([video(1, 61, 'route')]);
+    expect(neutralStrip(el)?.textContent).toContain('Layer 1-61 is carrying video (route).');
+    expect(neutralStrip(el)?.textContent).not.toContain('placed by another system');
+    expect(labels(el)).toEqual(['Clear layer 1-61']);
   });
 
   it('an unrecognised producer kind is presented exactly as video — "not html" fails safe', async () => {
@@ -606,7 +614,7 @@ describe('OrphanLayersBanner — FIELD-FIXES-01 L: CG’s bands, and a dismissal
   });
 
   const videoStrip = (el: ParentNode): Element | null =>
-    el.querySelector('[aria-label="Layers in use by other systems"]');
+    el.querySelector('[aria-label="Video producers outside your stack"]');
   const graphicStrip = (el: ParentNode): Element | null =>
     el.querySelector('[aria-label="HTML producers outside your stack"]');
   async function dismissIn(strip: Element | null): Promise<void> {

@@ -28,6 +28,36 @@ describe('MockRuntime stack', () => {
     expect(fields).toMatchObject({ headline: 'Hi', subtitle: 'There' });
   });
 
+  it('refuses invalid values before recording the rest of an Update', () => {
+    const rt = new MockRuntime();
+    rt.templateImport({
+      templateId: 'required-text',
+      templateType: 'lower-third',
+      fields: [
+        {
+          id: 'text',
+          label: 'Text',
+          type: 'text',
+          default: 'New text',
+          required: true,
+          minLength: 2,
+          maxLength: 8,
+        },
+      ],
+    });
+    expect(rt.load('required-row', 'required-text', { text: 'Original' }).accepted).toBe(true);
+    const current = () => rt.stackSnapshot().find(({ itemId }) => itemId === 'required-row');
+    const before = current();
+    expect(rt.update('required-row', { text: '  ', other: 'no' }, 'merge')).toEqual({
+      accepted: false,
+      errorCode: 'invalid-field',
+      message: 'Not sent: Text — A value is required.',
+    });
+    expect(current()).toEqual(before);
+    expect(rt.update('required-row', { text: 'Valid' }, 'merge').accepted).toBe(true);
+    expect(current()?.fields.text).toBe('Valid');
+  });
+
   it('remove drops the item', () => {
     const rt = new MockRuntime();
     const id = rt.stackSnapshot()[0]!.itemId;
