@@ -1,4 +1,6 @@
 import * as dgram from 'node:dgram';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
@@ -216,6 +218,11 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   await expect(inspector(page).getByTestId('book-counter')).toHaveText('2 / 3');
   await expectPvw(page, GREEN);
   await inspector(page)
+    .getByRole('button', { name: /^Previous page/ })
+    .click();
+  await expect(inspector(page).getByTestId('book-counter')).toHaveText('1 / 3');
+  await expectPvw(page, RED);
+  await inspector(page)
     .getByRole('textbox', { name: /^Page number/ })
     .fill('3');
   await inspector(page)
@@ -233,9 +240,9 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   await expectPvw(page, BLUE);
 });
 
-test('1.3 — Preview Next turns only the rehearsal picture, including while the row is on air', async ({
+test('1.3 — Sequence Folder keeps Preview Next local and turns Previous and Go to on air', async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(120_000);
   const handle = await boot();
   const engine = mock;
@@ -253,13 +260,20 @@ test('1.3 — Preview Next turns only the rehearsal picture, including while the
   await expect(previewPlay).toBeEnabled();
   await previewPlay.click();
 
-  const chooser = await openBookPageChooser(page, book, 'Pictures…');
-  await chooser.setFiles([
-    { name: 'page1.png', mimeType: 'image/png', buffer: solidPng(64, 36, RED) },
-    { name: 'page2.png', mimeType: 'image/png', buffer: solidPng(64, 36, GREEN) },
-    { name: 'page3.png', mimeType: 'image/png', buffer: solidPng(64, 36, BLUE) },
+  const folder = testInfo.outputPath('sequence-folder');
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'page10.png'), solidPng(64, 36, BLUE));
+  writeFileSync(join(folder, 'page2.png'), solidPng(64, 36, GREEN));
+  writeFileSync(join(folder, 'page1.png'), solidPng(64, 36, RED));
+  const chooser = await openBookPageChooser(page, book, 'Folder…');
+  await chooser.setFiles(folder);
+  const pages = bookPagesDialog(page);
+  await expect(pages.locator('[data-page-tile] .cg-page-tile__name')).toHaveText([
+    'page1.png',
+    'page2.png',
+    'page10.png',
   ]);
-  await bookPagesDialog(page).getByRole('button', { name: 'Done', exact: true }).click();
+  await pages.getByRole('button', { name: 'Done', exact: true }).click();
   await book.getByRole('button', { name: 'Apply staged edits' }).click();
   const inspectorCounter = book.getByTestId('book-counter');
   const layerCounter = layer.locator('[data-page-counter]');
@@ -321,26 +335,63 @@ test('1.3 — Preview Next turns only the rehearsal picture, including while the
     await expectPgm(RED);
 
     await book.getByRole('button', { name: /^Manage pages of/ }).click();
-    const pages = bookPagesDialog(page);
     await expect(pages.locator('[data-page-tile="1"] [data-page-mark="air"]')).toBeVisible();
     await expect(pages.locator('[data-page-tile="3"] [data-page-mark="pvw"]')).toBeVisible();
     await pages.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-    await layer.getByRole('button', { name: 'NEXT', exact: true }).click();
-    await expect.poll(() => programmeCommands(engine)).toHaveLength(beforeNext.length + 1);
-    expect(programmeCommands(engine).at(-1)).toMatch(/^CG 1-99 UPDATE 0 /);
-    const turn = engine.lastCgUpdate(SLOT)?.data;
-    if (turn === undefined || turn === null) throw new Error('Programme turn payload is missing');
-    expect(readCgControl(JSON.parse(turn))?.page).toMatchObject({ field: 'pages', turn: 'next' });
-    await air.evaluate(
-      (payload) => (window as unknown as { update: (value: string) => void }).update(payload),
-      turn,
+    const applyProgrammeTurn = async (
+      control: { turn: 'next' | 'previous' } | { index: number },
+      action: () => Promise<void>,
+    ): Promise<void> => {
+      const before = programmeCommands(engine).length;
+      await action();
+      await expect.poll(() => programmeCommands(engine)).toHaveLength(before + 1);
+      expect(programmeCommands(engine).at(-1)).toMatch(/^CG 1-99 UPDATE 0 /);
+      const payload = engine.lastCgUpdate(SLOT)?.data;
+      if (payload === undefined || payload === null)
+        throw new Error('Programme turn payload is missing');
+      expect(readCgControl(JSON.parse(payload))?.page).toMatchObject({
+        field: 'pages',
+        ...control,
+      });
+      await air.evaluate(
+        (value) => (window as unknown as { update: (data: string) => void }).update(value),
+        payload,
+      );
+    };
+
+    await applyProgrammeTurn({ turn: 'next' }, () =>
+      layer.getByRole('button', { name: 'NEXT', exact: true }).click(),
     );
     await expectPgm(GREEN);
     await expectPvw(page, BLUE);
     await expect(inspectorCounter).toHaveText('2 / 3');
     await expect(layerCounter).toHaveText('2 / 3');
     await expectInspectorPicture(GREEN);
+
+    const previous = book.getByRole('button', { name: /^Previous page/ });
+    await applyProgrammeTurn({ turn: 'previous' }, () => previous.click());
+    await expectPgm(RED);
+    await expect(inspectorCounter).toHaveText('1 / 3');
+    await expect(layerCounter).toHaveText('1 / 3');
+    await expect(previous).toBeDisabled();
+    await expectPvw(page, BLUE);
+
+    const pageNumber = book.getByRole('textbox', { name: /^Page number/ });
+    const go = book.getByRole('button', { name: /^Go to page/ });
+    await pageNumber.fill('۰');
+    await expect(go).toBeDisabled();
+    await pageNumber.fill('۳');
+    await applyProgrammeTurn({ index: 2 }, () => go.click());
+    await expectPgm(BLUE);
+    await expect(inspectorCounter).toHaveText('3 / 3');
+    await expect(layerCounter).toHaveText('3 / 3');
+    await expectInspectorPicture(BLUE);
+
+    await book.getByRole('button', { name: /^Manage pages of/ }).click();
+    await expect(pages.locator('[data-page-tile="3"] [data-page-mark="air"]')).toBeVisible();
+    await expect(pages.locator('[data-page-tile="1"] [data-page-mark="air"]')).toHaveCount(0);
+    await pages.getByRole('button', { name: 'Cancel', exact: true }).click();
   } finally {
     await air.close();
   }

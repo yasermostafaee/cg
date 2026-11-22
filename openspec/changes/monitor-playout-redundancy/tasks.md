@@ -72,6 +72,16 @@
       text to B's PGM before handoff, with zero new Bridge layout commands. The first sampled
       frame was blank at 393 ms after API confirmation. The next sample at 825 ms matched
       the reference page. In the same run, warm handoff and cleanup also passed.
+- [x] Exercise an unreachable reserve API with a loopback Engine pair. Play refuses before
+      layout submission. An authorised Update reaches A only when it still reports quorum,
+      and B catches up from the committed layout in the fixture. No quorum prevents new
+      submission and keeps the prior snapshot.
+- [x] Verify Previous and Go to page for a bundled Static/Cut picture book on the licensed
+      .26 pair. Control imported the VCG, played the first red image, went to page 3 with
+      Persian digits and returned to page 2. The real A and B programme feeds showed red,
+      blue and green respectively. Only A received the four Play, Go, Previous and Clear
+      layouts. Both members cleared the test layer at revision 24 and A remained owner.
+      Edge also verified independent PVW navigation and recovery on a newly selected owner.
 - [ ] Integrate editable picture books with replica-safe assets and verify their page recovery
       after a physical Core restart.
 - [ ] Verify the managed export adapter with additional real graphics and collect acceptance

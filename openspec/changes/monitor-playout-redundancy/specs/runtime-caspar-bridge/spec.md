@@ -75,6 +75,13 @@ SHALL preserve the graphic instance, fields and unrelated layout layers.
 - **THEN** the next press advances from the confirmed page and only the current owner receives the layout
 - **AND** a fresh renderer displays the applied page without replaying an entrance or earlier pages
 
+#### Scenario: Previous and Go to page in a bundled picture book
+
+- **WHEN** an eligible authored manual Cut picture book is on air
+- **THEN** Previous and Go to page submit the destination page to the confirmed owner
+- **AND** Control publishes the page from the applied layout under the book's field
+- **AND** the renderer uses the ordered pictures bundled with the verified template
+
 #### Scenario: The reserve Core restarts on a confirmed sequence page
 
 - **WHEN** Playout restores the applied layout after a reserve Core restart

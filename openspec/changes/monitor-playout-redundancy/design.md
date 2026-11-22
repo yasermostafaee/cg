@@ -156,15 +156,26 @@ reconciles any pending command and reads the applied layout before restoring con
 data, visibility and page. A finite authored sequence can make one manual pass with cuts
 between pages. Its HTML marker carries the page count. Bridge checks the expected current
 page against the applied layout, journals the requested absolute page and restores only a
-matching applied row. Timed scenes, editable book assets, live layouts and media are separate
-integration steps.
+matching applied row. An eligible picture book may have one Sequence Folder field whose
+ordered default matches the bundled pictures. Previous and Go to page use the same absolute
+layout operation as Next. The row reports the applied page under its book field. Replacement
+pictures, timed scenes, live layouts and media have separate integration steps.
 The licensed .26 test pair applied one owner-only Play to A and rendered the same graphic on
 B. A handoff preserved the instance and the visible caption. Control sent Update to B, recovered
 the updated row after a Bridge restart and removed it on both members through Stop and Clear.
 The test read raw AMCP for observation from B and captured the two Engines' own PGM feeds.
 The same pair verified an authored manual Cut sequence. Initial Play, Next and Update went
 to A. Both members showed page 1 after Next and kept it through a field edit, Bridge restart
-and ownership transfer to B. The two Cores confirmed Clear at revision 12.
+and ownership transfer to B. The two Cores confirmed Clear. A later reserve Core restart restored the same sequence page
+and edited text to B's PGM under a fresh generation, with no new Bridge layout command.
+The real pair also rendered all three pages of a bundled picture VCG with owner-only Play,
+Go and Previous. A held managed book keeps its exact template metadata and the operator
+clears that book before publishing a replacement under the same ID.
+
+Play requires the expected template hash on every mapped Engine before submission. Update
+uses the prepared template and can reach a valid owner when the Bridge alone cannot contact
+B. Playout catches up a lagging reserve from the committed layout. If two-member Playout
+quorum is lost, the existing output is retained and new writes are blocked.
 
 Launch the isolated Bridge with `--managed-cg-pilot <group.json> --state-home <directory>`.
 The profile contains `groupId`, the Control `channel`, and a list of `members` with

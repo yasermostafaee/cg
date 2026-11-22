@@ -1240,7 +1240,10 @@ function FieldEditor({
    * it can carry no grant — reading it here would be reading a guess as a decision.
    */
   const fromFileKind =
-    field !== null && fieldAllowsFileSource(field) && fieldTypeTakesFileSource(field.type)
+    field !== null &&
+    !(isBook && item.managedBook !== undefined) &&
+    fieldAllowsFileSource(field) &&
+    fieldTypeTakesFileSource(field.type)
       ? field.type
       : undefined;
   const fileOnly = fieldUsesFileOnly(field);
@@ -1313,6 +1316,7 @@ function FieldEditor({
             channel={item.slot?.channel}
             templateId={item.templateId}
             book={book}
+            managedBook={item.managedBook}
             onStage={stage}
             applied={applied}
             onAir={isOnAirStatus(item)}

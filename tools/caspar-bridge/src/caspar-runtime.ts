@@ -20,6 +20,7 @@ import {
 } from '@cg/caspar-client';
 import {
   managedResumePageCountFromHtml,
+  sameManagedBookPages,
   FieldValuesSchema,
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
@@ -74,6 +75,7 @@ import type {
   CgLiveFallback,
   CgPlateFit,
   CgPassTiming,
+  DynamicField,
   FieldValues,
   FrameTransition,
   FrameTransitionPhase,
@@ -2136,6 +2138,17 @@ interface TakeVerdict {
   errorCode?: string;
   message?: string;
   refusalOnRow?: true;
+}
+
+interface ManagedRowVerdict extends TakeVerdict {
+  page?: number;
+  count?: number;
+}
+
+interface ManagedPaging {
+  pageCount: number;
+  bookField: Extract<DynamicField, { type: 'list' }> | undefined;
+  info: TemplateInfo | null;
 }
 
 export class CasparRuntime {
@@ -4250,6 +4263,7 @@ export class CasparRuntime {
       const timingOverride = this.#passTimings.get(item.itemId);
       // `R-100` — the page each page list is on: the console's `12 / 300` reads it.
       const pages = this.#pageIndexes.get(item.itemId);
+      const managedBook = this.#managedBookMode(item);
       const pageRewinds = this.#pageRewinds.get(item.itemId);
       // The Auto/Manual choice beside that counter.
       const pageAdvance = this.#pageAdvance.get(item.itemId);
@@ -4316,6 +4330,7 @@ export class CasparRuntime {
         timingOverride === undefined &&
         // `R-100` — and the page number, for `timingOverride`'s reason, on the day it was added.
         pages === undefined &&
+        managedBook === undefined &&
         pageRewinds === undefined &&
         pageAdvance === undefined &&
         // `RUN-NEXT-VERSION-02` Q9 — and the sound mute, for the same reason, on the day it was added.
@@ -4346,6 +4361,7 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
+        ...(managedBook !== undefined && { managedBook }),
         ...(pageRewinds !== undefined && { pageRewinds: [...pageRewinds] }),
         ...(pageAdvance !== undefined && { pageAdvance }),
         ...(soundMuted !== undefined && { soundMuted }),
@@ -7527,31 +7543,52 @@ export class CasparRuntime {
     return null;
   }
 
-  #managedTemplate(
-    item: StackItemState,
-    slot: CommandSlot,
-  ): { versionId: string; key: string; sha256: string; pageCount: number } | undefined {
-    const version =
+  #managedArtifact(item: StackItemState, slot: CommandSlot) {
+    const versionId =
       this.#templates.heldVersion(item.itemId) ??
       this.#templates.versionOn(slot.channel, item.templateId);
-    const html = version === null ? null : this.#templates.htmlOf(version);
-    const key = version === null ? null : this.#templates.serveKeyOf(version);
-    if (version === null || html === null || key === null) return undefined;
+    if (versionId === null) return undefined;
+    const html = this.#templates.htmlOf(versionId);
+    const key = this.#templates.serveKeyOf(versionId);
+    if (html === null || key === null) return undefined;
     const pageCount = managedResumePageCountFromHtml(html);
-    return pageCount === undefined
-      ? undefined
-      : {
-          versionId: version,
-          key,
-          pageCount,
-          sha256: createHash('sha256').update(html).digest('hex'),
-        };
+    if (pageCount === undefined) return undefined;
+    const info = this.#templates.infoOf(versionId);
+    const book = info?.pageLists?.length === 1 ? info.pageLists[0] : undefined;
+    const field =
+      book === undefined ? undefined : info?.fields.find((entry) => entry.id === book.fieldId);
+    const bookField =
+      pageCount > 1 &&
+      book?.step !== false &&
+      field?.type === 'list' &&
+      field.default.length === pageCount
+        ? field
+        : undefined;
+    return { versionId, key, html, info, pageCount, bookField };
+  }
+
+  #managedBookMode(item: StackItemState): StackItemState['managedBook'] {
+    const slot = this.#slots.get(item.itemId);
+    if (
+      slot === undefined ||
+      this.#managedCg?.channel !== slot.channel ||
+      !this.#hasBook(item.itemId)
+    )
+      return undefined;
+    return this.#managedArtifact(item, slot)?.bookField === undefined ? 'unsupported' : 'authored';
+  }
+
+  #managedTemplate(item: StackItemState, slot: CommandSlot) {
+    const artifact = this.#managedArtifact(item, slot);
+    if (artifact === undefined) return undefined;
+    const { html, ...template } = artifact;
+    return { ...template, sha256: createHash('sha256').update(html).digest('hex') };
   }
 
   #settleManagedRow(
     itemId: string,
     layer: ManagedHtmlLayer | undefined,
-    pageCount: number,
+    paging: ManagedPaging | undefined,
     absent: 'keep' | 'clear' = 'keep',
     stagedFields?: FieldValues,
   ): void {
@@ -7580,7 +7617,13 @@ export class CasparRuntime {
       this.#reconciler.applyIntent({ kind, itemId }, seq);
       this.#reconciler.applyAck(seq, true);
     }
-    if (pageCount > 1) this.#setPageIndex(itemId, managedSequencePageKey, layer?.page ?? 0);
+    if (paging !== undefined && paging.pageCount > 1) {
+      if (paging.bookField !== undefined && (layer?.visibility === 'stopped' || absent === 'clear')) {
+        this.#rewindPicturePages(itemId, paging.info, data ?? item.fields);
+      } else {
+        this.#setPageIndex(itemId, paging.bookField?.id ?? managedSequencePageKey, layer?.page ?? 0);
+      }
+    }
     this.#markDirty(itemId);
   }
 
@@ -7598,7 +7641,7 @@ export class CasparRuntime {
     if (rows.length === 0) return;
     try {
       const mapped = await pilot.stack.inspectRows(rows);
-      rows.forEach(({ rowId, template, pageCount }, index) => {
+      rows.forEach(({ rowId, template }, index) => {
         const layer = mapped[index];
         if (layer !== undefined && template?.sha256 !== layer.template.version) {
           this.#reconciler.setUnverifiable(rowId, true);
@@ -7606,7 +7649,7 @@ export class CasparRuntime {
         }
         if (layer !== undefined && template !== undefined)
           this.#templates.hold(rowId, template.versionId);
-        this.#settleManagedRow(rowId, layer, pageCount);
+        this.#settleManagedRow(rowId, layer, template);
       });
     } catch {
       for (const { rowId } of rows) this.#reconciler.setUnverifiable(rowId, true);
@@ -7617,7 +7660,7 @@ export class CasparRuntime {
     itemId: string,
     operation: ManagedRowOperation,
     update?: { fields: FieldValues; mergeMode: 'merge' | 'replace' },
-  ): Promise<TakeVerdict> {
+  ): Promise<ManagedRowVerdict> {
     const apply = () => this.#applyManagedImpl(itemId, operation, update);
     return operation === 'take' ? apply() : this.#withPageQueue(itemId, apply);
   }
@@ -7626,7 +7669,8 @@ export class CasparRuntime {
     itemId: string,
     operation: ManagedRowOperation,
     update?: { fields: FieldValues; mergeMode: 'merge' | 'replace' },
-  ): Promise<TakeVerdict> {
+    turn?: { field: string; to: PageTurn },
+  ): Promise<ManagedRowVerdict> {
     const pilot = this.#managedCg;
     const slot = this.#slots.get(itemId);
     if (pilot === undefined || slot?.channel !== pilot.channel) {
@@ -7660,9 +7704,42 @@ export class CasparRuntime {
         };
       }
       const pageCount = template?.pageCount ?? 1;
-      const currentPage = this.#pageIndexes.get(itemId)?.[managedSequencePageKey] ?? 0;
-      if (operation === 'page' && pageCount < 2) {
-        return { accepted: false, errorCode: 'managed-cg-static-only' };
+      const bookField = template?.bookField;
+      const pageKey = bookField?.id ?? managedSequencePageKey;
+      const currentPage = this.#pageIndexes.get(itemId)?.[pageKey] ?? 0;
+      if (
+        operation === 'page' &&
+        (pageCount < 2 || (turn !== undefined && turn.field !== bookField?.id))
+      ) {
+        return {
+          accepted: false,
+          errorCode: 'managed-cg-static-only',
+          message: 'This managed template has no supported page list.',
+        };
+      }
+      let data = withFields ? item.fields : undefined;
+      if (update !== undefined) {
+        const refusal = operatorFieldUpdateRefusal(
+          template?.info ?? null,
+          item.fields,
+          update.fields,
+          update.mergeMode,
+        );
+        if (refusal !== undefined) return { accepted: false, ...refusal };
+        data =
+          update.mergeMode === 'replace' ? update.fields : { ...item.fields, ...update.fields };
+      }
+      if (
+        data !== undefined &&
+        bookField !== undefined &&
+        data[bookField.id] != null &&
+        !sameManagedBookPages(data[bookField.id], bookField.default)
+      ) {
+        return {
+          accepted: false,
+          errorCode: 'managed-cg-book-read-only',
+          message: 'This managed book uses the pictures bundled with its template.',
+        };
       }
       let manifest: ManagedTemplate | undefined;
       if (operation === 'take' && template !== undefined) {
@@ -7688,19 +7765,6 @@ export class CasparRuntime {
         };
         await pilot.commands.prepareTemplate(manifest);
       }
-      let data = withFields ? item.fields : undefined;
-      if (update !== undefined) {
-        const info = this.#templateOfItem(itemId, item.templateId);
-        const refusal = operatorFieldUpdateRefusal(
-          info,
-          item.fields,
-          update.fields,
-          update.mergeMode,
-        );
-        if (refusal !== undefined) return { accepted: false, ...refusal };
-        data =
-          update.mergeMode === 'replace' ? update.fields : { ...item.fields, ...update.fields };
-      }
       const result = await pilot.stack.apply({
         operation,
         rowId: itemId,
@@ -7708,7 +7772,7 @@ export class CasparRuntime {
         pageCount,
         ...(operation === 'page' && {
           expectedPage: currentPage,
-          targetPage: pageTarget(currentPage, pageCount, false, 'next'),
+          targetPage: pageTarget(currentPage, pageCount, false, turn?.to ?? 'next'),
         }),
         ...(manifest !== undefined && { template: manifest }),
         ...(template !== undefined && {
@@ -7738,11 +7802,17 @@ export class CasparRuntime {
       this.#settleManagedRow(
         itemId,
         result.layer,
-        pageCount,
+        template,
         operation === 'out' ? 'clear' : 'keep',
         data,
       );
-      return { accepted: true };
+      return {
+        accepted: true,
+        ...(operation === 'page' && {
+          page: (result.layer?.page ?? currentPage) + 1,
+          count: pageCount,
+        }),
+      };
     } catch (error) {
       return {
         accepted: false,
@@ -10066,6 +10136,9 @@ export class CasparRuntime {
     errorCode?: string;
     message?: string;
   }> {
+    if (this.#managedCg !== undefined) {
+      return this.#applyManagedImpl(itemId, 'page', undefined, { field, to });
+    }
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -10199,6 +10272,11 @@ export class CasparRuntime {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
     const detail: AuditDetail = { ...this.#itemDetail(itemId), pageAdvance: asked };
+    if (this.#managedCg !== undefined) {
+      const reason = 'managed-cg-book-read-only';
+      this.#recordOutcome('set-page-advance', detail, { outcome: 'failed', errorCode: reason });
+      return { ok: false, reason, message: 'Managed books use their authored manual advance.' };
+    }
     const list = this.#pageList(itemId, item.templateId, field);
     if (list === undefined || !list.step) {
       this.#recordOutcome('set-page-advance', detail, {
@@ -25901,6 +25979,25 @@ export class CasparRuntime {
   ): ReturnType<CasparRuntime['templateImport']> {
     const templateId = template.templateId;
     const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
+    const managedChannel = this.#managedCg?.channel;
+    if (managedChannel !== undefined && targets.includes(managedChannel)) {
+      const heldBook = this.#reconciler.snapshot().some((row) => {
+        if (row.templateId !== templateId) return false;
+        const slot = this.#slots.get(row.itemId);
+        if (slot?.channel !== managedChannel) return false;
+        if (!this.#managedBusy && this.#templates.heldVersion(row.itemId) === undefined) return false;
+        const artifact = this.#managedArtifact(row, slot);
+        return artifact?.bookField !== undefined &&
+          (artifact.html !== html || !isDeepStrictEqual(artifact.info, template));
+      });
+      if (heldBook) {
+        return {
+          registered: false,
+          templateId,
+          message: 'Clear the managed picture book before replacing its template.',
+        };
+      }
+    }
     if (
       template.controlLiveLayout !== undefined &&
       (meta.sourceSha256 === undefined ||

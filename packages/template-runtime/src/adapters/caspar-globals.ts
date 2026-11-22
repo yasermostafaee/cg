@@ -1,6 +1,5 @@
 import {
   CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
-  CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
   readCgControl,
   stripCgControl,
   withCgControl,
@@ -138,10 +137,7 @@ export function installCasparGlobals(
   win.cg = runtime;
   if (runtime.applyManagedState !== undefined) {
     win.apasaiCg = {
-      version:
-        (runtime.managedResumePageCount ?? 1) > 1
-          ? CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION
-          : CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+      version: runtime.managedResumeVersion ?? CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
       applyState: runtime.applyManagedState,
     };
   } else {

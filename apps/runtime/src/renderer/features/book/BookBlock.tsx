@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight, ListOrdered } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
-import type { FieldValue, ImageFit } from '@cg/shared-schema';
+import type { FieldValue, ImageFit, StackItemState } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
@@ -69,6 +69,7 @@ export interface BookBlockProps {
   templateId: string;
   /** The row's turning state (`bookOf`); `null` for a book the author's sequence turns by itself. */
   book: RowBook | null;
+  managedBook?: StackItemState['managedBook'];
   onStage: (value: FieldValue) => void;
   /** `RUN-NEXT-VERSION-03` 1.5 — the book ON the row (applied), for the page on air in `Manage pages…`. */
   applied: FieldValue | undefined;
@@ -91,12 +92,14 @@ export function BookBlock({
   channel,
   templateId,
   book,
+  managedBook,
   onStage,
   applied,
   onAir,
   fit = 'contain',
 }: BookBlockProps): JSX.Element {
-  const loaded = Array.isArray(value);
+  const canEdit = managedBook === undefined;
+  const loaded = managedBook !== 'authored' && Array.isArray(value);
   const pages = bookPagesOf(loaded ? value : defaults);
   const appliedPages = bookPagesOf(Array.isArray(applied) ? applied : defaults);
   const inPvw = useRehearse().some((r) => r.itemId === itemId);
@@ -137,23 +140,24 @@ export function BookBlock({
       data-book={fieldId}
       {...(dropping ? { 'data-drop-target': '' } : {})}
       onDragOver={(e) => {
-        if (!dragCarriesFiles(e.dataTransfer) || busy !== null) return;
+        if (!canEdit || !dragCarriesFiles(e.dataTransfer) || busy !== null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
         setDropping(true);
       }}
       onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+        if (canEdit && !e.currentTarget.contains(e.relatedTarget as Node | null))
+          setDropping(false);
       }}
       onDrop={(e) => {
-        if (!dragCarriesFiles(e.dataTransfer) || busy !== null) return;
+        if (!canEdit || !dragCarriesFiles(e.dataTransfer) || busy !== null) return;
         e.preventDefault();
         setDropping(false);
         // Read now: the drop's items are gone once this handler returns.
         void replaceDroppedPictures(droppedPictures(e.dataTransfer));
       }}
     >
-      {dropping && (
+      {canEdit && dropping && (
         <span className="cg-drop-hint" aria-hidden="true">
           Drop to replace the pictures
         </span>
@@ -164,9 +168,11 @@ export function BookBlock({
           {source.folder !== undefined && <bdi>{source.folder}</bdi>}
           {words.tail}
         </Tag>
-        <Tag className="cg-meta-chip" data-book-sent={dirty ? 'staged' : 'on-row'}>
-          {bookSent(dirty)}
-        </Tag>
+        {canEdit && (
+          <Tag className="cg-meta-chip" data-book-sent={dirty ? 'staged' : 'on-row'}>
+            {bookSent(dirty)}
+          </Tag>
+        )}
         <span className="cg-book-count" data-testid={`page-count-${fieldId}`}>
           {pages.length === 1 ? '1 page' : `${String(pages.length)} pages`}
         </span>
@@ -180,30 +186,43 @@ export function BookBlock({
         fit={fit}
         raster={raster}
       />
-      {book !== null && <BookTurn itemId={itemId} title={title} book={book} onAir={onAir} />}
-      <div className="cg-book__row" data-book-load="">
-        <Button
-          variant="neutral"
-          aria-label={`Manage pages of ${title}`}
-          disabled={busy !== null}
-          onClick={() => setManaging(true)}
-        >
-          <Icon icon={ListOrdered} size={13} />
-          Manage pages…
-        </Button>
-        {busy !== null && (
-          <span className="cg-book-count" role="status">
-            Loading {String(busy.done)} / {String(busy.total)}…
-          </span>
-        )}
-      </div>
-      {fitted !== null && (
+      {managedBook === 'unsupported' && (
+        <Notice noticeRole="notice" text="Page controls unavailable in External CG v2." />
+      )}
+      {book !== null && managedBook !== 'unsupported' && (
+        <BookTurn
+          itemId={itemId}
+          title={title}
+          book={book}
+          onAir={onAir}
+          managed={managedBook === 'authored'}
+        />
+      )}
+      {canEdit && (
+        <div className="cg-book__row" data-book-load="">
+          <Button
+            variant="neutral"
+            aria-label={`Manage pages of ${title}`}
+            disabled={busy !== null}
+            onClick={() => setManaging(true)}
+          >
+            <Icon icon={ListOrdered} size={13} />
+            Manage pages…
+          </Button>
+          {busy !== null && (
+            <span className="cg-book-count" role="status">
+              Loading {String(busy.done)} / {String(busy.total)}…
+            </span>
+          )}
+        </div>
+      )}
+      {canEdit && fitted !== null && (
         <span className="cg-book-count" data-testid="page-fit-line">
           {fitted}
         </span>
       )}
-      {refusal !== null && <Notice noticeRole="refusal" text={refusal} />}
-      {managing && (
+      {canEdit && refusal !== null && <Notice noticeRole="refusal" text={refusal} />}
+      {canEdit && managing && (
         <ManagePagesModal
           itemId={itemId}
           fieldId={fieldId}
@@ -384,11 +403,13 @@ function BookTurn({
   title,
   book,
   onAir,
+  managed,
 }: {
   itemId: string;
   title: string;
   book: RowBook;
   onAir: boolean;
+  managed: boolean;
 }): JSX.Element {
   const engineName = useEngineName();
   const [typed, setTyped] = useState<string | null>(null);
@@ -426,34 +447,39 @@ function BookTurn({
   const shown = typed ?? (book.count === 0 ? '' : String(book.page));
   const target = typed === null ? null : parseLocalizedNumber(typed.trim());
   const goable = target !== null && Number.isInteger(target) && target >= 1;
-  const none = book.count === 0;
+  const unavailable = busy || book.count === 0 || (managed && !onAir);
 
   return (
     <div data-book-bar="">
-      <div className="cg-book__row cg-book__advance" role="group" aria-label={`Advance ${title}`}>
-        <span className="cg-book-count">Advance</span>
-        <Button
-          variant="neutral"
-          aria-pressed={book.advance === 'manual'}
-          disabled={busy}
-          onClick={() => void setAdvance('manual')}
-        >
-          Manual
-        </Button>
-        <Button
-          variant="neutral"
-          aria-pressed={book.advance === 'auto'}
-          disabled={busy}
-          onClick={() => void setAdvance('auto')}
-        >
-          Auto
-        </Button>
-      </div>
-      <div className="cg-book__row cg-book__turn">
+      {!managed && (
+        <div className="cg-book__row cg-book__advance" role="group" aria-label={`Advance ${title}`}>
+          <span className="cg-book-count">Advance</span>
+          <Button
+            variant="neutral"
+            aria-pressed={book.advance === 'manual'}
+            disabled={busy}
+            onClick={() => void setAdvance('manual')}
+          >
+            Manual
+          </Button>
+          <Button
+            variant="neutral"
+            aria-pressed={book.advance === 'auto'}
+            disabled={busy}
+            onClick={() => void setAdvance('auto')}
+          >
+            Auto
+          </Button>
+        </div>
+      )}
+      <div
+        className="cg-book__row cg-book__turn"
+        title={managed && !onAir ? 'Play to turn pages on air.' : undefined}
+      >
         <Button
           variant="neutral"
           aria-label={`Previous page of ${title}`}
-          disabled={busy || none || (!book.wrap && book.page <= 1)}
+          disabled={unavailable || (!book.wrap && book.page <= 1)}
           onClick={() => void turn('previous')}
         >
           <Icon icon={ChevronLeft} size={13} flipRtl />
@@ -467,9 +493,9 @@ function BookTurn({
             onChange={setTyped}
             inputMode="numeric"
             aria-label={`Page number of ${title}`}
-            disabled={busy || none}
+            disabled={unavailable}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && goable && target !== null) void turn(target);
+              if (e.key === 'Enter' && !unavailable && goable && target !== null) void turn(target);
               if (e.key === 'Escape') setTyped(null);
             }}
           />
@@ -480,7 +506,7 @@ function BookTurn({
         <Button
           variant="neutral"
           aria-label={`Next page of ${title}`}
-          disabled={busy || none || (!book.wrap && book.page >= book.count && !onAir)}
+          disabled={unavailable || (!book.wrap && book.page >= book.count && (managed || !onAir))}
           onClick={() => void turn('next')}
         >
           Next
@@ -489,7 +515,7 @@ function BookTurn({
         <Button
           variant="neutral"
           aria-label={`Go to page in ${title}`}
-          disabled={busy || none || !goable}
+          disabled={unavailable || !goable}
           onClick={() => {
             if (target !== null) void turn(target);
           }}

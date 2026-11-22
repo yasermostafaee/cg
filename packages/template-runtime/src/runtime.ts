@@ -30,6 +30,9 @@ import {
   sequenceStepsByOperator,
   stripCgControl,
   managedResumePlan,
+  CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION,
+  CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
+  CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
   type CgControl,
   type CgLiveFallback,
   type CgPage,
@@ -3465,6 +3468,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       : createManagedStaticStage(scene, managedPlan.pageCount, {
           stage: built.container,
           ready,
+          ...(managedPlan.bookField !== undefined && { bookField: managedPlan.bookField }),
           ...(options.assetUrls === undefined ? {} : { assetUrls: options.assetUrls }),
           ...(options.skipFontLoad === undefined ? {} : { skipFontLoad: options.skipFontLoad }),
           canApply: () => machine.state === 'pending',
@@ -3475,7 +3479,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     ready,
     ...(managed === undefined || managedPlan === undefined
       ? {}
-      : { applyManagedState: managed.applyState, managedResumePageCount: managedPlan.pageCount }),
+      : {
+          applyManagedState: managed.applyState,
+          managedResumeVersion:
+            managedPlan.bookField !== undefined
+              ? CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION
+              : managedPlan.pageCount > 1
+                ? CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION
+                : CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+        }),
 
     async play(data, _opts?: PlayOptions): Promise<void> {
       if (machine.state === 'removed') {

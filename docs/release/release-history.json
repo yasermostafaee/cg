@@ -101,6 +101,10 @@
         {
           "fa": "در پایلوت External CG v2، دکمهٔ Next یک توالی محدودِ دستی با Cut را صفحه‌به‌صفحه پیش می‌برد. Bridge پس از راه‌اندازی دوباره ادامه را از شمارهٔ صفحهٔ تأییدشده در Playout انجام می‌دهد. آخرین صفحه ثابت می‌ماند و Stop توالی را از صفحهٔ اول آماده می‌کند. در آزمون .26، خود Playout صفحهٔ دوم را پس از ری‌استارت Core سرور B در PGM بازیابی کرد.",
           "en": "In the External CG v2 pilot, Next advances a finite manual Cut sequence. After restart, Bridge continues from the page confirmed by Playout. The final page holds and Stop resets the sequence for a fresh Play. On the .26 pair, Playout restored page two to B’s programme after its Core restarted."
+        },
+        {
+          "fa": "در پایلوت External CG v2، Previous و Go to page برای Sequence Folder با تصاویر همراه قالب، حالت Static و گذار Cut در دسترس‌اند. CG Control شمارهٔ صفحه را از چیدمان اعمال‌شدهٔ Playout می‌گیرد.",
+          "en": "In the External CG v2 pilot, Previous and Go to page support bundled Sequence Folder pictures in static templates with Cut transitions. CG Control reads the page from Playout's applied layout."
         }
       ],
       "fixes": [

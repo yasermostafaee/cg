@@ -1,4 +1,5 @@
 import {
+  CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION,
   CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
   CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
   SequenceElementSchema,
@@ -201,7 +202,7 @@ describe('External CG settled graphic recovery', () => {
     expect(document.querySelector('[data-cg-element-id="name"]')?.textContent).toBe('Studio');
   });
 
-  it('only accepts authored finite cuts and refuses operator-replaceable picture lists', () => {
+  it('only accepts authored finite cuts and matching bundled picture lists', async () => {
     expect(managedResumePageCount(sequenceScene({ advance: 'auto' }))).toBeUndefined();
     expect(managedResumePageCount(sequenceScene({ repeat: 'infinite' }))).toBeUndefined();
     expect(managedResumePageCount(sequenceScene({ transitionIn: 'fade' }))).toBeUndefined();
@@ -213,7 +214,24 @@ describe('External CG settled graphic recovery', () => {
       ],
     });
     expect(managedResumePageCount(pictureSequence)).toBe(2);
-    expect(managedResumePageCount(withPageLists(pictureSequence))).toBeUndefined();
+    const packaged = withPageLists(pictureSequence);
+    expect(managedResumePageCount(packaged)).toBe(2);
+    const field = packaged.fields.find(({ type }) => type === 'list');
+    if (field?.type !== 'list') throw new Error('Fixture has no book field.');
+    const replaced = [{ kind: 'image', id: 'replacement', media: 'a'.repeat(64) }];
+    expect(
+      managedResumePageCount({
+        ...packaged,
+        fields: packaged.fields.map((entry) =>
+          entry.id === field.id ? { ...field, default: replaced } : entry,
+        ),
+      }),
+    ).toBeUndefined();
+    boot(packaged);
+    expect(managedApi().version).toBe(CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION);
+    await expect(
+      managedApi().applyState({ ...state, page: 1, data: { [field.id]: replaced } }),
+    ).rejects.toThrow('bundled');
   });
 
   it('offers no managed callback for scenes whose layers are driven by frame timing', async () => {

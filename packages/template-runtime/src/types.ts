@@ -89,7 +89,7 @@ export interface TemplateRuntime {
   readonly ready: Promise<void>;
 
   /** Available to External CG v2 for authored pages with an absolute settled state. */
-  readonly managedResumePageCount?: number;
+  readonly managedResumeVersion?: string;
   applyManagedState?(snapshot: unknown): Promise<void>;
 
   /**

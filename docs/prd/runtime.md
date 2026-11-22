@@ -5228,8 +5228,14 @@ applied template state after a Bridge restart. The static HTML pilot passed on a
 - WHEN an eligible finite manual cut sequence shows a page THEN Next uses the absolute
   page in Playout's applied layout, including after a restart or owner transfer. The last page
   holds and Stop returns the sequence to its first page.
+- WHEN a Sequence Folder uses a single finite manual Cut sequence with its pictures bundled
+  in the export THEN Previous and Go to page change the same confirmed absolute page on
+  Playout. The pilot uses the bundled pictures and leaves preview navigation local.
 - WHEN the reserve Core restarts with a confirmed manual Cut page THEN Playout restores the
   same page and applied fields to the reserve's programme without a new Bridge layout command.
+- WHEN the reserve is behind on a committed layout THEN it catches up through Playout before
+  handoff. A two-member group that loses a voter keeps its existing output and refuses new
+  managed commands until quorum returns. Play requires all configured template preparations.
 - WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
 - WHEN a backup is healthy but a row has media or live inputs unavailable there THEN Layers keeps
   the template name and a short backup status. Inspector expands to show the affected inputs and reasons.

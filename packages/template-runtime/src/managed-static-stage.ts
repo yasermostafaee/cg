@@ -1,5 +1,6 @@
 import {
   FieldValuesSchema,
+  sameManagedBookPages,
   stripCgControl,
   type Element,
   type NestedFieldValues,
@@ -18,6 +19,7 @@ export interface ManagedStaticStage {
 interface StageOptions {
   readonly stage: HTMLElement;
   readonly ready: Promise<void>;
+  readonly bookField?: string;
   readonly assetUrls?: Readonly<Record<string, string>>;
   readonly skipFontLoad?: boolean;
   readonly canApply: () => boolean;
@@ -112,8 +114,18 @@ export function createManagedStaticStage(
   pageCount: number,
   options: StageOptions,
 ): ManagedStaticStage {
-  const { stage, ready, assetUrls, skipFontLoad, canApply, applyAssetUrls } = options;
+  const { stage, ready, bookField, assetUrls, skipFontLoad, canApply, applyAssetUrls } = options;
   const doc = stage.ownerDocument;
+  const book = scene.fields.find((field) => field.id === bookField);
+  const fieldDoc =
+    bookField === undefined
+      ? scene
+      : {
+          ...scene,
+          bindings: scene.bindings.filter(
+            ({ fieldId, target }) => fieldId !== bookField || target.kind !== 'sequence-items',
+          ),
+        };
   let active = false;
   let last = Promise.resolve();
 
@@ -122,9 +134,16 @@ export function createManagedStaticStage(
     const parent = stage.parentNode;
     if (!canApply() || parent === null) throw new Error('Managed graphic page is unavailable.');
 
+    if (
+      book?.type === 'list' &&
+      snapshot.data[book.id] != null &&
+      !sameManagedBookPages(snapshot.data[book.id], book.default)
+    ) {
+      throw new Error('Managed graphic pages must match the pictures bundled with the template.');
+    }
     const candidate = buildScene(sceneAtPage(scene, snapshot.page), doc);
     applyAssetUrls(candidate.container, assetUrls);
-    applyScopedFieldValues(scene, scene, snapshot.data, candidate.scopeTree, assetUrls);
+    applyScopedFieldValues(scene, fieldDoc, snapshot.data, candidate.scopeTree, assetUrls);
     candidate.container.style.position = 'absolute';
     candidate.container.style.opacity = '0';
     candidate.container.style.pointerEvents = 'none';

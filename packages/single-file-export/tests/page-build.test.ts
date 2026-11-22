@@ -10,12 +10,14 @@ import {
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION,
   CG_MANAGED_SEQUENCE_RESUME_PAGE_MARKER_NAME,
   CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
   CG_MANAGED_STATIC_RESUME_PAGE_MARKER,
   SequenceElementSchema,
   managedResumePageCountFromHtml,
   CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION,
+  withPageLists,
   type Scene,
 } from '@cg/shared-schema';
 import { sha256Hex } from '@cg/vcg-format';
@@ -171,6 +173,29 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
     ]) {
       expect(managedResumePageCountFromHtml('<html>' + invalidHead + '</html>')).toBeUndefined();
     }
+    const pictureBook = withPageLists({
+      ...scene,
+      layers: scene.layers.map((layer) => ({
+        ...layer,
+        children: [
+          {
+            ...sequence,
+            items: [
+              { id: 'a', kind: 'image', assetId: 'photo-a' },
+              { id: 'b', kind: 'image', assetId: 'photo-b' },
+            ],
+          },
+        ],
+      })),
+    });
+    expect(
+      managedResumePageCountFromHtml(buildVcgIndexHtml(pictureBook, [], [], false, version)),
+    ).toBeUndefined();
+    expect(
+      managedResumePageCountFromHtml(
+        buildVcgIndexHtml(pictureBook, [], [], false, CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION),
+      ),
+    ).toBe(2);
     expect(managedResumePageCountFromHtml(await exportedShell(scene))).toBeUndefined();
     expect(managedResumePageCountFromHtml(await exportedShell())).toBe(1);
   });

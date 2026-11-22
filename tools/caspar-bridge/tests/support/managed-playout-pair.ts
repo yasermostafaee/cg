@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ManagedCgCommands } from '../../src/managed-cg-commands.js';
 import {
+  managedAppliedStateSchema,
   managedLayoutCommandSchema,
   managedTemplateSchema,
   type ManagedFence,
@@ -102,6 +103,9 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
   let appliedLayers: readonly ManagedLayoutLayer[] = [];
   let staleAppliedState = false;
   let pendingAppliedState = false;
+  let backupApiDisconnected = false;
+  let backupAppliedRevision: number | undefined;
+  let quorumAvailable = true;
 
   const members = () =>
     Object.values(config).map(({ engineId, channelCode, nativeChannel }) => ({
@@ -141,6 +145,10 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
       }
       const route = request.slice(prefix.length);
       requests.push(engine + ':' + req.method + ':' + route);
+      if (engine === 'B' && backupApiDisconnected) {
+        res.destroy();
+        return;
+      }
       if (req.method === 'GET' && route === 'owner') {
         const leader = conflicted ? engine : current;
         answer(res, {
@@ -151,7 +159,7 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
           owner: members().find(({ engineId }) => engineId === leader),
           fence: fence(leader),
           leaseExpiresAt: new Date(Date.now() + (expired ? -1_000 : 10_000)).toISOString(),
-          canSendCommands: leader === engine,
+          canSendCommands: quorumAvailable && leader === engine,
           revision,
           members: members(),
           allowedLayers: [
@@ -165,6 +173,7 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
       }
       if (req.method === 'GET' && route === 'state') {
         const currentFence = fence(current);
+        const appliedRevision = staleAppliedState ? revision - 1 : revision;
         answer(res, {
           vote: {
             voterEngineId: engine,
@@ -188,7 +197,8 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
             nativeChannel: channel.nativeChannel,
             coreGeneration: currentFence.coreGeneration,
             preparedRevision: revision,
-            appliedRevision: staleAppliedState ? revision - 1 : revision,
+            appliedRevision:
+              engine === 'B' ? (backupAppliedRevision ?? appliedRevision) : appliedRevision,
             renderConfirmation: 'nativeOnly',
             error: null,
           },
@@ -297,6 +307,31 @@ export async function playoutPair(cleanup: (() => Promise<void> | void)[]) {
     reads,
     requests,
     staged,
+    disconnectBackupApi() {
+      backupApiDisconnected = true;
+    },
+    reconnectBackupApi() {
+      backupApiDisconnected = false;
+    },
+    pauseBackupReplica() {
+      backupAppliedRevision = revision;
+    },
+    catchUpBackupReplica() {
+      backupAppliedRevision = undefined;
+    },
+    setQuorumAvailable(available: boolean) {
+      quorumAvailable = available;
+    },
+    async readState(engine: Engine) {
+      const response = await fetch(
+        origins[engine] + '/api/v2/channels/' + config[engine].channelCode + '/external-cg/state',
+        {
+          headers: { authorization: 'Bearer token-' + engine },
+          signal: AbortSignal.timeout(5_000),
+        },
+      );
+      return managedAppliedStateSchema.parse(await response.json());
+    },
     pauseNextLayout() {
       let resume: (() => void) | undefined;
       pausedLayout = new Promise((resolve) => {

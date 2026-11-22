@@ -1,4 +1,10 @@
-import { sequenceStepsByOperator, type Element } from './elements.js';
+import {
+  SequenceItemSchema,
+  sequenceStepsByOperator,
+  type Element,
+  type SequenceElement,
+} from './elements.js';
+import { isPageListField } from './page-lists.js';
 import { playoutOf, type Composition, type Scene } from './scene.js';
 
 export const CG_MANAGED_STATIC_RESUME_PAGE_MARKER =
@@ -7,6 +13,7 @@ export const CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION = 'cg-managed-static-resum
 
 export const CG_MANAGED_SEQUENCE_RESUME_PAGE_MARKER_NAME = 'cg-managed-sequence-resume';
 export const CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION = 'cg-managed-sequence-resume-v1';
+export const CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION = 'cg-managed-book-resume-v1';
 
 // The External CG v2 contract accepts absolute indexes 0 through 1,000,000.
 const MAX_MANAGED_PAGE_COUNT = 1_000_001;
@@ -16,6 +23,7 @@ const SEQUENCE_MARKER_SUFFIX = '" />';
 interface ManagedResumePlan {
   readonly scene: Scene;
   readonly pageCount: number;
+  readonly bookField?: string;
 }
 
 /**
@@ -42,6 +50,20 @@ function effectiveSceneOf(scene: Scene): Scene | undefined {
   };
 }
 
+/** Compare ordered page identities and renderable content after normalizing the declared items. */
+export function sameManagedBookPages(value: unknown, authored: readonly unknown[]): boolean {
+  if (!Array.isArray(value) || value.length !== authored.length) return false;
+  return authored.every((page, index) => {
+    const actual = SequenceItemSchema.safeParse(value[index]);
+    const expected = SequenceItemSchema.safeParse(page);
+    return (
+      actual.success &&
+      expected.success &&
+      JSON.stringify(actual.data) === JSON.stringify(expected.data)
+    );
+  });
+}
+
 /**
  * A managed snapshot contains absolute fields, visibility and a zero-based page.
  * Its one optional authored sequence is immutable and cuts between pages on request.
@@ -53,7 +75,8 @@ export function managedResumePlan(scene: Scene): ManagedResumePlan | undefined {
 
   const compositions = new Map((effectiveScene.compositions ?? []).map((doc) => [doc.id, doc]));
   const ancestors = new Set<string>();
-  let sequencePageCount: number | undefined;
+  let sequence: SequenceElement | undefined;
+  let bookField: string | undefined;
 
   function isStaticDoc(doc: Scene | Composition, allowSequence: boolean): boolean {
     return (
@@ -61,10 +84,31 @@ export function managedResumePlan(scene: Scene): ManagedResumePlan | undefined {
       playoutOf(doc).mode === 'static' &&
       (doc.lookGroups?.length ?? 0) === 0 &&
       (doc.arrangements?.length ?? 0) === 0 &&
-      (doc.bindings ?? []).every(({ target }) => target.kind === 'text') &&
       doc.layers.every(({ children, visible }) =>
         children.every((child) => isStaticElement(child, visible, allowSequence)),
-      )
+      ) &&
+      (doc.bindings ?? []).every(({ fieldId, target }) => {
+        if (target.kind === 'text') return true;
+        if (
+          !allowSequence ||
+          target.kind !== 'sequence-items' ||
+          sequence?.id !== target.elementId ||
+          bookField !== undefined
+        ) {
+          return false;
+        }
+        const field = doc.fields?.find((entry) => entry.id === fieldId);
+        if (
+          field?.type !== 'list' ||
+          !sequence.items.every(({ kind }) => kind === 'image') ||
+          !isPageListField(field, sequence) ||
+          !sameManagedBookPages(field.default, sequence.items)
+        ) {
+          return false;
+        }
+        bookField = fieldId;
+        return true;
+      })
     );
   }
 
@@ -101,7 +145,7 @@ export function managedResumePlan(scene: Scene): ManagedResumePlan | undefined {
         if (
           !allowSequence ||
           !visible ||
-          sequencePageCount !== undefined ||
+          sequence !== undefined ||
           !sequenceStepsByOperator(element) ||
           element.advance !== 'manual' ||
           element.repeat !== 1 ||
@@ -116,7 +160,7 @@ export function managedResumePlan(scene: Scene): ManagedResumePlan | undefined {
         ) {
           return false;
         }
-        sequencePageCount = element.items.length;
+        sequence = element;
         return true;
       }
       default:
@@ -125,7 +169,11 @@ export function managedResumePlan(scene: Scene): ManagedResumePlan | undefined {
   }
 
   return isStaticDoc(effectiveScene, true)
-    ? { scene: effectiveScene, pageCount: sequencePageCount ?? 1 }
+    ? {
+        scene: effectiveScene,
+        pageCount: sequence?.items.length ?? 1,
+        ...(bookField !== undefined && { bookField }),
+      }
     : undefined;
 }
 
@@ -172,12 +220,14 @@ export function managedStaticResumePageMarker(scene: Scene, runtimeJs?: string):
   const hasSequenceRuntime =
     runtimeJs?.includes(CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION) === true;
   const hasStaticRuntime = runtimeJs?.includes(CG_MANAGED_STATIC_RESUME_RUNTIME_VERSION) === true;
-  if (!hasSequenceRuntime && !hasStaticRuntime) return '';
+  const hasBookRuntime = runtimeJs?.includes(CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION) === true;
+  if (!hasSequenceRuntime && !hasStaticRuntime && !hasBookRuntime) return '';
 
   const plan = managedResumePlan(scene);
   if (plan === undefined) return '';
   if (plan.pageCount > 1) {
-    return hasSequenceRuntime
+    const canResume = plan.bookField === undefined ? hasSequenceRuntime : hasBookRuntime;
+    return canResume
       ? SEQUENCE_MARKER_PREFIX + String(plan.pageCount) + SEQUENCE_MARKER_SUFFIX
       : '';
   }

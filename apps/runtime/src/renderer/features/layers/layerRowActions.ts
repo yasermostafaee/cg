@@ -454,6 +454,9 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    */
   const blocked = deps.restoreBlocked;
   const onAir = item !== null && isOnAir(item);
+  const managedBook = item?.managedBook;
+  const managedPageUnavailable =
+    managedBook === 'unsupported' || (managedBook === 'authored' && !onAir);
   // The engaged fill: PLAY wears the air colour only while the row IS on air — never on a guess.
   const playing = item?.status === 'on-air' || item?.status === 'playing';
   /*
@@ -906,7 +909,10 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       seventh button wrapped CLEAR onto a second line and moved every verb off its column. NEXT
       keeps its column and turns the page; PREV is in the row's menu and on the Inspector's book bar.
     */
-    ...(deps.book !== undefined && deps.book !== null && deps.page !== undefined
+    ...(managedBook !== 'unsupported' &&
+    deps.book !== undefined &&
+    deps.book !== null &&
+    deps.page !== undefined
       ? (() => {
           const book = deps.book;
           const page = deps.page;
@@ -918,6 +924,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
                 empty ||
                   blocked ||
                   needsCaspar ||
+                  managedPageUnavailable ||
                   book.count === 0 ||
                   (!book.wrap && book.page <= 1),
                 () => (item === null ? noop() : page(item.itemId, book.fieldId, 'previous')),
@@ -944,8 +951,9 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
               empty ||
                 blocked ||
                 needsCaspar ||
+                managedPageUnavailable ||
                 book.count === 0 ||
-                (!book.wrap && book.page >= book.count && !onAir),
+                (!book.wrap && book.page >= book.count && (managedBook === 'authored' || !onAir)),
               () => (item === null ? noop() : page(item.itemId, book.fieldId, 'next')),
               ArrowRightFromLine,
             );
@@ -953,7 +961,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         : act(
             'next',
             'NEXT',
-            empty || !onAir || !deps.hasNext || blocked || needsCaspar,
+            empty || !onAir || !deps.hasNext || blocked || needsCaspar || managedPageUnavailable,
             () => (item === null ? noop() : deps.next(item.itemId)),
             ArrowRightFromLine,
           )),

@@ -267,6 +267,8 @@ export const StackItemStateSchema = z.object({
    * The console's `12 / 300` reads it; a page turn changes it. ABSENT means page 1 of every list.
    */
   pages: StackItemPagesSchema.optional(),
+  /** External CG v2 can turn an authored, bundled manual Cut book. */
+  managedBook: z.enum(['authored', 'unsupported']).optional(),
   /** Live-only marker: these saved pages were reset at Stop, so PVW waits for its next Play. */
   pageRewinds: z.array(z.string()).optional(),
   /** Per-row override; absent fields inherit the template's authored advance mode. */
