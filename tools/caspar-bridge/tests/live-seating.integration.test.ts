@@ -906,6 +906,91 @@ it.each([false, true])(
   30_000,
 );
 
+it('keeps retired preset artwork out of the orphan strip and reports a new route on its seat', async () => {
+  const r = await bootControlFocus(
+    false,
+    false,
+    'motion',
+    true,
+    false,
+    true,
+    3,
+    true,
+    { start: 60, end: 79 },
+    false,
+    focusFrameIds,
+    true,
+    {
+      sources: [],
+      supportsRoutedArtwork: true,
+      keepPlateSources: true,
+      beforeTake: () => {
+        const info = defaultHandlers().get('INFO')!;
+        mock!.setHandler('INFO', async (request, context, socket) => {
+          const reply = await info(request, context, socket);
+          if (reply.kind !== 'ok-line') return reply;
+          const data = reply.data.replace(
+            /<file>\s*<path>route:\/\/(\d+)-(\d+)<\/path>\s*<\/file>/g,
+            '<route><channel>$1</channel><layer>$2</layer></route>',
+          );
+          return { ...reply, data };
+        });
+      },
+    },
+  );
+  const engine = mock!;
+  const notices: number[] = [];
+  r.orphansChanged.subscribe((layers) => notices.push(...layers.map(({ layer }) => layer)));
+  const retired = new Set<number>();
+  for (const look of ['two-camera', focusPreset]) {
+    const start = engine.receivedCommands().length;
+    expect(await r.setActiveLook('item-1', look, focusMotion)).toEqual({ ok: true });
+    const lines = engine
+      .receivedCommands()
+      .slice(start)
+      .map(({ line }) => line);
+    const routes = lines.flatMap((line) => {
+      const match = /^PLAY 1-(\d+) "route:\/\/1-79"$/.exec(line);
+      return match === null ? [] : [Number(match[1])];
+    });
+    expect(routes).toHaveLength(3);
+    for (const layer of routes) {
+      expect(lines).toContain('CLEAR 1-' + layer);
+      expect(engine.layerState({ channel: 1, layer })?.producer ?? 'empty').toBe('empty');
+      retired.add(layer);
+    }
+  }
+
+  const client = new AmcpTransport();
+  await client.connect(engine.host, engine.amcpPort);
+  const queue = new CommandQueue(client);
+  try {
+    // A previously emitted OSC frame can arrive after CLEAR has acknowledged.
+    // The sentinel proves that two sweeps processed the late route observations.
+    for (const layer of retired)
+      engine.emitOsc('/channel/1/stage/layer/' + layer + '/foreground/producer', ['route']);
+    const sentinel = 58;
+    expect((await queue.enqueue('PLAY 1-' + sentinel + ' "route://1-79"')).response.kind).toBe(
+      'ok',
+    );
+    await expect.poll(() => r.orphans().some(({ layer }) => layer === sentinel)).toBe(true);
+    expect(notices.filter((layer) => retired.has(layer))).toEqual([]);
+
+    const reused = [...retired][0]!;
+    expect((await queue.enqueue('PLAY 1-' + reused + ' "route://1-60"')).response.kind).toBe('ok');
+    await expect
+      .poll(() => r.orphans())
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ channel: 1, layer: reused, producer: 'route' }),
+        ]),
+      );
+  } finally {
+    queue.dispose();
+    client.destroy();
+  }
+});
+
 function expectNativeBorderMove(
   lines: readonly string[],
   channel: number,

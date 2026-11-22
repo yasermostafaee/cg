@@ -10,6 +10,7 @@ import {
   ServerSession,
   UnknownTemplateTypeError,
   type FailoverEvent,
+  type OccupiedLayer,
   type OscOccupancyTap,
   type LayerPolicy,
   type LayerSlot,
@@ -806,6 +807,14 @@ interface NativePresetBorderLease {
   htmlMayBeSuppressed: boolean;
   paintHoldMs?: number;
   lastPlayAt?: number;
+}
+
+interface ClearedPresetArtworkRoute {
+  readonly queue: ServerSession['queue'];
+  readonly producer: Extract<NativeArtworkLayerProducer, { kind: 'artwork-route' }>;
+  readonly clearedAt: number;
+  checking?: true;
+  emptyAt?: number;
 }
 
 interface NativePresetUnderlay {
@@ -2703,6 +2712,10 @@ export class CasparRuntime {
   readonly #occupancyStaleMs: number;
   readonly #channelTickStaleMs: number;
   readonly #orphanTracker = new OrphanTracker();
+  readonly #clearedPresetArtworkRoutes = new WeakMap<
+    ServerSession,
+    Map<string, ClearedPresetArtworkRoute>
+  >();
 
   // ── non-playout stub state ──────────────────────────────────────────
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
@@ -13165,8 +13178,16 @@ export class CasparRuntime {
         if (state === 'foreign') continue;
         // The same queue can have accepted a PLAY that was not visible in INFO yet.
         const mayHaveQueuedPlay = queue === lease.queue && lease.possiblePlays.has(slot);
-        if ((state !== 'empty' || mayHaveQueuedPlay) && !(await send(this.#builder.out(slot))))
-          return;
+        if (state !== 'empty' || mayHaveQueuedPlay) {
+          if (!(await send(this.#builder.out(slot)))) return;
+          if (state === 'native' && expected.kind === 'artwork-route' && queue === owner.queue) {
+            const cleared =
+              this.#clearedPresetArtworkRoutes.get(owner) ??
+              new Map<string, ClearedPresetArtworkRoute>();
+            cleared.set(adoptionKey(slot), { queue, producer: expected, clearedAt: Date.now() });
+            this.#clearedPresetArtworkRoutes.set(owner, cleared);
+          }
+        }
         if (this.#orphanedPrimaryMixers.get(owner)?.get(channel)?.has(slot.layer) === true) {
           mixerStillStaged = true;
         } else if (!(await send(this.#builder.mixerClear(slot)))) {
@@ -23928,6 +23949,75 @@ export class CasparRuntime {
     );
   }
 
+  /** A late OSC packet can reintroduce a route after our CLEAR invalidates its cached occupancy. */
+  #orphanCandidatesAfterArtworkClear(
+    session: ServerSession,
+    occupied: OccupiedLayer[],
+    owned: ReadonlySet<string>,
+  ): OccupiedLayer[] {
+    const cleared = this.#clearedPresetArtworkRoutes.get(session);
+    if (!cleared || cleared.size === 0) return occupied;
+    const { queue } = session;
+    const now = Date.now();
+    for (const [key, route] of cleared) {
+      if (route.queue !== queue || now - route.clearedAt > 2 * this.#occupancyStaleMs)
+        cleared.delete(key);
+    }
+
+    const checks = new Map<
+      number,
+      { key: string; observed: OccupiedLayer; route: ClearedPresetArtworkRoute }[]
+    >();
+    const candidates = occupied.filter((observed) => {
+      const key = adoptionKey(observed);
+      const route = cleared.get(key);
+      if (!route || owned.has(key)) return true;
+      if (
+        oscProducerKind(observed.producer) !== 'route' ||
+        observed.at - route.clearedAt > this.#occupancyStaleMs ||
+        this.#engineChannel(session, observed.channel) !== route.producer.channel
+      ) {
+        cleared.delete(key);
+        return true;
+      }
+      if (route.emptyAt === observed.at || route.checking) return false;
+      route.checking = true;
+      const channel = route.producer.channel;
+      const requests = checks.get(channel) ?? [];
+      requests.push({ key, observed, route });
+      checks.set(channel, requests);
+      return false;
+    });
+
+    // The OSC kind cannot distinguish an old packet from a different route just placed there.
+    // Share a stage read across affected coordinates before they enter normal orphan debounce.
+    for (const [channel, requests] of checks) {
+      void this.#readStageInfo(session, channel, AbortSignal.timeout(1_000), 'low').then((xml) => {
+        const layers = xml === null ? null : stageLayersOfInfo(xml);
+        for (const { key, observed, route } of requests) {
+          if (cleared.get(key) !== route) continue;
+          delete route.checking;
+          if (
+            this.#adapter.primarySession !== session ||
+            session.queue !== queue ||
+            this.#engineChannel(session, observed.channel) !== channel ||
+            xml === null ||
+            layers === null ||
+            layers.has(observed.layer) ||
+            nativePresetProducerLayerState(xml, observed.layer, route.producer) !== 'empty'
+          ) {
+            cleared.delete(key);
+          } else if (
+            session.osc.occupancy.lastProducerAt(observed.channel, observed.layer) === observed.at
+          ) {
+            route.emptyAt = observed.at;
+          }
+        }
+      });
+    }
+    return candidates;
+  }
+
   /**
    * One sweep tick: sample the CURRENT primary's passive OSC occupancy tap
    * and diff it against the layers this bridge owns (#slots). Reads the
@@ -24165,7 +24255,8 @@ export class CasparRuntime {
      * company's live automation output. It is pinned by its own test rather than
      * left to this comment.
      */
-    const { changed } = this.#orphanTracker.update(occupied, owned);
+    const candidates = this.#orphanCandidatesAfterArtworkClear(session, occupied, owned);
+    const { changed } = this.#orphanTracker.update(candidates, owned);
     if (changed) this.orphansChanged.emit(this.orphans());
   }
 

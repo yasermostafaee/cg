@@ -1080,8 +1080,14 @@ OSC pipeline and no AMCP traffic — so the interest set, rate limiter, and
 change tracker (the B-044 firehose protections) remain untouched. (CORRECTED
 by `RELEASE-091-01`: AMCP `INFO <channel>` on 2.5.0 DOES carry per-layer
 stage data — `<stage><layer><layer_N>` — measured on the plant's core; the
-sweep still reads OSC, and `INFO` is read only as the one-layer question a
-silent layer of ours raises.)
+ordinary orphan sweep uses OSC alone.)
+
+For a route observation immediately following acknowledged Clear of a Bridge-owned native preset
+artwork route, the Bridge MAY read the affected channel stage to verify occupancy. An empty seat
+confirmed on the same session SHALL exclude that OSC observation from the orphan notice. A
+producer present on the seat or an uncertain stage reading SHALL go through normal debounce after
+the scoped check. Later observations SHALL be evaluated on their own evidence. The verification
+SHALL only affect the notice.
 
 The sweep SHALL run on a bounded periodic cadence, query only the current
 primary (following it across failover and reconfiguration), and skip while
@@ -1126,6 +1132,14 @@ an explicit operator request.
   two sweep cycles the layer is surfaced as an orphan, named by
   channel-layer with its observed producer kind, and published to connected
   clients
+
+#### Scenario: Late OSC from retired native preset artwork does not surface
+
+- **WHEN** a delayed OSC route observation follows acknowledged cleanup of Bridge-owned preset
+  artwork and the same engine's stage has no producer on that seat **THEN** that observation does
+  not raise an orphan notice
+- **WHEN** a producer uses the same seat after that cleanup **THEN** the normal orphan debounce
+  still reports it if it is unclaimed
 
 #### Scenario: Owned layers never surface; idle is quiet
 

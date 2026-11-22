@@ -90,12 +90,25 @@
       "date": "2026-11-22",
       "status": "development",
       "summary": {
-        "fa": "آزمون‌های باز نسخهٔ ۱.۲.۱۳.",
-        "en": "Outstanding acceptance checks for 1.2.13."
+        "fa": "تغییرات پس از بیلد آزمایشی a96bd1dd و آزمون‌های باز ایستگاه.",
+        "en": "Changes after test build a96bd1dd and outstanding station checks."
       },
       "features": [],
-      "fixes": [],
+      "fixes": [
+        {
+          "fa": "پس از تعویض پریست، CG Bridge هشدار گزارش دیررس Route را برای لایهٔ موقت گرافیک قاب حذف می‌کند، وقتی CasparCG خالی بودن همان لایه را تأیید کند. Route واقعی روی همان لایه همچنان گزارش می‌شود.",
+          "en": "After a preset change, CG Bridge omits a late route report for a retired artwork layer when CasparCG confirms the seat is empty. A live route on that layer still surfaces."
+        },
+        {
+          "fa": "راهنمای نصب A/B توضیح می‌دهد که یک CG Bridge فعال هر دو موتور را مدیریت می‌کند و مسیر Share فایل‌های متنی و قالب‌های مشترک روی میزبان همان Bridge تنظیم می‌شود.",
+          "en": "The A/B installation guide identifies one active CG Bridge for both engines and locates the shared text and template folder on that Bridge’s configuration."
+        }
+      ],
       "planned": [
+        {
+          "fa": "پس از سوییچ پیاپی و راه‌اندازی دوبارهٔ Bridge، هشدار Route روی ایستگاه A/B بررسی شود. اگر برگشت، وضعیت لایه و مالکیت Bridge روی موتور فعال همان لحظه ثبت شود.",
+          "en": "Verify route notices on the A/B station after repeated preset changes and a Bridge-only restart. If the notice recurs, capture stage occupancy and Bridge ownership on the active engine."
+        },
         {
           "fa": "Focus، تغییر پریست و تصویر A/B را با نصاب ۱.۲.۱۳ روی ایستگاه بررسی کنید. هم‌زمانی محوشدن عنوان و تصویر در بیلد baf7c69a با آزمون کاربر تأیید شد.",
           "en": "Verify Focus, preset changes and A/B pictures on the target station using 1.2.13. The operator confirmed synchronized caption and picture fades in build baf7c69a."

@@ -9,6 +9,8 @@ observed producer kind and layer.
 - Identify HTML and video producers outside the stack. Ask the operator to check Program before clearing an HTML producer.
 - Describe producer removal in the per-layer and batch Clear confirmations.
 - Keep the existing confirmation, reachability and layer scope for each Clear.
+- Verify whether a recently cleared native preset artwork seat is empty before reporting a late
+  route sample as outside the stack.
 - Synchronize a row's Play indication with a layer-addressed Clear acknowledged by its primary.
 
 ## Capabilities
@@ -16,7 +18,7 @@ observed producer kind and layer.
 ### Modified Capabilities
 
 - `runtime-ui`: Occupancy notices and Clear confirmation wording.
-- `runtime-caspar-bridge`: authoritative stack status after a layer-addressed Clear.
+- `runtime-caspar-bridge`: authoritative stack status after a layer-addressed Clear and verification of late preset route samples.
 
 ## Impact
 

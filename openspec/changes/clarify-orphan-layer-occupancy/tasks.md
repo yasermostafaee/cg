@@ -25,3 +25,13 @@
 - [ ] Record the Linux E2E run covering the revised notice.
 - [ ] Capture Bridge ownership and CasparCG stage occupancy for 1-61, 1-66 and 1-71 if the
       station reproduces the notice, including which engine is active.
+
+## 4. Preset artwork route notices
+
+- [x] Reproduce false route notices when OSC arrives for artwork seats after repeated preset
+      changes and acknowledged cleanup.
+- [x] Verify the scoped Bridge check suppresses empty seats and reports a fresh external route
+      on the same coordinate. Pass 56 targeted Bridge tests including existing ownership, Clear,
+      A/B transitions, restart, reconnection and Shared files coverage.
+- [ ] Verify repeated preset changes and a Bridge-only restart on the A/B station. If the notice
+      returns, capture the active engine, stage and ownership at that time.

@@ -14166,13 +14166,16 @@ state. On return, the same rehearsal continues from its current state. No playou
 **Repro / Actual:** While showing a live layout on PGM, CG Control intermittently lists route
 producers on layers 1-61, 1-66 and 1-71 as placed by another system. The operator observed a
 single CG Control. The bridge's notice identifies occupied coordinates outside its current
-ledger. Its producer kind does not establish who placed it.
+ledger. Its producer kind does not establish who placed it. The operator later associated the
+transient strip with repeated preset switches. Integration tests reproduce a false warning when
+route OSC arrives after a native preset artwork layer has been cleared.
 
 **Expected / regression:** An unclaimed route notice names the observed layer and producer kind.
 A route held by the bridge ledger stays out of the strip. Clear remains explicit and
-confirmation-gated for eligible layers. DOM and browser tests exercise an unclaimed route. The
-station check still needs a matching ledger and CasparCG stage capture to determine why those
-particular routes lacked a claim.
+confirmation-gated for eligible layers. A late OSC sample for a retired artwork route stays out
+of the notice when CasparCG confirms the seat is empty. A producer occupying that same seat is
+still eligible for the notice. Verify the original station event with the active Bridge ledger
+and CasparCG stage captured together if it recurs.
 
 ## [~] B-446 — Apply the authored dynamic field rules in CG Control ⟨priority: high — owner, 2026-11-22⟩ — `openspec/changes/validate-authored-field-updates/`
 

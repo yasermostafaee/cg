@@ -24,3 +24,22 @@ the page after Stop requires confirmation that its own outro ended.
 - The row retains its binding, drops its cached resident producer and ignores late OSC frames
   until its next Take. A newer row intent keeps its own result. Acknowledgement from the backup
   alone does not settle the primary's row.
+
+## Preset artwork retirement
+
+CasparCG can send a final OSC producer sample while its stage removes a temporary artwork route.
+That sample can arrive after the Bridge has acknowledged Clear, invalidated its occupancy cache
+and released the native transition lease. Consecutive sweep sightings can then report an empty
+seat. The integration regression delivers such samples after two real preset switches.
+
+The Bridge records acknowledgement for artwork routes identified during native retirement. When
+a fresh route sample on one of those seats could be left over from cleanup, one read-only stage
+query for the affected channel can confirm the seat is empty. The check is scoped to the engine
+session and the retirement window. An occupied seat, an uncertain stage result, or a new producer
+observation still goes through normal orphan detection. This evidence is used only for notices.
+
+A Bridge-only update may leave a producer running in CasparCG while the old process’s temporary
+artwork ownership is lost. Persistent live layers are restored by the existing ledger, while
+native transition leases live in memory. Boot observations of genuinely occupied seats still
+follow the ordinary rules. The exact upgrade-time and recurring station warnings have not been
+captured with the active engine and ownership state.
