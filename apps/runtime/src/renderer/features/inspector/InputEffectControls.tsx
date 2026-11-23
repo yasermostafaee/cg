@@ -74,13 +74,14 @@ export function InputEffectControls({
         >
           {layout !== undefined && (
             <option value="default">
-              {localizeUi('Layout default (')}
-              {MODE_LABELS[authoredInputTransition(layout).mode]})
+              {localizeUi('Layout default ({effect})', {
+                effect: localizeUi(MODE_LABELS[authoredInputTransition(layout).mode]),
+              })}
             </option>
           )}
           {InputTransitionSchema.shape.mode.options.map((value) => (
             <option key={value} value={value}>
-              {MODE_LABELS[value]}
+              {localizeUi(MODE_LABELS[value])}
             </option>
           ))}
         </select>
@@ -99,7 +100,7 @@ export function InputEffectControls({
           >
             {InputTransitionDirectionSchema.options.map((value) => (
               <option key={value} value={value}>
-                {DIRECTION_LABELS[value]}
+                {localizeUi(DIRECTION_LABELS[value])}
               </option>
             ))}
           </select>

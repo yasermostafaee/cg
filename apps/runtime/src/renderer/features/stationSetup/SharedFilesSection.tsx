@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -15,6 +15,7 @@ export function SharedFilesSection({
   report: (message: ModalMessage | null) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const presentMessage = useFeedbackText();
   const admin = useHoldsStationAdmin();
   const [stored, setStored] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -47,7 +48,7 @@ export function SharedFilesSection({
       setStored(result.path);
       setDraft(result.path);
       const message = result.message ?? (checking ? 'CG Bridge can read this folder.' : undefined);
-      report(message === undefined ? null : { role: 'notice', text: message });
+      report(message === undefined ? null : { role: 'notice', text: presentMessage(message) });
     }
     return {
       accepted: result.ok,
@@ -86,13 +87,13 @@ export function SharedFilesSection({
                 run={save}
                 onError={(message) => report({ role: 'refusal', text: message })}
               >
-                {checking ? 'Check access' : 'Save path'}
+                {localizeUi(checking ? 'Check access' : 'Save path')}
               </AsyncButton>
             </div>
           </div>
         ) : (
           <div className="cg-field-fact" data-shared-files-path="">
-            <bdi>{stored ?? 'Loading…'}</bdi>
+            <bdi>{stored ?? localizeUi('Loading…')}</bdi>
           </div>
         )}
       </div>

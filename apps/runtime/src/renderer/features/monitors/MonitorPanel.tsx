@@ -238,7 +238,9 @@ function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        title={`Monitor volume ${String(sound.volume)}% · this console only`}
+        title={localizeUi('Monitor volume {percent}% · this console only', {
+          percent: String(sound.volume),
+        })}
         onClick={() => setOpen(!open)}
       >
         <Icon icon={SlidersHorizontal} size={13} />
@@ -370,13 +372,13 @@ export function MonitorPanel({
             title={
               mode === 'both'
                 ? legacy
-                  ? 'Show A and B'
-                  : 'Show all programme returns'
-                : `Show server ${selectName(mode)}`
+                  ? localizeUi('Show A and B')
+                  : localizeUi('Show all programme returns')
+                : localizeUi('Show server {server}', { server: selectName(mode) })
             }
             onClick={() => monitorPreferences.setDisplay(mode)}
           >
-            {mode === 'both' ? (legacy ? 'A+B' : 'All') : mode}
+            {mode === 'both' ? (legacy ? 'A+B' : localizeUi('All')) : mode}
           </Button>
         ))}
       </div>
@@ -390,11 +392,16 @@ export function MonitorPanel({
             <Button
               key={layout}
               variant="ghost"
-              aria-label={`${layout === 'horizontal' ? 'Horizontal' : 'Vertical'} programme layout`}
+              aria-label={localizeUi('{direction} programme layout', {
+                direction: layout === 'horizontal' ? 'Horizontal' : 'Vertical',
+              })}
               aria-pressed={monitorPreferences.layout === layout}
               data-toggle-on={monitorPreferences.layout === layout ? '' : undefined}
               data-pgm-layout-choice={layout}
-              title={`${layout === 'horizontal' ? 'Horizontal' : 'Vertical'} ${legacy ? 'A+B' : 'programme'} layout`}
+              title={localizeUi('{direction} {source} layout', {
+                direction: layout === 'horizontal' ? 'Horizontal' : 'Vertical',
+                source: legacy ? 'A+B' : 'programme',
+              })}
               onClick={() => monitorPreferences.setLayout(layout)}
             >
               <Icon icon={layout === 'horizontal' ? Columns2 : Rows2} size={13} />
@@ -430,8 +437,10 @@ export function MonitorPanel({
         aria-label={localizeUi('Programme sound')}
         title={
           selectedAudio === null
-            ? 'No active programme sound source'
-            : `Programme sound from ${selectName(selectedAudio)} — this console only`
+            ? localizeUi('No active programme sound source')
+            : localizeUi('Programme sound from {source} — this console only', {
+                source: selectName(selectedAudio),
+              })
         }
         onClick={programSound.toggle}
       >
@@ -443,7 +452,9 @@ export function MonitorPanel({
         aria-label={localizeUi('VU meter')}
         aria-pressed={monitorPreferences.showMeter}
         data-toggle-on={monitorPreferences.showMeter ? '' : undefined}
-        title={monitorPreferences.showMeter ? 'Hide VU meter' : 'Show VU meter'}
+        title={
+          monitorPreferences.showMeter ? localizeUi('Hide VU meter') : localizeUi('Show VU meter')
+        }
         onClick={() => monitorPreferences.setShowMeter(!monitorPreferences.showMeter)}
       >
         <Icon icon={AudioLines} size={13} />
@@ -454,7 +465,11 @@ export function MonitorPanel({
           aria-label={localizeUi('All programme meters')}
           aria-pressed={showAllMeters}
           data-toggle-on={showAllMeters ? '' : undefined}
-          title={showAllMeters ? 'Show selected source meter' : 'Show a meter beside each return'}
+          title={
+            showAllMeters
+              ? localizeUi('Show selected source meter')
+              : localizeUi('Show a meter beside each return')
+          }
           onClick={() => monitorPreferences.setMeterMode(showAllMeters ? 'selected' : 'all')}
         >
           <Icon icon={LayoutGrid} size={13} />
@@ -566,7 +581,7 @@ export function MonitorPanel({
           data-pgm-layout={grid ? 'grid' : monitorPreferences.layout}
           data-pgm-meter-mode={showAllMeters ? 'all' : 'selected'}
           role={showAllMeters ? 'group' : undefined}
-          aria-label={showAllMeters ? 'Programme meters' : undefined}
+          aria-label={showAllMeters ? localizeUi('Programme meters') : undefined}
         >
           {returns.map((tile) => {
             const { engine, physicalChannel, programReturn, name, active } = tile;

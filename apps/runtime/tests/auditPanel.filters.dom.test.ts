@@ -235,6 +235,14 @@ describe('§8 — the reference’s filters, asked of CG Bridge (`R-083`)', () =
       to: new Date('2026-09-08T23:59:59.999').toISOString(),
     });
 
+    const beforeInvalidDate = requests.length;
+    await type('#audit-from', '2026-02-29');
+    expect(dialog().querySelector('#audit-from')?.getAttribute('aria-invalid')).toBe('true');
+    expect(dialog().querySelector('[data-audit-range-error]')?.textContent).toContain(
+      'Enter a valid date in the selected calendar.',
+    );
+    expect(requests).toHaveLength(beforeInvalidDate);
+
     const beforeImpossible = requests.length;
     await type('#audit-from', '2026-09-09');
     expect(dialog().querySelector('[data-audit-range-error]')?.textContent).toContain(

@@ -68,7 +68,7 @@ export function LiveLayoutEditorTexts({
             aria-pressed={item.id === selected?.id}
             onClick={() => select(item.id)}
           >
-            {localizeUi('Text')} {index + 2}
+            {localizeUi('Text {number}', { number: index + 2 })}
           </Button>
         ))}
         <Button variant="neutral" onClick={addText}>
@@ -80,7 +80,7 @@ export function LiveLayoutEditorTexts({
           <div className="cg-live-layout-extra-text-field">
             <TextInput
               id={id + '-text'}
-              aria-label={'Text ' + String(selectedNumber)}
+              aria-label={localizeUi('Text {number}', { number: selectedNumber })}
               value={selected.text}
               onChange={(text) => changeSelected((current) => ({ ...current, text }))}
               dir="auto"
@@ -89,7 +89,7 @@ export function LiveLayoutEditorTexts({
             <Button
               className="cg-list-remove"
               variant="icon"
-              aria-label={'Remove text ' + String(selectedNumber)}
+              aria-label={localizeUi('Remove text {number}', { number: selectedNumber })}
               onClick={() => onChange(texts.filter((item) => item.id !== selected.id))}
             >
               <Icon icon={Trash2} size={15} />
@@ -99,7 +99,7 @@ export function LiveLayoutEditorTexts({
             key={selected.id}
             frameId={selected.id}
             frameNumber={frameNumber}
-            heading={localizeUi('Text style')}
+            heading="Text style"
             raster={layout.resolution}
             shared={controlLiveLayoutAdditionalTextStyle(layout, undefined, selectedIndex)}
             individualBase={controlLiveLayoutAdditionalTextStyle(

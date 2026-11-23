@@ -88,6 +88,8 @@ function inventory(): {
  */
 const BEFORE_AND_AFTER = {
   realLocalStorage: [
+    // R-128: Audit calendar is a console preference. Missing or invalid values display Gregorian.
+    'cg.runtime.audit-calendar.v1',
     /*
       `DELTA-RUN-NEXT-VERSION-01-C` — NEW: the calendar THIS viewer reads dates in (`calendarChoice.ts`):
       `solar-hijri` · `gregorian` · `lunar-hijri`. A per-viewer convenience, like the shell layout:

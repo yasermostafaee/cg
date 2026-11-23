@@ -208,7 +208,7 @@ function OutputTable({ rows }: { rows: readonly OutputRow[] }): JSX.Element {
                       icon={row.running ? CircleCheck : CirclePause}
                       size={STATION_SETUP_PX.stateIcon}
                     />
-                    {row.running ? 'Running' : 'Not running'}
+                    {row.running ? localizeUi('Running') : localizeUi('Not running')}
                   </span>
                 </td>
               </tr>
@@ -240,12 +240,18 @@ function ChannelRows({
         <span>
           {localizeUi('Channel')} {String(check.channel)} {localizeUi('on server')} {server.label} —{' '}
           {reachable
-            ? `checked ${formatClock(check.observedAt)}`
-            : `last checked ${formatClock(check.observedAt)}; ${engine} is unreachable, so this cannot be re-checked`}
+            ? localizeUi('checked {time}', { time: formatClock(check.observedAt) })
+            : localizeUi(
+                'last checked {time}; {engine} is unreachable, so this cannot be re-checked',
+                { time: formatClock(check.observedAt), engine: engine },
+              )}
         </span>
         {check.declared !== null && (
           <Tag className="cg-setup-tag" data-output-count="">
-            {`${String(running)} of ${String(rows.length)} running`}
+            {localizeUi('{running} of {total} running', {
+              running: String(running),
+              total: String(rows.length),
+            })}
           </Tag>
         )}
       </div>
@@ -260,7 +266,9 @@ function ChannelRows({
         ) : (
           <span style={styles.fact}>
             {localizeUi('Declared:')}{' '}
-            {check.declared.length === 0 ? 'nothing' : check.declared.map((d) => d.kind).join(', ')}
+            {check.declared.length === 0
+              ? localizeUi('nothing')
+              : check.declared.map((d) => d.kind).join(', ')}
             {localizeUi('. Running:')} {runningWords(check.running)}.
           </span>
         )}
@@ -285,9 +293,9 @@ function ChannelRows({
         )}
         {local.map((m) => (
           <span key={m.kind} style={styles.local} data-severity="local">
-            {m.kind === 'screen' ? 'Preview' : 'Local monitor'} — {missingWords([m])}{' '}
-            {localizeUi('is declared and not running:')}{' '}
-            {m.kind === 'screen' ? 'a preview window' : 'the sound device'}{' '}
+            {m.kind === 'screen' ? localizeUi('Preview') : localizeUi('Local monitor')} —{' '}
+            {missingWords([m])} {localizeUi('is declared and not running:')}{' '}
+            {m.kind === 'screen' ? localizeUi('a preview window') : localizeUi('the sound device')}{' '}
             {localizeUi(
               'on the playout machine, with no effect on air. Nothing for the operator to do.',
             )}
@@ -318,8 +326,13 @@ function ServerBlock({
       <span style={styles.status}>
         {localizeUi('Server')} {server.label}
         {localizeUi(': no output check has completed yet')}
-        {channel === undefined ? '' : ` for channel ${String(channel)}`}
-        {isServerReachable(server.state) ? '' : ` (${engine} is unreachable)`}.
+        {channel === undefined
+          ? ''
+          : localizeUi(' for channel {channel}', { channel: String(channel) })}
+        {isServerReachable(server.state)
+          ? ''
+          : localizeUi(' ({engine} is unreachable)', { engine: engine })}
+        .
       </span>
     );
   }

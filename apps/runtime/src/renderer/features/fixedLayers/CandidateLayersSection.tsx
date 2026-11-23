@@ -1,5 +1,4 @@
 import { useUiText } from '../../i18n/locale.js';
-import { templateTypeLabel } from '../library/templateName.js';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, Lock, Search, Trash2 } from 'lucide-react';
@@ -602,13 +601,7 @@ function BankEditor({
   async function removeTemplate(slot: FixedSlotState): Promise<void> {
     if (slot.binding === null) return;
     const { itemId } = slot.binding;
-    const name =
-      displayLabel({
-        name: slot.binding.templateName,
-        sourceFileName: slot.binding.sourceFileName,
-      }) ??
-      slot.binding.templateId ??
-      slot.binding.templateType;
+    const name = boundTemplateName(slot.binding);
     const item = stack.find((i) => i.itemId === itemId);
     // FAIL CLOSED on the destructive dialog's wording: only a settled idle/loaded status
     // may claim the graphic is off air. An item the stack cannot show us at all is the
@@ -655,6 +648,10 @@ function BankEditor({
   const slotFor = (layer: number): FixedSlotState | undefined =>
     slots.find((s) => s.layer === layer);
 
+  const boundTemplateName = (binding: NonNullable<FixedSlotState['binding']>): string =>
+    displayLabel({ name: binding.templateName, sourceFileName: binding.sourceFileName }) ??
+    localizeUi('Unnamed template');
+
   /** One row's whole state, worked out once — the table renders it and the filter reads it. */
   const rowFor = (layer: number): LayerRow => {
     const slot = slotFor(layer);
@@ -669,12 +666,7 @@ function BankEditor({
       slot,
       name: aliases[String(layer)] ?? '',
       placeholder: defaultLayerAlias(bank, layer),
-      template:
-        showBinding && bound !== null
-          ? (displayLabel({ name: bound.templateName, sourceFileName: bound.sourceFileName }) ??
-            bound.templateId ??
-            templateTypeLabel(bound.templateType))
-          : null,
+      template: showBinding && bound !== null ? boundTemplateName(bound) : null,
       /*
         🔴 OCCUPIED IS OUR OWN RECORD, never an inference from the wire. A bound item is the
         FIRST thing the bridge's `#fixedSlotOccupancy` answers `occupied` on (`isFixedSlotBusy`),
@@ -747,13 +739,13 @@ function BankEditor({
                       <input
                         type="checkbox"
                         role="switch"
-                        aria-label={`Show layer ${String(row.layer)}`}
+                        aria-label={localizeUi('Show layer {layer}', { layer: row.layer })}
                         checked={row.visible}
                         disabled={row.occupied && row.visible}
                         title={
                           row.occupied && row.visible
-                            ? 'Remove the template before hiding this row'
-                            : 'Show in the Layers panel'
+                            ? localizeUi('Remove the template before hiding this row')
+                            : localizeUi('Show in the Layers panel')
                         }
                         onChange={(e) => {
                           setVisible({ ...visible, [String(row.layer)]: e.target.checked });
@@ -764,7 +756,7 @@ function BankEditor({
                   ) : (
                     // §2 I — the fact, not a switch: `Tag` cannot become a control.
                     <Tag data-layer-shown={row.visible ? 'yes' : 'no'}>
-                      {row.visible ? 'Shown' : 'Hidden'}
+                      {localizeUi(row.visible ? 'Shown' : 'Hidden')}
                     </Tag>
                   )}
                 </td>
@@ -775,8 +767,14 @@ function BankEditor({
                       type="text"
                       dir="auto"
                       maxLength={ROW_NAME_MAX}
-                      aria-label={`Name for layer ${String(row.layer)} (row ${String(row.position)})`}
-                      placeholder={row.placeholder}
+                      aria-label={localizeUi('Name for layer {layer} (row {row})', {
+                        layer: row.layer,
+                        row: row.position,
+                      })}
+                      placeholder={localizeUi(
+                        isLowBankLayer(bank, row.layer) ? 'Live layer {layer}' : 'Layer {layer}',
+                        { layer: row.layer },
+                      )}
                       value={row.name}
                       onChange={(e) => {
                         setAliases({ ...aliases, [String(row.layer)]: e.target.value });
@@ -784,42 +782,27 @@ function BankEditor({
                     />
                   ) : (
                     // §2 I — the row's name as the console shows it: its alias, else its real layer.
-                    <IsolatedName>{row.name === '' ? row.placeholder : row.name}</IsolatedName>
+                    <IsolatedName>
+                      {row.name ||
+                        localizeUi(
+                          isLowBankLayer(bank, row.layer) ? 'Live layer {layer}' : 'Layer {layer}',
+                          { layer: row.layer },
+                        )}
+                    </IsolatedName>
                   )}
                 </td>
                 <td>
                   {row.template === null ? (
-                    <span className="cg-layer-none">{row.occupied ? '' : 'Unassigned'}</span>
+                    <span className="cg-layer-none">
+                      {row.occupied ? '' : localizeUi('Unassigned')}
+                    </span>
                   ) : (
                     <>
-                      {/*
-                        🔴 `MODAL-CHROME-10` ADDENDUM B — **the FIFTH surface to get this
-                        wrong, and it is the one the owner photographed.**
-
-                        This was a `<bdi>` carrying `.cg-layer-template`, which declares
-                        `display: block`. A `<bdi>`'s UA default is `unicode-bidi: isolate`
-                        PLUS `dir=auto`, so a Persian template name resolved the element's own
-                        `direction` to `rtl` — harmless while it is inline, but on a BLOCK that
-                        direction reaches the box's ALIGNMENT and `text-align: start` resolves
-                        to RIGHT. Persian titles flushed hard right in the Template column while
-                        English ones sat left, which is exactly what the operator reported.
-
-                        ⚠ The isolation is NOT the bug and must not be removed: these names are
-                        mixed (`زیرنویس معرفی — Guest Title`), and without it any name carrying
-                        a Latin word or digits reorders wrongly — a SILENT mis-rendering, which
-                        is worse than a visible misalignment because nobody photographs it.
-                        `IsolatedName` is the shape that keeps both: an LTR `<span>` for the
-                        BOX, an inline `<bdi>` for the CHARACTERS.
-                      */}
+                      {/* The cell aligns the label. Only the authored name sets its own direction. */}
                       <IsolatedName
                         className="cg-layer-template"
-                        {...(() => {
-                          // `exactOptionalPropertyTypes` — an ABSENT title and a title of
-                          // `undefined` are different things here, and only the first is legal.
-                          const id =
-                            row.slot?.binding?.templateId ?? row.slot?.binding?.templateType;
-                          return id === undefined ? {} : { title: id };
-                        })()}
+                        title={row.template}
+                        alignWithInterface
                       >
                         {row.template}
                       </IsolatedName>
@@ -831,7 +814,9 @@ function BankEditor({
                       */}
                       <span className="cg-layer-locked" data-layer-locked="">
                         <Icon icon={Lock} size={STATION_SETUP_PX.occupiedIcon} />
-                        {row.onAir ? 'On air' : 'Occupied'} {localizeUi('· visibility locked')}
+                        {localizeUi(
+                          row.onAir ? 'On air · visibility locked' : 'Occupied · visibility locked',
+                        )}
                       </span>
                     </>
                   )}
@@ -849,12 +834,16 @@ function BankEditor({
                     <Button
                       variant="quiet"
                       className="cg-list-remove"
-                      aria-label={`Remove the template on ${row.name === '' ? row.placeholder : row.name}`}
+                      aria-label={localizeUi('Remove the template on {name}', {
+                        name: row.name || row.placeholder,
+                      })}
                       disabled={row.removeRefused}
                       title={
                         row.removeRefused
-                          ? REMOVE_ON_AIR_REASON
-                          : 'Remove the template from this row — asks first, then clears the layer'
+                          ? localizeUi(REMOVE_ON_AIR_REASON)
+                          : localizeUi(
+                              'Remove the template from this row — asks first, then clears the layer',
+                            )
                       }
                       onClick={() => {
                         if (row.slot !== undefined) void removeTemplate(row.slot);

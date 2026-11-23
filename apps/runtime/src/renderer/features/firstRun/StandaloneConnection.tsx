@@ -1,3 +1,5 @@
+import { connectionCheckText } from './connectionCheckText.js';
+import { useUiText } from '../../i18n/locale.js';
 import { useState, type ReactNode } from 'react';
 import type { SetupCheckAnswer, StandaloneSetup } from '../../../shared/runtime-bridge.js';
 import { STANDALONE_BRIDGE_ADDRESS_ERROR } from '../../../shared/station-address.js';
@@ -40,6 +42,7 @@ export function StandaloneConnection({
   extraLines: readonly ShownCheckLine[];
   lineActions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [lines, setLines] = useState<readonly ShownCheckLine[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'check' | 'connect' | null>(null);
@@ -78,16 +81,16 @@ export function StandaloneConnection({
       />
       <div style={actionStyle}>
         <Button variant="secondary" disabled={busy !== null} onClick={() => void act('check')}>
-          {busy === 'check' ? 'Checking…' : 'Check'}
+          {localizeUi(busy === 'check' ? 'Checking…' : 'Check')}
         </Button>
         {changed && (
           <Button variant="primary" disabled={busy !== null} onClick={() => void act('connect')}>
-            {busy === 'connect' ? 'Connecting…' : 'Connect'}
+            {localizeUi(busy === 'connect' ? 'Connecting…' : 'Connect')}
           </Button>
         )}
       </div>
       <div className="cg-setup-field__error" id="cg-standalone-connection-error" role="status">
-        {error}
+        {error === null ? null : connectionCheckText(error, localizeUi)}
       </div>
       {(lines.length > 0 || extraLines.length > 0) && (
         <ConnectionCheckList

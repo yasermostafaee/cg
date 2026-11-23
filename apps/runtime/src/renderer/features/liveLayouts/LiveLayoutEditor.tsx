@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   AudioLines,
@@ -119,11 +119,12 @@ const settingsTabs = [
   { id: 'layout', label: 'Layout' },
 ];
 
-function nextPresetName(presets: readonly ControlLiveLayoutPreset[]): string {
+function nextPresetName(presets: readonly ControlLiveLayoutPreset[], namePattern: string): string {
   const names = new Set(presets.map(({ name }) => name));
+  const nameAt = (number: number): string => namePattern.replace('{number}', String(number));
   let number = presets.length + 1;
-  while (names.has(`Preset ${String(number)}`)) number += 1;
-  return `Preset ${String(number)}`;
+  while (names.has(nameAt(number))) number += 1;
+  return nameAt(number);
 }
 
 function setVisibility(
@@ -228,6 +229,7 @@ export function LiveLayoutEditor({
   onClose,
 }: LiveLayoutEditorProps): JSX.Element | null {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
   const [layout, setLayout] = useState<ControlLiveLayout>(() =>
     mode === 'create' ? { ...initial, frames: [], presets: [], defaultPresetId: '' } : initial,
   );
@@ -357,7 +359,7 @@ export function LiveLayoutEditor({
       : [
           {
             id,
-            label: 'plate ' + String(index + 1),
+            label: localizeUi('plate {number}', { number: index + 1 }),
             rect: normalizePlacement(rect, layout.resolution),
           },
         ];
@@ -531,7 +533,7 @@ export function LiveLayoutEditor({
         hiddenFocusTitles: [],
       }),
       id: `preset-${uuid()}`,
-      name: nextPresetName(layout.presets),
+      name: nextPresetName(layout.presets, localizeUi('Preset {number}')),
       ...(preset?.frameAttachments !== undefined && {
         frameAttachments: preset.frameAttachments.map((attachment) => ({
           ...attachment,
@@ -953,12 +955,14 @@ export function LiveLayoutEditor({
   return (
     <Modal
       title={localizeUi(titles[mode])}
-      subtitle={`Channel ${String(channel)}`}
+      subtitle={localizeUi('Channel {channel}', { channel })}
       emblem={LayoutGrid}
       size="library"
       onClose={onClose}
       busy={busy}
-      {...(refusal === undefined ? {} : { message: { role: 'refusal' as const, text: refusal } })}
+      {...(refusal === undefined
+        ? {}
+        : { message: { role: 'refusal' as const, text: localizeFeedback(refusal) } })}
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onClose} disabled={busy}>
@@ -976,7 +980,7 @@ export function LiveLayoutEditor({
               readingFallback
             }
           >
-            <Icon icon={Check} size={15} /> {busy ? 'Saving…' : 'Save layout'}
+            <Icon icon={Check} size={15} /> {localizeUi(busy ? 'Saving…' : 'Save layout')}
           </ModalAction>
         </>
       }
@@ -998,7 +1002,8 @@ export function LiveLayoutEditor({
             aria-label={localizeUi('Presets')}
           >
             {layout.presets.map((candidate, index) => {
-              const name = candidate.name.trim() || `Preset ${String(index + 1)}`;
+              const name =
+                candidate.name.trim() || localizeUi('Preset {number}', { number: index + 1 });
               return (
                 <Button
                   key={candidate.id}
@@ -1015,7 +1020,7 @@ export function LiveLayoutEditor({
                     className="cg-live-layout-preset-thumbnail"
                   />
                   <span className="cg-live-layout-preset-caption">
-                    <IsolatedName>{name}</IsolatedName>
+                    <IsolatedName alignWithInterface>{name}</IsolatedName>
                     {candidate.id === layout.defaultPresetId && (
                       <span
                         className="cg-live-layout-preset-start"
@@ -1092,7 +1097,9 @@ export function LiveLayoutEditor({
               {focusId !== undefined && preset !== undefined && (
                 <Button ref={returnButton} variant="neutral" onClick={returnToPreset}>
                   <Icon icon={RotateCcw} size={15} /> {localizeUi('Return to')}{' '}
-                  <IsolatedName>{preset.name || 'preset'}</IsolatedName>
+                  <IsolatedName alignWithInterface>
+                    {preset.name || localizeUi('preset')}
+                  </IsolatedName>
                 </Button>
               )}
               <Button
@@ -1176,10 +1183,10 @@ export function LiveLayoutEditor({
               style={{ aspectRatio: layout.resolution.width / layout.resolution.height }}
             >
               {layout.frames.length === 0
-                ? 'Add a plate to begin.'
+                ? localizeUi('Add a plate to begin.')
                 : preset === undefined
-                  ? 'Add a preset to preview these plates.'
-                  : 'Choose plates for this preset.'}
+                  ? localizeUi('Add a preset to preview these plates.')
+                  : localizeUi('Choose plates for this preset.')}
               {showSafeGuides && (
                 <FittedSafeAreaGuides
                   width={layout.resolution.width}
@@ -1219,9 +1226,9 @@ export function LiveLayoutEditor({
 
         <aside className="cg-live-layout-settings" aria-label={localizeUi('Layout settings panel')}>
           <TabStrip
-            tabs={settingsTabs}
+            tabs={settingsTabs.map(({ id, label }) => ({ id, label: localizeUi(label) }))}
             activeId={settingsScope}
-            ariaLabel="Layout settings"
+            ariaLabel={localizeUi('Layout settings')}
             idPrefix={fieldsId}
             onSelect={setSettingsScope}
             keyboardNavigation
@@ -1308,7 +1315,7 @@ export function LiveLayoutEditor({
                     ) : (
                       <LiveLayoutAssetThumbnail kind={backgroundMedia.kind} src={assetUrl} />
                     )}
-                    {readingMedia ? 'Reading…' : 'Image or video'}
+                    {localizeUi(readingMedia ? 'Reading…' : 'Image or video')}
                   </Button>
                   <FileInput
                     hidden
@@ -1354,7 +1361,9 @@ export function LiveLayoutEditor({
                       {preset !== undefined && <span>{localizeUi('In preset')}</span>}
                     </div>
                     {layout.frames.map((candidate, index) => {
-                      const name = candidate.title.trim() || `Plate ${String(index + 1)}`;
+                      const name =
+                        candidate.title.trim() ||
+                        localizeUi('Plate {number}', { number: index + 1 });
                       const position = presetFrameIds.indexOf(candidate.id) + 1;
                       const included = position > 0;
                       const positionId = `${fieldsId}-position-${String(index + 1)}`;
@@ -1363,6 +1372,8 @@ export function LiveLayoutEditor({
                       const presenceDescription = sourcePresenceDescription(
                         sourcePresence,
                         candidate.sourceId,
+                        undefined,
+                        localizeUi,
                       );
                       const presenceId = `${positionId}-source-presence`;
                       const frameDescription = [
@@ -1379,7 +1390,7 @@ export function LiveLayoutEditor({
                         >
                           <Button
                             className="cg-live-layout-frame-choice"
-                            aria-label={`Edit plate ${String(index + 1)}`}
+                            aria-label={localizeUi('Edit plate {number}', { number: index + 1 })}
                             aria-describedby={frameDescription || undefined}
                             active={candidate.id === frame.id}
                             aria-pressed={candidate.id === frame.id}
@@ -1405,10 +1416,10 @@ export function LiveLayoutEditor({
                               )}
                             </span>
                             <span className="cg-live-layout-frame-label">
-                              <IsolatedName>{name}</IsolatedName>
+                              <IsolatedName alignWithInterface>{name}</IsolatedName>
                               <SourceLabel
                                 sourceId={candidate.sourceId}
-                                fallback="Unassigned"
+                                fallback={localizeUi('Unassigned')}
                                 presence={sourcePresence}
                                 presenceAccessible={false}
                               />
@@ -1422,9 +1433,11 @@ export function LiveLayoutEditor({
                               <span
                                 className="cg-live-layout-frame-position-marker"
                                 id={positionId}
-                                title={`Position ${String(position)} in this preset`}
+                                title={localizeUi('Position {number} in this preset', {
+                                  number: position,
+                                })}
                               >
-                                {localizeUi('Pos')} {position}
+                                {localizeUi('Pos {number}', { number: position })}
                               </span>
                             )}
                             <span className="cg-live-layout-selection-mark" aria-hidden="true">
@@ -1438,7 +1451,9 @@ export function LiveLayoutEditor({
                                 mode !== 'create' && included && preset.frameIds.length <= 1
                               }
                               onChange={(next) => includeFrame(candidate.id, next)}
-                              aria-label={`Plate ${String(index + 1)} in preset`}
+                              aria-label={localizeUi('Plate {number} in preset', {
+                                number: index + 1,
+                              })}
                             />
                           )}
                         </div>
@@ -1449,9 +1464,7 @@ export function LiveLayoutEditor({
                 {frame !== undefined && (
                   <div className="cg-live-layout-fields">
                     <div className="cg-live-layout-panel-head">
-                      <h3>
-                        {localizeUi('Plate')} {frameNumber}
-                      </h3>
+                      <h3>{localizeUi('Plate {number}', { number: frameNumber })}</h3>
                       <Button
                         className="cg-live-layout-delete"
                         variant="danger"
@@ -1468,7 +1481,7 @@ export function LiveLayoutEditor({
                         aria-label={localizeUi('Plate input')}
                         channel={channel}
                         value={frame.sourceId ?? ''}
-                        choices={[{ value: '', label: 'Unassigned' }]}
+                        choices={[{ value: '', label: localizeUi('Unassigned') }]}
                         onChange={(sourceId) =>
                           updateFrame(({ sourceId: _old, ...candidate }) =>
                             sourceId === '' ? candidate : { ...candidate, sourceId },
@@ -1520,7 +1533,7 @@ export function LiveLayoutEditor({
                           {presetFrameIds.map((_, index) => (
                             <Button
                               key={index}
-                              aria-label={`Position ${String(index + 1)}`}
+                              aria-label={localizeUi('Position {number}', { number: index + 1 })}
                               aria-pressed={framePosition === index}
                               onClick={() => {
                                 if (index === framePosition) return;

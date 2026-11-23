@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
   useCallback,
   useEffect,
@@ -266,6 +267,7 @@ export function RehearsalFrame({
   onReadyChange,
   onBoundsChange,
 }: Props): JSX.Element {
+  const translateUi = useUiText();
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [ready, setReady] = useState(false);
   const loadedHtml = useRef<string | null>(null);
@@ -1029,7 +1031,7 @@ export function RehearsalFrame({
     // eslint-disable-next-line jsx-a11y/iframe-has-title
     <iframe
       ref={frameRef}
-      aria-label={`${rowName} rehearsal preview`}
+      aria-label={translateUi('{row} rehearsal preview', { row: rowName })}
       data-rehearsal-frame={itemId}
       data-cg-pvw="1"
       srcDoc={html}

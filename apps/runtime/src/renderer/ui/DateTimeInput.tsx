@@ -1,8 +1,9 @@
-import { useUiText } from '../i18n/locale.js';
+import { localeDirection, useUiText, type Locale } from '../i18n/locale.js';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { useMaskedDateTime, type MaskedInput } from '@cg/gesture';
 import {
+  addGregorianDays,
   CALENDAR_LABELS,
   CALENDAR_SYSTEMS,
   MONTH_NAMES,
@@ -10,6 +11,8 @@ import {
   lunarHijriCalculation,
   nowPlus,
   partsOfInstant,
+  toGregorian,
+  weekStartOf,
   writeFieldDigits,
   type CalendarSystem,
   type DateTimeParts,
@@ -235,13 +238,15 @@ function lunarTitle(adjust: number): string {
  * The calendar icon and its month grid: the month the date input holds (or this one), in the chosen
  * calendar, the week starting where that calendar's does. A Hijri grid reads right to left.
  */
-function DatePickerButton({
+export function DatePickerButton({
   calendar,
   parts,
   lunarAdjust,
   shown,
   now,
   onPick,
+  locale,
+  label,
 }: {
   calendar: CalendarSystem;
   parts: Partial<DateTimeParts>;
@@ -249,6 +254,8 @@ function DatePickerButton({
   shown: DigitSet;
   now: () => number;
   onPick: (day: { year: number; month: number; day: number }) => void;
+  locale?: Locale | undefined;
+  label?: string | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
   const anchor = useRef<HTMLButtonElement>(null);
@@ -269,7 +276,7 @@ function DatePickerButton({
       <Button
         ref={anchor}
         variant="icon"
-        aria-label={localizeUi('Pick a date')}
+        aria-label={label ?? localizeUi('Pick a date')}
         aria-haspopup="dialog"
         aria-expanded={view !== null}
         aria-controls={view !== null ? panelId : undefined}
@@ -283,12 +290,13 @@ function DatePickerButton({
           anchor={anchor}
           onClose={() => setView(null)}
           id={panelId}
-          aria-label={localizeUi('Pick a date')}
+          aria-label={label ?? localizeUi('Pick a date')}
           minWidth={260}
           maxHeight={360}
           initialFocusSelector="[data-grid-focus]"
         >
           <MonthGridPanel
+            locale={locale}
             calendar={calendar}
             view={view}
             lunarAdjust={lunarAdjust}
@@ -314,6 +322,7 @@ function MonthGridPanel({
   picked,
   onView,
   onPick,
+  locale,
 }: {
   calendar: CalendarSystem;
   view: { year: number; month: number };
@@ -322,10 +331,19 @@ function MonthGridPanel({
   picked: Partial<DateTimeParts>;
   onView: (view: { year: number; month: number }) => void;
   onPick: (day: { year: number; month: number; day: number }) => void;
+  locale?: Locale | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
   const grid = monthGrid(calendar, view.year, view.month, lunarAdjust);
-  const rtl = calendar !== 'gregorian';
+  const month =
+    locale === undefined
+      ? (MONTH_NAMES[calendar][view.month - 1] ?? '')
+      : displayedMonth(locale, calendar, view, lunarAdjust);
+  const weekday =
+    locale === undefined
+      ? undefined
+      : new Intl.DateTimeFormat(locale, { weekday: 'narrow', timeZone: 'UTC' });
+  const rtl = locale === undefined ? calendar !== 'gregorian' : localeDirection(locale) === 'rtl';
   const inMonth = picked.year === view.year && picked.month === view.month;
   const focusDay = inMonth && picked.day !== undefined && picked.day <= grid.days ? picked.day : 1;
   const n = (v: number): string => writeFieldDigits(String(v), shown);
@@ -340,7 +358,7 @@ function MonthGridPanel({
           <Icon icon={rtl ? ChevronRight : ChevronLeft} />
         </Button>
         <span className="cg-datetime-grid__title" data-datetime-grid-title="">
-          <bdi>{`${MONTH_NAMES[calendar][view.month - 1] ?? ''} ${n(view.year)}`}</bdi>
+          <bdi>{`${month} ${n(view.year)}`}</bdi>
         </span>
         <Button
           variant="icon"
@@ -353,7 +371,8 @@ function MonthGridPanel({
       <div className="cg-datetime-grid__days" role="group" aria-label={localizeUi('Days')}>
         {grid.heads.map((h, i) => (
           <span key={`head-${String(i)}`} className="cg-datetime-grid__weekday" aria-hidden="true">
-            {h}
+            {weekday?.format(new Date(Date.UTC(2020, 5, 7 + ((weekStartOf(calendar) + i) % 7)))) ??
+              h}
           </span>
         ))}
         {Array.from({ length: grid.leading }, (_, i) => (
@@ -367,7 +386,11 @@ function MonthGridPanel({
               key={day}
               variant="neutral"
               aria-pressed={isPicked}
-              aria-label={dayInWords({ year: view.year, month: view.month, day }, calendar, shown)}
+              aria-label={
+                locale === undefined
+                  ? dayInWords({ year: view.year, month: view.month, day }, calendar, shown)
+                  : `${n(day)} ${month} ${n(view.year)}`
+              }
               data-datetime-day={String(day)}
               {...(day === focusDay ? { 'data-grid-focus': '' } : {})}
               onClick={() => onPick({ year: view.year, month: view.month, day })}
@@ -379,6 +402,32 @@ function MonthGridPanel({
       </div>
     </div>
   );
+}
+
+function displayedMonth(
+  locale: Locale,
+  calendar: CalendarSystem,
+  view: { year: number; month: number },
+  lunarAdjust: number,
+): string {
+  const middle = toGregorian({ ...view, day: 15 }, calendar, lunarAdjust);
+  if (middle === null) return MONTH_NAMES[calendar][view.month - 1] ?? '';
+  const day = calendar === 'lunar-hijri' ? addGregorianDays(middle, lunarAdjust) : middle;
+  const system =
+    calendar === 'lunar-hijri'
+      ? lunarHijriCalculation() === 'islamic-umalqura'
+        ? 'islamic-umalqura'
+        : 'islamic-civil'
+      : calendar === 'solar-hijri'
+        ? 'persian'
+        : 'gregory';
+  const instant = new Date(0);
+  instant.setUTCFullYear(day.year, day.month - 1, day.day);
+  return new Intl.DateTimeFormat(locale, {
+    calendar: system,
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(instant);
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);

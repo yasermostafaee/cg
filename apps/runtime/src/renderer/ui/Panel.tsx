@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import type { CSSProperties, ReactNode } from 'react';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
@@ -130,6 +131,7 @@ export function Panel({
   onClose,
   compactHead = false,
 }: Props): JSX.Element {
+  const translateUi = useUiText();
   const layout = useShellLayoutContext();
   const focused = layout.focus === id;
 
@@ -170,9 +172,17 @@ export function Panel({
           */}
           <Button
             variant="icon"
-            aria-label={focused ? `Exit fullscreen ${title}` : `Show ${title} fullscreen`}
+            aria-label={
+              focused
+                ? translateUi('Exit fullscreen {panel}', { panel: title })
+                : translateUi('Show {panel} fullscreen', { panel: title })
+            }
             aria-pressed={focused}
-            title={focused ? `Restore ${title} to the workspace` : `Give ${title} the whole shell`}
+            title={
+              focused
+                ? translateUi('Restore {panel} to the workspace', { panel: title })
+                : translateUi('Give {panel} the whole shell', { panel: title })
+            }
             onClick={() => layout.setFocus(focused ? 'none' : id)}
           >
             <Icon icon={focused ? Minimize2 : Maximize2} />
@@ -191,8 +201,8 @@ export function Panel({
           {onClose !== undefined && (
             <Button
               variant="icon"
-              aria-label={`Close ${title}`}
-              title={`Close ${title}`}
+              aria-label={translateUi('Close {panel}', { panel: title })}
+              title={translateUi('Close {panel}', { panel: title })}
               onClick={() => {
                 if (focused) layout.setFocus('none');
                 onClose();

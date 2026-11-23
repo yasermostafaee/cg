@@ -403,11 +403,11 @@ export function ListFieldEditor({
   */
   if (items.some(isPictureItem)) {
     return (
-      <div style={styles.list} aria-label={`${fieldId} items`}>
+      <div style={styles.list} aria-label={localizeUi('{field} items', { field: fieldId })}>
         <p style={styles.empty} data-testid="list-pictures">
           {PICTURE_LIST_SENTENCE}
         </p>
-        <ol style={styles.pictures} aria-label={`${fieldId} pictures`}>
+        <ol style={styles.pictures} aria-label={localizeUi('{field} pictures', { field: fieldId })}>
           {items.map((item) => (
             <li key={item.id}>
               <bdi>{typeof item['name'] === 'string' ? item['name'] : item.id}</bdi>
@@ -424,12 +424,17 @@ export function ListFieldEditor({
     if (fileManaged) return <div style={styles.summary}>{footer}</div>;
     const title = field?.label?.trim() || fieldId;
     return (
-      <div style={styles.summary} aria-label={`${fieldId} rows summary`}>
+      <div
+        style={styles.summary}
+        aria-label={localizeUi('{field} rows summary', { field: fieldId })}
+      >
         <div style={styles.summaryRow}>
           <p style={styles.summaryText}>
-            {String(items.length)} {items.length === 1 ? 'row' : 'rows'}
-            {maxItems === undefined ? '' : ` · ${String(maxItems)} maximum`}
-            {rowStructureLocked ? ' · row structure locked' : ''}
+            {String(items.length)} {items.length === 1 ? localizeUi('row') : localizeUi('rows')}
+            {maxItems === undefined
+              ? ''
+              : localizeUi(' · {count} maximum', { count: String(maxItems) })}
+            {rowStructureLocked ? localizeUi('· row structure locked') : ''}
           </p>
           <Button
             variant="secondary"
@@ -447,9 +452,12 @@ export function ListFieldEditor({
         {footer}
         {editorOpen && (
           <Modal
-            title={`Edit ${title}`}
-            subtitle={`${String(items.length)} ${items.length === 1 ? 'row' : 'rows'}`}
-            ariaLabel={`Edit ${fieldId} rows`}
+            title={localizeUi('Edit {name}', { name: title })}
+            subtitle={localizeUi('{count} {rows}', {
+              count: String(items.length),
+              rows: items.length === 1 ? 'row' : 'rows',
+            })}
+            ariaLabel={localizeUi('Edit {field} rows', { field: fieldId })}
             size="wide"
             frame="fixed"
             onClose={() => setEditorOpen(false)}
@@ -491,7 +499,7 @@ export function ListFieldEditor({
     <div
       className={expanded ? 'cg-form' : undefined}
       style={styles.list}
-      aria-label={`${fieldId} items`}
+      aria-label={localizeUi('{field} items', { field: fieldId })}
     >
       {items.length === 0 && <p style={styles.empty}>{localizeUi('No items.')}</p>}
       {items.map((item, i) => {
@@ -515,7 +523,7 @@ export function ListFieldEditor({
               <div
                 className="cg-list-page-boundary"
                 role="separator"
-                aria-label={`Page ${String(pageNumber)}`}
+                aria-label={localizeUi('Page {page}', { page: String(pageNumber) })}
               >
                 {localizeUi('Page')} {String(pageNumber)}
               </div>
@@ -584,7 +592,7 @@ export function ListFieldEditor({
                 <AutoGrowTextarea
                   className="cg-list-item__text"
                   value={writeFieldDigits(itemText(item), fieldDigitsOf(field))}
-                  aria-label={`${fieldId} item ${n}`}
+                  aria-label={localizeUi('{field} item {item}', { field: fieldId, item: n })}
                   onChange={(e) =>
                     onStage(
                       setItemText(items, i, writeFieldText(e.currentTarget, field, e.nativeEvent)),
@@ -604,7 +612,10 @@ export function ListFieldEditor({
                   type="button"
                   className="cg-list-handle"
                   disabled={rowStructureLocked}
-                  aria-label={`Reorder ${fieldId} item ${n}`}
+                  aria-label={localizeUi('Reorder {field} item {item}', {
+                    field: fieldId,
+                    item: n,
+                  })}
                   title={localizeUi('Drag to reorder, or focus this and press ↑ / ↓')}
                   onPointerDown={() => {
                     const el = rows.current.get(i);
@@ -640,7 +651,7 @@ export function ListFieldEditor({
                 <Button
                   variant="icon"
                   className="cg-list-remove"
-                  aria-label={`Remove ${fieldId} item ${n}`}
+                  aria-label={localizeUi('Remove {field} item {item}', { field: fieldId, item: n })}
                   disabled={rowStructureLocked}
                   onClick={() => onStage(removeItem(items, i))}
                 >
@@ -662,7 +673,7 @@ export function ListFieldEditor({
             means STATE — the full rule is at `.cg-btn--accent` in `controls.css`. */}
         <Button
           variant="accent"
-          aria-label={`Add ${fieldId} item`}
+          aria-label={localizeUi('Add {field} item', { field: fieldId })}
           // `RUN-NEXT-VERSION-02` Q4 — a repeater's list stops at its row limit: the page shows no more.
           disabled={atLimit || rowStructureLocked}
           {...(rowStructureLocked

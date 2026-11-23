@@ -39,6 +39,7 @@ export function LayerShortcutsDialog({
   onClose: () => void;
   onApply: (shortcuts: LayerShortcutBindings) => Promise<string | null>;
 }): JSX.Element {
+  const translateUi = useUiText();
   const localizeUi = useUiText();
   const verbs = LAYER_SHORTCUT_VERBS.filter((verb) => verb !== 'next' || canAssignNext);
   const [draft, setDraft] = useState<ShortcutDraft>({});
@@ -201,7 +202,9 @@ export function LayerShortcutsDialog({
                           disabled={busy}
                           aria-label={label}
                           aria-description={
-                            active ? 'Press keys to record' : (assigned ?? 'Unassigned')
+                            active
+                              ? translateUi('Press keys to record')
+                              : (assigned ?? translateUi('Unassigned'))
                           }
                           aria-pressed={active}
                           title={assigned}
@@ -222,14 +225,14 @@ export function LayerShortcutsDialog({
                             event.stopPropagation();
                           }}
                         >
-                          <span>{active ? 'Press keys…' : (assigned ?? '—')}</span>
+                          <span>{active ? translateUi('Press keys…') : (assigned ?? '—')}</span>
                         </Button>
                         {chord !== undefined && (
                           <Button
                             variant="ghost"
                             className="cg-layer-shortcut-remove"
                             disabled={busy}
-                            aria-label={`Remove ${label}`}
+                            aria-label={translateUi('Remove {name}', { name: label })}
                             onClick={() => setShortcut(row.layer, verb, null)}
                           >
                             <Icon icon={X} size={14} />

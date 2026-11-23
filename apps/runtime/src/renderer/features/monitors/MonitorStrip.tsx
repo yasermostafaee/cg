@@ -210,7 +210,7 @@ export function MonitorStrip({
               aria-pressed={effectiveCompanionMode === mode}
               data-monitor-companion-mode={mode}
               disabled={unavailable}
-              title={unavailable ? 'Restore the workspace and select a layer' : label}
+              title={unavailable ? localizeUi('Restore the workspace and select a layer') : label}
               onClick={() => onCompanionModeChange(mode)}
             >
               <Icon icon={glyph} size={13} />

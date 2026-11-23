@@ -628,8 +628,8 @@ export function PreviewPanel({
             disabled={!moveAvailable}
             title={
               moveAvailable
-                ? 'Move the whole template in Preview'
-                : 'Show a template with editable Position in Preview to move it'
+                ? localizeUi('Move the whole template in Preview')
+                : localizeUi('Show a template with editable Position in Preview to move it')
             }
             onClick={() => toggleEditTool('move')}
           >
@@ -662,8 +662,8 @@ export function PreviewPanel({
               disabled={!panAvailable}
               title={
                 panAvailable
-                  ? 'Adjust which part of the input appears inside the frame'
-                  : 'Play a Crop edges plate in Preview to crop its input'
+                  ? localizeUi('Adjust which part of the input appears inside the frame')
+                  : localizeUi('Play a Crop edges plate in Preview to crop its input')
               }
               onClick={() => toggleEditTool('pan')}
             >

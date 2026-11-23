@@ -81,7 +81,7 @@ export function LiveLayoutEditorEffects({
               >
                 {FrameTransitionSchema.shape.motion.options.map((motion) => (
                   <option key={motion} value={motion}>
-                    {motions[motion]}
+                    {localizeUi(motions[motion])}
                   </option>
                 ))}
               </SelectInput>
@@ -167,7 +167,7 @@ export function LiveLayoutEditorEffects({
                 >
                   {InputTransitionDirectionSchema.options.map((direction) => (
                     <option key={direction} value={direction}>
-                      {directions[direction]}
+                      {localizeUi(directions[direction])}
                     </option>
                   ))}
                 </SelectInput>

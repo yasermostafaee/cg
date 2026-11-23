@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useLock } from '../../hooks/useLock.js';
 import { LockCard } from './LockOverlay.js';
 
@@ -23,19 +24,20 @@ import { LockCard } from './LockOverlay.js';
  * channel 1`: the bridge releases the lock, and with it every channel the lock covers.
  */
 export function ChannelLockPanel({ channel }: { channel: number }): JSX.Element {
+  const translateUi = useUiText();
   const lock = useLock();
   return (
     <div
       className="cg-channel-lock"
       data-channel-lock={String(channel)}
       role="region"
-      aria-label={`Channel ${String(channel)} locked`}
+      aria-label={translateUi('Channel {channel} locked', { channel: String(channel) })}
     >
       <LockCard
         {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
         {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
         onRelease={(pin) => window.cg.lock.release({ pin })}
-        title={`Channel ${String(channel)} locked`}
+        title={translateUi('Channel {channel} locked', { channel: String(channel) })}
         sub="Playout continues. Enter the PIN to use this channel."
         submitLabel="Unlock"
       />

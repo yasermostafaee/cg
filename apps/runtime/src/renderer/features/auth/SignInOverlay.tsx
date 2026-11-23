@@ -246,7 +246,7 @@ export function SignInOverlay({
             disabled={locked || username === '' || password === ''}
             onClick={() => void submit()}
           >
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? localizeUi('Signing in…') : localizeUi('Sign in')}
           </Button>
           <SetUpAgain {...(reload === undefined ? {} : { reload })} />
         </>

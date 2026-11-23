@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import { Move } from 'lucide-react';
 import { sameLiveMaskRect, type LiveRevealRect } from '@cg/shared-schema';
@@ -76,6 +77,7 @@ export function LiveLayoutEditorRectOverlay({
   onChange: (index: number, rect: LiveRevealRect) => void;
   labels?: readonly string[];
 }): JSX.Element {
+  const localizeUi = useUiText();
   const frame = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag>();
 
@@ -148,22 +150,22 @@ export function LiveLayoutEditorRectOverlay({
       ref={frame}
       className="cg-live-layout-rect-overlay"
       role="group"
-      aria-label={
+      aria-label={localizeUi(
         kind === 'mask'
           ? 'Preview mask'
           : kind === 'graphic'
             ? 'Preview graphic'
-            : 'Plate placement'
-      }
+            : 'Plate placement',
+      )}
     >
       {rects.map((rect, index) => {
         const selected = selectedIndex === index;
         const name =
           kind === 'mask'
-            ? 'mask window ' + String(index + 1)
+            ? localizeUi('mask window {number}', { number: index + 1 })
             : kind === 'graphic'
-              ? 'plate graphic'
-              : (labels?.[index] ?? 'plate ' + String(index + 1));
+              ? localizeUi('plate graphic')
+              : (labels?.[index] ?? localizeUi('plate {number}', { number: index + 1 }));
         return (
           <div
             key={index}
@@ -187,7 +189,7 @@ export function LiveLayoutEditorRectOverlay({
             <Button
               variant="secondary"
               className="cg-live-layout-rect-move"
-              aria-label={'Move ' + name}
+              aria-label={localizeUi('Move {name}', { name })}
               onClick={() => onSelect(index)}
               onKeyDown={(event) => nudge(event, index, rect)}
             >
@@ -199,7 +201,10 @@ export function LiveLayoutEditorRectOverlay({
                   key={handle.id}
                   className="cg-live-layout-rect-handle"
                   data-mask-handle={handle.id}
-                  aria-label={`Resize ${name} from ${handle.name}`}
+                  aria-label={localizeUi('Resize {name} from {handle}', {
+                    name,
+                    handle: localizeUi(handle.name),
+                  })}
                   onPointerDown={(event) => start(event, index, rect, handle)}
                   onKeyDown={(event) => nudge(event, index, rect, handle)}
                   children={null}

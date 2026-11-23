@@ -84,7 +84,7 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(identifier).toHaveCSS('direction', 'ltr');
 
   await page.getByRole('dialog').getByRole('button', { name: 'بستن', exact: true }).click();
-  const row = app.layerRow(96);
+  const row = page.locator('[data-layer="96"]');
   await expect(row).toHaveCSS('direction', 'rtl');
   await expect(row.getByRole('button', { name: 'پخش', exact: true })).toBeVisible();
   const header = page.locator('[data-verb-head]').first();
@@ -99,8 +99,8 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(page.locator('#cg-feedback-language')).toHaveValue('en');
 
   await page.getByRole('dialog').getByRole('button', { name: 'إغلاق', exact: true }).click();
-  await expect(app.layerRow(98)).toContainText('محظور');
-  await expect(app.layerRow(99)).toContainText('بث محاكى');
+  await expect(page.locator('[data-layer="98"]')).toContainText('محظور');
+  await expect(page.locator('[data-layer="99"]')).toContainText('بث محاكى');
   await expect(page.locator('[data-rehearsal-caption]')).toContainText('معاينة');
   await expect(page.locator('[data-pgm-screen]').first()).toContainText('لا توجد إشارة عودة');
   await expect(page.getByTestId('monitor-head-tag')).toContainText('الخرج غير معروف');
@@ -145,4 +145,65 @@ test('keeps delimiter settings until the reset warning is confirmed', async ({ a
   expect(await page.evaluate(() => (window as Window & { resetWrites?: number }).resetWrites)).toBe(
     1,
   );
+});
+
+test('localizes a layer confirmation without changing the feedback language', async ({ app }) => {
+  const { page } = app;
+  await openGeneral(page);
+  await page.locator('#cg-interface-language').selectOption('fa');
+  await expect(page.locator('#cg-feedback-language')).toHaveValue('en');
+  await page.getByRole('dialog').getByRole('button', { name: 'بستن', exact: true }).click();
+
+  const row = page.locator('[data-layer="80"]');
+  await row.getByRole('button', { name: 'پاک کردن', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: /پاک شود/ });
+  await expect(dialog).toContainText('بدون افکت خروج از آنتن برداشته می‌شود');
+  await expect(dialog).toContainText('1-80');
+  await dialog.getByRole('button', { name: 'انصراف', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row.getByRole('button', { name: 'پاک کردن', exact: true })).toBeEnabled();
+});
+
+test('keeps both positions of a visibility switch inside the track in RTL', async ({ app }) => {
+  const { page } = app;
+  for (const { language, layers } of [
+    { language: 'fa', layers: 'لایه‌ها' },
+    { language: 'ar', layers: 'الطبقات' },
+  ]) {
+    await openGeneral(page);
+    await page.locator('#cg-interface-language').selectOption(language);
+    const setup = page.getByRole('dialog');
+    await setup.getByRole('tab', { name: layers, exact: true }).click();
+
+    const input = setup.locator('.cg-switch input:enabled').first();
+    const wasChecked = await input.isChecked();
+    const track = input.locator('xpath=following-sibling::span');
+    const geometry = () =>
+      track.evaluate((element) => {
+        const thumb = getComputedStyle(element, '::after');
+        return {
+          right: Number.parseFloat(thumb.right),
+          width: Number.parseFloat(thumb.width),
+          trackWidth: element.clientWidth,
+        };
+      });
+    for (const checked of [false, true]) {
+      await input.setChecked(checked);
+      await expect(input).toBeChecked({ checked });
+      await expect(track).toHaveCSS('direction', 'rtl');
+      await expect
+        .poll(async () => {
+          const { right, width, trackWidth } = await geometry();
+          const left = trackWidth - right - width;
+          return right >= 0 && left >= 0 && (checked ? right > left : right < left);
+        })
+        .toBe(true);
+    }
+    // Revert the local draft without applying it to the bridge.
+    await input.setChecked(wasChecked);
+    await setup
+      .getByRole('button', { name: language === 'fa' ? 'بستن' : 'إغلاق', exact: true })
+      .first()
+      .click();
+  }
 });

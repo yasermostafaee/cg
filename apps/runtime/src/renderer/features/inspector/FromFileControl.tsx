@@ -304,7 +304,11 @@ export function FromFileControl({
               {lockedPath}
             </span>
           </Tag>
-          <Button variant="secondary" disabled aria-label={`Reload ${fieldId} from file`}>
+          <Button
+            variant="secondary"
+            disabled
+            aria-label={localizeUi('Reload {field} from file', { field: fieldId })}
+          >
             <Icon icon={RefreshCw} />
             {localizeUi('Reload')}
           </Button>
@@ -364,7 +368,7 @@ export function FromFileControl({
               focus ring a control owes. See the `--ghost` warning in `controls.css`. */}
           <Button
             variant="neutral"
-            aria-label={`Load ${fieldId} from file`}
+            aria-label={localizeUi('Load {field} from file', { field: fieldId })}
             disabled={!supported}
             title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
             onClick={() => void choose()}
@@ -407,7 +411,9 @@ export function FromFileControl({
       style={styles.wrap}
     >
       <div style={styles.row}>
-        {structured && <Tag>{fileOnly ? 'File managed' : 'File connected'}</Tag>}
+        {structured && (
+          <Tag>{fileOnly ? localizeUi('File managed') : localizeUi('File connected')}</Tag>
+        )}
         {/* THE FILE, as ONE control: its name and the way to detach it, welded
             together. See `.cg-file-chip` — the short version is that a bare `✕`
             here is the same glyph as the item-delete buttons one row up, doing
@@ -423,7 +429,8 @@ export function FromFileControl({
                   color: schemaNeedsUpdate ? cssVars['--r-caution-text'] : colors.checkPass,
                 }}
               />
-              {schemaNeedsUpdate ? 'Connected · update file' : 'Connected'} · {state.source.name}
+              {schemaNeedsUpdate ? localizeUi('Connected · update file') : localizeUi('Connected')}{' '}
+              · {state.source.name}
             </span>
           </Tag>
         ) : (
@@ -435,8 +442,8 @@ export function FromFileControl({
               <button
                 type="button"
                 className="cg-file-chip__detach"
-                aria-label={`Detach ${fieldId} file source`}
-                title={`Detach ${state.source.name}`}
+                aria-label={localizeUi('Detach {field} file source', { field: fieldId })}
+                title={localizeUi('Detach {file}', { file: state.source.name })}
                 onClick={() => detachFileSource(itemId, path)}
               >
                 ×
@@ -447,7 +454,7 @@ export function FromFileControl({
         {needsGrant ? (
           <AsyncButton
             variant="secondary"
-            aria-label={`Grant access to ${fieldId} file`}
+            aria-label={localizeUi('Grant access to {field} file', { field: fieldId })}
             run={async () => {
               await grant();
               return { accepted: true, cancelled: true };
@@ -467,7 +474,7 @@ export function FromFileControl({
              pattern. */
           <AsyncButton
             variant="secondary"
-            aria-label={`Reload ${fieldId} from file`}
+            aria-label={localizeUi('Reload {field} from file', { field: fieldId })}
             run={() =>
               reloadFromFile({ itemId, fields: appliedFields }, path, kind, itemFields, writePaths)
             }
@@ -480,11 +487,11 @@ export function FromFileControl({
         {!needsGrant && (
           <Button
             variant="secondary"
-            aria-label={`View ${fieldId} file content and fields`}
+            aria-label={localizeUi('View {field} file content and fields', { field: fieldId })}
             onClick={() => setPreviewOpen(true)}
           >
             <Icon icon={Eye} />
-            {structured ? 'View current data…' : 'View content…'}
+            {structured ? localizeUi('View current data…') : localizeUi('View content…')}
           </Button>
         )}
         {structured && !fileOnly && lockedPath === undefined && (
@@ -496,7 +503,7 @@ export function FromFileControl({
             <Button
               variant="neutral"
               onClick={() => detachFileSource(itemId, path)}
-              aria-label={`Detach ${fieldId} file source`}
+              aria-label={localizeUi('Detach {field} file source', { field: fieldId })}
             >
               <Icon icon={Unlink} />
               {localizeUi('Detach')}
@@ -528,8 +535,8 @@ export function FromFileControl({
             'Template fields changed after this workbook was generated. Reload still validates its data;',
           )}{' '}
           {fileOnly
-            ? 'save and reconnect an updated Excel file in Designer.'
-            : 'save and connect a new Excel file to refresh columns and choices.'}
+            ? localizeUi('save and reconnect an updated Excel file in Designer.')
+            : localizeUi('save and connect a new Excel file to refresh columns and choices.')}
         </p>
       )}
       {structured && itemFields !== undefined ? (

@@ -62,15 +62,17 @@ function MarginFields({
 }): JSX.Element {
   const localizeUi = useUiText();
   return (
-    <div className="cg-live-layout-margin-row" role="group" aria-label={kind + ' margins (px)'}>
-      <span>
-        {kind} {localizeUi('margins (px)')}
-      </span>
+    <div
+      className="cg-live-layout-margin-row"
+      role="group"
+      aria-label={localizeUi(kind === 'Preset' ? 'Preset margins (px)' : 'Focus margins (px)')}
+    >
+      <span>{localizeUi(kind === 'Preset' ? 'Preset margins (px)' : 'Focus margins (px)')}</span>
       <div className="cg-live-layout-margin-fields">
         {EDGES.map(({ side, name, axis, opposite }) => (
           <LiveLayoutEditorNumber
             key={side}
-            label={name}
+            label={localizeUi(name)}
             value={margins[side]}
             min={0}
             max={Math.max(0, Math.floor(resolution[axis] - margins[opposite] - 1))}
@@ -79,7 +81,7 @@ function MarginFields({
         ))}
         <Button
           variant="neutral"
-          aria-label={`Zero ${kind.toLowerCase()} margins`}
+          aria-label={localizeUi(kind === 'Preset' ? 'Zero preset margins' : 'Zero focus margins')}
           disabled={Object.values(margins).every((value) => value === 0)}
           onClick={() => onChange(ZERO_MARGINS)}
         >
@@ -170,7 +172,7 @@ export function LiveLayoutEditorArrange({
             {RECT_FIELDS.map(({ key, limit, name, axis, min }) => (
               <LiveLayoutEditorNumber
                 key={key}
-                label={name}
+                label={localizeUi(name)}
                 value={Number(selectedPlate.rect[key].toFixed(2))}
                 min={min}
                 max={Math.max(min, layout.resolution[axis] - selectedPlate.rect[limit])}
@@ -188,7 +190,7 @@ export function LiveLayoutEditorArrange({
         scope="preset"
         value={{ aspectRatio: preset.plateAspectRatio, fitMode: preset.plateFitMode }}
         inheritedAspect={width / height}
-        inheritedFit="Plate defaults"
+        inheritedFit={localizeUi('Plate defaults')}
         geometryControls={!custom && preset.fill !== true}
         onChange={(patch) => {
           if ('aspectRatio' in patch) changeGeometry({ plateAspectRatio: patch.aspectRatio });
@@ -222,7 +224,7 @@ export function LiveLayoutEditorArrange({
               }}
               className="cg-live-layout-arrangement-glyph"
             />
-            <span>{value === 'grid-top' && count === 4 ? 'Grid · 2 × 2' : name}</span>
+            <span>{localizeUi(value === 'grid-top' && count === 4 ? 'Grid · 2 × 2' : name)}</span>
           </Button>
         ))}
         <Button active={custom} aria-pressed={custom} onClick={onCustom}>
@@ -263,7 +265,7 @@ export function LiveLayoutEditorArrange({
               max={layout.resolution.width}
               onChange={(horizontalGap) => changeGeometry({ horizontalGap })}
             />
-            <span aria-hidden="true">px</span>
+            <span aria-hidden="true">{localizeUi('px')}</span>
           </div>
           <div className="cg-live-layout-gap-control">
             <Icon icon={MoveVertical} size={14} />
@@ -275,7 +277,7 @@ export function LiveLayoutEditorArrange({
               max={layout.resolution.height}
               onChange={(verticalGap) => changeGeometry({ verticalGap })}
             />
-            <span aria-hidden="true">px</span>
+            <span aria-hidden="true">{localizeUi('px')}</span>
           </div>
         </div>
       )}

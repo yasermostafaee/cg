@@ -51,7 +51,7 @@ export function LiveLayoutEditorPlatePresentation({
           {localizeUi('Plate aspect ratio')}
           <SelectInput
             id={id + '-aspect'}
-            aria-label={preset ? 'Preset plate aspect ratio' : 'Plate aspect ratio'}
+            aria-label={localizeUi(preset ? 'Preset plate aspect ratio' : 'Plate aspect ratio')}
             value={aspectChoice}
             onChange={(event) => {
               const selected = event.target.value;
@@ -60,7 +60,7 @@ export function LiveLayoutEditorPlatePresentation({
                 onChange({ aspectRatio: selected === '' ? undefined : Number(selected) });
             }}
           >
-            <option value="">{preset ? 'Match canvas' : 'Preset default'}</option>
+            <option value="">{localizeUi(preset ? 'Match canvas' : 'Preset default')}</option>
             {ASPECT_CHOICES.map(([ratio, label]) => (
               <option key={ratio} value={ratio}>
                 {label}
@@ -85,7 +85,7 @@ export function LiveLayoutEditorPlatePresentation({
         {localizeUi('Input fit')}
         <SelectInput
           id={id + '-fit'}
-          aria-label={preset ? 'Preset input fit' : 'Plate input fit'}
+          aria-label={localizeUi(preset ? 'Preset input fit' : 'Plate input fit')}
           value={value?.fitMode ?? ''}
           onChange={(event) => {
             const fit = event.target.value;

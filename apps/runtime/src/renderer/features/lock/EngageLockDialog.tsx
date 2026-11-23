@@ -79,7 +79,7 @@ export function EngageLockDialog({
           className="cg-field"
           type="password"
           value={pin}
-          aria-label={`Lock PIN (${String(MIN_LOCK_PIN)}–64 characters)`}
+          aria-label={localizeUi('Lock PIN ({min}–64 characters)', { min: String(MIN_LOCK_PIN) })}
           autoComplete="off"
           data-modal-autofocus=""
           onChange={(e) => setPin(e.target.value)}
@@ -87,7 +87,9 @@ export function EngageLockDialog({
       </DialogField>
       <DialogField
         label={localizeUi('PIN again')}
-        hint="Asked twice on purpose — a PIN you mistype is a PIN you cannot use to get back in."
+        hint={localizeUi(
+          'Asked twice on purpose — a PIN you mistype is a PIN you cannot use to get back in.',
+        )}
       >
         <input
           className="cg-field"

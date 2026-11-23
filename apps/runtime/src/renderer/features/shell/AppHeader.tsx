@@ -110,7 +110,10 @@ export function AppHeader({
         <span
           className="cg-app-header__pvw"
           data-app-header-pvw=""
-          title={`${String(rehearsals.length)} row(s) are rehearsing in this browser — nothing is sent to ${engine}`}
+          title={localizeUi(
+            '{count} row(s) are rehearsing in this browser — nothing is sent to {engine}',
+            { count: String(rehearsals.length), engine: engine },
+          )}
         >
           PVW · {rehearsals.length}
         </span>
@@ -137,8 +140,8 @@ export function AppHeader({
         aria-controls="monitor-strip"
         title={
           layout.monitorsShown
-            ? 'Fold PREVIEW and PROGRAM away — the layer list takes the height'
-            : 'Bring PREVIEW and PROGRAM back above the layer list'
+            ? localizeUi('Fold PREVIEW and PROGRAM away — the layer list takes the height')
+            : localizeUi('Bring PREVIEW and PROGRAM back above the layer list')
         }
         onClick={() => {
           layout.setMonitorsShown(!layout.monitorsShown);

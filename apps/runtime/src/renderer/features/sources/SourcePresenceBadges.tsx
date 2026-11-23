@@ -1,19 +1,29 @@
+import { useUiText } from '../../i18n/locale.js';
 import type { SourcePresenceView } from '@cg/shared-ipc';
 import './source-presence-badges.css';
 import type { PreviewEngine } from './usePreviewOrigins.js';
 
 const SERVERS = ['A', 'B'] as const;
-const AVAILABILITY_WORDS = {
-  present: 'available',
-  missing: 'unavailable',
-  unknown: 'availability unknown',
+const AVAILABILITY = {
+  present: 'Server {server}: available',
+  missing: 'Server {server}: unavailable',
+  unknown: 'Server {server}: availability unknown',
 } as const;
 
-function forSource(presence: SourcePresenceView | null, sourceId: string | null | undefined) {
+function forSource(
+  presence: SourcePresenceView | null,
+  sourceId: string | null | undefined,
+  localize?: ReturnType<typeof useUiText>,
+) {
   return presence !== null && sourceId && presence.engines.includes('B')
     ? SERVERS.map((server) => {
         const state = presence.sources[sourceId]?.[server] ?? 'unknown';
-        return { server, state, label: `Server ${server}: ${AVAILABILITY_WORDS[state]}` };
+        const key = AVAILABILITY[state];
+        return {
+          server,
+          state,
+          label: localize?.(key, { server }) ?? key.replace('{server}', server),
+        };
       })
     : null;
 }
@@ -22,8 +32,9 @@ export function sourcePresenceDescription(
   presence: SourcePresenceView | null,
   sourceId: string | null | undefined,
   originDescription?: string,
+  localize?: ReturnType<typeof useUiText>,
 ): string | undefined {
-  const servers = forSource(presence, sourceId);
+  const servers = forSource(presence, sourceId, localize);
   if (servers === null) return undefined;
   const availability = servers.map(({ label }) => label);
   if (originDescription !== undefined) availability.push(originDescription);
@@ -35,9 +46,7 @@ export function SourcePresenceBadges({
   sourceId,
   accessible = true,
   previewEngine,
-  originDescription = previewEngine === undefined
-    ? undefined
-    : `Preview from server ${previewEngine}`,
+  originDescription: suppliedOrigin,
 }: {
   presence: SourcePresenceView | null;
   sourceId: string | null | undefined;
@@ -45,9 +54,15 @@ export function SourcePresenceBadges({
   previewEngine?: PreviewEngine | undefined;
   originDescription?: string | undefined;
 }): JSX.Element | null {
-  const servers = forSource(presence, sourceId);
+  const localizeUi = useUiText();
+  const originDescription =
+    suppliedOrigin ??
+    (previewEngine === undefined
+      ? undefined
+      : localizeUi('Preview from server {server}', { server: previewEngine }));
+  const servers = forSource(presence, sourceId, localizeUi);
   if (servers === null) return null;
-  const label = sourcePresenceDescription(presence, sourceId, originDescription);
+  const label = sourcePresenceDescription(presence, sourceId, originDescription, localizeUi);
   return (
     <span
       className="cg-source-presence"

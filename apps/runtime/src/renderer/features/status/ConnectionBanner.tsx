@@ -135,7 +135,9 @@ export function ConnectionBanner({
             explanations an operator under pressure reads once and never again. The absence is
             pinned (`connectionBannerSetUpAgain.dom.test.ts`, `R-093`).
           */}
-          {address === null ? 'CG Bridge not reachable.' : `CG Bridge not reachable at ${address}.`}{' '}
+          {address === null
+            ? localizeUi('CG Bridge not reachable.')
+            : localizeUi('CG Bridge not reachable at {address}.', { address: address })}{' '}
           {localizeUi('Takes are refused until it is back.')}
         </span>
       </span>

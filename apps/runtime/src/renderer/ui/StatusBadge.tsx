@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from './engineWording.js';
 import type { StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone } from '../theme.js';
@@ -49,6 +50,7 @@ export function StatusBadge({
    */
   oscBlind?: boolean;
 }): JSX.Element {
+  const translateUi = useUiText();
   const visual = airStateVisual(status, pending);
   const tone = badgeTone(status, pending);
 
@@ -73,7 +75,11 @@ export function StatusBadge({
       : undefined;
 
   return (
-    <Tag className={`cg-badge cg-badge--${shownTone}`} aria-label={`status ${label}`} title={title}>
+    <Tag
+      className={`cg-badge cg-badge--${shownTone}`}
+      aria-label={translateUi('status {state}', { state: label })}
+      title={title}
+    >
       <span className="cg-badge__icon" aria-hidden="true">
         {visual.icon}
       </span>

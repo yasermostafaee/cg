@@ -165,9 +165,10 @@ export function PlateAudioStrip({
           value={Math.round(shown * 100)}
           disabled={why !== undefined}
           {...(why !== undefined ? { title: why } : {})}
-          aria-label={`Volume for ${plateName} ${
-            row.coordinate !== null ? `on ${row.coordinate}` : '(not seated)'
-          }`}
+          aria-label={localizeUi('Volume for {name} {seat}', {
+            name: plateName,
+            seat: row.coordinate !== null ? `on ${row.coordinate}` : '(not seated)',
+          })}
           aria-valuetext={pct(shown)}
           onChange={(e) => {
             setDragging(Number(e.target.value) / 100);
@@ -202,7 +203,9 @@ export function PlateAudioStrip({
           onError={reportCommandError}
           disabled={why !== undefined}
           {...(why !== undefined ? { title: why } : { title: ON_TITLE })}
-          aria-label={`Full volume for ${plateName} (100%, not the previous level)`}
+          aria-label={localizeUi('Full volume for {name} (100%, not the previous level)', {
+            name: plateName,
+          })}
         >
           {localizeUi('ON')}
         </AsyncButton>
@@ -212,7 +215,7 @@ export function PlateAudioStrip({
           onError={reportCommandError}
           disabled={why !== undefined}
           {...(why !== undefined ? { title: why } : { title: OFF_TITLE })}
-          aria-label={`Silence ${plateName}`}
+          aria-label={localizeUi('Silence {name}', { name: plateName })}
         >
           {localizeUi('OFF')}
         </AsyncButton>
@@ -222,7 +225,10 @@ export function PlateAudioStrip({
           onError={reportCommandError}
           disabled={why !== undefined || siblings.length < 2}
           title={why ?? (siblings.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)}
-          aria-label={`Solo ${plateName} — silences the other ${String(siblings.length - 1)} plate(s) on this row, with no restore`}
+          aria-label={localizeUi(
+            'Solo {name} — silences the other {count} plate(s) on this row, with no restore',
+            { name: plateName, count: String(siblings.length - 1) },
+          )}
         >
           {localizeUi('SOLO')}
         </AsyncButton>

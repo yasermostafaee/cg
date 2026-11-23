@@ -256,7 +256,7 @@ export function LivePlatesSection({
       */}
       {carried && (
         <p style={styles.carried} data-plates-carried-over="">
-          These bindings were carried over from this template&rsquo;s previous import.
+          {localizeUi('These bindings were carried over from this template’s previous import.')}
         </p>
       )}
       {/*

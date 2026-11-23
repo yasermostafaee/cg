@@ -1,3 +1,13 @@
+import {
+  fromGregorian,
+  latinDigits,
+  toGregorian,
+  writeFieldDigits,
+  type CalendarDay,
+  type CalendarSystem,
+  type DigitSet,
+} from '@cg/text-shaping';
+
 /**
  * `B-210` / `B-211` — how one audit row is READ.
  *
@@ -46,8 +56,60 @@ export {
   type OperatorRowName,
 } from '../../ui/operatorNaming.js';
 
+export interface AuditCalendarFormat {
+  calendar: CalendarSystem;
+  lunarAdjust: number;
+  digits: DigitSet;
+}
+
+const DEFAULT_FORMAT: AuditCalendarFormat = {
+  calendar: 'gregorian',
+  lunarAdjust: 0,
+  digits: 'latin',
+};
+
+export function auditCalendarDay(
+  gregorian: string,
+  format: AuditCalendarFormat,
+): CalendarDay | null {
+  const day = parseCalendarDay(gregorian);
+  return day === null ? null : fromGregorian(day, format.calendar, format.lunarAdjust);
+}
+
+function parseCalendarDay(value: string): CalendarDay | null {
+  const parts = /^(\d{4})[-/](\d{2})[-/](\d{2})$/.exec(latinDigits(value.trim()));
+  if (parts === null) return null;
+  const [, year, month, day] = parts;
+  if (Number(year) < 1) return null;
+  return { year: Number(year), month: Number(month), day: Number(day) };
+}
+
+function calendarDayText(day: CalendarDay, separator: string, digits: DigitSet): string {
+  const parts = [
+    String(day.year).padStart(4, '0'),
+    String(day.month).padStart(2, '0'),
+    String(day.day).padStart(2, '0'),
+  ];
+  return writeFieldDigits(parts.join(separator), digits);
+}
+
+export function auditCalendarDate(gregorian: string, format: AuditCalendarFormat): string {
+  const day = auditCalendarDay(gregorian, format);
+  return day === null ? '' : calendarDayText(day, '-', format.digits);
+}
+
+/** Parse the calendar an operator sees, returning the same Gregorian local day for UTC bounds. */
+export function auditFilterDate(value: string, format: AuditCalendarFormat): string | null {
+  const day = parseCalendarDay(value);
+  if (day === null || day.month < 1 || day.month > 12 || day.day < 1) return null;
+  const gregorian = toGregorian(day, format.calendar, format.lunarAdjust);
+  return gregorian === null || gregorian.year > 9999
+    ? null
+    : calendarDayText(gregorian, '-', 'latin');
+}
+
 export interface AuditTimeParts {
-  /** `YYYY-MM-DD` in the display zone — shown only where it changes down the list. */
+  /** The local date in the selected display calendar. */
   date: string;
   /** `HH:MM:SS`, 24-hour, in the display zone. */
   time: string;
@@ -71,7 +133,11 @@ export { timingClause } from '@cg/shared-ipc';
  * An unparseable stamp is rendered as itself: the record is never rewritten to look
  * tidier than it is.
  */
-export function auditTimeParts(ts: string, timeZone?: string): AuditTimeParts {
+export function auditTimeParts(
+  ts: string,
+  timeZone?: string,
+  format: AuditCalendarFormat = DEFAULT_FORMAT,
+): AuditTimeParts {
   const instant = Date.parse(ts);
   if (!Number.isFinite(instant)) return { date: '', time: ts, utc: ts };
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -87,8 +153,11 @@ export function auditTimeParts(ts: string, timeZone?: string): AuditTimeParts {
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((p) => p.type === type)?.value ?? '';
   return {
-    date: `${get('year')}-${get('month')}-${get('day')}`,
-    time: `${get('hour')}:${get('minute')}:${get('second')}`,
+    date: auditCalendarDate(
+      `${get('year').padStart(4, '0')}-${get('month')}-${get('day')}`,
+      format,
+    ),
+    time: writeFieldDigits(`${get('hour')}:${get('minute')}:${get('second')}`, format.digits),
     utc: ts,
   };
 }

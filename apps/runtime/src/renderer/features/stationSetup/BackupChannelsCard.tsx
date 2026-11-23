@@ -24,32 +24,47 @@ import { Tag } from '../../ui/Tag.js';
  */
 
 /** A line's state, in words — the refusal itself when there is one. */
-export function backupEntryStateText(line: BackupChannelLine): string {
+function backupEntryStateText(
+  line: BackupChannelLine,
+  localizeUi: ReturnType<typeof useUiText>,
+): string {
   if (line.state === 'mapped' && line.backupChannel !== undefined) {
-    return `CH ${String(line.backupChannel)} in force · ${
-      line.source === 'entry' ? 'from this entry' : 'from the backup engine'
-    }`;
+    return localizeUi(
+      line.source === 'entry'
+        ? 'CH {channel} in force · from this entry'
+        : 'CH {channel} in force · from the backup engine',
+      { channel: line.backupChannel },
+    );
   }
-  if (line.state === 'held') return 'Held until the next take';
+  if (line.state === 'held') return localizeUi('Held until the next take');
   const why = line.entryRefusal ?? line.reason;
-  return why === undefined ? 'Not mapped' : `Not mapped · ${why}`;
+  return why === undefined
+    ? localizeUi('Not mapped')
+    : localizeUi('Not mapped · {reason}', { reason: localizeUi(why) });
 }
 
-function defaultChoiceText(backup: BackupChannels, line: BackupChannelLine): string {
+function defaultChoiceText(
+  backup: BackupChannels,
+  line: BackupChannelLine,
+  localizeUi: ReturnType<typeof useUiText>,
+): string {
   const automatic =
     line.automaticChannel ?? (line.source === 'playout' ? line.backupChannel : undefined);
-  if (automatic !== undefined) return `Automatic · CH ${String(automatic)}`;
+  if (automatic !== undefined)
+    return localizeUi('Automatic · CH {channel}', { channel: automatic });
   switch (backup.channelListState) {
     case 'unread':
-      return 'Waiting for channel list';
+      return localizeUi('Waiting for channel list');
     case 'stale':
-      return 'Channel list out of date';
+      return localizeUi('Channel list out of date');
     case 'empty':
-      return 'No channels on server B';
+      return localizeUi('No channels on server B');
     case 'ready':
-      return line.manualChoices?.length ? 'No manual mapping' : 'No compatible channels';
+      return localizeUi(
+        line.manualChoices?.length ? 'No manual mapping' : 'No compatible channels',
+      );
     default:
-      return 'Channel choices unavailable';
+      return localizeUi('Channel choices unavailable');
   }
 }
 
@@ -82,10 +97,12 @@ export function BackupChannelsCard({
   const refusalFor = (line: BackupChannelLine, choice: number | null): string | null => {
     if (choice === null) return null;
     if (!line.manualChoices?.some((available) => available.channel === choice)) {
-      return `CH ${String(choice)} is no longer an available choice.`;
+      return localizeUi('CH {channel} is no longer an available choice.', { channel: choice });
     }
     if (rows.some((row) => row.line.channel !== line.channel && row.choice === choice)) {
-      return `CH ${String(choice)} is already selected for another channel.`;
+      return localizeUi('CH {channel} is already selected for another channel.', {
+        channel: choice,
+      });
     }
     return null;
   };
@@ -128,9 +145,11 @@ export function BackupChannelsCard({
       <div className="cg-card__body">
         {bridgeAutoFailover !== undefined && (
           <p className="cg-setup-field__hint">
-            {localizeUi('CG Bridge manages the graphics backup. Automatic CG failover is')}{' '}
-            {bridgeAutoFailover ? 'on' : 'off'}
-            {localizeUi('. Playout switches programme separately.')}
+            {localizeUi(
+              bridgeAutoFailover
+                ? 'CG Bridge manages the graphics backup. Automatic CG failover is on. Playout switches programme separately.'
+                : 'CG Bridge manages the graphics backup. Automatic CG failover is off. Playout switches programme separately.',
+            )}
           </p>
         )}
         {rows.map(({ line, choice, dirty: rowDirty }) => {
@@ -139,8 +158,8 @@ export function BackupChannelsCard({
           const fallback =
             choice !== null && !choices.some((available) => available.channel === choice);
           const refusal = rowDirty ? refusalFor(line, choice) : null;
-          const words = refusal ?? backupEntryStateText(line);
-          const defaultChoice = defaultChoiceText(backup, line);
+          const words = refusal ?? backupEntryStateText(line, localizeUi);
+          const defaultChoice = defaultChoiceText(backup, line, localizeUi);
           const value = choice === null ? '' : String(choice);
           return (
             <div
@@ -148,12 +167,16 @@ export function BackupChannelsCard({
               className="cg-setup-backup-row"
               data-backup-entry-row={String(line.channel)}
             >
-              <label htmlFor={id}>{`CH ${String(line.channel)} (primary) →`}</label>
+              <label htmlFor={id}>
+                {localizeUi('CH {channel} (primary) →', { channel: line.channel })}
+              </label>
               {mayChange ? (
                 <SelectInput
                   id={id}
                   className={rowDirty ? 'is-dirty' : undefined}
-                  aria-label={`Backup channel for CH ${String(line.channel)}`}
+                  aria-label={localizeUi('Backup channel for CH {channel}', {
+                    channel: line.channel,
+                  })}
                   aria-describedby={`${id}-status`}
                   aria-invalid={refusal !== null}
                   disabled={saving || (choices.length === 0 && choice === null && !rowDirty)}
@@ -169,18 +192,22 @@ export function BackupChannelsCard({
                   <option value="">{defaultChoice}</option>
                   {fallback && (
                     <option value={value} disabled>
-                      CH {value} ·{' '}
-                      {line.entryRefusal !== undefined || rowDirty ? 'Unavailable' : 'Saved'}
+                      {localizeUi('CH {channel}', { channel: value })} ·{' '}
+                      {localizeUi(
+                        line.entryRefusal !== undefined || rowDirty ? 'Unavailable' : 'Saved',
+                      )}
                     </option>
                   )}
                   {choices.map(({ channel, name }) => (
                     <option key={channel} value={channel}>
-                      CH {channel} · {name}
+                      {localizeUi('CH {channel} · {name}', { channel, name })}
                     </option>
                   ))}
                 </SelectInput>
               ) : (
-                <span id={id}>{choice === null ? defaultChoice : `CH ${value}`}</span>
+                <span id={id}>
+                  {choice === null ? defaultChoice : localizeUi('CH {channel}', { channel: value })}
+                </span>
               )}
               <span
                 id={`${id}-status`}

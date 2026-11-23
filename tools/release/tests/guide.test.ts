@@ -148,7 +148,7 @@ const LABELS: readonly { shown: string; text?: string | RegExp; file: string }[]
   },
   {
     shown: 'Update on air',
-    text: "{onAir ? 'Update on air' : 'Update'}",
+    text: "{onAir ? localizeUi('Update on air') : localizeUi('Update')}",
     file: 'apps/runtime/src/renderer/features/inspector/Inspector.tsx',
   },
   {

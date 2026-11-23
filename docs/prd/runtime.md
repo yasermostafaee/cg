@@ -5366,6 +5366,8 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 - WHEN the operator keeps the interface in English and selects Persian or Arabic feedback THEN action confirmations and refusals use that language.
 - WHEN the operator selects Persian or Arabic as the interface language THEN the settings, labels, fields and tables flow right to left and numeric transport fields and authored names retain their own direction.
+- WHEN Persian or Arabic is the interface language THEN modal tabs, Inspector fields, option labels, tooltips, confirmations and statuses use that language, while action messages use the selected feedback language.
+- WHEN Station setup shows an assigned graphic THEN the template name is aligned with the table direction, and the tooltip uses its display name. The visibility switch knob stays on its track in both RTL positions.
 - WHEN a developer edits a translation value before building THEN CG Control bundles the updated catalog. The root README links to the catalog source files.
 
 ## [~] R-124 — Arrange CG Control panels and save UI profiles ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/configure-control-workspace/`
@@ -5376,6 +5378,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 - WHEN a workspace option is changed THEN its panel moves and current previews and selected layers stay active.
 - WHEN a UI profile is loaded in any supported interface language THEN the saved physical positions and dimensions return.
+- WHEN an operator wants to restore the default panel arrangement THEN they can reset it in Settings → General → Workspace.
 
 ## [~] R-125 — Control local video preview per plate ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/author-live-layouts/`
 
@@ -5403,3 +5406,14 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 - WHEN the operator cancels the warning THEN the list stays unchanged.
 - WHEN the operator confirms THEN the shipped delimiter list is restored.
+
+## [~] R-128 — Read localized Audit logs in a chosen calendar ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/audit-calendar-and-localization/`
+
+**What:** Show the Audit controls and recorded actions in the interface language. Choose Gregorian, Jalali or Lunar Hijri for Audit in Settings → General. The choice is saved on this console and defaults to Gregorian.
+
+**Acceptance:**
+
+- WHEN the interface uses Persian or Arabic THEN Audit filters, result and action labels, empty and read states, and technical labels use that language and follow right-to-left layout.
+- WHEN the operator selects a calendar THEN the table, selected event details and date filters all read dates in it. Lunar Hijri applies the station correction.
+- WHEN a valid date filter is entered or picked THEN Bridge receives that local day's Gregorian bounds as UTC instants. Invalid or reversed date ranges issue no filter request.
+- WHEN an event is opened or copied THEN its original UTC stamp, identifiers and audit data remain available.

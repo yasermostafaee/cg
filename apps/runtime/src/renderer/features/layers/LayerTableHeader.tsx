@@ -154,7 +154,10 @@ export function LayerTableHeader({ density }: { density: Density }): JSX.Element
     <div style={{ ...styles.header, gridTemplateColumns: gridTemplateColumns(density) }} role="row">
       <span
         style={styles.cell}
-        title={`The row’s position, counting down from the top — the highest ${engine} layer is 1, because it draws over the others. It is also the row’s default name, and it is fixed to the layer: hiding a row never renumbers the rest.`}
+        title={localizeUi(
+          'The row’s position, counting down from the top — the highest {engine} layer is 1, because it draws over the others. It is also the row’s default name, and it is fixed to the layer: hiding a row never renumbers the rest.',
+          { engine: engine },
+        )}
       >
         #
       </span>

@@ -57,7 +57,7 @@ export function BackupServerDialog({
         look like one either.
       */
       confirmLabel={localizeUi('Add to draft')}
-      lede="Changes will be applied with the rest of your server settings."
+      lede={localizeUi('Changes will be applied with the rest of your server settings.')}
       confirmDisabled={invalid}
       onCancel={onCancel}
       onSubmit={() => {

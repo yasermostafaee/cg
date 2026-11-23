@@ -53,11 +53,14 @@ function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Elemen
         className="cg-layers-subbar__error"
         data-layers-tally-error=""
         data-error-tally={count}
-        aria-label={`${count} rows in error`}
+        aria-label={localizeUi('{count} rows in error', { count: count })}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        title={`${count} in error — rows whose last command was refused. Press to list them.`}
+        title={localizeUi(
+          '{count} in error — rows whose last command was refused. Press to list them.',
+          { count: count },
+        )}
         onClick={() => setOpen((o) => !o)}
       >
         {count} {localizeUi('in error')}

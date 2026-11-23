@@ -794,25 +794,37 @@ export function LayerRow({
        */
       const occupancySentence =
         slot.observed.kind === 'unknown'
-          ? `${engine} is not reporting layer ${layerName} right now, so the console CANNOT tell you what is on it — this clears it anyway, whatever it is.`
+          ? localizeUi(
+              '{engine} is not reporting layer {layer} right now, so the console CANNOT tell you what is on it — this clears it anyway, whatever it is.',
+              { engine, layer: layerName },
+            )
           : slot.observed.kind === 'producer'
-            ? `${engine} reports a ${slot.observed.producer} producer on layer ${layerName}; it leaves air immediately, with no outro.`
-            : `${engine} reports layer ${layerName} as empty, so this should have nothing to destroy.`;
+            ? localizeUi(
+                '{engine} reports a {producer} producer on layer {layer}; it leaves air immediately, with no outro.',
+                { engine, producer: slot.observed.producer, layer: layerName },
+              )
+            : localizeUi(
+                '{engine} reports layer {layer} as empty, so this should have nothing to destroy.',
+                { engine, layer: layerName },
+              );
       return withConfirm(action, () =>
         confirm(
           item !== null
             ? {
-                title: `Clear ${rowName}?`,
-                body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again. ${occupancySentence}`,
+                title: localizeUi('Clear {row}?', { row: rowName }),
+                body: localizeUi(
+                  'Layer {layer} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again. {occupancy}',
+                  { layer: layerName, occupancy: occupancySentence },
+                ),
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
               }
             : {
-                title: `Clear layer ${layerName}?`,
-                body:
-                  `This row holds no template, so this clears the LAYER itself: ` +
-                  `whatever is on ${layerName} leaves air immediately, with no outro. ` +
-                  `${occupancySentence}`,
+                title: localizeUi('Clear layer {layer}?', { layer: layerName }),
+                body: localizeUi(
+                  'This row holds no template, so this clears the LAYER itself: whatever is on {layer} leaves air immediately, with no outro. {occupancy}',
+                  { layer: layerName, occupancy: occupancySentence },
+                ),
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
               },
@@ -842,13 +854,22 @@ export function LayerRow({
       const onAirNow = isOnAir(item);
       return withConfirm(action, () =>
         confirm({
-          title: `Remove “${templateLabel ?? rowName}” from ${rowName}?`,
+          title: localizeUi('Remove “{template}” from {row}?', {
+            template: templateLabel ?? rowName,
+            row: rowName,
+          }),
           body: onAirNow
-            ? `This item is ON AIR. Removing it CLEARS layer ${layerName} — the graphic leaves the output immediately, with no outro.`
+            ? localizeUi(
+                'This item is ON AIR. Removing it CLEARS layer {layer} — the graphic leaves the output immediately, with no outro.',
+                { layer: layerName },
+              )
             : // §6 — "a pick from the library" named a panel that no longer exists.
               // LOAD opens the picker, which is where both paths now are.
-              `The item leaves the row and layer ${layerName} is cleared. Loading again means pressing LOAD and choosing a template, or importing a new .vcg.`,
-          confirmLabel: onAirNow ? 'Remove and clear (ON AIR)' : 'Remove',
+              localizeUi(
+                'The item leaves the row and layer {layer} is cleared. Loading again means pressing LOAD and choosing a template, or importing a new .vcg.',
+                { layer: layerName },
+              ),
+          confirmLabel: onAirNow ? localizeUi('Remove and clear (ON AIR)') : localizeUi('Remove'),
           tone: 'remove',
         }),
       );
@@ -1083,7 +1104,7 @@ export function LayerRow({
       <span
         style={{ ...styles.state, color: state.color }}
         title={state.title ?? state.label}
-        aria-label={`status ${localizeUi(state.label)}`}
+        aria-label={localizeUi('status {state}', { state: localizeUi(state.label) })}
         /*
           The state's ROLE, as a stable hook.
 
@@ -1161,7 +1182,7 @@ export function LayerRow({
             sits in its own inline isolate, in its own direction, inside the row's LTR box.
           */}
           <bdi dir={directionOf(rowName)}>{rowName}</bdi>
-          {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
+          {dirty && <DraftChip label={localizeUi('{row} has unapplied edits', { row: rowName })} />}
         </span>
         {item !== null && <BackupStatus item={item} template={template} compact />}
         {/*
@@ -1218,8 +1239,13 @@ export function LayerRow({
             className="cg-row-audio-btn"
             data-row-audio=""
             data-row-audio-state={liveAudioOn ? 'on' : 'muted'}
-            title={`Live audio ${liveAudioOn ? 'ON' : 'MUTED'} · right-click this row`}
-            aria-label={`Audio controls for ${rowName} · audio ${liveAudioOn ? 'on' : 'muted'}`}
+            title={localizeUi('Live audio {state} · right-click this row', {
+              state: liveAudioOn ? 'ON' : 'MUTED',
+            })}
+            aria-label={localizeUi('Audio controls for {row} · audio {state}', {
+              row: rowName,
+              state: liveAudioOn ? 'on' : 'muted',
+            })}
             onClick={(e) => {
               // The row itself selects on click; this button is a different act.
               e.stopPropagation();
@@ -1237,8 +1263,12 @@ export function LayerRow({
         {template?.hasSound === true && (
           <Tag
             data-template-sound={soundMuted ? 'muted' : 'on'}
-            title={soundMuted ? 'Template sound muted' : 'Template sound'}
-            aria-label={soundMuted ? `${rowName}'s sound is muted` : `${rowName} plays a sound`}
+            title={soundMuted ? localizeUi('Template sound muted') : localizeUi('Template sound')}
+            aria-label={
+              soundMuted
+                ? localizeUi("{row}'s sound is muted", { row: rowName })
+                : localizeUi('{row} plays a sound', { row: rowName })
+            }
           >
             <Icon icon={soundMuted ? VolumeX : Volume2} size={12} />
           </Tag>
@@ -1256,8 +1286,13 @@ export function LayerRow({
             aria-pressed={soundMuted}
             // `C-038` — the one console-side permission answer, as every row verb reads it.
             disabled={!canOperate}
-            title={soundMuted ? 'Unmute template sound' : 'Mute template sound'}
-            aria-label={`${soundMuted ? 'Unmute' : 'Mute'} ${rowName}'s template sound`}
+            title={
+              soundMuted ? localizeUi('Unmute template sound') : localizeUi('Mute template sound')
+            }
+            aria-label={localizeUi(
+              soundMuted ? "Unmute {row}'s template sound" : "Mute {row}'s template sound",
+              { row: rowName },
+            )}
             onClick={(e) => {
               // The row itself selects on click; this button is a different act.
               e.stopPropagation();
@@ -1271,8 +1306,14 @@ export function LayerRow({
         {rowBook !== null && rowBook.count > 0 && (
           <Tag
             data-page-counter=""
-            title={`Page ${String(rowBook.page)} of ${String(rowBook.count)}`}
-            aria-label={`Page ${String(rowBook.page)} of ${String(rowBook.count)}`}
+            title={localizeUi('Page {page} of {total}', {
+              page: String(rowBook.page),
+              total: String(rowBook.count),
+            })}
+            aria-label={localizeUi('Page {page} of {total}', {
+              page: String(rowBook.page),
+              total: String(rowBook.count),
+            })}
           >
             {/* An LTR isolate: in an RTL context `1 / 3` would otherwise be drawn `3 / 1` (delta A). */}
             <bdi dir="ltr">{`${String(rowBook.page)} / ${String(rowBook.count)}`}</bdi>
@@ -1443,7 +1484,7 @@ export function LayerRow({
           items={toMenuItems(actions)}
           x={menu.x}
           y={menu.y}
-          ariaLabel={`${rowName} actions`}
+          ariaLabel={localizeUi('{row} actions', { row: rowName })}
           onClose={close}
         />
       )}

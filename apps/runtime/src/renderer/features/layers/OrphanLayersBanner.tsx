@@ -267,14 +267,17 @@ export function OrphanLayersBanner({
     const name = `${String(o.channel)}-${String(o.layer)}`;
     void (async () => {
       const ok = await confirm({
-        title: `Clear layer ${name}?`,
-        body: `This removes the producer from layer ${name}. Check Program before clearing.`,
-        confirmLabel: 'Clear layer',
+        title: localizeUi('Clear layer {layer}?', { layer: name }),
+        body: localizeUi(
+          'This removes the producer from layer {layer}. Check Program before clearing.',
+          { layer: name },
+        ),
+        confirmLabel: localizeUi('Clear layer'),
         tone: 'clear',
       });
       if (!ok) return;
       runCommand(
-        `Clear layer ${name}`,
+        localizeUi('Clear layer {layer}', { layer: name }),
         window.cg.layers
           .clear({ channel: o.channel, layer: o.layer })
           .then((r) => ({ accepted: r.ok })),
@@ -293,9 +296,12 @@ export function OrphanLayersBanner({
     const count = String(targets.length);
     void (async () => {
       const ok = await confirm({
-        title: `Clear ${count} layers?`,
-        body: `This removes the producers from layers ${names.join(', ')}. Check Program before clearing.`,
-        confirmLabel: `Clear ${count} layers`,
+        title: localizeUi('Clear {count} layers?', { count: count }),
+        body: localizeUi(
+          'This removes the producers from layers {layers}. Check Program before clearing.',
+          { layers: names.join(', ') },
+        ),
+        confirmLabel: localizeUi('Clear {count} layers', { count: count }),
         tone: 'clear',
       });
       if (!ok) return;
@@ -318,9 +324,12 @@ export function OrphanLayersBanner({
     return (
       <Button
         variant="caution"
-        aria-label={`Clear layer ${name}`}
+        aria-label={localizeUi('Clear layer {layer}', { layer: name })}
         disabled={clearRefusal !== undefined}
-        title={clearRefusal ?? `Send CLEAR ${name} to remove the producer from this layer`}
+        title={
+          clearRefusal ??
+          localizeUi('Send CLEAR {layer} to remove the producer from this layer', { layer: name })
+        }
         onClick={() => {
           clearOne(o);
         }}
@@ -342,7 +351,9 @@ export function OrphanLayersBanner({
           disabled={clearRefusal !== undefined}
           title={
             clearRefusal ??
-            `Send CLEAR ${targets.map((o) => `${String(o.channel)}-${String(o.layer)}`).join(', ')}`
+            localizeUi('Send CLEAR {layers}', {
+              layers: targets.map((o) => `${String(o.channel)}-${String(o.layer)}`).join(', '),
+            })
           }
           onClick={() => {
             clearListed(targets);
@@ -370,8 +381,15 @@ export function OrphanLayersBanner({
                   <span>
                     {/* `PLAYOUT-FEATURES-01` D — the Playout's own license rule, when D4 said so. */}
                     {e.cause === 'playout-license'
-                      ? `Layer ${String(e.layer)} on CH ${String(e.channel)} — ${CLEARED_BY_PLAYOUT_LICENSE}`
-                      : `Layer ${String(e.layer)} on CH ${String(e.channel)} was cleared outside CG Control`}
+                      ? localizeUi('Layer {layer} on CH {channel} — {reason}', {
+                          layer: String(e.layer),
+                          channel: String(e.channel),
+                          reason: CLEARED_BY_PLAYOUT_LICENSE,
+                        })
+                      : localizeUi('Layer {layer} on CH {channel} was cleared outside CG Control', {
+                          layer: String(e.layer),
+                          channel: String(e.channel),
+                        })}
                   </span>
                 </div>
               );

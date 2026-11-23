@@ -159,7 +159,7 @@ export function LiveSourceSwapDialog({
                 className="cg-form-row__control"
                 id={`swap-${item.itemId}-${plate.sourceId}`}
                 // `B-309` — the picker's name is the plate's, in the operator's words — never its id.
-                aria-label={`Live source for ${label}`}
+                aria-label={localizeUi('Live source for {name}', { name: label })}
                 value={swapped ?? ''}
                 onChange={(sourceId) => change(plate.sourceId, sourceId)}
                 // `B-303` — the words and the name kept apart: the name in its own isolate and direction.

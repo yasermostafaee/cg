@@ -174,7 +174,11 @@ export function LiveLayoutEditorFrameOptions({
               scope="plate"
               value={presetOverrides.value}
               inheritedAspect={presetOverrides.inheritedAspect}
-              inheritedFit={`Inherit · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
+              inheritedFit={localizeUi('Inherit · {fit}', {
+                fit: localizeUi(
+                  presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture',
+                ),
+              })}
               geometryControls={presetOverrides.geometryControls ?? true}
               onChange={presetOverrides.onChange}
             />
@@ -197,8 +201,8 @@ export function LiveLayoutEditorFrameOptions({
             <button
               type="button"
               className="cg-live-layout-fit-info"
-              aria-label={DEFAULT_FIT_HELP}
-              title={DEFAULT_FIT_HELP}
+              aria-label={localizeUi(DEFAULT_FIT_HELP)}
+              title={localizeUi(DEFAULT_FIT_HELP)}
             >
               <Icon icon={Info} size={14} />
             </button>
@@ -209,10 +213,10 @@ export function LiveLayoutEditorFrameOptions({
                 key={fitMode}
                 active={fit === fitMode}
                 aria-pressed={fit === fitMode}
-                title={DEFAULT_FIT_HELP}
+                title={localizeUi(DEFAULT_FIT_HELP)}
                 onClick={() => onChange({ fitMode })}
               >
-                {label}
+                {localizeUi(label)}
               </Button>
             ))}
           </div>
@@ -371,11 +375,11 @@ export function LiveLayoutEditorFrameOptions({
                   disabled={!canEditMask}
                   active={editingMask}
                   aria-pressed={editingMask}
-                  title={
+                  title={localizeUi(
                     canEditMask
                       ? 'Move or resize the mask in Preview'
-                      : 'Show this plate in Preview to edit its mask'
-                  }
+                      : 'Show this plate in Preview to edit its mask',
+                  )}
                   onClick={() => onMaskEditingChange(!editingMask)}
                 >
                   <Icon icon={Move} size={14} />
@@ -415,7 +419,7 @@ export function LiveLayoutEditorFrameOptions({
                   {windows.map((_, index) => (
                     <Button
                       key={index}
-                      aria-label={'Mask window ' + (index + 1)}
+                      aria-label={localizeUi('Mask window {number}', { number: index + 1 })}
                       active={index === activeIndex}
                       aria-pressed={index === activeIndex}
                       onClick={() => onSelectMaskWindow(index)}
@@ -432,7 +436,7 @@ export function LiveLayoutEditorFrameOptions({
                 {MASK_FIELDS.map(({ key, limit, label, min }) => (
                   <LiveLayoutEditorNumber
                     key={key}
-                    label={label}
+                    label={localizeUi(label)}
                     min={min}
                     max={100}
                     decimal
@@ -475,7 +479,7 @@ export function LiveLayoutEditorFrameOptions({
                 aria-pressed={resize === operatorPlacement}
                 onClick={() => onChange({ operatorPlacement })}
               >
-                {label}
+                {localizeUi(label)}
               </Button>
             ))}
           </div>

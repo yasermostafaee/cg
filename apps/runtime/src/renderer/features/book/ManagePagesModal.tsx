@@ -199,7 +199,10 @@ export function ManagePagesModal({
       title={localizeUi('Manage pages')}
       subtitle={
         <>
-          <bdi>{title}</bdi> · {draft.length === 1 ? '1 page' : `${String(draft.length)} pages`}
+          <bdi>{title}</bdi> ·{' '}
+          {draft.length === 1
+            ? localizeUi('1 page')
+            : localizeUi('{count} pages', { count: String(draft.length) })}
         </>
       }
       emblem={Images}
@@ -253,12 +256,19 @@ export function ManagePagesModal({
             {localizeUi('Drop to add pages')}
           </span>
         )}
-        <div className="cg-pages__tools" role="toolbar" aria-label={`${title} — page tools`}>
+        <div
+          className="cg-pages__tools"
+          role="toolbar"
+          aria-label={localizeUi('{name} — page tools', { name: title })}
+        >
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(false, false)}>
             <Icon icon={FilePlus2} size={13} />
             {busy === null
-              ? 'Add pictures…'
-              : `Loading ${String(busy.done)} / ${String(busy.total)}…`}
+              ? localizeUi('Add pictures…')
+              : localizeUi('Loading {done} / {total}…', {
+                  done: String(busy.done),
+                  total: String(busy.total),
+                })}
           </Button>
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, false)}>
             <Icon icon={FolderOpen} size={13} />
@@ -290,10 +300,12 @@ export function ManagePagesModal({
             onClick={() => removeIds(selected)}
           >
             <Icon icon={Trash2} size={13} />
-            {selected.size === 0 ? 'Remove selected' : `Remove ${String(selected.size)} selected`}
+            {selected.size === 0
+              ? localizeUi('Remove selected')
+              : localizeUi('Remove {count} selected', { count: String(selected.size) })}
           </Button>
         </div>
-        <ol className="cg-pages__grid" aria-label={`${title} — pages`}>
+        <ol className="cg-pages__grid" aria-label={localizeUi('{name} — pages', { name: title })}>
           {draft.map((page, i) => {
             const n = i + 1;
             const isSelected = selected.has(page.id);
@@ -330,13 +342,15 @@ export function ManagePagesModal({
                 </div>
                 <PageFrame page={page} authored={authored} fit={fit} raster={raster} />
                 <span className="cg-page-tile__name" title={label}>
-                  <bdi>{isPicturePage(page) ? label : label === '' ? 'Text page' : label}</bdi>
+                  <bdi>
+                    {isPicturePage(page) ? label : label === '' ? localizeUi('Text page') : label}
+                  </bdi>
                 </span>
                 <div className="cg-page-tile__tools">
                   <Button
                     variant="icon"
                     aria-pressed={isSelected}
-                    aria-label={`Select page ${String(n)}`}
+                    aria-label={localizeUi('Select page {page}', { page: String(n) })}
                     title={localizeUi('Select')}
                     onClick={() =>
                       setSelected((now) => {
@@ -351,7 +365,7 @@ export function ManagePagesModal({
                   </Button>
                   <Button
                     variant="icon"
-                    aria-label={`Move page ${String(n)} earlier`}
+                    aria-label={localizeUi('Move page {page} earlier', { page: String(n) })}
                     title={localizeUi('Move earlier')}
                     disabled={i === 0}
                     onClick={() => move(i, i - 1)}
@@ -360,7 +374,7 @@ export function ManagePagesModal({
                   </Button>
                   <Button
                     variant="icon"
-                    aria-label={`Move page ${String(n)} later`}
+                    aria-label={localizeUi('Move page {page} later', { page: String(n) })}
                     title={localizeUi('Move later')}
                     disabled={i === draft.length - 1}
                     onClick={() => move(i, i + 2)}
@@ -370,7 +384,7 @@ export function ManagePagesModal({
                   {!isPicturePage(page) && (
                     <Button
                       variant="icon"
-                      aria-label={`Edit page ${String(n)}`}
+                      aria-label={localizeUi('Edit page {page}', { page: String(n) })}
                       title={localizeUi('Edit')}
                       onClick={() => setEditing(page.id)}
                     >
@@ -379,7 +393,7 @@ export function ManagePagesModal({
                   )}
                   <Button
                     variant="icon"
-                    aria-label={`Remove page ${String(n)}`}
+                    aria-label={localizeUi('Remove page {page}', { page: String(n) })}
                     title={localizeUi('Remove')}
                     onClick={() => removeIds(new Set([page.id]))}
                   >
@@ -399,12 +413,14 @@ export function ManagePagesModal({
         </ol>
         {editingPage !== undefined && !isPicturePage(editingPage) && (
           <div className="cg-pages__editor" data-text-page-editor="">
-            <span className="cg-pages__editor-label">{`Text of page ${String(editingIndex + 1)}`}</span>
+            <span className="cg-pages__editor-label">
+              {localizeUi('Text of page {page}', { page: String(editingIndex + 1) })}
+            </span>
             <AutoGrowTextarea
               className="cg-field"
               dir="auto"
               value={editingPage.text}
-              aria-label={`Text of page ${String(editingIndex + 1)}`}
+              aria-label={localizeUi('Text of page {page}', { page: String(editingIndex + 1) })}
               onChange={(e) => {
                 const text = e.currentTarget.value;
                 const id = editingPage.id;

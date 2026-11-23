@@ -451,7 +451,7 @@ export function LooksBindingsSection({
                 <span
                   className="cg-dirty-dot"
                   data-look-tab-dirty={look.id}
-                  aria-label={`${look.name} has unapplied edits`}
+                  aria-label={localizeUi('{look} has unapplied edits', { look: look.name })}
                 >
                   ●
                 </span>
@@ -535,7 +535,10 @@ export function LooksBindingsSection({
                     className={['cg-form-row__control', dirty && 'is-dirty', masked && 'is-struck']
                       .filter(Boolean)
                       .join(' ')}
-                    aria-label={`Input for ${label} in preset ${look.name}`}
+                    aria-label={localizeUi('Input for {field} in preset {preset}', {
+                      field: label,
+                      preset: look.name,
+                    })}
                     data={{
                       'data-look-binding': `${look.id}:${plate.sourceId}`,
                       ...(masked ? { 'data-look-binding-masked': '' } : {}),
@@ -588,7 +591,10 @@ export function LooksBindingsSection({
                         <Button
                           variant="ghost"
                           data-clear-patch={plate.sourceId}
-                          title={`Stop patching "${label}" and put this row's per-look inputs back in force`}
+                          title={localizeUi(
+                            'Stop patching "{name}" and put this row\'s per-look inputs back in force',
+                            { name: label },
+                          )}
                           onClick={() => {
                             void window.cg.stack
                               .swapLiveSource({

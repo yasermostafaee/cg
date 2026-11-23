@@ -100,7 +100,8 @@ export function LiveLayoutEditorFrameAttachments({
           }}
         />
         <Button variant="neutral" disabled={importing} onClick={() => picker.current?.click()}>
-          <Icon icon={ImagePlus} size={14} /> {importing ? 'Reading graphic…' : 'Add .vcg graphic'}
+          <Icon icon={ImagePlus} size={14} />{' '}
+          {localizeUi(importing ? 'Reading graphic…' : 'Add .vcg graphic')}
         </Button>
       </div>
       {selected !== undefined && isLegacy(selected.id) && (
@@ -162,7 +163,7 @@ export function LiveLayoutEditorFrameAttachments({
             {FIELDS.map(({ key, limit, label, min }) => (
               <LiveLayoutEditorNumber
                 key={key}
-                label={label}
+                label={localizeUi(label)}
                 value={Math.round(selected.rect[key] * 10000) / 100}
                 min={min}
                 max={100}

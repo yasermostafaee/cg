@@ -119,7 +119,7 @@ Stop any earlier `pnpm --filter @cg/runtime dev` terminal first; its Vite server
 If another station process owns a required port, the launcher identifies it and refuses to replace
 it silently.
 
-### CG Control translation files
+### CG Control translation files — فایل‌های ترجمهٔ CG Control
 
 Edit the CG Control language catalogs in the source checkout before building installers.
 

@@ -220,7 +220,7 @@ export function FromFilePreviewDialog({
   return (
     <Modal
       title={localizeUi('File content and fields')}
-      ariaLabel={`File content and fields · ${fieldId}`}
+      ariaLabel={localizeUi('File content and fields · {field}', { field: fieldId })}
       size="wide"
       frame="fixed"
       onClose={onClose}
@@ -247,25 +247,25 @@ export function FromFilePreviewDialog({
           <code style={styles.filePath}>{state.source.displayPath ?? state.source.name}</code>
         </div>
         <Button variant="secondary" disabled={loading} onClick={() => void readPreview()}>
-          {loading ? 'Loading…' : 'Reload preview'}
+          {loading ? localizeUi('Loading…') : localizeUi('Reload preview')}
         </Button>
       </div>
 
       {kind === 'list' && lockFile && (
         <div style={styles.split}>
-          <span>{state.format === 'text' ? 'Delimiter' : 'Format'}</span>
+          <span>{state.format === 'text' ? localizeUi('Delimiter') : localizeUi('Format')}</span>
           <Tag
             className="cg-file-chip cg-file-chip--content-sized"
             aria-label={
               state.format === 'text'
-                ? `${fieldId} locked delimiter`
-                : `${fieldId} locked file format`
+                ? localizeUi('{field} locked delimiter', { field: fieldId })
+                : localizeUi('{field} locked file format', { field: fieldId })
             }
             title={
               state.format === 'text'
                 ? state.split
                   ? state.delimiter
-                  : 'Whole file'
+                  : localizeUi('Whole file')
                 : state.format
             }
           >
@@ -273,7 +273,7 @@ export function FromFilePreviewDialog({
               ? state.split
                 ? (delimiters.find((entry) => entry.value === state.delimiter)?.label ??
                   state.delimiter)
-                : 'Whole file'
+                : localizeUi('Whole file')
               : state.format.toUpperCase()}
           </Tag>
         </div>
@@ -291,7 +291,7 @@ export function FromFilePreviewDialog({
                   format: event.target.value as 'text' | 'json' | 'csv',
                 })
               }
-              aria-label={`${fieldId} file format`}
+              aria-label={localizeUi('{field} file format', { field: fieldId })}
             >
               <option value="text">{localizeUi('Text / delimiter')}</option>
               <option value="json">{localizeUi('JSON rows')}</option>
@@ -302,7 +302,7 @@ export function FromFilePreviewDialog({
                 <Checkbox
                   checked={state.split}
                   onChange={(checked) => updateSplitConfig(item.itemId, path, { split: checked })}
-                  aria-label={`Split ${fieldId} into items`}
+                  aria-label={localizeUi('Split {field} into items', { field: fieldId })}
                 />{' '}
                 {localizeUi('Split file')}
               </label>
@@ -314,7 +314,7 @@ export function FromFilePreviewDialog({
                 onChange={(event) =>
                   updateSplitConfig(item.itemId, path, { delimiter: event.target.value })
                 }
-                aria-label={`${fieldId} split delimiter`}
+                aria-label={localizeUi('{field} split delimiter', { field: fieldId })}
               >
                 {delimiters.every((entry) => entry.value !== state.delimiter) && (
                   <option value={state.delimiter}>
@@ -346,13 +346,15 @@ export function FromFilePreviewDialog({
         <section style={styles.pane} aria-label={localizeUi('File content')}>
           <h3 style={styles.heading}>{localizeUi('File content')}</h3>
           <pre style={styles.pre} data-file-preview-content="">
-            {content ?? (loading ? 'Loading…' : '')}
+            {content ?? (loading ? localizeUi('Loading…') : '')}
           </pre>
         </section>
         <section style={styles.pane} aria-label={localizeUi('Parsed fields')}>
           <h3 style={styles.heading}>{localizeUi('Parsed fields')}</h3>
           {parsed === null ? (
-            <p style={styles.loadingText}>{parseError === null ? 'Loading…' : 'No valid rows.'}</p>
+            <p style={styles.loadingText}>
+              {parseError === null ? localizeUi('Loading…') : localizeUi('No valid rows.')}
+            </p>
           ) : (
             <ParsedValue value={parsed} />
           )}

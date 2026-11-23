@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { CircleArrowOutDownRight, Trash2, XSquare, type LucideIcon } from 'lucide-react';
 import type { VerbTone } from './rowAction.js';
@@ -125,6 +126,7 @@ export function useConfirm(): {
   confirm: (req: ConfirmRequest) => Promise<boolean>;
   confirmDialog: JSX.Element | null;
 } {
+  const t = useUiText();
   const [request, setRequest] = useState<ConfirmRequest | null>(null);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
 
@@ -147,7 +149,7 @@ export function useConfirm(): {
   const confirmDialog =
     request === null ? null : (
       <Modal
-        title={request.title}
+        title={t(request.title)}
         /*
           `SETTINGS-MATCH-02` §8d — a confirm raised INSIDE Station setup is part of that
           dialog's sub-family (480, its own bands, the lighter scrim); one raised from the
@@ -164,7 +166,7 @@ export function useConfirm(): {
                 dialog Cancel is a genuine peer of the destructive action, so it must
                 look like a control of the same kind rather than a link beside one. */}
             <ModalAction actionRole="cancel" onClick={() => settle(false)}>
-              Cancel
+              {t('Cancel')}
             </ModalAction>
             {/*
               §2 — THE ROLE DECIDES THE TREATMENT, and a confirm dialog's committing
@@ -183,7 +185,7 @@ export function useConfirm(): {
               {...(request.tone !== undefined ? { 'data-verb-tone': request.tone } : {})}
               onClick={() => settle(true)}
             >
-              {request.confirmLabel}
+              {t(request.confirmLabel)}
             </ModalAction>
           </>
         }
@@ -206,7 +208,7 @@ export function useConfirm(): {
             />
           </span>
         )}
-        {request.body}
+        {typeof request.body === 'string' ? t(request.body) : request.body}
       </Modal>
     );
 
@@ -227,6 +229,7 @@ export function usePrompt(): {
   prompt: (req: PromptRequest) => Promise<string | null>;
   promptDialog: JSX.Element | null;
 } {
+  const t = useUiText();
   const [request, setRequest] = useState<PromptRequest | null>(null);
   const [value, setValue] = useState('');
   const resolver = useRef<((value: string | null) => void) | null>(null);
@@ -254,24 +257,24 @@ export function usePrompt(): {
   const promptDialog =
     request === null ? null : (
       <Modal
-        title={request.title}
+        title={t(request.title)}
         onClose={() => settle(null)}
         footer={
           <>
             {/* The same two roles as the confirm dialog — Cancel is a peer of Submit,
                 and Submit is the action this dialog exists to perform. */}
             <ModalAction actionRole="cancel" onClick={() => settle(null)}>
-              Cancel
+              {t('Cancel')}
             </ModalAction>
             <ModalAction actionRole="primary" disabled={tooShort} onClick={() => settle(value)}>
-              {request.submitLabel}
+              {t(request.submitLabel)}
             </ModalAction>
           </>
         }
       >
-        {request.body}
+        {typeof request.body === 'string' ? t(request.body) : request.body}
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-          {request.label}
+          {t(request.label)}
           {/*
             🔴 `B-230` — `data-modal-autofocus`, NOT `autoFocus`, and the swap is the fix.
 

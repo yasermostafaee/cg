@@ -592,7 +592,7 @@ export function Inspector({
         id="inspector"
         as="aside"
         title={localizeUi('INSPECTOR')}
-        ariaLabel="Inspector"
+        ariaLabel={localizeUi('Inspector')}
         onClose={onClose}
       >
         <div className="cg-inspector-body" style={styles.scroll}>
@@ -743,7 +743,7 @@ export function Inspector({
       id="inspector"
       as="aside"
       title={localizeUi('INSPECTOR')}
-      ariaLabel="Inspector"
+      ariaLabel={localizeUi('Inspector')}
       onClose={onClose}
     >
       {/*
@@ -1060,14 +1060,18 @@ export function Inspector({
               GAINS the fact the colour carries, so a screen-reader operator is told the row
               is live by the control itself rather than only by the chip above it.
             */
-            aria-label={onAir ? 'Apply staged edits to the on-air row' : 'Apply staged edits'}
+            aria-label={
+              onAir
+                ? localizeUi('Apply staged edits to the on-air row')
+                : localizeUi('Apply staged edits')
+            }
             disabled={applyRefusal !== undefined}
             {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}
             run={() => onApply(itemId)}
             onError={() => undefined}
             data-inspector-commit={onAir ? 'on-air' : 'off-air'}
           >
-            {onAir ? 'Update on air' : 'Update'}
+            {onAir ? localizeUi('Update on air') : localizeUi('Update')}
           </AsyncButton>
           {dirty && <DraftChip label={localizeUi('unapplied edits')} />}
           {/*
@@ -1099,12 +1103,13 @@ export function Inspector({
  * or a template imported before the parts existed) is one name, in one isolate, as before.
  */
 export function GroupHeadingText({ group }: { group: CompositionFieldGroup }): JSX.Element {
+  const localizeUi = useUiText();
   const parts = group.labelParts;
   if (parts === undefined) return <IsolatedName>{group.label ?? group.name}</IsolatedName>;
   return (
     <>
       <IsolatedName>{parts.name}</IsolatedName>
-      {` — item ${String(parts.item)}`}
+      {localizeUi(' — item {item}', { item: String(parts.item) })}
       {parts.stub !== undefined && (
         <>
           {' · '}
@@ -1138,9 +1143,13 @@ function FieldGroup({
   inheritedFields: FieldValues | undefined;
   frameTitles: SharedFrameTitleIndex;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const itemId = item.itemId;
   return (
-    <section style={styles.group} aria-label={`${group.label ?? group.name} fields`}>
+    <section
+      style={styles.group}
+      aria-label={localizeUi('{group} fields', { group: group.label ?? group.name })}
+    >
       {/* Authored too — a composition's label comes from the template package. */}
       <h3 style={styles.groupHeading}>
         <GroupHeadingText group={group} />
@@ -1198,6 +1207,7 @@ function FieldEditor({
   inheritedFields?: FieldValues | undefined;
   titlePaths?: readonly FieldPath[] | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
@@ -1311,7 +1321,10 @@ function FieldEditor({
         </span>
         <FieldDescription label={label} description={field?.description} />
         {dirty && (
-          <span className="cg-dirty-dot" aria-label={`${fieldId} has unapplied edits`}>
+          <span
+            className="cg-dirty-dot"
+            aria-label={localizeUi('{field} has unapplied edits', { field: fieldId })}
+          >
             ●
           </span>
         )}

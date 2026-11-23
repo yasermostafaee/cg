@@ -20,6 +20,10 @@
           "en": "CG Control offers independent English, Persian and Arabic choices for interface text and action feedback. Persian and Arabic use right-to-left layouts. The README links to the source catalogs for editing before packaging."
         },
         {
+          "fa": "در تنظیمات عمومی، تقویم گزارش عملیات را بین میلادی، جلالی و هجری قمری انتخاب کنید. تاریخ‌های گزارش و فیلترها از همین انتخاب پیروی می‌کنند.",
+          "en": "Choose Gregorian, Jalali or Lunar Hijri under General. The selected calendar applies to displayed Audit dates and date filters."
+        },
+        {
           "fa": "در General ترتیب PVW/PGM، جای لایه‌ها و سمت بازرس را تنظیم کنید و چیدمان را در پروفایل رابط ذخیره کنید.",
           "en": "General lets you choose monitor order, move the layer table above or below, place the Inspector on either side, and save the arrangement in a UI profile."
         },
@@ -49,6 +53,14 @@
         }
       ],
       "fixes": [
+        {
+          "fa": "متن‌ها و تولتیپ‌های جاافتاده در مودال‌ها، تب‌ها، اینسپکتور و نوار وضعیت CG Control به فارسی و عربی ترجمه شدند. پیام‌های عملیات از انتخاب جداگانهٔ زبان پیروی می‌کنند.",
+          "en": "Localized missing CG Control modal, tab, Inspector and status labels and tooltips in Persian and Arabic. Operation messages use their independent language setting."
+        },
+        {
+          "fa": "کلیدهای نمایش لایه در حالت راست‌به‌چپ اصلاح شدند. در تنظیمات لایه‌ها نام قالب هم‌تراز با جدول است و تولتیپ نام قالب را نشان می‌دهد. بازنشانی چیدمان پنل‌ها به تنظیمات عمومی منتقل شد.",
+          "en": "Fixed RTL layer visibility switches and aligned graphic names and readable tooltips in Layers settings. Moved panel layout reset to General."
+        },
         {
           "fa": "اصلاح تقویم قمری به General منتقل شد. بازنشانی جداکننده‌ها پس از هشدار و تأیید انجام می‌شود. ساخت چیدمان زنده از پنجرهٔ Templates در دسترس است.",
           "en": "General contains the Lunar Hijri correction. Delimiter reset asks for confirmation. New live layout is available from the Templates dialog."

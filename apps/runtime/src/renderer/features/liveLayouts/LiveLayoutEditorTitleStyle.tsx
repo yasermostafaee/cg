@@ -100,6 +100,7 @@ function TitleColor({
   value: string;
   onChange: (color: string) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const color = value.slice(0, 7);
   const alpha = value.slice(7);
   return (
@@ -114,7 +115,7 @@ function TitleColor({
         />
       </div>
       <LiveLayoutEditorNumber
-        label={label + ' opacity (%)'}
+        label={localizeUi('{name} opacity (%)', { name: label })}
         value={alpha === '' ? 100 : Math.round((Number.parseInt(alpha, 16) / 255) * 100)}
         min={0}
         max={100}
@@ -154,7 +155,7 @@ function ShadowFields({
         <Checkbox
           id={id + '-enabled'}
           checked={value !== null}
-          aria-label={'Enable ' + label.toLowerCase()}
+          aria-label={localizeUi('Enable {name}', { name: label.toLowerCase() })}
           onChange={(next) => onChange(next ? DEFAULT_SHADOW : null)}
         />
         {localizeUi('Enabled')}
@@ -162,7 +163,7 @@ function ShadowFields({
       {value !== null && (
         <div className="cg-form-grid cg-live-layout-title-fields">
           <LiveLayoutEditorNumber
-            label={label + ' X (px)'}
+            label={localizeUi('{name} X (px)', { name: label })}
             value={toTenths(value.offsetX)}
             min={-MAX_LENGTH}
             max={MAX_LENGTH}
@@ -170,7 +171,7 @@ function ShadowFields({
             onChange={(offsetX) => update({ offsetX })}
           />
           <LiveLayoutEditorNumber
-            label={label + ' Y (px)'}
+            label={localizeUi('{name} Y (px)', { name: label })}
             value={toTenths(value.offsetY)}
             min={-MAX_LENGTH}
             max={MAX_LENGTH}
@@ -178,7 +179,7 @@ function ShadowFields({
             onChange={(offsetY) => update({ offsetY })}
           />
           <LiveLayoutEditorNumber
-            label={label + ' blur (px)'}
+            label={localizeUi('{name} blur (px)', { name: label })}
             value={toTenths(value.blur)}
             min={0}
             max={MAX_LENGTH}
@@ -206,7 +207,7 @@ function ShadowFields({
             </>
           )}
           <TitleColor
-            label={label + ' color'}
+            label={localizeUi('{name} color', { name: label })}
             value={value.color}
             onChange={(color) => update({ color })}
           />
@@ -278,9 +279,13 @@ export function LiveLayoutEditorTitleStyle({
 
   return (
     <details className="cg-live-layout-title-style">
-      <LiveLayoutEditorSectionHeading icon={Type} label={heading} />
+      <LiveLayoutEditorSectionHeading icon={Type} label={localizeUi(heading)} />
       {onSharedChange !== undefined && (
-        <div className="cg-live-layout-title-scope" role="group" aria-label={heading + ' scope'}>
+        <div
+          className="cg-live-layout-title-scope"
+          role="group"
+          aria-label={localizeUi('{name} scope', { name: localizeUi(heading) })}
+        >
           <Button
             active={sharedSelection}
             aria-pressed={sharedSelection}
@@ -293,7 +298,7 @@ export function LiveLayoutEditorTitleStyle({
             aria-pressed={!sharedSelection}
             onClick={() => setScope('frame')}
           >
-            {localizeUi('Plate')} {frameNumber}
+            {localizeUi('Plate {number}', { number: frameNumber })}
           </Button>
           {!sharedSelection && override !== undefined && (
             <Button variant="neutral" onClick={onResetOverride}>
@@ -312,7 +317,7 @@ export function LiveLayoutEditorTitleStyle({
           {numbers.map(({ label, key, min, max }) => (
             <LiveLayoutEditorNumber
               key={key}
-              label={label}
+              label={localizeUi(label)}
               value={toTenths(title[key])}
               min={min}
               max={max}
@@ -333,7 +338,8 @@ export function LiveLayoutEditorTitleStyle({
               disabled={readingFont}
               onClick={() => fontInput.current?.click()}
             >
-              <Icon icon={Plus} size={14} /> {readingFont ? 'Reading font…' : 'Add font'}
+              <Icon icon={Plus} size={14} />{' '}
+              {localizeUi(readingFont ? 'Reading font…' : 'Add font')}
             </Button>
             <FileInput
               ref={fontInput}
@@ -367,13 +373,16 @@ export function LiveLayoutEditorTitleStyle({
           <Choice
             label={localizeUi('Horizontal alignment')}
             value={title.align}
-            choices={ALIGNMENTS}
+            choices={ALIGNMENTS.map(({ value, label }) => ({ value, label: localizeUi(label) }))}
             onChange={(align) => onChange({ align })}
           />
           <Choice
             label={localizeUi('Vertical alignment')}
             value={title.verticalAlign}
-            choices={VERTICAL_ALIGNMENTS}
+            choices={VERTICAL_ALIGNMENTS.map(({ value, label }) => ({
+              value,
+              label: localizeUi(label),
+            }))}
             onChange={(verticalAlign) => onChange({ verticalAlign })}
           />
           <TitleColor
@@ -401,7 +410,7 @@ export function LiveLayoutEditorTitleStyle({
             <Choice
               label={localizeUi('Digits')}
               value={title.digits}
-              choices={DIGITS}
+              choices={DIGITS.map(({ value, label }) => ({ value, label: localizeUi(label) }))}
               onChange={(digits) => onChange({ digits })}
             />
           </div>

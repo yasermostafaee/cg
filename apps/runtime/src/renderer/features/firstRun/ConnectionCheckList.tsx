@@ -16,6 +16,7 @@ import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { usePrefersReducedMotion } from '../../ui/usePrefersReducedMotion.js';
+import { connectionCheckText } from './connectionCheckText.js';
 import type { ShownCheckLine } from './firstRunStation.js';
 
 /**
@@ -157,12 +158,15 @@ export function ConnectionCheckList({
   const operatorLines = lines.map((line) => ({
     ...line,
     text: playoutEngineWording(
-      line.id === 'amcp' && line.status === 'pass'
-        ? line.text.replace(
-            /answered VERSION: (\d+\.\d+\.\d+(?:-[\w]+(?:[.-][\w]+)*)?)\b.*$/,
-            'answered VERSION: $1.',
-          )
-        : line.text,
+      connectionCheckText(
+        line.id === 'amcp' && line.status === 'pass'
+          ? line.text.replace(
+              /answered VERSION: (\d+\.\d+\.\d+(?:-[\w]+(?:[.-][\w]+)*)?)\b.*$/,
+              'answered VERSION: $1.',
+            )
+          : line.text,
+        localizeUi,
+      ),
       engineName,
     ),
   }));
@@ -191,10 +195,11 @@ export function ConnectionCheckList({
           const passes = mine.filter((l) => l.status === 'pass').length;
           const attention = mine.length - passes;
           const folded = !showAll && passes > 0;
+          const heading = localizeUi(group.title);
           return (
             // A GROUP, not a landmark: four sections per check would crowd the page's regions.
-            <div key={group.id} role="group" aria-label={group.title} data-check-group={group.id}>
-              {(!folded || attention > 0) && <h4 style={styles.groupHead}>{group.title}</h4>}
+            <div key={group.id} role="group" aria-label={heading} data-check-group={group.id}>
+              {(!folded || attention > 0) && <h4 style={styles.groupHead}>{heading}</h4>}
               <ul style={styles.list}>
                 <CheckLineItems lines={mine} still={still} hidePasses={folded} actions={actions} />
                 {folded && (
@@ -207,7 +212,7 @@ export function ConnectionCheckList({
                       <Icon icon={Check} size={14} />
                     </span>
                     <span style={{ color: colors.textSecondary }}>
-                      {`${group.title} · ${String(passes)} OK`}
+                      {localizeUi('{group} · {count} OK', { group: heading, count: passes })}
                     </span>
                   </li>
                 )}
@@ -228,7 +233,7 @@ export function ConnectionCheckList({
                 });
               }}
             >
-              {showAll ? 'Show less' : 'Show all'}
+              {localizeUi(showAll ? 'Show less' : 'Show all')}
             </Button>
           </div>
         )}
@@ -270,7 +275,7 @@ function CheckLineItems({
         >
           <span
             style={{ color: ICON_INK[checkLineTone(line)], paddingTop: 2 }}
-            aria-label={line.status}
+            aria-label={localizeUi(line.status)}
             data-check-icon=""
           >
             <Icon

@@ -55,7 +55,7 @@ export function PlaylistGainControl({
       <Button
         variant="secondary"
         disabled={linkDown}
-        title={linkDown ? BRIDGE_DOWN_REASON : 'Adjust the original Playlist output'}
+        title={linkDown ? BRIDGE_DOWN_REASON : localizeUi('Adjust the original Playlist output')}
         onClick={() => setOpen(true)}
       >
         <Icon icon={SlidersHorizontal} size={14} />
@@ -147,7 +147,7 @@ function PlaylistGainDialog({
   return (
     <Modal
       title={localizeUi('Playlist gain')}
-      subtitle={`CH ${String(channel)} · Programme output`}
+      subtitle={localizeUi('CH {channel} · Programme output', { channel: String(channel) })}
       emblem={SlidersHorizontal}
       onClose={onClose}
       busy={saving}
@@ -191,7 +191,10 @@ function PlaylistGainDialog({
               allow="number"
               decimal
               dir="ltr"
-              title={`${String(PLAYLIST_GAIN_MIN_DB)} to +${String(PLAYLIST_GAIN_MAX_DB)} dB`}
+              title={localizeUi('{min} to +{max} dB', {
+                min: String(PLAYLIST_GAIN_MIN_DB),
+                max: String(PLAYLIST_GAIN_MAX_DB),
+              })}
               disabled={reading || saving}
             />
           </label>

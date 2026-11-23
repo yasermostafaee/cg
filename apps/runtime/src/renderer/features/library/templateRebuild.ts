@@ -185,8 +185,14 @@ export function rebuiltLine(
  * 🔴 **THE LIBRARY'S ONE LINE** for templates this runtime cannot rebuild — imported before their
  * package was kept, or whose rebuild failed. Their names follow it, each isolated.
  */
-export function reimportLine(count: number): string {
-  return count === 1 ? 'Re-import 1 template' : `Re-import these ${String(count)} templates`;
+export function reimportLine(
+  count: number,
+  text = (source: string, values?: { count: number }): string =>
+    values === undefined ? source : source.replace('{count}', String(values.count)),
+): string {
+  return count === 1
+    ? text('Re-import 1 template')
+    : text('Re-import these {count} templates', { count });
 }
 
 /** The long form, for the line's `title` only (an operator surface carries no prose). */

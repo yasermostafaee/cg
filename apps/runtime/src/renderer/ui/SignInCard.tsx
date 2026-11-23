@@ -81,12 +81,13 @@ export function SignInCard({
 
 /** The mark and the product name, as the splash composes them. */
 export function SignInBrand(): JSX.Element {
+  const translateUi = useUiText();
   return (
     <div className="cg-signin-brand" data-signin-brand="">
       <ApasaiMark />
       {/* CG is the platform, Control the role this app plays in it — the splash's weight split. */}
       <span className="cg-signin-brand__product">
-        <b>CG</b> Control
+        <b>CG</b> {translateUi('Control')}
       </span>
     </div>
   );

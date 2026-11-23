@@ -230,8 +230,8 @@ export function CountdownTargetField({
             {durationInvalid && (
               <p className="cg-field-fact" role="status">
                 {mode === 'timeofday'
-                  ? 'Enter a duration from one second to less than 24 hours.'
-                  : 'Enter a positive duration in whole seconds.'}
+                  ? localizeUi('Enter a duration from one second to less than 24 hours.')
+                  : localizeUi('Enter a positive duration in whole seconds.')}
               </p>
             )}
           </div>

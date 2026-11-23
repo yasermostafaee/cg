@@ -159,7 +159,7 @@ function CropDragSurface({
     <button
       type="button"
       className="cg-live-layout-crop-drag"
-      aria-label={'Adjust crop for ' + label}
+      aria-label={localizeUi('Adjust crop for {name}', { name: label })}
       title={localizeUi('Drag the picture or use the arrow keys to adjust the crop')}
       onPointerDown={(event) => {
         if (!event.isPrimary || event.button !== 0) return;
@@ -573,7 +573,9 @@ export function LiveLayoutEditorPreview({
       number,
       position: frameOrder.indexOf(input.id) + 1,
       focusLabel: alias || number,
-      focusName: alias ? `Focus plate ${number}: ${alias}` : `Focus plate ${number}`,
+      focusName: alias
+        ? localizeUi('Focus plate {number}: {alias}', { number, alias })
+        : localizeUi('Focus plate {number}', { number }),
     };
   });
   const soloFrameId = frameOrder.length === 1 ? frameOrder[0] : undefined;
@@ -852,7 +854,7 @@ export function LiveLayoutEditorPreview({
                   frame={rect}
                   pictureBox={pictureBox}
                   cropFocus={cropFocus}
-                  fallback={`Plate ${number}`}
+                  fallback={localizeUi('Plate {number}', { number })}
                   hasFallback={fallback !== undefined}
                 />
               </div>
@@ -860,7 +862,7 @@ export function LiveLayoutEditorPreview({
                 <InputAudioMeter
                   sourceId={sourceId}
                   channel={channel}
-                  name={source?.name ?? `Plate ${number}`}
+                  name={source?.name ?? localizeUi('Plate {number}', { number })}
                   edge
                 />
               )}

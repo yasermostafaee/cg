@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import { Move } from 'lucide-react';
 import type { LiveFramePlacement } from '@cg/shared-schema';
@@ -69,6 +70,7 @@ export function PreviewFramePlacement({
   preserveAspect: boolean;
   onSelect: () => void;
 }): JSX.Element {
+  const translateUi = useUiText();
   const drag = useRef<Drag>();
   const name = plate.sourceName ?? plate.plateLabel ?? 'Plate';
   const canMove = frame.move !== false;
@@ -141,7 +143,7 @@ export function PreviewFramePlacement({
         <Button
           variant="neutral"
           className="cg-frame-placement__move"
-          aria-label={`Move frame for ${name}`}
+          aria-label={translateUi('Move frame for {name}', { name: name })}
           onKeyDown={(event) => keyboard(event)}
         >
           <Icon icon={Move} size={14} />
@@ -154,7 +156,10 @@ export function PreviewFramePlacement({
             variant="neutral"
             className="cg-frame-placement__corner"
             data-corner={corner.key}
-            aria-label={`Resize ${name} from ${corner.name}`}
+            aria-label={translateUi('Resize {name} from {corner}', {
+              name: name,
+              corner: corner.name,
+            })}
             onPointerDown={(event) => start(event, corner)}
             onKeyDown={(event) => keyboard(event, corner)}
             children={null}

@@ -118,13 +118,15 @@ export type BackupMappedTone = 'ok' | 'warn' | 'alarm';
  */
 export function backupMappedSummary(
   state: BackupChannelsState,
+  format = (mapped: number, total: number): string =>
+    `Server B · ${String(mapped)}/${String(total)} CG channels mapped`,
 ): { readonly text: string; readonly tone: BackupMappedTone } | null {
   const backup = state.backup;
   if (backup === null || backup.channels.length === 0) return null;
   const m = backup.channels.length;
   const n = backup.channels.filter((c) => c.state === 'mapped').length;
   return {
-    text: `Server B · ${String(n)}/${String(m)} CG channels mapped`,
+    text: format(n, m),
     tone: n === m ? 'ok' : n === 0 ? 'alarm' : 'warn',
   };
 }

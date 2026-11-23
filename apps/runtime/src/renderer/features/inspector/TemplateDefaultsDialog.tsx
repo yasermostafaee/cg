@@ -157,8 +157,8 @@ export function TemplateDefaultsDialog({
         `CHANNEL-SOURCES-01` — THE CHANNEL IS IN THE TITLE: the defaults are this channel's (see the
         module header), in the console's own `· CH n` spelling.
       */
-      title={`Source defaults · CH ${String(channel)}`}
-      ariaLabel={`Source defaults · CH ${String(channel)}`}
+      title={localizeUi('Source defaults · CH {channel}', { channel: String(channel) })}
+      ariaLabel={localizeUi('Source defaults · CH {channel}', { channel: String(channel) })}
       onClose={close}
       size="prose"
       /*
@@ -197,7 +197,10 @@ export function TemplateDefaultsDialog({
           <strong>
             <IsolatedName>{templateName}</IsolatedName>
           </strong>
-          {`. These defaults apply to every row on CH ${String(channel)} using this template; row overrides remain separate.`}
+          {localizeUi(
+            '. These defaults apply to every row on CH {channel} using this template; row overrides remain separate.',
+            { channel: String(channel) },
+          )}
         </p>
         {plates.length === 0 ? (
           /*
@@ -233,7 +236,7 @@ export function TemplateDefaultsDialog({
                     <SourcePicker
                       className="cg-form-row__control"
                       id={`plate-default-${plate.sourceId}`}
-                      aria-label={`Default source for ${label}`}
+                      aria-label={localizeUi('Default source for {name}', { name: label })}
                       data={{ 'data-defaults-select': plate.sourceId }}
                       value={picked}
                       onChange={(sourceId) => stage(plate.sourceId, sourceId)}
@@ -260,7 +263,10 @@ export function TemplateDefaultsDialog({
               its next take — the half an operator editing a live show needs to read.
             */}
             <p style={styles.foot} data-defaults-foot="">
-              {`Applies to every row on CH ${String(channel)} using this template, at its next take. No playout command is sent.`}
+              {localizeUi(
+                'Applies to every row on CH {channel} using this template, at its next take. No playout command is sent.',
+                { channel: String(channel) },
+              )}
             </p>
           </>
         )}

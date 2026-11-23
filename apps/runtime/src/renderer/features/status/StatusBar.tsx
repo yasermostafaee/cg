@@ -1,3 +1,4 @@
+import { connectionCheckText } from '../firstRun/connectionCheckText.js';
 import { useUiText } from '../../i18n/locale.js';
 import {
   PLAYOUT_ENGINE_NAME,
@@ -11,13 +12,13 @@ import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
 import {
   backupMappedSummary,
   ENGINE_SERVER,
-  engineChipText,
   engineNeedsAttention,
   engineStateText,
   stoppedChannelsOf,
   type BackupChannelsState,
   type ConnectionHealth,
   type EngineLine,
+  type EngineState,
   type EngineSessions,
 } from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
@@ -316,17 +317,20 @@ const AMCP_ONLY_TITLE =
   'path, not what is actually on screen.';
 
 /** The tooltip that keeps the last-known reading available without asserting it. */
-function staleTitle(state: string): string {
-  return (
-    `Bridge disconnected — the server's health cannot be read. ` +
-    `Last known before the link dropped: ${sessionLabel(state).text}.`
-  );
-}
-
 /**
  * 🔴 `RELEASE-0112-01` (`R-085`) — the engines whose CG Bridge session needs a person, as chips: a
  * signed-in, waiting or unconfigured engine is the absence of an alarm, as health is in this bar.
  */
+const engineChipLabels: Partial<Record<EngineState, string>> = {
+  'needs-admin': 'Server {server} · Bridge sign-in needed',
+  'not-licensed': 'Server {server} · CG license needed',
+  refused: 'Server {server} · Bridge sign-in refused',
+  'amcp-pending': 'Server {server} · AMCP approval needed',
+  unreachable: 'Server {server} · Engine API unreachable',
+  'core-held': 'Server {server} · Controlled by another CG Bridge',
+  'core-shared': 'Server {server} · Shared with another CG Bridge',
+};
+
 function engineChips(
   engines: EngineSessions | null | undefined,
 ): { server: 'A' | 'B'; line: EngineLine }[] {
@@ -375,6 +379,9 @@ export function StatusBar({
    */
   backupChannels?: BackupChannelsState | null;
 }): JSX.Element {
+  const translateUi = useUiText();
+  const engineChipText = (server: 'A' | 'B', state: EngineState): string =>
+    translateUi(engineChipLabels[state] ?? 'Server {server}', { server });
   const localizeUi = useUiText();
   const engine = useEngineName();
   const playoutLinked = engine === PLAYOUT_ENGINE_NAME;
@@ -409,12 +416,17 @@ export function StatusBar({
         className="cg-pill"
         title={
           programmeActive === undefined
-            ? 'Playout has not verified the programme role for this channel.'
+            ? translateUi('Playout has not verified the programme role for this channel.')
             : [
-                `Active ${programmeActive.engine}: ${programmeServerDisplayName(programmeActive, playoutSignInUrl)}`,
-                ...programmeStandbys.map(
-                  (member) =>
-                    `Standby ${member.engine}: ${programmeServerDisplayName(member, playoutSignInUrl)}`,
+                translateUi('Active {engine}: {name}', {
+                  engine: programmeActive.engine,
+                  name: programmeServerDisplayName(programmeActive, playoutSignInUrl),
+                }),
+                ...programmeStandbys.map((member) =>
+                  translateUi('Standby {engine}: {name}', {
+                    engine: member.engine,
+                    name: programmeServerDisplayName(member, playoutSignInUrl),
+                  }),
                 ),
               ].join('\n')
         }
@@ -422,9 +434,13 @@ export function StatusBar({
         style={programmeActive === undefined ? styles.stale : styles.primary}
       >
         PGM CH {programmeChannel}
-        {programmeActive === undefined ? ' · role unknown' : ` · ${programmeActive.engine} active`}
+        {programmeActive === undefined
+          ? ' ' + translateUi('· role unknown')
+          : translateUi(' · {engine} active', { engine: programmeActive.engine })}
         {programmeStandbys.length > 0 &&
-          ` · ${programmeStandbys.map(({ engine }) => engine).join('/')} standby`}
+          translateUi(' · {engines} standby', {
+            engines: programmeStandbys.map(({ engine }) => engine).join('/'),
+          })}
       </Tag>
     ) : null;
   /**
@@ -518,7 +534,9 @@ export function StatusBar({
   const mapped =
     stale || health.backup === undefined || backupChannels == null
       ? null
-      : backupMappedSummary(backupChannels);
+      : backupMappedSummary(backupChannels, (mapped, total) =>
+          translateUi('Server B · {mapped}/{total} CG channels mapped', { mapped, total }),
+        );
   const failoverTarget = health.currentPrimary === 'A' ? 'B' : 'A';
   const targetSession = stale
     ? undefined
@@ -527,7 +545,7 @@ export function StatusBar({
       : engines?.backup;
   const failoverBlock =
     health.backup === undefined
-      ? 'No CG backup configured'
+      ? translateUi('No CG backup configured')
       : targetSession?.state === 'core-held'
         ? engineChipText(failoverTarget, targetSession.state)
         : undefined;
@@ -539,7 +557,10 @@ export function StatusBar({
   ].filter((notice) => notice !== undefined);
   const failoverTitle =
     failoverBlock ??
-    [`Switch graphics control to Server ${failoverTarget}.`, ...failoverNotice].join(' ');
+    [
+      translateUi('Switch graphics control to Server {server}.', { server: failoverTarget }),
+      ...failoverNotice,
+    ].join(' ');
 
   /*
    * 🔴 `CONSOLE-MATCH-03` §5 — THE FOUR UNICODE GLYPHS ARE GONE FROM THIS BAR.
@@ -575,10 +596,16 @@ export function StatusBar({
               className="cg-pill"
               title={
                 stale
-                  ? staleTitle(server.state)
+                  ? translateUi(
+                      "Bridge disconnected — the server's health cannot be read. Last known before the link dropped: {state}.",
+                      { state: translateUi(serverStateWord(server.state)) },
+                    )
                   : deaf
-                    ? AMCP_ONLY_TITLE
-                    : `Server ${server.label} is the ${active ? 'primary' : 'standby'} target for CG Bridge commands.`
+                    ? translateUi(AMCP_ONLY_TITLE)
+                    : translateUi('Server {server} is the {role} target for CG Bridge commands.', {
+                        server: server.label,
+                        role: translateUi(active ? 'primary' : 'standby'),
+                      })
               }
             >
               <span style={healthDotStyle(label)}>
@@ -590,10 +617,12 @@ export function StatusBar({
                 }
               >
                 {localizeUi('Server')} {server.label}
-                {playoutConnection || stale ? '' : active ? ' · CG active' : ' · CG standby'}
+                {playoutConnection || stale
+                  ? ''
+                  : ' ' + translateUi(active ? '· CG active' : '· CG standby')}
               </span>
               {' · '}
-              <span style={label.style}>{label.text}</span>
+              <span style={label.style}>{translateUi(label.text)}</span>
             </Tag>
           ))}
           {programmeRole}
@@ -625,11 +654,20 @@ export function StatusBar({
               <Tag
                 key={line.engine}
                 className="cg-pill"
-                title={playoutEngineWording(`Server ${server}: ${engineStateText(line)}`, engine)}
-                aria-label={playoutEngineWording(
-                  `Server ${server}: ${engineStateText(line)}`,
-                  engine,
-                )}
+                title={translateUi('Server {server}: {detail}', {
+                  server,
+                  detail: connectionCheckText(
+                    playoutEngineWording(engineStateText(line), engine),
+                    translateUi,
+                  ),
+                })}
+                aria-label={translateUi('Server {server}: {detail}', {
+                  server,
+                  detail: connectionCheckText(
+                    playoutEngineWording(engineStateText(line), engine),
+                    translateUi,
+                  ),
+                })}
                 data-engine-chip={line.engine}
                 data-engine-state={line.state}
               >
@@ -651,7 +689,9 @@ export function StatusBar({
             <Tag
               className="cg-pill"
               title={playoutEngineWording(noOscTitle(health.primary.label), engine)}
-              aria-label={`No OSC from server ${health.primary.label}`}
+              aria-label={translateUi('No OSC from server {server}', {
+                server: health.primary.label,
+              })}
             >
               <span style={styles.noOsc}>
                 <Icon icon={TriangleAlert} size={11} /> {localizeUi('NO OSC FROM')}{' '}
@@ -663,7 +703,9 @@ export function StatusBar({
             <Tag
               className="cg-pill"
               title={playoutEngineWording(noOscTitle(health.backup.label), engine)}
-              aria-label={`No OSC from server ${health.backup.label}`}
+              aria-label={translateUi('No OSC from server {server}', {
+                server: health.backup.label,
+              })}
             >
               <span style={styles.noOsc}>
                 <Icon icon={TriangleAlert} size={11} /> {localizeUi('NO OSC FROM')}{' '}
@@ -693,9 +735,14 @@ export function StatusBar({
                 deadChannelTitle(health.primary.label, primaryDead),
                 engine,
               )}
-              aria-label={`Server ${health.primary.label} is not producing frames on ${
-                primaryDead.length === 1 ? 'channel' : 'channels'
-              } ${primaryDead.join(', ')}`}
+              aria-label={translateUi(
+                'Server {server} is not producing frames on {channels} {numbers}',
+                {
+                  server: health.primary.label,
+                  channels: translateUi(primaryDead.length === 1 ? 'channel' : 'channels'),
+                  numbers: primaryDead.join(', '),
+                },
+              )}
             >
               <span style={styles.noOsc}>
                 ⚠ {health.primary.label} {localizeUi('NOT PRODUCING · CH')} {primaryDead.join(', ')}
@@ -709,9 +756,14 @@ export function StatusBar({
                 deadChannelTitle(health.backup.label, backupDead),
                 engine,
               )}
-              aria-label={`Server ${health.backup.label} is not producing frames on ${
-                backupDead.length === 1 ? 'channel' : 'channels'
-              } ${backupDead.join(', ')}`}
+              aria-label={translateUi(
+                'Server {server} is not producing frames on {channels} {numbers}',
+                {
+                  server: health.backup.label,
+                  channels: translateUi(backupDead.length === 1 ? 'channel' : 'channels'),
+                  numbers: backupDead.join(', '),
+                },
+              )}
             >
               <span style={styles.noOsc}>
                 ⚠ {health.backup.label} {localizeUi('NOT PRODUCING · CH')} {backupDead.join(', ')}

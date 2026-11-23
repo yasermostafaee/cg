@@ -79,7 +79,8 @@ export function ImageFieldControl({
           aria-label={ariaLabel}
           disabled={disabled}
           title={
-            selectedOption?.label ?? (assetId === '' ? 'No picture selected' : 'Uploaded picture')
+            selectedOption?.label ??
+            (assetId === '' ? localizeUi('No picture selected') : localizeUi('Uploaded picture'))
           }
           onClick={() => setPickerOpen(true)}
         >
@@ -92,7 +93,9 @@ export function ImageFieldControl({
           </span>
           <span className="cg-image-picker-trigger__label">
             {selectedOption?.label ??
-              (assetId === '' ? 'No picture selected' : 'Current uploaded picture')}
+              (assetId === ''
+                ? localizeUi('No picture selected')
+                : localizeUi('Current uploaded picture'))}
           </span>
           <span className="cg-image-picker-trigger__hint">{localizeUi('Choose…')}</span>
         </Button>
@@ -106,7 +109,7 @@ export function ImageFieldControl({
             ref={uploadInput}
             className="cg-visually-hidden"
             accept={acceptAttr(field)}
-            aria-label={`${ariaLabel} browse image`}
+            aria-label={localizeUi('{field} browse image', { field: ariaLabel })}
             disabled={disabled}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
@@ -136,8 +139,8 @@ export function ImageFieldControl({
       )}
       {pickerOpen && (
         <Modal
-          title={`Choose picture · ${ariaLabel}`}
-          ariaLabel={`Choose picture for ${ariaLabel}`}
+          title={localizeUi('Choose picture · {field}', { field: ariaLabel })}
+          ariaLabel={localizeUi('Choose picture for {field}', { field: ariaLabel })}
           size="wide"
           layer="sub"
           onClose={() => setPickerOpen(false)}

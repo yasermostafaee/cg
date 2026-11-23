@@ -962,7 +962,9 @@ export function RehearsalStage({
         ))}
         {showLiveSourceNote && (
           <span style={styles.liveSourceNote} data-live-source-note="">
-            {hasSourcePicture ? 'SOME LIVE SOURCES NOT RENDERED' : 'LIVE SOURCES NOT RENDERED'}
+            {hasSourcePicture
+              ? localizeUi('SOME LIVE SOURCES NOT RENDERED')
+              : localizeUi('LIVE SOURCES NOT RENDERED')}
           </span>
         )}
         {/* `RELEASE-091-01` §1 — a row that has no page, beside the ones that do. */}

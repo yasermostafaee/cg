@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import type { TemplateLiveSources } from '@cg/shared-ipc';
 import type { ControlLiveLayout } from '@cg/shared-schema';
 import { templateFocusTarget } from '@cg/shared-ipc';
@@ -247,6 +248,7 @@ export function LookPicker({
   target,
   onAir,
 }: Props): JSX.Element {
+  const translateUi = useUiText();
   const preview = target === 'preview';
   const starting = target === 'next';
   const targetLabel = { air: 'PGM preset', next: 'Starting preset', preview: 'Preview preset' }[
@@ -258,7 +260,10 @@ export function LookPicker({
       data-look-picker=""
       data-look-target={target}
       role="group"
-      aria-label={`${targetLabel} for ${rowName}`}
+      aria-label={translateUi('{target} for {row}', {
+        target: translateUi(targetLabel),
+        row: rowName,
+      })}
     >
       {/*
         The label IS the target statement. `PVW LOOK` rather than a badge or a colour: this
@@ -294,11 +299,13 @@ export function LookPicker({
       <span
         style={styles.label}
         title={
-          starting ? 'Selecting a preset chooses the first preset taken on air.' : IMMEDIATE_TITLE
+          starting
+            ? translateUi('Selecting a preset chooses the first preset taken on air.')
+            : IMMEDIATE_TITLE
         }
       >
-        {preview ? 'PVW LOOK' : 'PGM'}{' '}
-        <span style={styles.now}>{starting ? '· FIRST' : '· NOW'}</span>
+        {preview ? translateUi('PVW LOOK') : 'PGM'}{' '}
+        <span style={styles.now}>{starting ? translateUi('· FIRST') : translateUi('· NOW')}</span>
       </span>
       <span style={styles.strip} data-look-strip="">
         {looks.map((look) => {
@@ -343,7 +350,12 @@ export function LookPicker({
               {...(live && onAir ? { 'data-look-onair': '' } : {})}
               disabled={refusal !== undefined}
               title={
-                refusal ?? `${look.label} · ${String(count)} ${count === 1 ? 'plate' : 'plates'}`
+                refusal ??
+                translateUi('{look} · {count} {plates}', {
+                  look: look.label,
+                  count: String(count),
+                  plates: count === 1 ? 'plate' : 'plates',
+                })
               }
               /*
                 🔴 “CURRENT”, never “on air”. The picker says which LOOK is selected; whether
@@ -353,7 +365,10 @@ export function LookPicker({
               */
               // `B-151` — and the TARGET, so a screen reader gets the same answer the label
               // gives sighted operators: this press changes the preview, or it changes air.
-              aria-label={`${look.label} · ${targetLabel}${live ? ' — current' : ''}`}
+              aria-label={translateUi(live ? '{look} · {target} — current' : '{look} · {target}', {
+                look: look.label,
+                target: translateUi(targetLabel),
+              })}
               data-look-id={look.id}
               data-look-frames={String(look.frames.length)}
               onClick={() => {

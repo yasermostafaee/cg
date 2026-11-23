@@ -250,22 +250,23 @@ test('the toggle folds the strip away and hands its height to the layer list; a 
   expect(layersAfter).not.toBeNull();
   expect(layersAfter!.height).toBeGreaterThan(layersBefore!.height + stripBox!.height * 0.9);
 
-  /*
-    🔴 THE WAY OUT — reset returns EVERY axis to the SHIPPED DEFAULT, this one included, and
-    since `MONITORS-01` that default is HIDDEN rather than shown.
+  const reset = page.getByRole('button', { name: 'Reset the panel layout', exact: true });
+  const settings = page.getByRole('dialog', { name: 'Station setup' });
+  const openGeneral = async () => {
+    await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+    await settings.getByRole('tab', { name: 'General', exact: true }).click();
+  };
+  await expect(reset).toHaveCount(0);
+  await openGeneral();
+  await expect(reset).toBeDisabled();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
 
-    ⚠ THE STRIP IS ALREADY FOLDED AT THIS POINT, which is the whole subtlety: the toggle press
-    above put this axis BACK on its default, so `customized` is false and the reset control is
-    not on the page at all. Asserting it here is not a smaller version of the old assertion —
-    it is the correct one, because "there is nothing to reset" is exactly what a shell sitting
-    at its defaults should say. (Written down because the first spelling of this test clicked
-    for a control that had correctly just disappeared, and timed out.)
-  */
-  await expect(page.getByRole('button', { name: 'Reset the panel layout' })).toHaveCount(0);
-
-  // …and from the direction that DOES move: bring the strip up, and reset folds it away.
   await showMonitors(page);
-  await page.getByRole('button', { name: 'Reset the panel layout' }).click();
+  await expect(reset).toHaveCount(0);
+  await openGeneral();
+  await reset.click();
+  await expect(reset).toBeDisabled();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(strip(page)).toHaveCount(0);
   await expect(monitorsToggle(page)).toHaveAttribute('aria-expanded', 'false');
 });

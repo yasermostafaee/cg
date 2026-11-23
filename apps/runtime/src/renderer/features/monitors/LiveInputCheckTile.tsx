@@ -203,17 +203,17 @@ export function LiveInputCheckTile({
           hidden={!pictureLive}
           className="cg-input-check-tile__picture"
           role="img"
-          aria-label={`Live input picture for ${view.sourceName}`}
+          aria-label={localizeUi('Live input picture for {source}', { source: view.sourceName })}
           data-input-picture=""
         />
         {!pictureLive && (
           <span className="cg-input-check-tile__placeholder">
             {state === 'forbidden' ? (
-              <span data-input-check-detail="">{view.message || 'Access denied'}</span>
+              <span data-input-check-detail="">{view.message || localizeUi('Access denied')}</span>
             ) : state === 'connecting' ? (
-              'Waiting for picture'
+              localizeUi('Waiting for picture')
             ) : (
-              'No current picture'
+              localizeUi('No current picture')
             )}
           </span>
         )}
@@ -232,7 +232,9 @@ export function LiveInputCheckTile({
               variant="icon"
               aria-label={localizeUi('Input preview sound')}
               aria-pressed={audible}
-              title={audible ? 'Mute input preview' : 'Listen to input preview'}
+              title={
+                audible ? localizeUi('Mute input preview') : localizeUi('Listen to input preview')
+              }
               disabled={!pictureLive}
               onClick={toggleSound}
               onKeyDown={handleButtonKey}

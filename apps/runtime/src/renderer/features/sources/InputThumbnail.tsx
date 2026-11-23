@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { VideoOff, Volume2, VolumeX } from 'lucide-react';
@@ -243,6 +244,7 @@ export function InputThumbnail({
     tile,
   ]);
 
+  const localizeUi = useUiText();
   if (directChosen) {
     return (
       <DirectNdiInputTile
@@ -305,11 +307,11 @@ export function InputThumbnail({
     ) : compact ? (
       <Icon icon={VideoOff} size={12} />
     ) : frame?.signal === 'absent' ? (
-      'No signal'
+      localizeUi('No signal')
     ) : awaitingPicture ? (
-      'Loading preview…'
+      localizeUi('Loading preview…')
     ) : (
-      'Preview unavailable'
+      localizeUi('Preview unavailable')
     );
 
   const thumbnail =
@@ -320,8 +322,8 @@ export function InputThumbnail({
         data-input-thumbnail="passive"
         data-input-thumbnail-compact={compact ? '' : undefined}
         role="img"
-        aria-label={description}
-        title={description}
+        aria-label={localizeUi(description)}
+        title={localizeUi(description)}
       >
         {content}
       </span>
@@ -331,8 +333,12 @@ export function InputThumbnail({
         variant="ghost"
         className={className}
         data-input-thumbnail="checkable"
-        aria-label={`Check input · ${sourceDisplayName(source.name, 'input')}`}
-        title={`${description} Select to check this input.`}
+        aria-label={localizeUi('Check input · {name}', {
+          name: sourceDisplayName(source.name, 'input'),
+        })}
+        title={localizeUi('{description} Select to check this input.', {
+          description: localizeUi(description),
+        })}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
         }}
@@ -379,6 +385,7 @@ function DirectNdiInputTile({
   onPreviewEngineChange: PreviewOriginChanged | undefined;
   onPick: (() => void) | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const picture = useNdiPicture(receiver);
   const levels = useNdiLevels(receiver);
   const listening = useNdiAudioReceiver();
@@ -423,8 +430,8 @@ function DirectNdiInputTile({
         className="cg-input-thumbnail cg-input-check-tile"
         data-input-thumbnail="direct"
         role="region"
-        aria-label={`Direct NDI preview · ${sourceName}`}
-        title={picture.state === 'error' ? caption : undefined}
+        aria-label={localizeUi('Direct NDI preview · {name}', { name: sourceName })}
+        title={picture.state === 'error' ? localizeUi(caption) : undefined}
       >
         <canvas
           ref={canvas}
@@ -432,12 +439,12 @@ function DirectNdiInputTile({
           className="cg-input-check-tile__picture"
           aria-hidden="true"
         />
-        {!live && <span className="cg-input-check-tile__placeholder">{caption}</span>}
+        {!live && <span className="cg-input-check-tile__placeholder">{localizeUi(caption)}</span>}
         {onPick !== undefined && (
           <Button
             variant="ghost"
             className="cg-direct-ndi-input-select"
-            aria-label={'Select input · ' + sourceName}
+            aria-label={localizeUi('Select input · {name}', { name: sourceName })}
             onClick={onPick}
             onKeyDown={onActionKey}
           >
@@ -445,14 +452,14 @@ function DirectNdiInputTile({
           </Button>
         )}
         <span className="cg-input-check-tile__top">
-          {live && <span className="cg-input-check-tile__status">{caption}</span>}
+          {live && <span className="cg-input-check-tile__status">{localizeUi(caption)}</span>}
           <span className="cg-input-check-tile__actions">
             <Button
               variant="icon"
-              aria-label={`Listen to ${sourceName}`}
+              aria-label={localizeUi('Listen to {name}', { name: sourceName })}
               aria-pressed={audible}
               disabled={!live}
-              title={audible ? 'Mute input preview' : 'Listen to input preview'}
+              title={localizeUi(audible ? 'Mute input preview' : 'Listen to input preview')}
               onKeyDown={onActionKey}
               onClick={(event) => {
                 event.stopPropagation();

@@ -232,11 +232,11 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
     layer: PlayoutLayerState,
   ): Promise<{ accepted: boolean; cancelled?: boolean }> => {
     const ok = await confirm({
-      title: `Clear playout layer ${String(layer.layer)}?`,
-      body:
-        `This is NOT our layer — it belongs to the playout system. Its graphic leaves air ` +
-        `immediately, with no outro. Only the playout side can put it back.`,
-      confirmLabel: `Clear layer ${String(layer.layer)}`,
+      title: localizeUi('Clear playout layer {layer}?', { layer: String(layer.layer) }),
+      body: localizeUi(
+        'This is NOT our layer — it belongs to the playout system. Its graphic leaves air immediately, with no outro. Only the playout side can put it back.',
+      ),
+      confirmLabel: localizeUi('Clear layer {layer}', { layer: String(layer.layer) }),
     });
     if (!ok) return { accepted: false, cancelled: true };
     return clearOne(layer);
@@ -246,14 +246,22 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
     if (clearable.length === 0) return { accepted: false, cancelled: true };
     const list = clearable.map((l) => String(l.layer)).join(', ');
     const ok = await confirm({
-      title: `Clear ${String(clearable.length)} playout layer${clearable.length === 1 ? '' : 's'}?`,
-      body:
-        `These are NOT our layers — they belong to the playout system. ` +
-        `Layer${clearable.length === 1 ? '' : 's'} ${list} will be cleared immediately and ` +
-        `whatever graphics are on them leave air with no outro. ` +
-        `Occupants that are not html templates, and any layer whose occupancy cannot be ` +
-        `verified, are NOT included and stay untouched.`,
-      confirmLabel: `Clear ${String(clearable.length)} layer${clearable.length === 1 ? '' : 's'}`,
+      title: localizeUi(
+        clearable.length === 1 ? 'Clear {count} playout layer?' : 'Clear {count} playout layers?',
+        { count: clearable.length },
+      ),
+      body: localizeUi(
+        'These are NOT our layers — they belong to the playout system. {layers} will be cleared immediately and whatever graphics are on them leave air with no outro. Occupants that are not html templates, and any layer whose occupancy cannot be verified, are NOT included and stay untouched.',
+        {
+          layers: localizeUi(clearable.length === 1 ? 'Layer {layers}' : 'Layers {layers}', {
+            layers: list,
+          }),
+        },
+      ),
+      confirmLabel: localizeUi(
+        clearable.length === 1 ? 'Clear {count} layer' : 'Clear {count} layers',
+        { count: clearable.length },
+      ),
     });
     if (!ok) return { accepted: false, cancelled: true };
     // N calls to the SAME single-layer channel (the UN-gated `clearOne` — this
@@ -308,7 +316,9 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
             onError={reportCommandError}
             disabled={clearRefusal !== undefined}
             {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
-            aria-label={`Clear all ${String(clearable.length)} clearable playout layers`}
+            aria-label={localizeUi('Clear all {count} clearable playout layers', {
+              count: String(clearable.length),
+            })}
           >
             {localizeUi('CLEAR ALL')}
           </AsyncButton>
@@ -331,7 +341,9 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
                   onError={reportCommandError}
                   disabled={clearRefusal !== undefined}
                   {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
-                  aria-label={`Clear playout layer ${String(layer.layer)}`}
+                  aria-label={localizeUi('Clear playout layer {layer}', {
+                    layer: String(layer.layer),
+                  })}
                 >
                   {localizeUi('CLEAR')}
                 </AsyncButton>
@@ -428,12 +440,15 @@ function StationLayerDeclarations(): JSX.Element {
         <span style={styles.groupTitle}>{localizeUi('Live plate layers')}</span>
         <span style={styles.groupValue} dir="ltr">
           {!live.ready
-            ? 'Waiting for Bridge.'
+            ? localizeUi('Waiting for Bridge.')
             : live.value.length === 0
-              ? 'No occupied live plate layers.'
-              : `${String(live.value.length)} occupied · ${live.value
-                  .map((l) => `${String(l.channel)}-${String(l.layer)}`)
-                  .join(', ')}`}
+              ? localizeUi('No occupied live plate layers.')
+              : localizeUi('{count} occupied · {layers}', {
+                  count: String(live.value.length),
+                  layers: live.value
+                    .map((l) => `${String(l.channel)}-${String(l.layer)}`)
+                    .join(', '),
+                })}
         </span>
         {live.ready && live.value.length > 0 && (
           <p style={styles.groupNote}>

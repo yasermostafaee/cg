@@ -437,7 +437,15 @@ function PreviewPanDraft({
       <Button
         variant="ghost"
         className="cg-pan-draft__handle"
-        aria-label={`Pan ${sourcePicture !== undefined ? 'source picture' : guide ? 'crop guide' : 'practice image'} in ${plateLabel}`}
+        aria-label={localizeUi('Pan {picture} in {plate}', {
+          picture:
+            sourcePicture !== undefined
+              ? 'source picture'
+              : guide
+                ? 'crop guide'
+                : 'practice image',
+          plate: plateLabel,
+        })}
         aria-disabled={blocked || (!horizontal && !vertical)}
         data-pan-practice-axis={
           horizontal && vertical
@@ -548,7 +556,10 @@ function PreviewPanDraft({
               variant="ghost"
               className="cg-pan-draft__resize"
               data-pan-resize-corner={corner.name}
-              aria-label={`Resize ${corner.name} crop corner in ${plateLabel}`}
+              aria-label={localizeUi('Resize {corner} crop corner in {plate}', {
+                corner: corner.name,
+                plate: plateLabel,
+              })}
               title={localizeUi('Resize crop')}
               {...gestureProps(corner)}
               onKeyDown={(event) => {
@@ -581,8 +592,8 @@ function PreviewPanDraft({
         <span role="status">
           {sourcePicture !== undefined && state === 'ready'
             ? measured
-              ? 'Source picture'
-              : 'Preview picture'
+              ? localizeUi('Source picture')
+              : localizeUi('Preview picture')
             : label}
         </span>
         <bdi>{plateLabel}</bdi>
@@ -597,7 +608,7 @@ function PreviewPanDraft({
         onClick={() => commitFocus({ ...focus, ...DEFAULT_LIVE_CROP_FOCUS })}
       >
         <Icon icon={RotateCcw} size={14} />
-        {!compactCenter && 'Center'}
+        {!compactCenter && localizeUi('Center')}
       </Button>
     </div>
   );

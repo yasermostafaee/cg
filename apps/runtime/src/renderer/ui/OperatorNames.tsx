@@ -87,24 +87,25 @@ export function OperatorNames({ name }: { name: OperatorRowName }): JSX.Element 
  * it wrong take the same one rather than each inventing a fix.
  *
  * The `className` and the `title` go on the WRAPPER, which is the box: layout is the box's
- * job, and the isolate must stay inline for its own job to be safe. `dir="ltr"` is explicit
- * rather than inherited — it makes the box immune to an ancestor that ever goes RTL, which is
- * the other way `text-align: start` can resolve to the wrong side.
+ * job, and the isolate stays inline so its text direction cannot position the wrapper.
+ * Callers that follow the interface direction can allow the wrapper to inherit it.
  */
 export function IsolatedName({
   className,
   title,
   children,
+  alignWithInterface = false,
 }: {
   className?: string;
   title?: string;
   children: ReactNode;
+  alignWithInterface?: boolean;
 }): JSX.Element {
   return (
-    <span className={className} title={title} dir="ltr">
+    <span className={className} title={title} dir={alignWithInterface ? undefined : 'ltr'}>
       {/*
         `B-303` — the isolate takes the name's OWN direction ({@link directionOf}) when the name is
-        text; anything else keeps the UA's `dir=auto`. The BOX stays LTR, as above.
+        text; anything else keeps the UA's `dir=auto`.
       */}
       <bdi {...(typeof children === 'string' ? { dir: directionOf(children) } : {})}>
         {children}

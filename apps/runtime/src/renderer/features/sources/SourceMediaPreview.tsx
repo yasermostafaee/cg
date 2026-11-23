@@ -206,20 +206,23 @@ function MediaPreviewSurface({
         {plate.toggleAudio !== undefined && (
           <Button
             variant="icon"
-            aria-label={audio + ' in ' + plate.name}
-            title={audio}
+            aria-label={localizeUi(
+              plate.audible ? 'Mute preview in {name}' : 'Listen to preview in {name}',
+              { name: plate.name },
+            )}
+            title={localizeUi(audio)}
             aria-pressed={plate.audible}
             onClick={plate.toggleAudio}
           >
             <Icon icon={plate.audible ? Volume2 : VolumeX} size={16} />
           </Button>
         )}
-        {status !== undefined && <span role="status">{status}</span>}
+        {status !== undefined && <span role="status">{localizeUi(status)}</span>}
       </div>
     );
   }
 
-  const fullscreenLabel = expanded ? 'Close fullscreen preview' : 'Fullscreen preview';
+  const fullscreenLabel = localizeUi(expanded ? 'Close fullscreen preview' : 'Fullscreen preview');
   const fullscreenToggle = document.fullscreenEnabled && (
     <Button
       ref={fullscreenButton}
@@ -252,14 +255,14 @@ function MediaPreviewSurface({
     >
       <div className="cg-source-media-preview__heading">
         <IsolatedName>{name}</IsolatedName>
-        <span>{description}</span>
+        <span>{localizeUi(description)}</span>
       </div>
       <div className="cg-source-media-preview__picture">
         {picture}
         {loading !== undefined && (
           <span className="cg-source-media-preview__loading" role="status">
             <Icon icon={LoaderCircle} size={18} />
-            {loading}
+            {localizeUi(loading)}
           </span>
         )}
         {transport === undefined && fullscreenToggle}
@@ -312,8 +315,8 @@ function MediaPreviewTransport({
         {fullscreenToggle}
       </div>
       {message && (
-        <span className="cg-source-media-preview__status" role="status">
-          {message}
+        <span className="cg-source-media-preview__status" role="status" dir="auto">
+          {localizeUi(message)}
         </span>
       )}
     </div>
@@ -798,14 +801,14 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       message = preview.message ?? 'Preview unavailable';
     } else if (loading) message = 'Loading…';
   }
-  let playbackOrigin = '';
-  if (showVideo && preview?.playbackMode === 'local-original') {
-    playbackOrigin = ' · Local original file';
-  } else if (showVideo && preview?.playbackMode === 'network-original') {
-    playbackOrigin = ' · Original file over network';
-  }
+  const originKey =
+    showVideo && preview?.playbackMode === 'local-original'
+      ? 'Server {server} · Local original file'
+      : showVideo && preview?.playbackMode === 'network-original'
+        ? 'Server {server} · Original file over network'
+        : 'Server {server}';
   const origin =
-    displayedEngine === undefined ? null : `Server ${displayedEngine}${playbackOrigin}`;
+    displayedEngine === undefined ? null : localizeUi(originKey, { server: displayedEngine });
   const plateAudio =
     showVideo &&
     (plate?.hasAudio === true || (plate?.hasAudio !== false && decodedAudioUrl === videoUrl));
@@ -955,7 +958,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             <Button
               ref={playbackButton}
               variant="icon"
-              title={intent === 'playing' ? 'Pause preview' : 'Play preview'}
+              title={localizeUi(intent === 'playing' ? 'Pause preview' : 'Play preview')}
               aria-label={localizeUi(intent === 'playing' ? 'Pause preview' : 'Play preview')}
               aria-keyshortcuts="Space"
               disabled={!foreground}
@@ -974,7 +977,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             </Button>
             <Button
               variant="icon"
-              title={muted ? 'Listen to preview' : 'Mute preview'}
+              title={localizeUi(muted ? 'Listen to preview' : 'Mute preview')}
               aria-label={localizeUi(muted ? 'Listen to preview' : 'Mute preview')}
               aria-pressed={!muted}
               disabled={!foreground}
@@ -986,7 +989,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
               className="cg-source-media-preview__volume"
               aria-label={localizeUi('Preview volume')}
               aria-valuetext={`${volume}%`}
-              title={`Preview volume · ${volume}%`}
+              title={localizeUi('Preview volume · {percent}', { percent: `${volume}%` })}
               min={0}
               max={100}
               step={1}
@@ -1207,7 +1210,7 @@ function SampledSourceMediaPreview({
                   <Button
                     ref={playbackButton}
                     variant="icon"
-                    title={playing ? 'Pause preview' : 'Play preview'}
+                    title={localizeUi(playing ? 'Pause preview' : 'Play preview')}
                     aria-label={localizeUi(playing ? 'Pause preview' : 'Play preview')}
                     aria-keyshortcuts="Space"
                     onClick={togglePlayback}

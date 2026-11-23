@@ -39,8 +39,16 @@ const placementFields = [
 
 export function WorkspaceSettings(): JSX.Element {
   const t = useUiText();
-  const { positions, setPositions, uiProfiles, saveProfile, loadProfile, deleteProfile } =
-    useShellLayoutContext();
+  const {
+    positions,
+    setPositions,
+    uiProfiles,
+    saveProfile,
+    loadProfile,
+    deleteProfile,
+    customized,
+    reset,
+  } = useShellLayoutContext();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
   const trimmed = name.trim();
@@ -58,6 +66,9 @@ export function WorkspaceSettings(): JSX.Element {
       <section className="cg-card" aria-label={t('Workspace')}>
         <div className="cg-card__head">
           <span className="cg-card__title">{t('Workspace')}</span>
+          <Button variant="neutral" disabled={!customized} onClick={reset}>
+            {t('Reset the panel layout')}
+          </Button>
         </div>
         <div className="cg-card__body">
           <div className="cg-setup-fields cg-setup-fields--three">

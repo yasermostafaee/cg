@@ -276,7 +276,9 @@ function PassesControl({
           // OFF AIR: names what it inherits when the operator has stored nothing. ON AIR: no
           // number and no placeholder either — a placeholder would be that same unseeable
           // count in lighter ink.
-          placeholder={onAir ? '' : `Default (${passesWord(inherited)})`}
+          placeholder={
+            onAir ? '' : localizeUi('Default ({passes})', { passes: passesWord(inherited) })
+          }
           onBlur={() => {
             refuseIfNotACount(typed);
           }}
@@ -328,7 +330,7 @@ function DelayControl({
           }}
           decimal
           aria-label={localizeUi('Gap between passes')}
-          placeholder={`Default (${secondsOf(inheritedMs)})`}
+          placeholder={localizeUi('Default ({seconds})', { seconds: secondsOf(inheritedMs) })}
           onBlur={() => {
             const raw = typed.trim();
             if (raw === '') return;
@@ -373,13 +375,17 @@ function SentLine({
       </p>
     );
   }
+  const pattern = localizeUi(value === 'infinite' ? 'Sent {amount}' : 'Sent {amount} passes');
+  const [before, after] = pattern.split('{amount}', 2);
+  const amount =
+    value === 'infinite'
+      ? localizeUi('until stop')
+      : localizeUi('Timing repeat count: {count}', { count: value });
   return (
     <p style={styles.hint} data-testid="timing-passes-sent">
-      {localizeUi('Sent')}{' '}
-      <strong style={styles.sentValue}>
-        {value === 'infinite' ? 'until stop' : `${String(value)} more`}
-      </strong>
-      {value === 'infinite' ? '' : ' passes'}
+      {before}
+      <strong style={styles.sentValue}>{amount}</strong>
+      {after}
       {at === undefined ? '' : ` · ${at}`}
     </p>
   );

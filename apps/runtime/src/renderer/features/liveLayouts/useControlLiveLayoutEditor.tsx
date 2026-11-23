@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { ControlLiveLayout } from '@cg/shared-schema';
@@ -35,6 +36,7 @@ export function useControlLiveLayoutEditor(
   busy: boolean;
   dialog: JSX.Element | null;
 } {
+  const localizeUi = useUiText();
   const [request, setRequest] = useState<EditorRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
@@ -49,6 +51,7 @@ export function useControlLiveLayoutEditor(
     duplicate = false,
   ): Promise<void> => {
     const current = ++generation.current;
+    const copyName = localizeUi('{name} copy');
     setBusy(true);
     try {
       let next: EditorRequest;
@@ -60,7 +63,7 @@ export function useControlLiveLayoutEditor(
           undefined;
         next = {
           channel,
-          initial: createControlLiveLayout(raster),
+          initial: { ...createControlLiveLayout(raster), name: localizeUi('New live layout') },
           mode: 'create',
         };
       } else {
@@ -73,7 +76,9 @@ export function useControlLiveLayoutEditor(
           ? {
               ...layout,
               id: uuid(),
-              name: `${layout.name.slice(0, 115)} copy`,
+              name: copyName.replace('{name}', () =>
+                layout.name.slice(0, 120 - copyName.replace('{name}', '').length),
+              ),
             }
           : { ...layout, id: template.templateId };
         next = {

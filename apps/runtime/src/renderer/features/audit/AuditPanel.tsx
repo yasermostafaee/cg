@@ -1,4 +1,5 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
+import { writeFieldDigits } from '@cg/text-shaping';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -16,7 +17,6 @@ import {
   auditChannelOf,
   auditMatches,
   holdsPermissionClass,
-  rebuildClause,
   rebuildDetail,
   type AuditCursor,
   type AuditFilter,
@@ -28,7 +28,9 @@ import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
-import { DateInput } from '../../ui/DateInput.js';
+import { AuditDateInput } from './AuditDateInput.js';
+import { AUDIT_DIGITS, useAuditCalendar } from './auditCalendarChoice.js';
+import { useLunarAdjustDays } from '../calendar/calendarStore.js';
 import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -36,7 +38,13 @@ import { OperatorNames } from '../../ui/OperatorNames.js';
 import { SelectInput } from '../../ui/SelectInput.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { commandForDisplay } from '../sources/producerDisplay.js';
-import { auditTimeParts, placeName, templateName, timingClause } from './auditFormat.js';
+import {
+  auditTimeParts,
+  placeName,
+  templateName,
+  timingClause,
+  type AuditCalendarFormat,
+} from './auditFormat.js';
 
 interface Props {
   open: boolean;
@@ -91,12 +99,14 @@ function outcomeTag(outcome: AuditEntry['outcome']): string {
   return 'cg-tag cg-tag--error';
 }
 
-function eventCount(count: number): string {
-  return `${String(count)} ${count === 1 ? 'event' : 'events'}`;
-}
-
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const { interface: locale } = useLanguages();
+  const calendar = useAuditCalendar();
+  const lunarAdjust = useLunarAdjustDays();
+  const format: AuditCalendarFormat = { calendar, lunarAdjust, digits: AUDIT_DIGITS[locale] };
+  const number = (value: number): string => writeFieldDigits(String(value), format.digits);
   const auth = useAuthSession();
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -109,6 +119,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [channelFilter, setChannelFilter] = useState(0);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [fromInvalid, setFromInvalid] = useState(false);
+  const [toInvalid, setToInvalid] = useState(false);
+  const [dateReset, setDateReset] = useState(0);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const [next, setNext] = useState<AuditCursor | null>(null);
@@ -134,7 +147,12 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const rangeError = fromDate !== '' && toDate !== '' && fromDate > toDate;
+  const invalidDate = fromInvalid || toInvalid;
+  const rangeReversed = fromDate !== '' && toDate !== '' && fromDate > toDate;
+  const rangeError = invalidDate || rangeReversed;
+  const rangeMessage = invalidDate
+    ? 'Enter a valid date in the selected calendar.'
+    : 'From must not be after To.';
   const filter = useMemo((): AuditFilter => {
     const value: AuditFilter = {};
     if (actionFilter !== 'all') value.action = actionFilter;
@@ -220,7 +238,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     } catch (error) {
       if (ask !== asked.current) return { accepted: true };
       setRead({ kind: 'failed', detail: error instanceof Error ? error.message : String(error) });
-      return { accepted: false, message: READ_FAILED_TEXT };
+      return { accepted: false, message: localizeFeedback(READ_FAILED_TEXT) };
     } finally {
       if (ask === asked.current) setBusy(false);
     }
@@ -265,7 +283,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   const refresh = (): Promise<{ accepted: boolean; message?: string }> => {
     if (rangeError)
-      return Promise.resolve({ accepted: false, message: 'From must not be after To.' });
+      return Promise.resolve({ accepted: false, message: localizeFeedback(rangeMessage) });
     void loadTotal();
     return loadPage(cursors[pageIndex], pageIndex);
   };
@@ -338,7 +356,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     (auth.kind === 'off' ||
       (auth.kind === 'signed-in' && holdsPermissionClass(auth.principal.roles, 'station-admin')));
   const selected = entries.find((entry) => rowIdentity(entry) === selectedKey) ?? null;
-  const filtered = Object.keys(filter).length > 0 || query.trim() !== '';
+  const filtered = Object.keys(filter).length > 0 || query.trim() !== '' || invalidDate;
   const resetFilters = (): void => {
     setActionFilter('all');
     setActorFilter('');
@@ -346,6 +364,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     setChannelFilter(0);
     setFromDate('');
     setToDate('');
+    setFromInvalid(false);
+    setToInvalid(false);
+    setDateReset((revision) => revision + 1);
     setQuery('');
   };
 
@@ -354,7 +375,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       title={localizeUi('Audit log')}
       emblem={ScrollText}
       subtitle={localizeUi('Station actions and their recorded outcomes.')}
-      ariaLabel="Audit log"
+      ariaLabel={localizeUi('Audit log')}
       size="ledger"
       frame="fixed"
       onClose={onClose}
@@ -362,19 +383,25 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         <div className="cg-audit-footer" data-audit-footer="">
           <span className="cg-audit-foot-info">
             {read.kind === 'ready' ? (
-              <span data-audit-count={String(entries.length)}>{eventCount(entries.length)}</span>
+              <span data-audit-count={String(entries.length)}>
+                {localizeUi(entries.length === 1 ? '{count} event' : '{count} events', {
+                  count: number(entries.length),
+                })}
+              </span>
             ) : (
               <span data-audit-read={read.kind}>
-                {read.kind === 'reading' ? 'Reading…' : 'Not read'}
+                {localizeUi(read.kind === 'reading' ? 'Reading…' : 'Not read')}
               </span>
             )}
             {totalRead.kind === 'ready' && total !== null ? (
               <span data-audit-total={String(total)}>
-                {eventCount(total)} {localizeUi('total')}
+                {localizeUi(total === 1 ? '{count} event total' : '{count} events total', {
+                  count: number(total),
+                })}
               </span>
             ) : (
               <span data-audit-total-read={totalRead.kind}>
-                {totalRead.kind === 'reading' ? 'Counting…' : 'Total unavailable'}
+                {localizeUi(totalRead.kind === 'reading' ? 'Counting…' : 'Total unavailable')}
               </span>
             )}
             <label className="cg-audit-follow" htmlFor="cg-audit-follow-new">
@@ -383,8 +410,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             </label>
             {pendingEvents > 0 && (
               <Button variant="ghost" data-audit-new-events="" onClick={() => loadFirst.current()}>
-                {String(pendingEvents)} {localizeUi('new')}{' '}
-                {pendingEvents === 1 ? 'event' : 'events'}
+                {localizeUi(pendingEvents === 1 ? '{count} new event' : '{count} new events', {
+                  count: number(pendingEvents),
+                })}
               </Button>
             )}
             {filtered && (
@@ -403,7 +431,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
               <Icon icon={ChevronLeft} flipRtl /> {localizeUi('Previous')}
             </Button>
             <span data-audit-page={String(pageIndex + 1)}>
-              {localizeUi('Page')} {String(pageIndex + 1)}
+              {localizeUi('Page {number}', { number: number(pageIndex + 1) })}
             </span>
             <Button
               variant="neutral"
@@ -440,7 +468,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           onChange={(value) => setActionFilter(value as ActionFilter)}
           options={ACTION_OPTIONS.map((value) => ({
             value,
-            label: value === 'all' ? 'All actions' : value,
+            label: localizeUi(value === 'all' ? 'All actions' : value),
           }))}
         />
         <FilterSelect
@@ -450,7 +478,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           onChange={(value) => setOutcomeFilter(value as OutcomeFilter)}
           options={OUTCOME_OPTIONS.map((value) => ({
             value,
-            label: value === 'all' ? 'All results' : outcomeLabel(value),
+            label: localizeUi(value === 'all' ? 'All results' : outcomeLabel(value)),
           }))}
         />
         {channelsOf(bank).length > 0 && (
@@ -460,13 +488,16 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             value={String(channelFilter)}
             onChange={(value) => setChannelFilter(Number(value))}
             options={[
-              { value: '0', label: 'All channels' },
+              { value: '0', label: localizeUi('All channels') },
               ...channelsOf(bank).map((channel) => ({
                 value: String(channel),
                 label:
                   channelNames.get(channel) === undefined
-                    ? `CH ${String(channel)}`
-                    : `CH ${String(channel)} · ${channelNames.get(channel) ?? ''}`,
+                    ? localizeUi('CH {channel}', { channel: number(channel) })
+                    : localizeUi('CH {channel} · {name}', {
+                        channel: number(channel),
+                        name: channelNames.get(channel) ?? '',
+                      }),
               })),
             ]}
           />
@@ -482,22 +513,30 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         </div>
         <div className="cg-audit-field cg-audit-field--date">
           <label htmlFor="audit-from">{localizeUi('From')}</label>
-          <DateInput
+          <AuditDateInput
+            key={dateReset}
             id="audit-from"
-            ariaLabel="Audit from date"
+            label={localizeUi('Audit from date')}
+            pickerLabel={localizeUi('Pick a start date')}
             value={fromDate}
+            format={format}
             onChange={setFromDate}
-            invalid={rangeError}
+            onInvalidChange={setFromInvalid}
+            invalid={rangeReversed || fromInvalid}
           />
         </div>
         <div className="cg-audit-field cg-audit-field--date">
           <label htmlFor="audit-to">{localizeUi('To')}</label>
-          <DateInput
+          <AuditDateInput
+            key={dateReset}
             id="audit-to"
-            ariaLabel="Audit to date"
+            label={localizeUi('Audit to date')}
+            pickerLabel={localizeUi('Pick an end date')}
             value={toDate}
+            format={format}
             onChange={setToDate}
-            invalid={rangeError}
+            onInvalidChange={setToInvalid}
+            invalid={rangeReversed || toInvalid}
           />
         </div>
         <AsyncButton variant="neutral" icon={RefreshCw} run={refresh}>
@@ -524,7 +563,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       )}
       {rangeError && (
         <p className="cg-audit-range-error" role="status" data-audit-range-error="">
-          {localizeUi('From must not be after To.')}
+          {localizeUi(rangeMessage)}
         </p>
       )}
       <div className="cg-audit-browser" data-audit-details-open={String(selected !== null)}>
@@ -559,6 +598,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
                     templates={templates}
                     bank={bank}
                     channelNames={channelNames}
+                    format={format}
                     onSelect={() => setSelectedKey((selected) => (selected === key ? null : key))}
                   />
                 );
@@ -569,6 +609,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         {selected !== null && (
           <EventDetails
             entry={selected}
+            format={format}
             templates={templates}
             bank={bank}
             onClose={() => setSelectedKey(null)}
@@ -618,12 +659,19 @@ function EmptyState({
   rangeError: boolean;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const { interface: locale } = useLanguages();
+  const number = (value: number): string => writeFieldDigits(String(value), AUDIT_DIGITS[locale]);
   if (rangeError)
     return <p className="cg-audit-empty">{localizeUi('Choose a possible date range.')}</p>;
   if (read.kind === 'failed') {
     return (
       <div className="cg-audit-fault">
-        <Notice noticeRole="refusal" aria="status" text={READ_FAILED_TEXT} detail={read.detail} />
+        <Notice
+          noticeRole="refusal"
+          aria="status"
+          text={localizeUi(READ_FAILED_TEXT)}
+          detail={read.detail}
+        />
       </div>
     );
   }
@@ -637,7 +685,7 @@ function EmptyState({
           noticeRole="refusal"
           aria="status"
           text={localizeUi('No audit record is configured, so nothing has been written.')}
-          detail="Audit recording is unavailable."
+          detail={localizeUi('Audit recording is unavailable.')}
         />
       </div>
     );
@@ -648,7 +696,12 @@ function EmptyState({
         <Notice
           noticeRole="refusal"
           aria="status"
-          text={`Some audit entries may be missing (${String(health.errorCount)} write ${health.errorCount === 1 ? 'failure' : 'failures'}).`}
+          text={localizeUi(
+            health.errorCount === 1
+              ? 'Some audit entries may be missing ({count} write failure).'
+              : 'Some audit entries may be missing ({count} write failures).',
+            { count: number(health.errorCount) },
+          )}
           detail={[health.lastError, health.path].filter((detail) => detail !== null).join(' — ')}
         />
       </div>
@@ -656,7 +709,7 @@ function EmptyState({
   }
   return (
     <p className="cg-audit-empty">
-      {filtered ? 'No audit entries match this filter.' : 'No audit entries yet.'}
+      {localizeUi(filtered ? 'No audit entries match this filter.' : 'No audit entries yet.')}
     </p>
   );
 }
@@ -667,6 +720,7 @@ function AuditRow({
   templates,
   bank,
   channelNames,
+  format,
   onSelect,
 }: {
   entry: AuditEntry;
@@ -674,10 +728,12 @@ function AuditRow({
   templates: ReadonlyMap<string, TemplateInfo>;
   bank: readonly FixedLayerBank[] | null;
   channelNames: ReadonlyMap<number, string>;
+  format: AuditCalendarFormat;
   onSelect: () => void;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const time = auditTimeParts(entry.ts);
+  const time = auditTimeParts(entry.ts, undefined, format);
+  const number = (value: number): string => writeFieldDigits(String(value), format.digits);
   const place = placeName(entry.slot, bank);
   const template = templateName(entry.templateId, templates);
   const names = [place, template].filter((name): name is string => name !== null);
@@ -701,8 +757,10 @@ function AuditRow({
           '—'
         ) : (
           <>
-            <bdi>{channelName ?? `CH ${String(channel)}`}</bdi>
-            {channelName !== undefined && <small>CH {String(channel)}</small>}
+            <bdi>{channelName ?? localizeUi('CH {channel}', { channel: number(channel) })}</bdi>
+            {channelName !== undefined && (
+              <small>{localizeUi('CH {channel}', { channel: number(channel) })}</small>
+            )}
           </>
         )}
       </span>
@@ -712,8 +770,12 @@ function AuditRow({
         data-audit-time={time.utc}
         title={time.utc}
       >
-        <strong>{time.time}</strong>
-        <small>{time.date}</small>
+        <strong>
+          <bdi dir="ltr">{time.time}</bdi>
+        </strong>
+        <small>
+          <bdi dir="ltr">{time.date}</bdi>
+        </small>
       </span>
       <span
         className="cg-audit-actor"
@@ -722,13 +784,15 @@ function AuditRow({
         {...(entry.consoleAddress === undefined
           ? {}
           : {
-              title: `From ${entry.consoleAddress}`,
+              title: localizeUi('From {address}', { address: entry.consoleAddress }),
               'data-audit-console': entry.consoleAddress,
             })}
       >
         <bdi>{entry.actor}</bdi>
       </span>
-      <span data-audit-cell="action">{entry.action}</span>
+      <span data-audit-cell="action" data-audit-action={entry.action}>
+        {localizeUi(entry.action)}
+      </span>
       <span className="cg-audit-item" data-audit-cell="item">
         {names.length > 0 ? (
           <span className="cg-audit-names" data-audit-names="">
@@ -742,7 +806,10 @@ function AuditRow({
             className="cg-audit-slot"
             data-audit-slot={`${String(entry.slot.channel)}-${String(entry.slot.layer)}`}
           >
-            CH {String(entry.slot.channel)} {localizeUi('· layer')} {String(entry.slot.layer)}
+            {localizeUi('CH {channel} · layer {layer}', {
+              channel: number(entry.slot.channel),
+              layer: number(entry.slot.layer),
+            })}
           </span>
         )}
       </span>
@@ -757,23 +824,31 @@ function AuditRow({
 
 function EventDetails({
   entry,
+  format,
   templates,
   bank,
   onClose,
 }: {
   entry: AuditEntry;
+  format: AuditCalendarFormat;
   templates: ReadonlyMap<string, TemplateInfo>;
   bank: readonly FixedLayerBank[] | null;
   onClose: () => void;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const time = auditTimeParts(entry.ts);
+  const time = auditTimeParts(entry.ts, undefined, format);
+  const number = (value: number): string => writeFieldDigits(String(value), format.digits);
   const place = placeName(entry.slot, bank);
   const template = templateName(entry.templateId, templates);
   const names = [place, template].filter((name): name is string => name !== null);
-  const technical: { label: string; value: string }[] = [];
-  const add = (label: string, value: string | number | undefined): void => {
-    if (value !== undefined && value !== '') technical.push({ label, value: String(value) });
+  const technical: { label: string; value: string; display?: string }[] = [];
+  const add = (label: string, value: string | number | undefined, display?: string): void => {
+    if (value !== undefined && value !== '')
+      technical.push({
+        label,
+        value: String(value),
+        ...(display === undefined ? {} : { display }),
+      });
   };
   add('Item ID', entry.itemId);
   add('Template ID', entry.templateId);
@@ -781,7 +856,8 @@ function EventDetails({
   add('Console', entry.consoleAddress);
   add('Template hash', entry.templateHash);
   add('Data hash', entry.dataHash);
-  add('Server', entry.server ?? entry.slot?.server);
+  const server = entry.server ?? entry.slot?.server;
+  add('Server', server, server === undefined ? undefined : localizeUi(server));
   add('Acknowledged', entry.ackMs === undefined ? undefined : `${String(entry.ackMs)} ms`);
   add(
     'OSC confirmed',
@@ -791,20 +867,48 @@ function EventDetails({
   add('Command', entry.command === undefined ? undefined : commandForDisplay(entry.command));
   add('Refused request', entry.refused?.channel);
   add('Refused channel', entry.refused?.casparChannel);
-  add('Timing', timingClause(entry.timing) ?? undefined);
-  add('Sound', entry.sound === undefined ? undefined : entry.sound.muted ? 'Muted' : 'Unmuted');
-  add(
-    'Page advance',
-    entry.pageAdvance === undefined
-      ? undefined
-      : `${entry.pageAdvance.field} · ${entry.pageAdvance.mode}`,
-  );
+  const timing = entry.timing;
+  const timingDisplay = [];
+  if (timing?.passes !== undefined) {
+    timingDisplay.push(
+      timing.passes === 'infinite'
+        ? localizeUi('until stop')
+        : localizeUi('{count} passes', { count: number(timing.passes) }),
+    );
+  }
+  if (timing?.delayMs !== undefined) {
+    timingDisplay.push(
+      localizeUi('gap {seconds} s', { seconds: number(Math.round(timing.delayMs / 100) / 10) }),
+    );
+  }
+  add('Timing', timingClause(timing) ?? undefined, timingDisplay.join(' · '));
+  const sound = entry.sound === undefined ? undefined : entry.sound.muted ? 'Muted' : 'Unmuted';
+  add('Sound', sound, sound === undefined ? undefined : localizeUi(sound));
+  if (entry.pageAdvance !== undefined) {
+    const { field, mode } = entry.pageAdvance;
+    add(
+      'Page advance',
+      `${field} · ${mode}`,
+      `${field} · ${localizeUi(mode === 'auto' ? 'Auto' : 'Manual')}`,
+    );
+  }
   add('Media', entry.media === undefined ? undefined : JSON.stringify(entry.media));
   add(
     'Backup channels',
     entry.backupChannels === undefined ? undefined : JSON.stringify(entry.backupChannels),
   );
-  add('Rebuild', entry.rebuild === undefined ? undefined : rebuildDetail(entry.rebuild));
+  if (entry.rebuild !== undefined) {
+    const { from, to, reason } = entry.rebuild;
+    const runtimes = localizeUi('Template runtime {from} → {to}', {
+      from: from?.runtimeBuild ?? localizeUi('unrecorded'),
+      to: to.runtimeBuild,
+    });
+    add(
+      'Rebuild',
+      rebuildDetail(entry.rebuild),
+      reason === undefined ? runtimes : localizeUi('{runtimes}. {reason}', { runtimes, reason }),
+    );
+  }
 
   return (
     <aside
@@ -820,7 +924,7 @@ function EventDetails({
       </div>
       <span className={outcomeTag(entry.outcome)}>{localizeUi(outcomeLabel(entry.outcome))}</span>
       <div className="cg-audit-details__title">
-        <strong>{entry.action}</strong>
+        <strong>{localizeUi(entry.action)}</strong>
         {names.length > 0 && <OperatorNames name={{ names, layer: null, title: '' }} />}
       </div>
       {entry.errorCode !== undefined && (
@@ -834,22 +938,29 @@ function EventDetails({
       <dl className="cg-audit-details__facts">
         <dt>{localizeUi('Time')}</dt>
         <dd>
-          {time.date} {time.time}
+          <bdi dir="ltr">
+            {time.date} {time.time}
+          </bdi>
         </dd>
         <dt>UTC</dt>
-        <dd>{time.utc}</dd>
+        <dd>
+          <bdi dir="ltr">{time.utc}</bdi>
+        </dd>
         <dt>{localizeUi('Actor')}</dt>
         <dd>
           <bdi>{entry.actor}</bdi>
         </dd>
         <dt>{localizeUi('Action')}</dt>
-        <dd>{entry.action}</dd>
+        <dd>{localizeUi(entry.action)}</dd>
         {entry.inputPreview !== undefined && (
           <>
             <dt>{localizeUi('Input preview')}</dt>
             <dd>
-              CH {entry.inputPreview.channel} · <bdi>{entry.inputPreview.sourceName}</bdi> ·{' '}
-              {entry.inputPreview.operation}
+              {localizeUi('CH {channel} · {name} · {operation}', {
+                channel: number(entry.inputPreview.channel),
+                name: entry.inputPreview.sourceName,
+                operation: localizeUi(entry.inputPreview.operation),
+              })}
             </dd>
           </>
         )}
@@ -857,14 +968,21 @@ function EventDetails({
           <>
             <dt>{localizeUi('Channel / layer')}</dt>
             <dd>
-              {String(entry.slot.channel)} / {String(entry.slot.layer)}
+              <bdi dir="ltr">
+                {number(entry.slot.channel)} / {number(entry.slot.layer)}
+              </bdi>
             </dd>
           </>
         )}
         {entry.rebuild !== undefined && (
           <>
             <dt>{localizeUi('Change')}</dt>
-            <dd>{rebuildClause(entry.rebuild)}</dd>
+            <dd>
+              {localizeUi('{from} → {to}', {
+                from: entry.rebuild.from?.consoleVersion ?? localizeUi('earlier'),
+                to: entry.rebuild.to.consoleVersion,
+              })}
+            </dd>
           </>
         )}
       </dl>
@@ -877,9 +995,11 @@ function EventDetails({
               className="cg-audit-detail-value"
               data-audit-technical={fact.label}
             >
-              <span>{fact.label}</span>
-              <code title={fact.value}>{fact.value}</code>
-              <CopyValue label={fact.label} value={fact.value} />
+              <span>{localizeUi(fact.label)}</span>
+              <code dir="auto" title={fact.value}>
+                {fact.display ?? fact.value}
+              </code>
+              <CopyValue label={localizeUi(fact.label)} value={fact.value} />
             </div>
           ))}
         </section>
@@ -903,11 +1023,13 @@ function CopyValue({
   text?: string | undefined;
 }): JSX.Element {
   const [copied, setCopied] = useState(false);
+  const t = useUiText();
+  const copy = t('Copy {label}', { label });
   return (
     <Button
       variant="neutral"
-      aria-label={`Copy ${label}`}
-      title={`Copy ${label}`}
+      aria-label={copy}
+      title={copy}
       onClick={() => {
         if (navigator.clipboard === undefined) return;
         void navigator.clipboard.writeText(value).then(() => {

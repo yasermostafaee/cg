@@ -307,10 +307,10 @@ export function FrameAutoLayout({
               <>
                 <option value="more-top">
                   {frames.length === 1
-                    ? 'Single plate'
+                    ? localizeUi('Single plate')
                     : canChooseFullerRow
-                      ? 'More frames on top'
-                      : 'Grid'}
+                      ? localizeUi('More frames on top')
+                      : localizeUi('Grid')}
                 </option>
                 {canChooseFullerRow && (
                   <option value="more-bottom">{localizeUi('More frames on bottom')}</option>

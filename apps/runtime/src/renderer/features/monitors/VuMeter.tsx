@@ -31,6 +31,7 @@ export function VuMeter({
   label?: string;
   watchPeaks?: MeterStore['watchAudio'];
 }): JSX.Element {
+  const translateUi = useUiText();
   const fills = useRef<(HTMLSpanElement | null)[]>([]);
   const latest = useRef<readonly number[] | null>(null);
   const countRef = useRef(2);
@@ -86,7 +87,12 @@ export function VuMeter({
       <div className="cg-vu__body">
         <div className="cg-vu__bars" tabIndex={busCount > 16 ? 0 : undefined}>
           {Array.from({ length: busCount }, (_, i) => (
-            <span key={i} className="cg-vu__bar" data-vu-bar={i + 1} title={`Bus ${i + 1}`}>
+            <span
+              key={i}
+              className="cg-vu__bar"
+              data-vu-bar={i + 1}
+              title={translateUi('Bus {number}', { number: i + 1 })}
+            >
               <span
                 className="cg-vu__fill"
                 ref={(el) => {

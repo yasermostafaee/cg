@@ -176,7 +176,9 @@ export function BookBlock({
           </Tag>
         )}
         <span className="cg-book-count" data-testid={`page-count-${fieldId}`}>
-          {pages.length === 1 ? '1 page' : `${String(pages.length)} pages`}
+          {pages.length === 1
+            ? localizeUi('1 page')
+            : localizeUi('{count} pages', { count: String(pages.length) })}
         </span>
       </div>
       <BookStrip
@@ -207,7 +209,7 @@ export function BookBlock({
         <div className="cg-book__row" data-book-load="">
           <Button
             variant="neutral"
-            aria-label={`Manage pages of ${title}`}
+            aria-label={localizeUi('Manage pages of {name}', { name: title })}
             disabled={busy !== null}
             onClick={() => setManaging(true)}
           >
@@ -274,11 +276,12 @@ function BookStrip({
   fit: ImageFit;
   raster: Raster;
 }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div
       className="cg-book__strip"
       role="group"
-      aria-label={`${title} — pages around the current one`}
+      aria-label={localizeUi('{name} — pages around the current one', { name: title })}
     >
       {pagesAroundCurrent(pages.length, current).map((index, slot) => {
         const page = pages[index];
@@ -458,7 +461,11 @@ function BookTurn({
   return (
     <div data-book-bar="">
       {!managed && (
-        <div className="cg-book__row cg-book__advance" role="group" aria-label={`Advance ${title}`}>
+        <div
+          className="cg-book__row cg-book__advance"
+          role="group"
+          aria-label={localizeUi('Advance {name}', { name: title })}
+        >
           <span className="cg-book-count">{localizeUi('Advance')}</span>
           <Button
             variant="neutral"
@@ -480,11 +487,11 @@ function BookTurn({
       )}
       <div
         className="cg-book__row cg-book__turn"
-        title={managed && !onAir ? 'Play to turn pages on air.' : undefined}
+        title={managed && !onAir ? localizeUi('Play to turn pages on air.') : undefined}
       >
         <Button
           variant="neutral"
-          aria-label={`Previous page of ${title}`}
+          aria-label={localizeUi('Previous page of {name}', { name: title })}
           disabled={unavailable || (!book.wrap && book.page <= 1)}
           onClick={() => void turn('previous')}
         >
@@ -498,7 +505,7 @@ function BookTurn({
             value={shown}
             onChange={setTyped}
             inputMode="numeric"
-            aria-label={`Page number of ${title}`}
+            aria-label={localizeUi('Page number of {name}', { name: title })}
             disabled={unavailable}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !unavailable && goable && target !== null) void turn(target);
@@ -511,7 +518,7 @@ function BookTurn({
         </span>
         <Button
           variant="neutral"
-          aria-label={`Next page of ${title}`}
+          aria-label={localizeUi('Next page of {name}', { name: title })}
           disabled={unavailable || (!book.wrap && book.page >= book.count && (managed || !onAir))}
           onClick={() => void turn('next')}
         >
@@ -520,7 +527,7 @@ function BookTurn({
         </Button>
         <Button
           variant="neutral"
-          aria-label={`Go to page in ${title}`}
+          aria-label={localizeUi('Go to page in {name}', { name: title })}
           disabled={unavailable || !goable}
           onClick={() => {
             if (target !== null) void turn(target);

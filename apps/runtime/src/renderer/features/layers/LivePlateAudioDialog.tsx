@@ -318,7 +318,7 @@ export function LivePlateAudioDialog({
     >
       <div className="cg-audio-context" data-audio-context="">
         <span>
-          {String(plates.length)} {plates.length === 1 ? 'frame' : 'frames'}
+          {String(plates.length)} {plates.length === 1 ? localizeUi('frame') : localizeUi('frames')}
           {activeLook !== null && (
             <>
               {' · '}
@@ -440,7 +440,9 @@ export function LivePlateAudioDialog({
                 }}
                 disabled={locked}
                 title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : ON_TITLE}
-                aria-label={`Full volume for ${plate.name} (100%, not the previous level)`}
+                aria-label={localizeUi('Full volume for {name} (100%, not the previous level)', {
+                  name: plate.name,
+                })}
               >
                 {localizeUi('ON')}
               </Button>
@@ -451,7 +453,7 @@ export function LivePlateAudioDialog({
                 }}
                 disabled={locked}
                 title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : OFF_TITLE}
-                aria-label={`Silence ${plate.name}`}
+                aria-label={localizeUi('Silence {name}', { name: plate.name })}
               >
                 {localizeUi('OFF')}
               </Button>
@@ -474,7 +476,10 @@ export function LivePlateAudioDialog({
                       ? SOLO_ALONE_TITLE
                       : SOLO_TITLE
                 }
-                aria-label={`Solo ${plate.name} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
+                aria-label={localizeUi(
+                  'Solo {name} — silences the other {count} plate(s) on this row, with no restore',
+                  { name: plate.name, count: String(plateIds.length - 1) },
+                )}
               >
                 {localizeUi('SOLO')}
               </Button>

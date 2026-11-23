@@ -142,7 +142,7 @@ export function DelimitersSection({
    */
   const removeOne = async (id: string, label: string): Promise<void> => {
     const ok = await confirm({
-      title: `Remove “${label}”?`,
+      title: localizeUi('Remove “{name}”?', { name: label }),
       destructive: true,
       // §8 — raised from INSIDE Station setup: that family's frame, and its lighter scrim.
       layer: 'sub',
@@ -159,7 +159,7 @@ export function DelimitersSection({
           </p>
         </>
       ),
-      confirmLabel: 'Remove delimiter',
+      confirmLabel: localizeUi('Remove delimiter'),
       tone: 'remove',
     });
     if (!ok) return;
@@ -255,7 +255,7 @@ export function DelimitersSection({
                       <span className="cg-table__actions-group">
                         <Button
                           variant="quiet"
-                          aria-label={`Rename delimiter ${d.label}`}
+                          aria-label={localizeUi('Rename delimiter {name}', { name: d.label })}
                           title={localizeUi('Rename delimiter')}
                           onClick={() => setRenaming(d)}
                         >
@@ -266,7 +266,7 @@ export function DelimitersSection({
                         <Button
                           variant="quiet"
                           className="cg-list-remove"
-                          aria-label={`Remove delimiter ${d.label}`}
+                          aria-label={localizeUi('Remove delimiter {name}', { name: d.label })}
                           title={localizeUi('Remove this delimiter — asks first')}
                           onClick={() => void removeOne(d.id, d.label)}
                         >

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import type { LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
@@ -45,12 +46,13 @@ export interface SetupNoticeSpec {
  * switch is the defect an alert role would introduce here. It is a paragraph with a heading.
  */
 export function SetupNotice({ spec }: { spec: SetupNoticeSpec }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div className="cg-setup-notice" data-setup-notice="">
       <Icon icon={spec.icon} size={STATION_SETUP_PX.noticeIcon} />
       <div>
-        <strong className="cg-setup-notice__title">{spec.title}</strong>
-        <p className="cg-setup-notice__body">{spec.body}</p>
+        <strong className="cg-setup-notice__title">{localizeUi(spec.title)}</strong>
+        <p className="cg-setup-notice__body">{localizeUi(spec.body)}</p>
       </div>
     </div>
   );

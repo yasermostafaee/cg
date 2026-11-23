@@ -518,7 +518,7 @@ export function PlayoutConnection({
               disabled={origin === null || busy !== null}
               onClick={() => void check('press')}
             >
-              {busy === 'checking' ? 'Checking…' : 'Check'}
+              {localizeUi(busy === 'checking' ? 'Checking…' : 'Check')}
             </Button>
           )}
           {canWrite && !editing && (
@@ -557,9 +557,11 @@ export function PlayoutConnection({
           {/* T1 — where CG Bridge is, as a fact: on the Playout's machine (derived), or a separate server. */}
           {bridgeAddress !== null && origin !== null && (
             <Tag className="cg-setup-card-tag" data-bridge-placement="">
-              {onSeparateServer(bridgeAddress, origin)
-                ? 'Separate server'
-                : 'On the Playout machine'}
+              {localizeUi(
+                onSeparateServer(bridgeAddress, origin)
+                  ? 'Separate server'
+                  : 'On the Playout machine',
+              )}
             </Tag>
           )}
           {canWrite && (
@@ -591,7 +593,12 @@ export function PlayoutConnection({
               void check('press', bridgeAddressOf(next.bridge, playoutHostOf(typed)));
             }}
           >
-            {`Use ${lastUsedFields.port === '' ? lastUsedFields.host : `${lastUsedFields.host}:${lastUsedFields.port}`} (last used)`}
+            {localizeUi('Use {address} (last used)', {
+              address:
+                lastUsedFields.port === ''
+                  ? lastUsedFields.host
+                  : `${lastUsedFields.host}:${lastUsedFields.port}`,
+            })}
           </Button>
         </div>
       )}
@@ -606,7 +613,7 @@ export function PlayoutConnection({
             disabled={typed === null || busy !== null}
             onClick={() => void check('press')}
           >
-            {busy === 'checking' ? 'Checking…' : 'Check'}
+            {localizeUi(busy === 'checking' ? 'Checking…' : 'Check')}
           </Button>
           {canWrite && (
             <Button
@@ -614,7 +621,7 @@ export function PlayoutConnection({
               disabled={!changed || busy !== null || typed === null || bridgeTyped === null}
               onClick={() => void connect()}
             >
-              {busy === 'connecting' ? 'Connecting…' : 'Connect'}
+              {localizeUi(busy === 'connecting' ? 'Connecting…' : 'Connect')}
             </Button>
           )}
           {changed && (

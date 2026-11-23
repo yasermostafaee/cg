@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import { Move } from 'lucide-react';
 import { sameLiveMaskRect, type LiveRevealRect } from '@cg/shared-schema';
@@ -55,6 +56,7 @@ export function PreviewMaskPlacement({
   fit: number;
   onSelect: () => void;
 }): JSX.Element {
+  const translateUi = useUiText();
   const drag = useRef<MaskDrag>();
   const { placement } = mask;
   const { rect, kind, index } = placement;
@@ -140,8 +142,8 @@ export function PreviewMaskPlacement({
       <Button
         variant="neutral"
         className="cg-frame-placement__move"
-        aria-label={`Move ${name}`}
-        title={`Move ${name}`}
+        aria-label={translateUi('Move {name}', { name: name })}
+        title={translateUi('Move {name}', { name: name })}
         onKeyDown={(event) => keyboard(event)}
       >
         <Icon icon={Move} size={14} />
@@ -152,7 +154,10 @@ export function PreviewMaskPlacement({
           variant="neutral"
           className="cg-frame-placement__corner"
           data-corner={corner.key}
-          aria-label={`Resize ${name} from ${corner.name}`}
+          aria-label={translateUi('Resize {name} from {corner}', {
+            name: name,
+            corner: corner.name,
+          })}
           onPointerDown={(event) => start(event, corner)}
           onKeyDown={(event) => keyboard(event, corner)}
           children={null}

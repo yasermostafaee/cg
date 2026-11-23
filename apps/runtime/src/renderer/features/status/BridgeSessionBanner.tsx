@@ -137,7 +137,7 @@ export function BridgeSessionBanner(): JSX.Element | null {
         ) : primaryNeeds ? (
           BRIDGE_NEEDS_ADMIN_LINE
         ) : (
-          `${BRIDGE_NEEDS_ADMIN_LINE} on the backup engine`
+          localizeUi('{message} on the backup engine', { message: BRIDGE_NEEDS_ADMIN_LINE })
         )}
       </span>
       {admin && (
@@ -166,6 +166,7 @@ export function BridgeSessionBanner(): JSX.Element | null {
  * local time.
  */
 export function LicenseGraceBanner(): JSX.Element | null {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
   const license = useLicense();
   const admin =
@@ -177,8 +178,10 @@ export function LicenseGraceBanner(): JSX.Element | null {
       <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
       <span style={styles.text}>
         {until === null
-          ? 'Playout license expired — in grace'
-          : `Playout license expired — grace until ${localDateTime(until)}`}
+          ? localizeUi('Playout license expired — in grace')
+          : localizeUi('Playout license expired — grace until {time}', {
+              time: localDateTime(until),
+            })}
       </span>
     </div>
   );
@@ -307,7 +310,7 @@ function BridgeSignInDialog({
             disabled={busy || username === '' || password === ''}
             onClick={() => void submit()}
           >
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? localizeUi('Signing in…') : localizeUi('Sign in')}
           </ModalAction>
         </>
       }
@@ -346,7 +349,7 @@ function BridgeSignInDialog({
           tabs={lines.map((line) => ({ id: line.engine, label: ENGINE_LABEL[line.engine] }))}
           activeId={engine}
           onSelect={(id) => choose(id as Engine)}
-          ariaLabel="Sign in on"
+          ariaLabel={localizeUi('Sign in on')}
           idPrefix="cg-bridge-signin-engine"
           level="inner"
         >

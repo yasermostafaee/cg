@@ -351,7 +351,7 @@ function SignInStep({
           disabled={locked || username === '' || password === ''}
           onClick={() => void submit()}
         >
-          {busy ? 'Signing in…' : 'Sign in'}
+          {localizeUi(busy ? 'Signing in…' : 'Sign in')}
         </Button>
       </div>
     </section>
@@ -739,9 +739,11 @@ export function ChannelStep({
       )}
       <div style={styles.row}>
         <Button variant="primary" disabled={!ready} onClick={() => void commit()}>
-          {busy
-            ? 'Setting up…'
-            : commitLabel(channels.length > 0 ? channels.length : rows.length, warned)}
+          {localizeUi(
+            busy
+              ? 'Setting up…'
+              : commitLabel(channels.length > 0 ? channels.length : rows.length, warned),
+          )}
         </Button>
       </div>
     </>

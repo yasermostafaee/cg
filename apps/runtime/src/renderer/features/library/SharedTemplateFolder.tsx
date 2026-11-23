@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownWideNarrow,
@@ -123,6 +123,7 @@ export function SharedTemplateFolder({
   onImport: (file: File, source?: SharedTemplateSource) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
   const [folder, setFolder] = useState(recentFolder);
   const [revision, setRevision] = useState(0);
   const [listing, setListing] = useState<FolderListing | null>(null);
@@ -203,7 +204,7 @@ export function SharedTemplateFolder({
       onClose={() => {
         if (!reading) onClose();
       }}
-      message={problem === null ? [] : { role: 'refusal', text: problem }}
+      message={problem === null ? [] : { role: 'refusal', text: localizeFeedback(problem) }}
       footer={
         <>
           <ModalAction actionRole="cancel" disabled={reading} onClick={onClose}>
@@ -214,7 +215,7 @@ export function SharedTemplateFolder({
             disabled={selected === null || loading || reading}
             onClick={() => void readPackage()}
           >
-            {reading ? 'Reading…' : 'Import package'}
+            {localizeUi(reading ? 'Reading…' : 'Import package')}
           </ModalAction>
         </>
       }
@@ -224,7 +225,9 @@ export function SharedTemplateFolder({
           <Button
             variant="neutral"
             disabled={trail.length === 0}
-            title={trail.length === 0 ? 'At the Shared files root' : 'Open parent folder'}
+            title={localizeUi(
+              trail.length === 0 ? 'At the Shared files root' : 'Open parent folder',
+            )}
             onClick={() => setFolder(parent)}
           >
             <Icon icon={ArrowUp} size={14} /> {localizeUi('Up')}
@@ -240,14 +243,14 @@ export function SharedTemplateFolder({
             variant="neutral"
             className="cg-shared-template-sort"
             disabled={reading}
-            aria-label={
-              newestFirst ? 'Newest first. Show oldest first' : 'Oldest first. Show newest first'
-            }
+            aria-label={localizeUi(
+              newestFirst ? 'Newest first. Show oldest first' : 'Oldest first. Show newest first',
+            )}
             title={localizeUi('Sort templates by date modified')}
             onClick={() => setNewestFirst((current) => !current)}
           >
             <Icon icon={newestFirst ? ArrowDownWideNarrow : ArrowUpNarrowWide} size={14} />
-            {newestFirst ? 'Newest first' : 'Oldest first'}
+            {localizeUi(newestFirst ? 'Newest first' : 'Oldest first')}
           </Button>
         </div>
         <p
@@ -255,13 +258,13 @@ export function SharedTemplateFolder({
           role="status"
           aria-label={localizeUi('Shared folder location')}
         >
-          <IsolatedName title={listing?.root ?? 'Shared files'}>
+          <IsolatedName alignWithInterface title={listing?.root ?? localizeUi('Shared files')}>
             {localizeUi('Shared files')}
           </IsolatedName>
           {trail.map((part, index) => (
             <span key={trail.slice(0, index + 1).join('/')}>
               <span aria-hidden="true"> / </span>
-              <IsolatedName>{part}</IsolatedName>
+              <IsolatedName alignWithInterface>{part}</IsolatedName>
             </span>
           ))}
         </p>
@@ -304,7 +307,10 @@ export function SharedTemplateFolder({
                             ) : (
                               <Icon icon={FileUp} size={14} />
                             )}
-                            <IsolatedName className="cg-shared-template-entry__name">
+                            <IsolatedName
+                              alignWithInterface
+                              className="cg-shared-template-entry__name"
+                            >
                               {name}
                             </IsolatedName>
                             {selected === name && <Icon icon={Check} size={14} />}

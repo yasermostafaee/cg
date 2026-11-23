@@ -223,9 +223,10 @@ describe('Layers — the owner’s case', () => {
       setupSlot(71),
     ];
     const { pane } = await open('candidate-layers', { auth: VIEWER, slots: bound });
-    expect(pane.querySelector('[data-candidate-layer="70"]')?.textContent, 'bound').toContain(
-      'tpl-clock',
-    );
+    const assignedRow = pane.querySelector('[data-candidate-layer="70"]');
+    expect(assignedRow?.textContent, 'bound').toContain('Unnamed template');
+    expect(assignedRow?.textContent).not.toContain('tpl-clock');
+    expect(assignedRow?.querySelector('[title="tpl-clock"]')).toBeNull();
     expect(buttonNamed(pane, /^Remove the template on /)).toBeUndefined();
 
     await unmountStationSetup();

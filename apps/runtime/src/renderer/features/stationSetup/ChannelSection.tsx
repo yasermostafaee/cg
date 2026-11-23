@@ -201,16 +201,16 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         </div>
         <div className="cg-video-mode">
           <strong className="cg-video-mode__word" data-video-mode-word="">
-            {words.word}
+            {localizeUi(words.word)}
           </strong>
-          <span className="cg-video-mode__scan">{words.scan}</span>
+          <span className="cg-video-mode__scan">{localizeUi(words.scan)}</span>
         </div>
         <dl className="cg-video-metrics">
           <div className="cg-video-metric">
             <dt>{localizeUi('Resolution')}</dt>
             <dd>
               {configured === undefined
-                ? 'not configured'
+                ? localizeUi('not configured')
                 : `${String(configured.raster.width)} × ${String(configured.raster.height)}`}
             </dd>
           </div>
@@ -220,14 +220,14 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
           </div>
           <div className="cg-video-metric">
             <dt>{localizeUi('Server mode')}</dt>
-            <dd className="cg-video-metric__mono">{modeLine(state, channel)}</dd>
+            <dd className="cg-video-metric__mono">{localizeUi(modeLine(state, channel))}</dd>
           </div>
         </dl>
         {/* The app's own two facts (`B-236`) — the reference draws neither; the guard keeps both. */}
         <dl className="cg-video-metrics">
           <div className="cg-video-metric">
             <dt>{localizeUi('Declared by')}</dt>
-            <dd>{playoutEngineWording(declaredBy(state, channel), engine)}</dd>
+            <dd>{playoutEngineWording(localizeUi(declaredBy(state, channel)), engine)}</dd>
           </div>
           <div className="cg-video-metric">
             <dt>{localizeUi('Check')}</dt>

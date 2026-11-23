@@ -5,9 +5,13 @@ import { Modal, ModalAction } from '../../ui/Modal.js';
  * 🔴 `R-094` — the one fact line, and only when it is true: how many of the console's items stay
  * on air when the window closes. `null` with none — the dialog then says nothing but its title.
  */
-export function stayOnAirLine(onAir: number): string | null {
+export function stayOnAirLine(onAir: number, format?: ReturnType<typeof useUiText>): string | null {
   if (onAir <= 0) return null;
-  return onAir === 1 ? '1 item stays on air.' : `${String(onAir)} items stay on air.`;
+  if (format === undefined)
+    return onAir === 1 ? '1 item stays on air.' : `${String(onAir)} items stay on air.`;
+  return format(onAir === 1 ? '{count} item stays on air.' : '{count} items stay on air.', {
+    count: onAir,
+  });
 }
 
 /**
@@ -35,7 +39,7 @@ export function CloseConsoleDialog({
   onClose: () => void;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const fact = stayOnAirLine(onAir);
+  const fact = stayOnAirLine(onAir, localizeUi);
   return (
     <Modal
       title={localizeUi('Close CG Control?')}

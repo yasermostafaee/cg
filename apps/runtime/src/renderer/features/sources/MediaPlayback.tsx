@@ -92,7 +92,7 @@ export function MediaPlaybackControl({
         variant="icon"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={`Playback: ${entry.name}`}
+        aria-label={localizeUi('Playback: {name}', { name: entry.name })}
         title={localizeUi('Playback')}
         className="cg-form-row__action"
         data-media-playback={entry.id}
@@ -141,7 +141,7 @@ export function MediaPlaybackControl({
                     data-media-when-hidden={whenHidden}
                     onClick={() => set({ ...playback, whenHidden })}
                   >
-                    {WHEN_HIDDEN_LABEL[whenHidden]}
+                    {localizeUi(WHEN_HIDDEN_LABEL[whenHidden])}
                   </Button>
                 ))}
               </div>
@@ -178,12 +178,12 @@ export function MediaTransport({
         variant="icon"
         iconOnly
         icon={state.paused ? Play : Pause}
-        title={state.paused ? 'Play' : 'Pause'}
+        title={localizeUi(state.paused ? 'Play' : 'Pause')}
         data-media-transport-play={state.paused ? 'play' : 'pause'}
         run={press(state.paused ? 'play' : 'pause')}
         onError={(message) => reportCommandError(message)}
       >
-        {state.paused ? 'Play' : 'Pause'}
+        {localizeUi(state.paused ? 'Play' : 'Pause')}
       </AsyncButton>
       <AsyncButton
         variant="icon"

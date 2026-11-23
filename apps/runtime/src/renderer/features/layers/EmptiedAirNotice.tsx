@@ -198,10 +198,17 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
           <span style={styles.actions}>
             <Button
               variant="caution-strong"
-              aria-label={`Put ${String(count)} ${rowWord} back on air`}
+              aria-label={localizeUi('Put {count} {rows} back on air', {
+                count: String(count),
+                rows: rowWord,
+              })}
               disabled={refusal !== undefined}
               title={
-                refusal ?? `Re-take ${String(count)} ${rowWord} — this puts graphics back ON AIR`
+                refusal ??
+                localizeUi('Re-take {count} {rows} — this puts graphics back ON AIR', {
+                  count: String(count),
+                  rows: rowWord,
+                })
               }
               onClick={() => {
                 /*
@@ -210,7 +217,10 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
                 */
                 void (async () => {
                   const ok = await confirm({
-                    title: `Put ${String(count)} ${rowWord} back on air?`,
+                    title: localizeUi('Put {count} {rows} back on air?', {
+                      count: String(count),
+                      rows: rowWord,
+                    }),
                     /*
                       🔴 `MODAL-CHROME-10` ADDENDUM D §D3(a) — **THE ONE CONFIRM IN THIS APP THAT
                       IS NOT DESTRUCTIVE.** `useConfirm` now shows the trash mark by default,
@@ -221,12 +231,15 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
                     */
                     destructive: false,
                     body: `This re-takes ${count === 1 ? 'it' : 'them'} and puts ${count === 1 ? 'it' : 'them'} on air now.`,
-                    confirmLabel: 'Put back on air',
+                    confirmLabel: localizeUi('Put back on air'),
                     tone: 'play',
                   });
                   if (!ok) return;
                   runCommand(
-                    `Put ${String(count)} ${rowWord} back on air`,
+                    localizeUi('Put {count} {rows} back on air', {
+                      count: String(count),
+                      rows: rowWord,
+                    }),
                     window.cg.emptiedAir
                       .restore({ itemIds: rows.map((r) => r.itemId) })
                       // Anything short of ALL of them is reported, and the strip stays up

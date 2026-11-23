@@ -270,7 +270,9 @@ export function SafeGuideSettings({
                           role="radio"
                           aria-label={label}
                           aria-description={
-                            frame.visible ? 'Shown in preview' : 'Hidden in preview'
+                            frame.visible
+                              ? localizeUi('Shown in preview')
+                              : localizeUi('Hidden in preview')
                           }
                           title={`${label} · ${frame.visible ? 'Shown' : 'Hidden'} in preview`}
                           aria-checked={editing?.id === frame.id}
@@ -364,7 +366,9 @@ export function SafeGuideSettings({
                           <div key={border.percent} className="cg-safe-guide-settings__heading">
                             <label className="cg-safe-guide-settings__check">
                               <Checkbox
-                                aria-label={`Show ${GUIDE_BORDER_LABELS[border.percent]}`}
+                                aria-label={localizeUi('Show {name}', {
+                                  name: GUIDE_BORDER_LABELS[border.percent],
+                                })}
                                 checked={border.visible}
                                 onChange={(visible) => changeBorder(border.percent, { visible })}
                               />
@@ -373,13 +377,17 @@ export function SafeGuideSettings({
                             <div className="cg-safe-guide-settings__colors">
                               <ColorInput
                                 appearance="swatch"
-                                aria-label={`${GUIDE_BORDER_LABELS[border.percent]} color`}
+                                aria-label={localizeUi('{border} color', {
+                                  border: GUIDE_BORDER_LABELS[border.percent],
+                                })}
                                 value={border.color ?? editing.color}
                                 onChange={(color) => changeBorder(border.percent, { color })}
                               />
                               <Button
                                 variant="icon"
-                                aria-label={`Use frame color for ${GUIDE_BORDER_LABELS[border.percent]}`}
+                                aria-label={localizeUi('Use frame color for {name}', {
+                                  name: GUIDE_BORDER_LABELS[border.percent],
+                                })}
                                 title={localizeUi('Use frame color')}
                                 disabled={border.color === undefined}
                                 onClick={() => inheritBorder(border.percent)}
@@ -590,19 +598,19 @@ function GuideRow({
     <div className="cg-safe-guide-settings__line" data-custom-guide-row={line.id}>
       <div className="cg-safe-guide-settings__line-heading">
         <Checkbox
-          aria-label={`Show ${label.toLowerCase()}`}
+          aria-label={localizeUi('Show {name}', { name: label.toLowerCase() })}
           checked={line.visible}
           onChange={(visible) => onChange({ visible })}
         />
         <span
           className="cg-safe-guide-settings__axis"
-          title={line.axis === 'y' ? 'Horizontal' : 'Vertical'}
+          title={line.axis === 'y' ? localizeUi('Horizontal') : localizeUi('Vertical')}
         >
           <Icon icon={line.axis === 'y' ? MoveHorizontal : MoveVertical} size={14} />
         </span>
         <TextInput
           className="cg-safe-guide-settings__line-name"
-          aria-label={`${label} name`}
+          aria-label={localizeUi('{guide} name', { guide: label })}
           value={line.name}
           onChange={(name) => onChange({ name })}
           maxLength={80}
@@ -613,7 +621,7 @@ function GuideRow({
         <div className="cg-safe-guide-settings__position">
           <NumericInput
             className="cg-field"
-            aria-label={`${label} position percent`}
+            aria-label={localizeUi('{guide} position percent', { guide: label })}
             value={position}
             decimal
             maxLength={8}
@@ -629,13 +637,13 @@ function GuideRow({
         <div className="cg-safe-guide-settings__colors">
           <ColorInput
             appearance="swatch"
-            aria-label={`${label} color`}
+            aria-label={localizeUi('{guide} color', { guide: label })}
             value={color}
             onChange={(color) => onChange({ color })}
           />
           <Button
             variant="icon"
-            aria-label={`Use guide color for ${label.toLowerCase()}`}
+            aria-label={localizeUi('Use guide color for {name}', { name: label.toLowerCase() })}
             title={localizeUi('Use guide color')}
             disabled={line.color === undefined}
             onClick={onInherit}
@@ -643,7 +651,11 @@ function GuideRow({
             <Icon icon={RotateCcw} size={13} />
           </Button>
         </div>
-        <Button variant="icon" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
+        <Button
+          variant="icon"
+          aria-label={localizeUi('Remove {name}', { name: label.toLowerCase() })}
+          onClick={onRemove}
+        >
           <Icon icon={Trash2} size={14} />
         </Button>
       </div>

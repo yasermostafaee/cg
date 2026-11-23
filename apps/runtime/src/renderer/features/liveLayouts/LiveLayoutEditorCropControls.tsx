@@ -29,9 +29,8 @@ export function LiveLayoutEditorCropControls({
 }): JSX.Element {
   const localizeUi = useUiText();
   const preset = scope === 'preset';
-  const group = preset ? 'Crop defaults' : 'Plate crop';
-  const prefix = preset ? 'Default crop' : 'Crop';
-  const resetLabel = preset ? 'Reset default crop' : 'Reset plate crop';
+  const group = localizeUi(preset ? 'Crop defaults' : 'Plate crop');
+  const resetLabel = localizeUi(preset ? 'Reset default crop' : 'Reset plate crop');
   return (
     <section className="cg-live-layout-crop-controls" aria-label={group}>
       <div className="cg-live-layout-crop-head">
@@ -62,7 +61,7 @@ export function LiveLayoutEditorCropControls({
       </div>
       <div className="cg-form-grid cg-live-layout-crop-values">
         <LiveLayoutEditorNumber
-          label={prefix + ' X (%)'}
+          label={localizeUi(preset ? 'Default crop X (%)' : 'Crop X (%)')}
           value={toPercent(value.x)}
           min={0}
           max={100}
@@ -70,7 +69,7 @@ export function LiveLayoutEditorCropControls({
           onChange={(x) => onChange({ ...value, x: x / 100 })}
         />
         <LiveLayoutEditorNumber
-          label={prefix + ' Y (%)'}
+          label={localizeUi(preset ? 'Default crop Y (%)' : 'Crop Y (%)')}
           value={toPercent(value.y)}
           min={0}
           max={100}
@@ -78,7 +77,7 @@ export function LiveLayoutEditorCropControls({
           onChange={(y) => onChange({ ...value, y: y / 100 })}
         />
         <LiveLayoutEditorNumber
-          label={prefix + ' zoom (%)'}
+          label={localizeUi(preset ? 'Default crop zoom (%)' : 'Crop zoom (%)')}
           value={toPercent(value.zoom ?? 1)}
           min={100}
           max={MAX_LIVE_CROP_ZOOM * 100}

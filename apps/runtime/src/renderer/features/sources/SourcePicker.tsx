@@ -152,19 +152,25 @@ export function ChoiceLabel({
 }): JSX.Element {
   const localizeUi = useUiText();
   const { origins, publish } = usePreviewOrigins(observePicture);
-  if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
+  if (choice.names === undefined)
+    return <span className="cg-choice-label">{localizeUi(choice.label)}</span>;
   if (choice.names === null) {
-    return <span className="cg-choice-label">{`${choice.label} (none set)`}</span>;
+    return (
+      <span className="cg-choice-label">
+        {localizeUi('{label} (none set)', { label: localizeUi(choice.label) })}
+      </span>
+    );
   }
   const sourceId = choice.names;
   const source = labelledSource(choice.names);
-  const name = source?.name ?? NOT_LISTED;
+  const name = source?.name ?? localizeUi(NOT_LISTED);
   const offered = source !== null && !source.unavailable;
   const input = meterChannel === undefined ? undefined : inputAudioSource(choice.names);
   return (
     <span className="cg-choice-label" data-choice-names={choice.names}>
       <span className="cg-choice-label__words" data-field-overflow="">
-        {`${choice.label} (`}
+        {localizeUi(choice.label)}
+        {' ('}
         <bdi dir={directionOf(name)} data-choice-name="">
           {name}
         </bdi>
@@ -205,7 +211,7 @@ export function ChoiceLabel({
       {!offered && (
         <Tag
           className="cg-source-tag cg-source-tag--unavailable"
-          title={source?.reason ?? INPUT_GONE_REASON}
+          title={localizeUi(source?.reason ?? INPUT_GONE_REASON)}
         >
           {localizeUi('Unavailable')}
         </Tag>
@@ -321,12 +327,21 @@ export function SourcePicker({
   const previewEngine = pictureOrigin ?? measuredEngine;
   const originDescription =
     pictureOrigin !== undefined
-      ? `Last picture from server ${pictureOrigin}`
+      ? localizeUi('Last picture from server {server}', { server: pictureOrigin })
       : measuredEngine !== undefined
-        ? `Preview audio from server ${measuredEngine}`
+        ? localizeUi('Preview audio from server {server}', { server: measuredEngine })
         : undefined;
-  const fallback = choices[0] !== undefined ? choiceText(choices[0]) : 'None';
-  const displayValue = showingChoice ? choiceText(choice) : (boundSource?.name ?? fallback);
+  const describeChoice = (item: SourceChoice): string => {
+    const label = localizeUi(item.label);
+    if (item.names === undefined) return label;
+    if (item.names === null) return localizeUi('{label} (none set)', { label });
+    return localizeUi('{label} ({name})', {
+      label,
+      name: labelledSource(item.names)?.name ?? localizeUi(NOT_LISTED),
+    });
+  };
+  const fallback = choices[0] === undefined ? localizeUi('None') : describeChoice(choices[0]);
+  const displayValue = showingChoice ? describeChoice(choice) : (boundSource?.name ?? fallback);
   const posterIdentity = JSON.stringify(
     currentSourceCatalog().sources.find((source) => source.id === selectedSource),
   );
@@ -343,6 +358,7 @@ export function SourcePicker({
     selectedPresence,
     selectedSource,
     originDescription,
+    localizeUi,
   );
   const presenceDescriptionId = `${base}-source-presence`;
 
@@ -462,6 +478,7 @@ function PickerPanel({
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [inputView, setInputView] = useState<InputView>('grid');
+  const localizeUi = useUiText();
   const [mediaView, setMediaView] = useState<InputView>('grid');
   const tabChanged = useRef(false);
   const media = useMediaSearch();
@@ -489,10 +506,13 @@ function PickerPanel({
     }
   };
   const tabs = [
-    { id: 'inputs', label: `Inputs ${String(inputs.length)}` },
+    { id: 'inputs', label: localizeUi('Inputs {count}', { count: inputs.length }) },
     {
       id: 'media',
-      label: media.libraryTotal === null ? 'Media' : `Media ${String(media.libraryTotal)}`,
+      label:
+        media.libraryTotal === null
+          ? localizeUi('Media')
+          : localizeUi('Media {count}', { count: media.libraryTotal }),
     },
   ];
   const prefix = `${base}-tab`;
@@ -531,7 +551,7 @@ function PickerPanel({
           inputCheck?.stop();
           setTab(next === 'media' ? 'media' : 'inputs');
         }}
-        ariaLabel="Source kind"
+        ariaLabel={localizeUi('Source kind')}
         idPrefix={prefix}
       />
       <TabPanel activeId={tab} idPrefix={prefix}>
@@ -713,7 +733,7 @@ function InputsTab({
       kind: 'option',
       key: source.id,
       ariaLabel: source.status === 'unavailable' ? `${name} Unavailable` : name,
-      ariaDescription: sourcePresenceDescription(presence, source.id),
+      ariaDescription: sourcePresenceDescription(presence, source.id, undefined, localizeUi),
       disabled,
       selected,
       ...(loops
@@ -930,6 +950,7 @@ function mediaRow(
   previewChannel: number | undefined,
   previewEngine: PreviewEngine | undefined,
   onPreviewEngineChange: PreviewOriginChanged,
+  localizeUi: ReturnType<typeof useUiText>,
 ): VirtualRow {
   const selected = item.id === value;
   const name = sourceDisplayName(item.name, 'media');
@@ -953,21 +974,21 @@ function mediaRow(
     <Button
       variant={grid ? 'icon' : 'neutral'}
       className="cg-picker-preview-button"
-      aria-label={`Preview · ${name}`}
+      aria-label={localizeUi('Preview · {name}', { name })}
       aria-pressed={previewing}
-      title={grid ? 'Play preview' : undefined}
+      title={grid ? localizeUi('Play preview') : undefined}
       data-picker-preview={item.id}
       onClick={() => setPreview({ key, item })}
     >
       <Icon icon={Play} size={grid ? 23 : 17} />
-      {!grid && <span>Preview</span>}
+      {!grid && <span>{localizeUi('Preview')}</span>}
     </Button>
   );
   return {
     kind: 'option',
     key,
     selected,
-    ariaDescription: sourcePresenceDescription(presence, item.id),
+    ariaDescription: sourcePresenceDescription(presence, item.id, undefined, localizeUi),
     data: { 'data-picker-media': item.id },
     trailing: grid ? (
       <div className="cg-picker-media-tile-picture">
@@ -1009,7 +1030,9 @@ function mediaRow(
               previewEngine={previewEngine}
             />
             {item.unavailable === true && (
-              <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
+              <Tag className="cg-source-tag cg-source-tag--unavailable">
+                {localizeUi('Unavailable')}
+              </Tag>
             )}
             {selected && <SourceSelectionCheck />}
           </span>
@@ -1101,6 +1124,7 @@ function MediaTab({
           previewChannel,
           origins.get(item.id),
           (engine) => publish(item.id, engine),
+          localizeUi,
         ),
       );
     };
@@ -1109,10 +1133,10 @@ function MediaTab({
     if (isMediaId(value) && !inResults.has(value)) {
       const current = labelledSource(value);
       const entry = bound.find((s) => s.id === value);
-      out.push({ kind: 'heading', key: 'Current', content: 'Current' });
+      out.push({ kind: 'heading', key: 'Current', content: localizeUi('Current') });
       addMedia(`current:${value}`, {
         id: value,
-        name: current?.name ?? NOT_LISTED,
+        name: current?.name ?? localizeUi(NOT_LISTED),
         durationMs: current?.durationMs,
         folder: entry?.media?.folder,
         width: entry?.media?.width,
@@ -1134,6 +1158,7 @@ function MediaTab({
     previewChannel,
     origins,
     publish,
+    localizeUi,
   ]);
 
   const chooseMedia = (index: number): void => {
@@ -1182,7 +1207,7 @@ function MediaTab({
             data-picker-sort={media.sort}
             onClick={() => setSortOpen(!sortOpen)}
           >
-            {media.sort === 'name' ? 'Name' : 'Recent'}
+            {localizeUi(media.sort === 'name' ? 'Name' : 'Recent')}
             <Icon icon={ChevronDown} size={14} />
           </Button>
           {sortOpen && (
@@ -1222,7 +1247,7 @@ function MediaTab({
                       setSortOpen(false);
                     }}
                   >
-                    {order === 'name' ? 'Name' : 'Recent'}
+                    {localizeUi(order === 'name' ? 'Name' : 'Recent')}
                     {media.sort === order && <Icon icon={Check} size={14} />}
                   </Button>
                 ))}
@@ -1249,14 +1274,16 @@ function MediaTab({
         )}
         {media.failed !== null ? (
           <div className="cg-picker-empty" data-picker-failed="">
-            <span>{media.failed}</span>
+            <span>{localizeUi(media.failed)}</span>
             <Button variant="neutral" data-picker-retry="" onClick={media.retry}>
               {localizeUi('Retry')}
             </Button>
           </div>
         ) : empty && rows.length === 0 ? (
           <p className="cg-picker-empty" data-picker-empty="media">
-            {media.q === '' ? 'No media from the Playout.' : `No media matches “${media.q}”.`}
+            {media.q === ''
+              ? localizeUi('No media from the Playout.')
+              : localizeUi('No media matches “{query}”.', { query: media.q })}
           </p>
         ) : (
           <VirtualList

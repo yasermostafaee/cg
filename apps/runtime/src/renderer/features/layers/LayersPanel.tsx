@@ -26,7 +26,6 @@ import {
   LayoutGrid,
   LoaderCircle,
   PanelRight,
-  RotateCcw,
   Search,
   TriangleAlert,
   X,
@@ -776,13 +775,13 @@ export function LayersPanel({
       question (a row that never played has no outro to run).
     */
     const ok = await confirm({
-      title: `Clear all ${String(boundCount)} row(s) holding a layer?`,
+      title: localizeUi('Clear all {count} row(s) holding a layer?', { count: String(boundCount) }),
       body:
         `Every row that holds a layer is cleared immediately, with no outro — whatever this ` +
         `console currently believes is on it. That deliberately includes rows that read as ` +
         `merely loaded: a cued row loses its pre-rolled graphic and will re-load on its next ` +
         `play. The rows all stay on the stack and can be taken again.`,
-      confirmLabel: 'Clear all',
+      confirmLabel: localizeUi('Clear all'),
       tone: 'clear',
     });
     if (!ok) return;
@@ -846,9 +845,12 @@ export function LayersPanel({
    */
   const stopAll = useCallback(async (): Promise<void> => {
     const ok = await confirm({
-      title: 'Stop all on-air items?',
-      body: `All ${String(onAirCount)} on-air item(s) run their own outro and come off air gracefully. They stay loaded and can be taken again.`,
-      confirmLabel: 'Stop all',
+      title: localizeUi('Stop all on-air items?'),
+      body: localizeUi(
+        'All {count} on-air item(s) run their own outro and come off air gracefully. They stay loaded and can be taken again.',
+        { count: String(onAirCount) },
+      ),
+      confirmLabel: localizeUi('Stop all'),
       tone: 'stop',
     });
     if (!ok) return;
@@ -1438,7 +1440,7 @@ export function LayersPanel({
     <Panel
       id="layers"
       title={localizeUi('LAYERS')}
-      ariaLabel="Layers"
+      ariaLabel={localizeUi('Layers')}
       style={{ flex: 1 }}
       /*
         🔴 `AUDIT-CLOSE-01` B3 — THE TABS ARE THE PANEL'S HEADING, so the card is ONE line.
@@ -1452,7 +1454,7 @@ export function LayersPanel({
           tabs={tabs}
           activeId={activeTab}
           onSelect={setActiveTab}
-          ariaLabel="Layer surfaces"
+          ariaLabel={localizeUi('Layer surfaces')}
           inPanelBar
         />
       }
@@ -1515,7 +1517,7 @@ export function LayersPanel({
                 title={
                   needsCaspar
                     ? needsCasparReason
-                    : 'Every on-air graphic runs its own outro and stays loaded'
+                    : localizeUi('Every on-air graphic runs its own outro and stays loaded')
                 }
                 onClick={() => void stopAll()}
               >
@@ -1551,7 +1553,9 @@ export function LayersPanel({
                 title={
                   needsCaspar
                     ? needsCasparReason
-                    : 'Every row holding a layer is cut immediately, with no outro — whatever its status reads'
+                    : localizeUi(
+                        'Every row holding a layer is cut immediately, with no outro — whatever its status reads',
+                      )
                 }
                 onClick={() => void clearAll()}
               >
@@ -1578,9 +1582,13 @@ export function LayersPanel({
           {layout.narrow && (
             <Button
               variant="ghost"
-              aria-label={inspectorOpen ? 'Hide the Inspector' : 'Show the Inspector'}
+              aria-label={
+                inspectorOpen ? localizeUi('Hide the Inspector') : localizeUi('Show the Inspector')
+              }
               aria-expanded={inspectorOpen}
-              title={inspectorOpen ? 'Hide the Inspector' : 'Show the Inspector'}
+              title={
+                inspectorOpen ? localizeUi('Hide the Inspector') : localizeUi('Show the Inspector')
+              }
               onClick={onToggleInspector}
             >
               <Icon icon={PanelRight} />
@@ -1598,19 +1606,6 @@ export function LayersPanel({
             shape the audit found; the header exists now, and the reference draws this control
             in it.
           */}
-          {/* THE WAY BACK. Always reachable once anything is customised, so an
-              operator who drags a panel somewhere useless at 2 a.m. is never
-              stuck with it. */}
-          {layout.customized && (
-            <Button
-              variant="ghost"
-              aria-label={localizeUi('Reset the panel layout')}
-              title={localizeUi('Put every panel back to its default size')}
-              onClick={layout.reset}
-            >
-              <Icon icon={RotateCcw} />
-            </Button>
-          )}
           {/* FULLSCREEN is NOT here any more — `Panel` renders it for every
               panel, which is how the Inspector finally got one too. */}
         </>
@@ -1685,9 +1680,9 @@ export function LayersPanel({
                 {localizeUi('No candidate layers are declared.')}
               </strong>
               <span>
-                This station has no rows to load onto yet. The channel and the range of candidate
-                layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config file
-                and restart it.
+                {localizeUi(
+                  'This station has no rows to load onto yet. The channel and the range of candidate layers are fixed at install: set them in the bridge’s fixed-layers config file and restart it.',
+                )}
               </span>
               {/* `STATION-CHROME-02` §1 — this used to name a Configure button in the bar
                   above. That button is gone, so the sentence names where the section
@@ -1733,7 +1728,8 @@ export function LayersPanel({
                   <Icon icon={TriangleAlert} size={13} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <strong>
-                      {restoreSkips.length} {restoreSkips.length === 1 ? 'row' : 'rows'}{' '}
+                      {restoreSkips.length}{' '}
+                      {restoreSkips.length === 1 ? localizeUi('row') : localizeUi('rows')}{' '}
                       {localizeUi('did not come back')}
                     </strong>{' '}
                     {localizeUi('after the bridge restarted:')}{' '}
@@ -1783,7 +1779,8 @@ export function LayersPanel({
                   <Icon icon={TriangleAlert} size={13} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <strong>
-                      {restoreMigrations.length} {restoreMigrations.length === 1 ? 'row' : 'rows'}{' '}
+                      {restoreMigrations.length}{' '}
+                      {restoreMigrations.length === 1 ? localizeUi('row') : localizeUi('rows')}{' '}
                       {localizeUi('came back on a different row')}
                     </strong>{' '}
                     {localizeUi('after the bridge restarted:')}{' '}
@@ -1925,11 +1922,17 @@ export function LayersPanel({
                     data-air-tally={String(tally.onAir)}
                     className="cg-layers-subbar__onair"
                     {...(tallyUnverifiable ? { 'data-unverifiable': '' } : {})}
-                    aria-label={`${String(tally.onAir)} items on air`}
+                    aria-label={localizeUi('{count} items on air', { count: String(tally.onAir) })}
                     title={
                       tallyUnverifiable
-                        ? `${String(tally.onAir)} on air — what this console believes is on air. ${engine} cannot be reached, so nothing is confirming it right now.`
-                        : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play ${engine} accepted, or one still waiting for its answer. A refused row is counted separately.`
+                        ? localizeUi(
+                            '{count} on air — what this console believes is on air. {engine} cannot be reached, so nothing is confirming it right now.',
+                            { count: String(tally.onAir), engine: engine },
+                          )
+                        : localizeUi(
+                            '{count} on air — rows this console believes are on air or unsettled: a play {engine} accepted, or one still waiting for its answer. A refused row is counted separately.',
+                            { count: String(tally.onAir), engine: engine },
+                          )
                     }
                   >
                     {tally.onAir} {localizeUi('on air')}

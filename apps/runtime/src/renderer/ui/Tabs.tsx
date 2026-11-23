@@ -199,11 +199,12 @@ export function TabStrip({
     Tab stop. Inner strips may opt in to the same keyboard behavior.
   */
   const moveFocus = (e: KeyboardEvent<HTMLButtonElement>): void => {
+    const forward = getComputedStyle(e.currentTarget).direction === 'rtl' ? -1 : 1;
     const step =
       e.key === 'ArrowRight'
-        ? 1
+        ? forward
         : e.key === 'ArrowLeft'
-          ? -1
+          ? -forward
           : e.key === 'Home' || e.key === 'End'
             ? 0
             : null;

@@ -1,4 +1,4 @@
-import { feedback, useUiText } from '../../i18n/locale.js';
+import { feedback, useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { templateTypeLabel } from '../library/templateName.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
   type DragEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import {
   AlertTriangle,
@@ -347,6 +348,18 @@ function kindOf(template: TemplateInfo): 'graphic' | 'bed' {
   return requiredBankFor(template) === 'low' ? 'bed' : 'graphic';
 }
 
+/** Keep an authored name isolated inside a translated sentence. */
+function insertName(message: string, token: '{name}' | '{row}', name: ReactNode): ReactNode {
+  const [before, after] = message.split(token, 2);
+  return (
+    <>
+      {before}
+      {name}
+      {after}
+    </>
+  );
+}
+
 /**
  * `CHANNEL-TEMPLATES-01` — WHOSE list the picker holds, in the operator's words: `CH n`, the
  * row's channel. A pick that names no row has no channel and reads the station-wide list.
@@ -436,6 +449,7 @@ export function useTemplatePicker(
   pickerDialog: JSX.Element | null;
 } {
   const t = useUiText();
+  const localizeFeedback = useFeedbackText();
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
@@ -607,6 +621,7 @@ export function useTemplatePicker(
     it claims none; every console door (`LayerRow`) passes one.
   */
   const channel = request?.channel;
+  const displayScope = channel === undefined ? t('this station') : listScope(channel);
   const catalogue = request?.templates;
   const loadThumbnail = useMemo(() => {
     if (!templateThumbnailsAvailable || channel === undefined || catalogue === undefined)
@@ -794,9 +809,9 @@ export function useTemplatePicker(
   const deleteTemplate = useCallback(
     async (template: TemplateInfo, onChannel: number | undefined): Promise<void> => {
       const label = templateDisplayName(template);
-      const scope = listScope(onChannel);
+      const scope = onChannel === undefined ? t('this station') : listScope(onChannel);
       const ok = await confirm({
-        title: `Remove “${label}” from ${scope}?`,
+        title: t('Remove “{name}” from {scope}?', { name: label, scope }),
         /*
           🔴 `MODAL-CHROME-10` ADDENDUM D §D3(a) — THE DESTRUCTIVE MARK. It is the default now
           (see `ConfirmRequest.destructive`); this line is not needed and is not written. What
@@ -828,20 +843,23 @@ export function useTemplatePicker(
         body: (
           <>
             <p className="cg-confirm-copy">
-              Remove{' '}
-              <strong>
-                <bdi>{label}</bdi>
-              </strong>{' '}
-              from {scope}?
+              {insertName(
+                t('Remove {name} from {scope}?', { scope }),
+                '{name}',
+                <strong>
+                  <bdi>{label}</bdi>
+                </strong>,
+              )}
             </p>
             <p className="cg-confirm-copy">
-              “{label}” is removed from {scope} for every browser. This cannot be undone — the .vcg
-              must be re-imported. A row still holding it must be cleared with the row&apos;s own
-              REMOVE first.
+              {t(
+                "“{name}” is removed from {scope} for every browser. This cannot be undone — the .vcg must be re-imported. A row still holding it must be cleared with the row's own REMOVE first.",
+                { name: label, scope },
+              )}
             </p>
           </>
         ),
-        confirmLabel: `Remove from ${scope}`,
+        confirmLabel: t('Remove from {scope}', { scope }),
         tone: 'remove',
       });
       if (!ok) return;
@@ -881,7 +899,7 @@ export function useTemplatePicker(
         });
       }
     },
-    [confirm, refreshTemplateSources],
+    [confirm, refreshTemplateSources, t],
   );
 
   const cancelPackageQuestion = useRef<(() => void) | null>(null);
@@ -919,20 +937,24 @@ export function useTemplatePicker(
         cancelPackageQuestion.current = () => resolve(null);
         setMessage({
           role: 'notice',
-          text: `“${name}” is already on this channel.`,
+          text: feedback('“{name}” is already on this channel.', { name }),
           remedies: (
             <>
               <Button variant="primary" onClick={() => answer('update')}>
-                Update “<IsolatedName>{name}</IsolatedName>”
+                {insertName(
+                  t('Update “{name}”'),
+                  '{name}',
+                  <IsolatedName alignWithInterface>{name}</IsolatedName>,
+                )}
               </Button>
               <Button variant="secondary" onClick={() => answer('add')}>
-                Add as a new template
+                {t('Add as a new template')}
               </Button>
             </>
           ),
         });
       }),
-    [],
+    [t],
   );
 
   const askReplaceSource = useCallback(
@@ -946,21 +968,24 @@ export function useTemplatePicker(
         cancelPackageQuestion.current = () => resolve(false);
         setMessage({
           role: 'notice',
-          text: `“${filename}” contains a different package.`,
-          detail: `Replace “${templateDisplayName(target)}” on this channel with “${incoming.name ?? filename}” from this file?`,
+          text: feedback('“{file}” contains a different package.', { file: filename }),
+          detail: feedback('Replace “{target}” on this channel with “{incoming}” from this file?', {
+            target: templateDisplayName(target),
+            incoming: incoming.name ?? filename,
+          }),
           remedies: (
             <>
               <Button variant="primary" onClick={() => answer(true)}>
-                Replace from this file
+                {t('Replace from this file')}
               </Button>
               <Button variant="secondary" onClick={() => answer(false)}>
-                Cancel replacement
+                {t('Cancel replacement')}
               </Button>
             </>
           ),
         });
       }),
-    [],
+    [t],
   );
 
   /**
@@ -972,11 +997,12 @@ export function useTemplatePicker(
     async (reference: TemplateReference): Promise<void> => {
       const place = playoutEngineWording(describeReferencePlace(reference, bank), engine);
       const ok = await confirm({
-        title: 'Remove that item?',
-        body:
-          `The item ${place} is not on any row this station shows. Removing it clears its ` +
-          `layer — if it is on air, it comes off — and frees the template. No row is touched.`,
-        confirmLabel: 'Remove item',
+        title: t('Remove that item?'),
+        body: t(
+          'The item {place} is not on any row this station shows. Removing it clears its layer — if it is on air, it comes off — and frees the template. No row is touched.',
+          { place },
+        ),
+        confirmLabel: t('Remove item'),
         tone: 'remove',
       });
       if (!ok) return;
@@ -995,8 +1021,10 @@ export function useTemplatePicker(
           */
           setMessage({
             role: 'refusal',
-            text: errorCodeMessage(res.errorCode) ?? `The item ${place} could not be removed.`,
-            detail: `The item ${place}.`,
+            text:
+              errorCodeMessage(res.errorCode) ??
+              feedback('The item {place} could not be removed.', { place }),
+            detail: feedback('The item {place}.', { place }),
           });
           return;
         }
@@ -1018,7 +1046,7 @@ export function useTemplatePicker(
         });
       }
     },
-    [bank, channel, confirm, engine, readUsage],
+    [bank, channel, confirm, engine, readUsage, t],
   );
 
   /*
@@ -1182,7 +1210,7 @@ export function useTemplatePicker(
       .replace(/[\p{Control}\\/:*?"<>|]/gu, '-')
       .replace(/^[. ]+|[. ]+$/g, '');
     const reserved = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem);
-    const name = `${reserved ? '_' : ''}${stem || 'Live layout'}.vcg`;
+    const name = `${reserved ? '_' : ''}${stem || t('Live layout')}.vcg`;
     setMessage(null);
     setReferences([]);
     setBusyLabel('Exporting');
@@ -1193,13 +1221,16 @@ export function useTemplatePicker(
       const result = await saveFile(
         new Blob([bytes], { type: 'application/octet-stream' }),
         name,
-        'Apasai CG template package',
+        t('Apasai CG template package'),
         '.vcg',
       );
       if (result.kind === 'saved')
-        setMessage({ role: 'notice', text: `Saved “${result.handle.name}”.` });
+        setMessage({
+          role: 'notice',
+          text: feedback('Saved “{name}”.', { name: result.handle.name }),
+        });
       if (result.kind === 'download')
-        setMessage({ role: 'notice', text: `Download started for “${name}”.` });
+        setMessage({ role: 'notice', text: feedback('Download started for “{name}”.', { name }) });
     } catch (error) {
       setMessage({
         role: 'refusal',
@@ -1263,7 +1294,10 @@ export function useTemplatePicker(
             text:
               reloaded === 0
                 ? (failures[0] ?? 'No template was reloaded.')
-                : `${String(reloaded)} template(s) reloaded; ${String(failures.length)} failed.`,
+                : feedback('{complete} template(s) reloaded; {failed} failed.', {
+                    complete: reloaded,
+                    failed: failures.length,
+                  }),
             ...(reloaded > 0 || failures.length > 1 ? { detail: failures.join(' ') } : {}),
           });
         } else if (reloaded > 0) {
@@ -1292,32 +1326,35 @@ export function useTemplatePicker(
   const askReload = useCallback(
     (templates: readonly TemplateInfo[], reviewSourceChange = false): void => {
       if (templates.length === 0 || importBusy) return;
-      const label =
-        templates.length === 1
-          ? `“${templateDisplayName(templates[0] as TemplateInfo)}”`
-          : `${String(templates.length)} templates`;
+      const label = templateDisplayName(templates[0] as TemplateInfo);
       const answer = (policy: ReloadDataPolicy): void => {
         setMessage(null);
         void runReload(templates, policy, reviewSourceChange);
       };
       setMessage({
         role: 'notice',
-        text: `Reload ${label} from the original file${templates.length === 1 ? '' : 's'}?`,
-        detail:
+        text:
+          templates.length === 1
+            ? feedback('Reload “{name}” from the original file?', { name: label })
+            : feedback('Reload {count} templates from the original files?', {
+                count: templates.length,
+              }),
+        detail: feedback(
           'Choose whether rows already in CG Control keep their current data or return to the defaults in the reloaded package.',
+        ),
         remedies: (
           <>
             <Button variant="primary" onClick={() => answer('keep')}>
-              Reload and keep current data
+              {t('Reload and keep current data')}
             </Button>
             <Button variant="secondary" onClick={() => answer('file-defaults')}>
-              Reload and use file defaults
+              {t('Reload and use file defaults')}
             </Button>
           </>
         ),
       });
     },
-    [importBusy, runReload],
+    [importBusy, runReload, t],
   );
   // The drop handler is declared above `runImport`; it reads the latest one through this ref.
   runImportRef.current = runImport;
@@ -1358,10 +1395,10 @@ export function useTemplatePicker(
               <Button
                 key={reference.itemId}
                 variant="danger"
-                aria-label={`Remove the item ${place}`}
+                aria-label={t('Remove the item {place}', { place })}
                 onClick={() => void removeReference(reference)}
               >
-                Remove that item
+                {t('Remove that item')}
               </Button>
             );
           }
@@ -1375,7 +1412,7 @@ export function useTemplatePicker(
                 on AIR, and this one only scrolls the layer table to the row and opens it. So
                 the label says the act, and the `title` says it in full.
               */
-              title={`Close this dialog and go to the row holding it — ${place}`}
+              title={t('Close this dialog and go to the row holding it — {place}', { place })}
               onClick={() => {
                 // Close first, then ask the table to go there: the picker sits over the list,
                 // and a scroll under a backdrop is not a remedy.
@@ -1383,7 +1420,11 @@ export function useTemplatePicker(
                 requestRowFocus(slot.layer);
               }}
             >
-              Go to <IsolatedName>{rowName}</IsolatedName> (layer {slot.layer})
+              {insertName(
+                t('Go to {row} (layer {layer})', { layer: slot.layer }),
+                '{row}',
+                <IsolatedName alignWithInterface>{rowName}</IsolatedName>,
+              )}
             </Button>
           );
         });
@@ -1393,8 +1434,10 @@ export function useTemplatePicker(
       <Modal
         title={
           request.mode === 'manage'
-            ? t('Templates · {scope}', { scope: listScope(channel) })
-            : request.title
+            ? t('Templates · {scope}', { scope: displayScope })
+            : request.destination === null
+              ? t(request.title)
+              : t('Load onto {row}', { row: request.destination.rowName })
         }
         /*
           `RUNTIME-REPAIR-05` §3 — eleven words to five. It read "Choose a template already on
@@ -1404,8 +1447,8 @@ export function useTemplatePicker(
         */
         subtitle={
           request.mode === 'manage'
-            ? `Import, reload or remove templates on ${listScope(channel)}.`
-            : 'Choose a template for this row.'
+            ? t('Import, reload or remove templates on {scope}.', { scope: displayScope })
+            : t('Choose a template for this row.')
         }
         /* `REPAIR-03` B, audit row 98 — the reference draws a 42 px emblem in this head. */
         emblem={LayoutTemplate}
@@ -1416,10 +1459,10 @@ export function useTemplatePicker(
           ? {
               message: {
                 ...message,
-                text: playoutEngineWording(message.text, engine),
+                text: playoutEngineWording(localizeFeedback(message.text), engine),
                 ...(message.detail === undefined
                   ? {}
-                  : { detail: playoutEngineWording(message.detail, engine) }),
+                  : { detail: playoutEngineWording(localizeFeedback(message.detail), engine) }),
                 ...(remedies === null ? {} : { remedies }),
               },
             }
@@ -1432,11 +1475,11 @@ export function useTemplatePicker(
             */}
             {request.mode === 'load' ? (
               <span className="cg-tpl-foot-info" data-template-foot-info="">
-                {FOOT_INFO}
+                {t(FOOT_INFO)}
               </span>
             ) : (
               <span className="cg-tpl-foot-info" data-template-foot-info="manage">
-                Manage this channel&apos;s catalogue without loading a row.
+                {t("Manage this channel's catalogue without loading a row.")}
               </span>
             )}
             {/*
@@ -1449,7 +1492,7 @@ export function useTemplatePicker(
               resolves to `neutral`: neutral must not mean invisible.
             */}
             <ModalAction actionRole="cancel" disabled={importBusy} onClick={() => settle(null)}>
-              {request.mode === 'manage' ? 'Close' : 'Cancel'}
+              {t(request.mode === 'manage' ? 'Close' : 'Cancel')}
             </ModalAction>
             {/*
               §6 — IMPORT LIVES IN HERE, and it is not a convenience.
@@ -1484,7 +1527,9 @@ export function useTemplatePicker(
                   data-template-commit=""
                   onClick={() => commit(selected)}
                 >
-                  Load onto {request.destination?.rowName ?? 'this row'}
+                  {request.destination === null
+                    ? t('Load onto this row')
+                    : t('Load onto {row}', { row: request.destination.rowName })}
                 </ModalAction>
               )
             }
@@ -1508,12 +1553,20 @@ export function useTemplatePicker(
           {importBusy ? (
             <div className="cg-tpl-import-progress" data-template-import-progress="" role="status">
               <span className="cg-tpl-import-progress__spinner" aria-hidden="true" />
-              <strong>{busyLabel} template…</strong>
+              <strong>
+                {t(
+                  busyLabel === 'Exporting'
+                    ? 'Exporting template…'
+                    : busyLabel === 'Reloading'
+                      ? 'Reloading template…'
+                      : 'Importing template…',
+                )}
+              </strong>
               <bdi title={importingFileName ?? undefined}>{importingFileName}</bdi>
               <span>
                 {busyLabel === 'Exporting'
-                  ? 'Reading the saved package from CG Bridge.'
-                  : 'Verifying and preparing the package.'}
+                  ? t('Reading the saved package from CG Bridge.')
+                  : t('Verifying and preparing the package.')}
               </span>
             </div>
           ) : (
@@ -1549,6 +1602,7 @@ export function useTemplatePicker(
                     placeholder={t('Search templates…')}
                     aria-label={t('Search templates')}
                     autoComplete="off"
+                    dir="auto"
                     value={query}
                     onChange={setQuery}
                   />
@@ -1611,14 +1665,14 @@ export function useTemplatePicker(
                 <div
                   className="cg-tpl-reimport"
                   data-template-reimport={String(reimport.length)}
-                  title={REIMPORT_TITLE}
+                  title={t(REIMPORT_TITLE)}
                 >
                   <Notice
                     noticeRole="notice"
                     aria="note"
-                    text={reimportLine(reimport.length)}
+                    text={reimportLine(reimport.length, t)}
                     remedies={reimport.map((t) => (
-                      <IsolatedName key={t.templateId} title={t.templateId}>
+                      <IsolatedName alignWithInterface key={t.templateId} title={t.templateId}>
                         {templateDisplayName(t)}
                       </IsolatedName>
                     ))}
@@ -1640,7 +1694,7 @@ export function useTemplatePicker(
                     panel that no longer exists (§6).
                   */
                       <div className="cg-tpl-empty" data-template-empty="">
-                        <h3>{t('Nothing on {scope} yet', { scope: listScope(channel) })}</h3>
+                        <h3>{t('Nothing on {scope} yet', { scope: displayScope })}</h3>
                         <p>{t('Import a .vcg package to begin.')}</p>
                         <Button variant="primary" disabled={importBusy} onClick={openImport}>
                           <Icon icon={FileUp} size={14} />
@@ -1668,7 +1722,7 @@ export function useTemplatePicker(
                   <aside
                     className="cg-tpl-aside"
                     data-template-aside=""
-                    aria-label={request.mode === 'manage' ? 'Template details' : 'Destination'}
+                    aria-label={t(request.mode === 'manage' ? 'Template details' : 'Destination')}
                   >
                     {request.destination !== null && (
                       <div className="cg-tpl-dest" data-template-destination="">
@@ -1677,25 +1731,32 @@ export function useTemplatePicker(
                         </span>
                         <span className="cg-tpl-dest__text">
                           <span className="cg-tpl-dest__name">
-                            Destination · <bdi>{request.destination.rowName}</bdi>
+                            {insertName(
+                              t('Destination · {row}'),
+                              '{row}',
+                              <bdi>{request.destination.rowName}</bdi>,
+                            )}
                           </span>
                           {/*
                         `R-028` — the real coordinate stays in the sentence, because this is
                         where an operator finds the layer they may have to clear by hand.
                       */}
                           <span className="cg-tpl-dest__meta">
-                            {request.accepts === 'low' ? 'Live layer' : 'Operator row'} · on{' '}
-                            {request.destination.coord}
+                            {t(
+                              request.accepts === 'low'
+                                ? 'Live layer · on {coord}'
+                                : 'Operator row · on {coord}',
+                              { coord: request.destination.coord },
+                            )}
                           </span>
                           <span className="cg-tpl-dest__meta">
-                            {request.destination.holding === null ? (
-                              'Empty — nothing loaded on it.'
-                            ) : (
-                              <>
-                                Holding <bdi>{request.destination.holding}</bdi>. Loading replaces
-                                it.
-                              </>
-                            )}
+                            {request.destination.holding === null
+                              ? t('Empty — nothing loaded on it.')
+                              : insertName(
+                                  t('Holding {name}. Loading replaces it.'),
+                                  '{name}',
+                                  <bdi>{request.destination.holding}</bdi>,
+                                )}
                           </span>
                         </span>
                       </div>
@@ -1712,13 +1773,17 @@ export function useTemplatePicker(
                 */}
                     {selected === null ? (
                       <p className="cg-tpl-aside__hint" data-template-aside-hint="">
-                        Choose a template to see its details.
+                        {t('Choose a template to see its details.')}
                       </p>
                     ) : (
                       <div className="cg-tpl-pick" data-template-selected={selected.templateId}>
-                        <p className="cg-tpl-pick__eyebrow">Selected template</p>
+                        <p className="cg-tpl-pick__eyebrow">{t('Selected template')}</p>
                         {/* Golden rule 11 — the operator's word in the sentence, the id on the title. */}
-                        <IsolatedName className="cg-tpl-pick__name" title={selected.templateId}>
+                        <IsolatedName
+                          alignWithInterface
+                          className="cg-tpl-pick__name"
+                          title={selected.templateId}
+                        >
                           {templateDisplayName(selected)}
                         </IsolatedName>
                         {loadThumbnail !== undefined && (
@@ -1736,22 +1801,29 @@ export function useTemplatePicker(
                           />
                         )}
                         <dl className="cg-tpl-kv">
-                          <dt>Type</dt>
+                          <dt>{t('Type')}</dt>
                           <dd>
-                            {kindOf(selected) === 'bed'
-                              ? 'Live layout'
-                              : templateTypeLabel(selected.templateType)}
+                            {t(
+                              kindOf(selected) === 'bed'
+                                ? 'Live layout'
+                                : templateTypeLabel(selected.templateType),
+                            )}
                           </dd>
-                          <dt>Text fields</dt>
+                          <dt>{t('Text fields')}</dt>
                           <dd>{String(operatorFieldCount(selected))}</dd>
-                          <dt>Plates</dt>
+                          <dt>{t('Plates')}</dt>
                           <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
                           {/* `UI-POLISH-01` C — `Manage`'s usage line, here now that `Manage` is gone. */}
-                          <dt>Rows</dt>
+                          <dt>{t('Rows')}</dt>
                           <dd data-template-usage={String(usage.get(selected.templateId) ?? 0)}>
                             {(usage.get(selected.templateId) ?? 0) === 0
-                              ? 'Not on any row'
-                              : `Used by ${count(usage.get(selected.templateId) ?? 0, 'row')}`}
+                              ? t('Not on any row')
+                              : t(
+                                  usage.get(selected.templateId) === 1
+                                    ? 'Used by {count} row'
+                                    : 'Used by {count} rows',
+                                  { count: usage.get(selected.templateId) ?? 0 },
+                                )}
                           </dd>
                         </dl>
                         {controlLiveLayouts &&
@@ -1763,21 +1835,21 @@ export function useTemplatePicker(
                                 disabled={layoutEditor.busy}
                                 onClick={() => void layoutEditor.open(channel, selected)}
                               >
-                                <Icon icon={Pencil} size={14} /> Edit layout
+                                <Icon icon={Pencil} size={14} /> {t('Edit layout')}
                               </Button>
                               <Button
                                 variant="neutral"
                                 disabled={layoutEditor.busy}
                                 onClick={() => void layoutEditor.open(channel, selected, true)}
                               >
-                                <Icon icon={Copy} size={14} /> Duplicate layout
+                                <Icon icon={Copy} size={14} /> {t('Duplicate layout')}
                               </Button>
                               <Button
                                 variant="neutral"
                                 disabled={layoutEditor.busy}
                                 onClick={() => void exportLayout(selected)}
                               >
-                                <Icon icon={Download} size={14} /> Export .vcg
+                                <Icon icon={Download} size={14} /> {t('Export .vcg')}
                               </Button>
                             </div>
                           )}
@@ -1796,8 +1868,8 @@ export function useTemplatePicker(
                                   <Icon icon={ok ? CheckCircle2 : AlertTriangle} size={16} />
                                 </span>
                                 <span>
-                                  <strong>{ok ? COMPATIBLE.title : refusal.title}</strong>
-                                  <span>{ok ? COMPATIBLE.text : refusal.text}</span>
+                                  <strong>{t(ok ? COMPATIBLE.title : refusal.title)}</strong>
+                                  <span>{t(ok ? COMPATIBLE.text : refusal.text)}</span>
                                 </span>
                               </div>
                             );
@@ -1902,11 +1974,6 @@ function operatorFieldCount(template: TemplateInfo): number {
   return values.size;
 }
 
-/** Singular and plural template metadata labels. */
-function count(n: number, one: string): string {
-  return `${String(n)} ${one}${n === 1 ? '' : 's'}`;
-}
-
 /**
  * ⚠ `MODAL-CHROME-10` ADDENDUM D §D1 — this no longer owns the SEARCH box or the two
  * station-level doors. They are the dialog's chrome now, rendered once above the view switch so
@@ -1969,7 +2036,7 @@ function PickerList({
             data-template-filter={chip.key}
             onClick={() => onKind(chip.key)}
           >
-            {chip.label}
+            {localizeUi(chip.label)}
           </Button>
         ))}
       </div>
@@ -1993,7 +2060,11 @@ function PickerList({
                 key={t.templateId}
                 template={t}
                 accepts={request.mode === 'load' ? request.accepts : null}
-                scope={listScope(request.channel)}
+                scope={
+                  request.channel === undefined
+                    ? localizeUi('this station')
+                    : listScope(request.channel)
+                }
                 unassigned={unassigned(t)}
                 isSelected={selected?.templateId === t.templateId}
                 onSelect={() => onSelect(t)}
@@ -2044,6 +2115,7 @@ function PickerRow({
   // `single-clock-look-switch` — the SAME predicate the bridge refuses on.
   const wrongBank = accepts !== null && requiredBankFor(t) !== accepts;
   const plates = t.liveSources?.sources.length ?? 0;
+  const fields = operatorFieldCount(t);
   return (
     <div
       className="cg-tpl-row"
@@ -2067,9 +2139,9 @@ function PickerRow({
       <Button
         variant="ghost"
         className="cg-tpl-row__load"
-        aria-label={`Select ${label}`}
+        aria-label={localizeUi('Select {name}', { name: label })}
         aria-pressed={isSelected}
-        title={wrongBank && accepts !== null ? REFUSAL[accepts].text : t.templateId}
+        title={wrongBank && accepts !== null ? localizeUi(REFUSAL[accepts].text) : t.templateId}
         onClick={onSelect}
         {...(accepts !== null ? { onDoubleClick: onCommit } : {})}
       >
@@ -2082,17 +2154,25 @@ function PickerRow({
         <span className="cg-tpl-text">
           {/* ADDENDUM B — the BOX is LTR chrome, the NAME is isolated INLINE inside it. A
                   `<bdi>` carrying the class was blockified here and flushed Persian titles right. */}
-          <IsolatedName className="cg-tpl-name">{label}</IsolatedName>
+          <IsolatedName alignWithInterface className="cg-tpl-name">
+            {label}
+          </IsolatedName>
           <span className="cg-tpl-meta">
             <span>
-              {templateKind === 'bed' ? 'Live layout' : templateTypeLabel(t.templateType)}
+              {localizeUi(
+                templateKind === 'bed' ? 'Live layout' : templateTypeLabel(t.templateType),
+              )}
             </span>
             <span aria-hidden="true">·</span>
-            <span>{count(operatorFieldCount(t), 'field')}</span>
+            <span>
+              {localizeUi(fields === 1 ? '{count} field' : '{count} fields', { count: fields })}
+            </span>
             {plates > 0 && (
               <>
                 <span aria-hidden="true">·</span>
-                <span>{count(plates, 'plate')}</span>
+                <span>
+                  {localizeUi(plates === 1 ? '{count} plate' : '{count} plates', { count: plates })}
+                </span>
               </>
             )}
             {/*
@@ -2101,7 +2181,7 @@ function PickerRow({
               remedy, stays beneath (`cg-tpl-reason`).
             */}
             {wrongBank && accepts !== null && (
-              <Tag className="cg-tag cg-tag--warn">{REFUSAL[accepts].chip}</Tag>
+              <Tag className="cg-tag cg-tag--warn">{localizeUi(REFUSAL[accepts].chip)}</Tag>
             )}
             {/*
               D-137 / C-015 — said on the row, not hidden behind a hover.
@@ -2112,9 +2192,9 @@ function PickerRow({
               <Tag
                 className="cg-tag cg-tag--warn"
                 data-live-sources="unknown"
-                title={STALE_CARRIER_TITLE}
+                title={localizeUi(STALE_CARRIER_TITLE)}
               >
-                {STALE_CARRIER_LABEL}
+                {localizeUi(STALE_CARRIER_LABEL)}
               </Tag>
             ) : (
               <span hidden data-live-sources={carrier} />
@@ -2128,9 +2208,9 @@ function PickerRow({
               <Tag
                 className="cg-tag cg-tag--warn"
                 data-plates-unassigned={needsSource.join(',')}
-                title={UNASSIGNED_TITLE}
+                title={localizeUi(UNASSIGNED_TITLE)}
               >
-                {localizeUi('Needs a source:')} {needsSource.join(', ')}
+                {localizeUi('Needs a source:')} <bdi>{needsSource.join(', ')}</bdi>
               </Tag>
             )}
           </span>
@@ -2152,11 +2232,13 @@ function PickerRow({
         <Button
           variant="icon"
           className="cg-tpl-row__reload"
-          aria-label={`Reload ${label}`}
+          aria-label={localizeUi('Reload {name}', { name: label })}
           title={
             sourceName === undefined
-              ? 'Original file is not remembered on this CG Control; import it again to enable Reload.'
-              : `Reload ${label} from ${sourceName}`
+              ? localizeUi(
+                  'Original file is not remembered on this CG Control; import it again to enable Reload.',
+                )
+              : localizeUi('Reload {name} from {file}', { name: label, file: sourceName })
           }
           data-template-reload={t.templateId}
           disabled={sourceName === undefined}
@@ -2167,8 +2249,8 @@ function PickerRow({
         <Button
           variant="icon"
           className="cg-tpl-row__delete"
-          aria-label={`Remove ${label} from ${scope}`}
-          title={`Remove ${label} from ${scope}`}
+          aria-label={localizeUi('Remove {name} from {scope}', { name: label, scope })}
+          title={localizeUi('Remove {name} from {scope}', { name: label, scope })}
           data-template-delete={t.templateId}
           onClick={onDelete}
         >

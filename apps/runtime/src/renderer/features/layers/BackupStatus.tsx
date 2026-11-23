@@ -82,7 +82,7 @@ function BackupDetails({
         onClick={() => setOpen(!open)}
       >
         <Icon icon={TriangleAlert} size={12} />
-        {compact ? ' B' : ' Backup incomplete'}
+        {compact ? ' B' : localizeUi('Backup incomplete')}
       </Button>
       {open && (
         <Popover

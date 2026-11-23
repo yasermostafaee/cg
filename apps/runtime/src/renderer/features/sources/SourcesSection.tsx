@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useLanguages, useUiText } from '../../i18n/locale.js';
 import { useState, useSyncExternalStore } from 'react';
 import {
   canCheckLiveInput,
@@ -60,7 +60,19 @@ const styles = {
 } as const;
 
 /** The last good read, as a time an operator can check against the clock. */
-const READ_TIME = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium' });
+const READ_TIME_FORMATS = {
+  en: new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium' }),
+  fa: new Intl.DateTimeFormat('fa-IR', {
+    calendar: 'gregory',
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }),
+  ar: new Intl.DateTimeFormat('ar', {
+    calendar: 'gregory',
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }),
+};
 
 function inputFormatLabel(format: string | undefined): string {
   if (format === undefined || format.toUpperCase() === 'AUTO') return 'Auto';
@@ -86,6 +98,7 @@ export function SourcesSection({
   channel: number;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const { interface: locale } = useLanguages();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
@@ -162,8 +175,10 @@ export function SourcesSection({
           <InputCatalogueServer server={catalog.inputsServer} />
           <span className="cg-setup-read" data-sources-read="">
             {catalog.inputsReadAt === undefined
-              ? 'Not read yet'
-              : `Last read ${READ_TIME.format(new Date(catalog.inputsReadAt))}`}
+              ? localizeUi('Not read yet')
+              : localizeUi('Last read {time}', {
+                  time: READ_TIME_FORMATS[locale].format(new Date(catalog.inputsReadAt)),
+                })}
           </span>
         </div>
         <InputViewSwitch view={view} onChange={setView} />
@@ -226,23 +241,29 @@ export function SourcesSection({
                     className="cg-resource__type"
                     data-source-kind={KIND_WORD[source.producer.kind]}
                   >
-                    {KIND_WORD[source.producer.kind]}
+                    {localizeUi(KIND_WORD[source.producer.kind])}
                   </span>
                   {source.status === 'unusable' && (
-                    <Tag className="cg-source-tag" title={source.reason}>
+                    <Tag
+                      className="cg-source-tag"
+                      title={source.reason === undefined ? undefined : localizeUi(source.reason)}
+                    >
                       {localizeUi('Unusable')}
                     </Tag>
                   )}
                   {source.status === 'unavailable' && (
-                    <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>
+                    <Tag
+                      className="cg-source-tag cg-source-tag--unavailable"
+                      title={source.reason === undefined ? undefined : localizeUi(source.reason)}
+                    >
                       {localizeUi('Unavailable')}
                     </Tag>
                   )}
                   <bdi
                     className="cg-resource__value cg-setup-source-format"
-                    title={inputFormatLabel(source.format)}
+                    title={localizeUi(inputFormatLabel(source.format))}
                   >
-                    {inputFormatLabel(source.format)}
+                    {localizeUi(inputFormatLabel(source.format))}
                   </bdi>
                 </div>
               </div>
@@ -306,8 +327,18 @@ export function SourcesSection({
           {/* What is IN FORCE right now — for a principal who cannot apply a band, it IS the band. */}
           <p className="cg-setup-band-summary" data-plate-band={inForce?.origin ?? 'none'}>
             {inForce === null
-              ? `Nothing is declared yet; ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)} is the usual choice.`
-              : `Currently ${String(inForce.range.start)}–${String(inForce.range.end)}${inForce.origin === 'default' ? ' · default' : ''} · ${String(inForce.range.end - inForce.range.start + 1)} layers.`}
+              ? localizeUi('Nothing is declared yet; {range} is the usual choice.', {
+                  range: `${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}`,
+                })
+              : localizeUi(
+                  inForce.origin === 'default'
+                    ? 'Currently {range} · default · {count} layers.'
+                    : 'Currently {range} · {count} layers.',
+                  {
+                    range: `${String(inForce.range.start)}–${String(inForce.range.end)}`,
+                    count: inForce.range.end - inForce.range.start + 1,
+                  },
+                )}
           </p>
         </div>
       </section>

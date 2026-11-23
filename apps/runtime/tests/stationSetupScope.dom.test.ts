@@ -172,12 +172,15 @@ describe('§3 — the six that did not move', () => {
     expect(stationSetupSource()).not.toMatch(/window\.cg\.lock|usePrompt\(/);
   });
 
-  it('3. panel widths and the Inspector overlay stay with the shell — Station setup renders no layout control', async () => {
-    // Where they live today: the shell's dividers and the Layers header's reset.
+  it('3. the shell retains its dividers and General owns workspace reset', async () => {
+    // The dividers stay in the shell and the reset lives in General.
     const app = read('App.tsx');
     expect(app).toContain("localizeUi('Resize the Inspector')");
     expect(app).toContain("localizeUi('Resize the monitor strip')");
-    expect(read('features', 'layers', 'LayersPanel.tsx')).toContain('Reset the panel layout');
+    expect(read('features', 'layers', 'LayersPanel.tsx')).not.toContain('Reset the panel layout');
+    expect(read('features', 'workspace', 'WorkspaceSettings.tsx')).toContain(
+      'Reset the panel layout',
+    );
 
     stationSetupStub();
     const setup = await renderStationSetup();

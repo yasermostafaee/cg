@@ -1,3 +1,5 @@
+import { connectionCheckText } from './connectionCheckText.js';
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useRef, useState } from 'react';
 import { cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -86,6 +88,7 @@ export function LocalBridgeHelp({
   /** A step worked: the check runs again. */
   onFixed: () => void;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const [state, setState] = useState<LocalBridgeState | null>(null);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
@@ -125,7 +128,7 @@ export function LocalBridgeHelp({
   return (
     <div style={styles.column} data-local-bridge={state?.kind === 'here' ? state.service : ''}>
       <div style={styles.line} role="status">
-        {line.text}
+        {connectionCheckText(line.text, localizeUi)}
       </div>
       {line.offer !== null && (
         <div style={styles.row}>
@@ -136,13 +139,13 @@ export function LocalBridgeHelp({
               if (line.offer !== null) void act(line.offer);
             }}
           >
-            {line.offer.action === 'start' ? 'Start CG Bridge' : 'Free the port'}
+            {localizeUi(line.offer.action === 'start' ? 'Start CG Bridge' : 'Free the port')}
           </Button>
         </div>
       )}
       {said !== null && (
         <div style={styles.line} role="status" data-local-bridge-outcome="">
-          {said}
+          {connectionCheckText(said, localizeUi)}
         </div>
       )}
     </div>

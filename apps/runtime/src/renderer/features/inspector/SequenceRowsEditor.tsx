@@ -389,7 +389,7 @@ function CurrentSequenceRowsDialog({
     <Modal
       title={localizeUi('Current file-only data')}
       subtitle={label}
-      ariaLabel={`Current file-only data · ${label}`}
+      ariaLabel={localizeUi('Current file-only data · {name}', { name: label })}
       size="wide"
       frame="fixed"
       onClose={onClose}
@@ -414,8 +414,11 @@ function CurrentSequenceRowsDialog({
           }
         >
           {invalidCount === 0
-            ? 'All values match the template'
-            : `${String(invalidCount)} invalid ${invalidCount === 1 ? 'cell' : 'cells'}`}
+            ? localizeUi('All values match the template')
+            : localizeUi('{count} invalid {cells}', {
+                count: String(invalidCount),
+                cells: invalidCount === 1 ? 'cell' : 'cells',
+              })}
         </Tag>
       </div>
       <div style={styles.previewTableWrap}>
@@ -470,7 +473,11 @@ function CurrentSequenceRowsDialog({
                         aria-label={
                           error === undefined
                             ? undefined
-                            : `Row ${String(rowIndex + 1)}, ${field.label || field.id}: ${error}`
+                            : localizeUi('Row {row}, {field}: {error}', {
+                                row: String(rowIndex + 1),
+                                field: field.label || field.id,
+                                error: error,
+                              })
                         }
                       >
                         <StructuredCellValue
@@ -636,8 +643,8 @@ function SequenceRowsFileControl({
               }}
             />
             {fileOnly && authoredPath !== undefined
-              ? `Connected · ${sourceName(authoredPath)}`
-              : 'Not connected'}
+              ? localizeUi('Connected · {file}', { file: sourceName(authoredPath) })
+              : localizeUi('Not connected')}
           </Tag>
           {fileOnly && onViewCurrentData !== undefined && (
             <Button variant="secondary" onClick={onViewCurrentData}>
@@ -679,7 +686,7 @@ function SequenceRowsFileControl({
   return (
     <div className="cg-file-managed-connection">
       <div style={styles.source}>
-        <Tag>{fileOnly ? 'File managed' : 'File connected'}</Tag>
+        <Tag>{fileOnly ? localizeUi('File managed') : localizeUi('File connected')}</Tag>
         <Tag title={resolvedSourcePath}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--r-space-1)' }}>
             <Icon
@@ -689,7 +696,8 @@ function SequenceRowsFileControl({
                 color: schemaNeedsUpdate ? cssVars['--r-caution-text'] : colors.checkPass,
               }}
             />
-            {schemaNeedsUpdate ? 'Connected · update file' : 'Connected'} · {state.source.name}
+            {schemaNeedsUpdate ? localizeUi('Connected · update file') : localizeUi('Connected')} ·{' '}
+            {state.source.name}
           </span>
         </Tag>
         {state.permission === 'granted' ? (
@@ -714,7 +722,7 @@ function SequenceRowsFileControl({
             <Button
               variant="neutral"
               onClick={() => detachFileSource(item.itemId, path)}
-              aria-label={`Detach ${state.source.name}`}
+              aria-label={localizeUi('Detach {file}', { file: state.source.name })}
             >
               <Icon icon={Unlink} />
               {localizeUi('Detach')}
@@ -743,8 +751,8 @@ function SequenceRowsFileControl({
             'Template fields changed after this file was generated. Reload still checks its data, but its Excel choices may be outdated.',
           )}{' '}
           {fileOnly
-            ? 'Reconnect the updated workbook in Designer.'
-            : 'Save and connect a new Excel file.'}
+            ? localizeUi('Reconnect the updated workbook in Designer.')
+            : localizeUi('Save and connect a new Excel file.')}
         </p>
       )}
       {state.error !== null && <p style={styles.error}>{state.error}</p>}
@@ -791,20 +799,27 @@ export function SequenceRowsEditor({
   };
 
   return (
-    <section style={styles.section} aria-label={`${set.sequenceName} all rows`}>
+    <section
+      style={styles.section}
+      aria-label={localizeUi('{sequence} all rows', { sequence: set.sequenceName })}
+    >
       <h3 style={styles.heading}>
         <span>
           {set.field.label} {localizeUi('· all pages')}
         </span>
         {dirty && (
-          <span className="cg-dirty-dot" aria-label={`${set.field.id} has unapplied edits`}>
+          <span
+            className="cg-dirty-dot"
+            aria-label={localizeUi('{field} has unapplied edits', { field: set.field.id })}
+          >
             ●
           </span>
         )}
       </h3>
       <p style={styles.hint}>
-        {String(rows.length)} {rows.length === 1 ? 'row' : 'rows'} · {String(pageCount)}{' '}
-        {pageCount === 1 ? 'page' : 'pages'} · {String(set.maxItems)} {localizeUi('per page')}
+        {String(rows.length)} {rows.length === 1 ? localizeUi('row') : localizeUi('rows')} ·{' '}
+        {String(pageCount)} {pageCount === 1 ? localizeUi('page') : localizeUi('pages')} ·{' '}
+        {String(set.maxItems)} {localizeUi('per page')}
       </p>
       {fileOnly ? (
         <>

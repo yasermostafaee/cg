@@ -21,3 +21,10 @@ The console SHALL expose independent monitor order, Layers vertical position, an
 
 - **WHEN** the operator looks for New live layout
 - **THEN** the creation action is available through Templates and omitted from the Layers toolbar
+
+#### Scenario: Reset the layout from General
+
+- **WHEN** the operator customizes the workspace
+- **THEN** the reset action is available in Settings → General → Workspace
+- **AND** it does not occupy the Layers toolbar
+- **AND** it is disabled when the workspace is already using the shipped layout.

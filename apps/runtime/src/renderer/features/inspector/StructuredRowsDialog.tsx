@@ -191,7 +191,7 @@ export function StructuredRowsDialog({
     <Modal
       title={localizeUi('Current file-only data')}
       subtitle={label}
-      ariaLabel={`Current file-only data · ${label}`}
+      ariaLabel={localizeUi('Current file-only data · {name}', { name: label })}
       size="wide"
       frame="fixed"
       onClose={onClose}
@@ -216,8 +216,11 @@ export function StructuredRowsDialog({
           }
         >
           {invalidCount === 0
-            ? 'All values match the template'
-            : `${String(invalidCount)} invalid ${invalidCount === 1 ? 'cell' : 'cells'}`}
+            ? localizeUi('All values match the template')
+            : localizeUi('{count} invalid {cells}', {
+                count: String(invalidCount),
+                cells: invalidCount === 1 ? 'cell' : 'cells',
+              })}
         </Tag>
       </div>
       <div style={styles.tableWrap}>
@@ -250,7 +253,11 @@ export function StructuredRowsDialog({
                       aria-label={
                         error === undefined
                           ? undefined
-                          : `Row ${String(rowIndex + 1)}, ${field.label || field.id}: ${error}`
+                          : localizeUi('Row {row}, {field}: {error}', {
+                              row: String(rowIndex + 1),
+                              field: field.label || field.id,
+                              error: error,
+                            })
                       }
                     >
                       <StructuredCellValue

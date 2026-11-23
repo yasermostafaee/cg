@@ -230,8 +230,8 @@ export function LivePlateOverlay({
       role="group"
       aria-label={
         sourceFrames !== undefined && sourceFrames.size > 0
-          ? 'Live source preview'
-          : 'Live source placeholders'
+          ? localizeUi('Live source preview')
+          : localizeUi('Live source placeholders')
       }
       style={{ ...frameBox(raster, fit), ...styles.layer, zIndex }}
     >
@@ -371,7 +371,7 @@ export function LivePlateOverlay({
                   it carries the full sentence at every size. */}
                   {(preview?.signal === 'absent' || roomForLabel) && (
                     <span style={styles.kind} data-live-plate-caveat="">
-                      {preview?.signal === 'absent' ? 'No signal' : REGION_CAVEAT}
+                      {preview?.signal === 'absent' ? localizeUi('No signal') : REGION_CAVEAT}
                     </span>
                   )}
                   <span style={styles.plate}>
@@ -426,10 +426,10 @@ export function LivePlateOverlay({
                   aria-pressed={localAudio === 'audible'}
                   title={
                     localAudio === 'connecting'
-                      ? 'Cancel preview audio'
+                      ? localizeUi('Cancel preview audio')
                       : localAudio === 'audible'
-                        ? 'Mute this preview input'
-                        : 'Listen to this preview input'
+                        ? localizeUi('Mute this preview input')
+                        : localizeUi('Listen to this preview input')
                   }
                   data-preview-plate-audio={localAudio}
                   onClick={() => {

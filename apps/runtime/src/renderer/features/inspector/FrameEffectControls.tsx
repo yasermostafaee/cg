@@ -51,7 +51,7 @@ export function PresetPlateDirectionControl({
   onChange: (direction: InputTransitionDirection | undefined) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const label = phase === 'enter' ? 'Arriving plates' : 'Departing plates';
+  const label = localizeUi(phase === 'enter' ? 'Arriving plates' : 'Departing plates');
   const choices = phase === 'enter' ? ARRIVAL_LABELS : DEPARTURE_LABELS;
   return (
     <label className="cg-preset-plate-direction-control">
@@ -69,7 +69,7 @@ export function PresetPlateDirectionControl({
         <option value="">{localizeUi('Fade')}</option>
         {InputTransitionDirectionSchema.options.map((option) => (
           <option key={option} value={option}>
-            {choices[option]}
+            {localizeUi(choices[option])}
           </option>
         ))}
       </select>
@@ -108,7 +108,7 @@ export function FrameEffectControls({
 
   return (
     <fieldset className="cg-position-effect" disabled={disabled}>
-      <legend>{label}</legend>
+      <legend>{localizeUi(label)}</legend>
       <label>
         {localizeUi('Motion')}
         <select
@@ -127,12 +127,13 @@ export function FrameEffectControls({
         >
           {preset !== undefined && (
             <option value="default">
-              {preset.defaultLabel ?? 'Layout default'} ({MOTION_LABELS[preset.value.motion]})
+              {localizeUi(preset.defaultLabel ?? 'Layout default')} (
+              {localizeUi(MOTION_LABELS[preset.value.motion])})
             </option>
           )}
           {FrameTransitionSchema.shape.motion.options.map((value) => (
             <option key={value} value={value}>
-              {MOTION_LABELS[value]}
+              {localizeUi(MOTION_LABELS[value])}
             </option>
           ))}
         </select>

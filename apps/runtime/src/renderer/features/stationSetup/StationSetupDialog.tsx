@@ -63,6 +63,7 @@ import {
 } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { CalendarSection } from '../calendar/CalendarSection.js';
+import { AuditCalendarSettings } from '../audit/AuditCalendarSettings.js';
 import { LanguageSettings } from './LanguageSettings.js';
 import { WorkspaceSettings } from '../workspace/WorkspaceSettings.js';
 import { useUiText } from '../../i18n/locale.js';
@@ -678,7 +679,9 @@ export function StationSetupDialog({
   const railNameContainsHost =
     railDisplayHost !== null &&
     (railName === railDisplayHost || railName.endsWith(` (${railDisplayHost})`));
-  const graphicsAddressLabel = `Where ${engineName} fetches graphics`;
+  const graphicsAddressLabel = localizeUi('Where {engine} fetches graphics', {
+    engine: engineName,
+  });
   /** `T3` — `Advanced` (the graphics address and the redundancy): `null` — as the station has it. */
   const [advancedOpen, setAdvancedOpen] = useState<boolean | null>(null);
   const advancedShown = advancedOpen ?? !playoutStation;
@@ -1457,7 +1460,7 @@ export function StationSetupDialog({
             <>
               {' · '}
               {programmeActive === undefined ? (
-                'Programme role unknown'
+                localizeUi('Programme role unknown')
               ) : (
                 <>
                   {localizeUi('Programme ·')}{' '}
@@ -1486,7 +1489,7 @@ export function StationSetupDialog({
           )}
         </>
       }
-      ariaLabel="Station setup"
+      ariaLabel={localizeUi('Station setup')}
       /*
         🔴 `STATION-CHROME-02` §2 — A FIXED FRAME, not a wide one. `wide` sized the dialog to
         its content, so the box moved every time the operator changed tab: Delimiters is five
@@ -1794,7 +1797,7 @@ export function StationSetupDialog({
                       </Tag>
                       {serverAState !== null && (
                         <Tag className="cg-setup-card-tag" data-caspar-health="">
-                          {serverStateWord(serverAState)}
+                          {localizeUi(serverStateWord(serverAState))}
                         </Tag>
                       )}
                     </>
@@ -1817,8 +1820,11 @@ export function StationSetupDialog({
                         disabled={onAirCount > 0}
                         title={
                           onAirCount > 0
-                            ? 'Refused while anything is on air.'
-                            : `Sets ${engineName} A to ${casparJoin.playoutCasparHost}.`
+                            ? localizeUi('Refused while anything is on air.')
+                            : localizeUi('Sets {engine} A to {host}.', {
+                                engine: engineName,
+                                host: casparJoin.playoutCasparHost,
+                              })
                         }
                         run={async () => {
                           const host = casparJoin.playoutCasparHost;
@@ -1841,7 +1847,7 @@ export function StationSetupDialog({
                           return { accepted: true };
                         }}
                       >
-                        Use the Playout&apos;s
+                        {localizeUi("Use the Playout's")}
                       </AsyncButton>
                     )}
                 </div>
@@ -2036,14 +2042,16 @@ export function StationSetupDialog({
                                         routes to. So they are labelled as what they are, and none is
                                         marked as the answer. */}
                                   <span className="cg-setup-field__hint" aria-hidden="true">
-                                    CG Bridge&apos;s machine
+                                    {localizeUi("CG Bridge's machine")}
                                   </span>
                                   {serveCandidates.map((candidate) => (
                                     <Button
                                       key={candidate}
                                       className="cg-setup-chip"
-                                      aria-label={`Use graphics host ${candidate}`}
-                                      title={`Use ${candidate}`}
+                                      aria-label={localizeUi('Use graphics host {host}', {
+                                        host: candidate,
+                                      })}
+                                      title={localizeUi('Use {host}', { host: candidate })}
                                       onClick={() => setServeHost(candidate)}
                                     >
                                       {candidate}
@@ -2098,7 +2106,9 @@ export function StationSetupDialog({
                           id="quick-restore"
                           label={localizeUi('Restore window (seconds)')}
                           error={quickRestoreError}
-                          hint="Restore on-air graphics after a short engine outage. Enter 0 to turn it off."
+                          hint={localizeUi(
+                            'Restore on-air graphics after a short engine outage. Enter 0 to turn it off.',
+                          )}
                         >
                           <NumericInput
                             className="cg-field cg-field--mono"
@@ -2200,13 +2210,10 @@ export function StationSetupDialog({
                   <p className="cg-card__note cg-card__note--inline" data-remote-host-note="">
                     <Icon icon={Info} size={STATION_SETUP_PX.helpIcon} />
                     <span>
-                      {localizeUi('Remote server (')}
-                      {remoteHosts.join(', ')}
                       {localizeUi(
-                        '): the template server and OSC listener will use a LAN address so',
-                      )}{' '}
-                      {engineName} can reach CG Bridge&apos;s machine. The control connection stays
-                      on 127.0.0.1.
+                        "Remote server ({hosts}): the template server and OSC listener will use a LAN address so {engine} can reach CG Bridge's machine. The control connection stays on 127.0.0.1.",
+                        { hosts: remoteHosts.join(', '), engine: engineName },
+                      )}
                     </span>
                   </p>
                 )}
@@ -2305,6 +2312,7 @@ export function StationSetupDialog({
             <SetupSection id="general">
               <LanguageSettings />
               <CalendarSection report={reporters.general} />
+              <AuditCalendarSettings />
               <WorkspaceSettings />
             </SetupSection>
           )}

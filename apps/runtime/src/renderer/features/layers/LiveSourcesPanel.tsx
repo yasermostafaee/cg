@@ -415,25 +415,33 @@ export function LiveSourcesPanel({
   const releaseStranded = async (
     row: LiveLayerRowView,
   ): Promise<{ accepted: boolean; cancelled?: boolean }> => {
+    if (row.coordinate === null) return { accepted: false, cancelled: true };
     const scope = releaseScopeOf(rowsRef.current, row.itemId);
     const names = scope.map((r) => r.coordinate).join(', ');
     const many = scope.length > 1;
     const ok = await confirm({
       title: many
-        ? `Release ${String(scope.length)} stranded layers (${names})?`
-        : `Release stranded layer ${row.coordinate}?`,
-      body:
-        (many
-          ? `These ${String(scope.length)} layers — ${names} — were all seated for the same item, ` +
-            `and clearing is item-scoped: releasing one releases them all. They carry ` +
-            `${scope.map((r) => `"${plateName(r)}" (${plateSourceName(r)})`).join(', ')}. `
-          : `This layer carries "${plateName(row)}" (${plateSourceName(row)}). `) +
-        `No row on the stack owns ${many ? 'them' : 'it'}, so nothing else in the console can ` +
-        `reach ${many ? 'them' : 'it'}. Releasing clears the ` +
-        `layer${many ? 's' : ''} — whatever ${many ? 'they are' : 'it is'} showing leaves air ` +
-        `immediately, with no outro — and forgets the bridge's record. If a guest is on ` +
-        `${many ? 'one of these layers' : 'this layer'}, they go to black.`,
-      confirmLabel: many ? `Release ${String(scope.length)} layers` : `Release ${row.coordinate}`,
+        ? localizeUi('Release {count} stranded layers ({layers})?', {
+            count: String(scope.length),
+            layers: names,
+          })
+        : localizeUi('Release stranded layer {layer}?', { layer: row.coordinate }),
+      body: many
+        ? localizeUi(
+            'These {count} layers — {layers} — were all seated for the same item, and clearing is item-scoped: releasing one releases them all. They carry {sources}. No row on the stack owns them, so nothing else in the console can reach them. Releasing clears the layers — whatever they are showing leaves air immediately, with no outro — and forgets the bridge’s record. If a guest is on one of these layers, they go to black.',
+            {
+              count: scope.length,
+              layers: names,
+              sources: scope.map((r) => `"${plateName(r)}" (${plateSourceName(r)})`).join(', '),
+            },
+          )
+        : localizeUi(
+            'This layer carries "{name}" ({source}). No row on the stack owns it, so nothing else in the console can reach it. Releasing clears the layer — whatever it is showing leaves air immediately, with no outro — and forgets the bridge’s record. If a guest is on this layer, they go to black.',
+            { name: plateName(row), source: plateSourceName(row) },
+          ),
+      confirmLabel: many
+        ? localizeUi('Release {count} layers', { count: String(scope.length) })
+        : localizeUi('Release {layer}', { layer: row.coordinate }),
     });
     if (!ok) return { accepted: false, cancelled: true };
 
@@ -547,12 +555,13 @@ export function LiveSourcesPanel({
             this word stays true as the rows beneath it grow.
           */}
           {String(seated.length)} {localizeUi('occupied')}{' '}
-          {seated.length === 1 ? 'layer' : 'layers'}
+          {seated.length === 1 ? localizeUi('layer') : localizeUi('layers')}
         </strong>
         <span className="cg-plate-count">
           {String(shownCount)} {localizeUi('shown ·')} {String(heldCount)} {localizeUi('held')}
-          {unknownCount > 0 && ` · ${String(unknownCount)} unknown`}
-          {unseatedCount > 0 && ` · ${String(unseatedCount)} not seated`}
+          {unknownCount > 0 && localizeUi(' · {count} unknown', { count: String(unknownCount) })}
+          {unseatedCount > 0 &&
+            localizeUi(' · {count} not seated', { count: String(unseatedCount) })}
         </span>
         <span className="cg-plate-spacer" />
         {/*
@@ -676,9 +685,16 @@ export function LiveSourcesPanel({
               // The row is the keyboard's target for the audio dialog (`Shift+F10` /
               // `ContextMenu`), exactly as the reference's `<tr tabindex="0">` is.
               tabIndex={0}
-              aria-label={`${name} ${
-                row.coordinate !== null ? `on ${row.coordinate}` : 'not seated'
-              } · ${row.headline}${row.audio !== null ? ' · right-click for audio' : ''}`}
+              aria-label={
+                localizeUi(
+                  row.coordinate !== null
+                    ? '{name} on {layer} · {status}'
+                    : '{name} not seated · {status}',
+                  row.coordinate !== null
+                    ? { name, layer: row.coordinate, status: localizeUi(row.headline) }
+                    : { name, status: localizeUi(row.headline) },
+                ) + (row.audio !== null ? localizeUi(' · right-click for audio') : '')
+              }
               title={row.detail}
               onContextMenu={(e) => {
                 if (openAudioFor(row)) {
@@ -721,7 +737,9 @@ export function LiveSourcesPanel({
                     className="cg-plate-producer"
                     data-plate-unnamed={row.sourceName === null ? 'true' : undefined}
                     title={
-                      row.sourceName === null ? `${source} · no source name available` : source
+                      row.sourceName === null
+                        ? localizeUi('{source} · no source name available', { source: source })
+                        : source
                     }
                   >
                     {source}
@@ -789,15 +807,21 @@ export function LiveSourcesPanel({
                         when the composition IS the visible name, so the tooltip never says the
                         same word twice.
                       */
-                      title={`${
-                        row.ownerDetail !== null ? `Carrying ${row.ownerDetail}. ` : ''
-                      }Open ${row.ownerLabel} and its Inspector${
-                        row.coordinate !== null ? ` — it owns live layer ${row.coordinate}` : ''
-                      }`}
+                      title={
+                        (row.ownerDetail === null
+                          ? ''
+                          : localizeUi('Carrying {source}. ', { source: row.ownerDetail })) +
+                        localizeUi('Open {row} and its Inspector', { row: row.ownerLabel }) +
+                        (row.coordinate === null
+                          ? ''
+                          : localizeUi(' — it owns live layer {layer}', { layer: row.coordinate }))
+                      }
                       aria-label={
                         row.coordinate !== null
-                          ? `Open the row that owns live layer ${row.coordinate}`
-                          : `Open the row that declares ${name}`
+                          ? localizeUi('Open the row that owns live layer {layer}', {
+                              layer: row.coordinate,
+                            })
+                          : localizeUi('Open the row that declares {name}', { name: name })
                       }
                     >
                       {/* ADDENDUM B — the box is the button's own LTR chrome; only the

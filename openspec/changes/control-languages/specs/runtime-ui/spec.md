@@ -27,3 +27,17 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 #### Scenario: Status labels follow the interface language
 
 - **WHEN** the interface uses Arabic and feedback is English **THEN** blocked and simulated-air row states are Arabic while command notifications use English.
+
+#### Scenario: Operator-facing copy follows the interface language
+
+- **WHEN** Persian or Arabic is selected for the interface
+- **THEN** the shell, Inspector, layer actions, dialogs, dialog tabs, option labels, tooltips, placeholders and diagnostics use the selected language
+- **AND** confirmation prompts and recorded Audit outcomes use the interface language, while operation messages and toasts use the separately selected feedback language
+- **AND** authored names and technical values retain their text and natural direction
+
+#### Scenario: Read a template assignment in Stations settings
+
+- **WHEN** a graphic is assigned to a row in the Station setup Layers tab
+- **THEN** its display name aligns at the start of the cell in the current direction and appears in the tooltip
+- **AND** the assignment uses an unavailable label if the display name cannot be resolved
+- **AND** both states of the visibility switch keep its knob inside the track when the interface is right to left.

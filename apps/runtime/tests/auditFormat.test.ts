@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
 import {
+  auditFilterDate,
   auditTimeParts,
   placeName,
   shortId,
@@ -154,5 +155,35 @@ describe('R3 — timingClause', () => {
   it('says nothing when there is nothing to state, so no empty element is rendered', () => {
     expect(timingClause(undefined)).toBeNull();
     expect(timingClause({})).toBeNull();
+  });
+});
+
+describe('Audit dates in the selected reading calendar', () => {
+  const record = '2026-03-20T21:00:00.123Z';
+
+  it('uses the local day across midnight and keeps the original UTC stamp', () => {
+    const format = { calendar: 'solar-hijri', lunarAdjust: 0, digits: 'persian' } as const;
+    const shown = auditTimeParts(record, 'Asia/Tehran', format);
+    expect(shown).toEqual({ date: '۱۴۰۵-۰۱-۰۱', time: '۰۰:۳۰:۰۰', utc: record });
+    expect(auditFilterDate(shown.date, format)).toBe('2026-03-21');
+    expect(auditFilterDate('۱۴۰۵/۱۲/۳۱', format)).toBeNull();
+  });
+
+  it('applies the station correction in both directions of the Lunar Hijri conversion', () => {
+    const format = { calendar: 'lunar-hijri', lunarAdjust: 1, digits: 'arabic-indic' } as const;
+    const shown = auditTimeParts(record, 'Asia/Tehran', format);
+    expect(shown.date).not.toBe(
+      auditTimeParts(record, 'Asia/Tehran', { ...format, lunarAdjust: 0 }).date,
+    );
+    expect(auditFilterDate(shown.date, format)).toBe('2026-03-21');
+    expect(auditFilterDate('١٤٤٧/١٣/٠١', format)).toBeNull();
+    expect(shown.utc).toBe(record);
+  });
+
+  it('validates a Gregorian filter date with any supported digit set', () => {
+    const format = { calendar: 'gregorian', lunarAdjust: 0, digits: 'latin' } as const;
+    expect(auditFilterDate('۲۰۲۴/۰۲/۲۹', format)).toBe('2024-02-29');
+    expect(auditFilterDate('2026-02-29', format)).toBeNull();
+    expect(auditFilterDate('2026/02', format)).toBeNull();
   });
 });

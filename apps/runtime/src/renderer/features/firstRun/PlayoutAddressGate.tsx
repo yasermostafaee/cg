@@ -132,7 +132,7 @@ export function PlayoutAddressGate({
       groundData={{ 'data-playout-address-gate': '' }}
       footer={
         <Button variant="primary" disabled={nothingTyped || busy} onClick={() => void connect()}>
-          {busy ? 'Connecting…' : 'Connect'}
+          {localizeUi(busy ? 'Connecting…' : 'Connect')}
         </Button>
       }
     >

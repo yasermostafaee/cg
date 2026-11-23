@@ -337,7 +337,7 @@ export function PositionPicker({
                 key={a}
                 variant="default"
                 className="cg-anchor-cell"
-                aria-label={`Anchor ${a}`}
+                aria-label={localizeUi('Anchor {anchor}', { anchor: a })}
                 aria-pressed={a === anchor}
                 disabled={locked}
                 title={a}
