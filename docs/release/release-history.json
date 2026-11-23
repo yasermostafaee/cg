@@ -54,6 +54,10 @@
       ],
       "fixes": [
         {
+          "fa": "عنوان ستون اول عملیات لایه‌ها، «بارگذاری / حذف»، هر دو کاربرد دکمه را در زبان رابط نشان می‌دهد.",
+          "en": "The first Layers action column shows Load / Remove in the selected interface language."
+        },
+        {
           "fa": "متن‌ها و تولتیپ‌های جاافتاده در مودال‌ها، تب‌ها، اینسپکتور و نوار وضعیت CG Control به فارسی و عربی ترجمه شدند. پیام‌های عملیات از انتخاب جداگانهٔ زبان پیروی می‌کنند.",
           "en": "Localized missing CG Control modal, tab, Inspector and status labels and tooltips in Persian and Arabic. Operation messages use their independent language setting."
         },

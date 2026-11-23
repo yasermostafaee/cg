@@ -287,7 +287,7 @@ test('§3 — the header sits on its own ground, its labels clear AA, and the be
   // STOP/CLEAR misread — and no seventh.
   const heads = await app.layers.locator('[data-verb-head]').allTextContents();
   expect(heads.map((h) => h.toUpperCase())).toEqual([
-    'ITEM',
+    'LOAD / REMOVE',
     'ON PVW',
     'PLAY',
     'NEXT',

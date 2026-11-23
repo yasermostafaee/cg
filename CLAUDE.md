@@ -729,6 +729,17 @@ the deep-dives — `packages/template-runtime/README.md`,
 `apps/designer/src/renderer/state/README.md`. Behavior stays in the OpenSpec
 specs; engine docs cover "how it's built".
 
+## CG Control localization
+
+- Every change that adds or edits operator-visible CG Control text includes English, Persian,
+  and Arabic translations in the same change. Use the catalogs in
+  apps/runtime/src/renderer/i18n/catalogs and keep keys and named placeholders in sync.
+- Use the interface language for headings, labels, options, tooltips, accessibility labels,
+  confirmations, diagnostics and standing status. Use the feedback language for action
+  outcomes, warnings and toasts. Preserve authored names and technical values.
+- Verify the catalogs and check any affected layout in Persian and Arabic RTL before
+  building installers. The developer workflow is documented in README.md.
+
 ## Design system — interactive controls
 
 - 🔴 **AN OPERATOR SURFACE CARRIES NO EXPLANATORY PROSE.** Labels, values, state

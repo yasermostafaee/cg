@@ -50,16 +50,12 @@ const heads = (el: HTMLElement): string[] =>
   [...el.querySelectorAll('[data-verb-head]')].map((h) => h.textContent ?? '');
 
 describe('LayerTableHeader — the toggle column head', () => {
-  it('names the COLUMN and neither verb', async () => {
+  it('names both actions of the toggle in one column', async () => {
     const el = await renderHeader();
-    expect(heads(el)[0]).toBe('ITEM');
-    // Not LOAD (wrong above a bound row's trash glyph) and not REMOVE (wrong
-    // above an empty row's download glyph).
-    expect(heads(el)[0]).not.toBe('LOAD');
-    expect(heads(el)[0]).not.toBe('REMOVE');
+    expect(heads(el)[0]).toBe('LOAD / REMOVE');
   });
 
-  it('still states the toggle in words, so nothing is lost by the neutral head', async () => {
+  it('explains which action is available in each state', async () => {
     const el = await renderHeader();
     const title = el.querySelector('[data-verb-head]')?.getAttribute('title') ?? '';
     expect(title).toContain('LOAD');

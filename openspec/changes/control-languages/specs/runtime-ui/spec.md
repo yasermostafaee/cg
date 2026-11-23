@@ -41,3 +41,9 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **THEN** its display name aligns at the start of the cell in the current direction and appears in the tooltip
 - **AND** the assignment uses an unavailable label if the display name cannot be resolved
 - **AND** both states of the visibility switch keep its knob inside the track when the interface is right to left.
+
+#### Scenario: Identify the row’s template action column
+
+- **WHEN** the operator reads the Layers header in English, Persian or Arabic
+- **THEN** the first action column names both Load and Remove in that interface language, without truncation or a shift of the other action columns
+- **AND** each row’s button states the action available for that row.

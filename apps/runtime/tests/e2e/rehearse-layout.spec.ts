@@ -305,13 +305,7 @@ test('the header prints one word per verb BUTTON, so no word names the wrong gly
   // reference product's, so a head above the wrong glyph is an air risk, which is
   // the whole reason the header prints words at all.
   expect(heads.length).toBe(buttons.length);
-  // §5 — the first head is `ITEM`, not `LOAD`. It is the one column whose control
-  // is a TOGGLE, so no verb can name it without being wrong on half the rows: the
-  // row under test is BOUND, and its first glyph is a trash can. See
-  // `LayerTableHeader`.
-  expect(heads).toEqual(['ITEM', 'ON PVW', 'PLAY', 'NEXT', 'STOP', 'CLEAR']);
-  // …and the head names the column while the BUTTON goes on naming itself — the
-  // two channels the icon-only verbs depend on, and the reason the neutral head
-  // costs nothing.
+  // The heading covers the toggle, and this bound row's button names its available action.
+  expect(heads).toEqual(['LOAD / REMOVE', 'ON PVW', 'PLAY', 'NEXT', 'STOP', 'CLEAR']);
   expect(buttons).toEqual(['REMOVE', ...heads.slice(1)]);
 });

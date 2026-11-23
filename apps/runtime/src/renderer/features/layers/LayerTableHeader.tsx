@@ -54,24 +54,8 @@ import {
  */
 const VERB_HEADS: readonly { label: string; title: string }[] = [
   {
-    /*
-      §5 — THE ONE HEAD THAT NAMES ITS COLUMN RATHER THAN A VERB.
-
-      The first column is the LOAD/REMOVE toggle, and the head cannot be per-row:
-      it is one word above thirty buttons, half of which are the other half. It
-      read `LOAD`, so on every bound row a TRASH glyph sat under the word LOAD —
-      the exact misreading the header exists to prevent, printed by the header
-      itself.
-
-      Naming the other verb would be the same defect mirrored, and naming both
-      does not fit a 44px column. So it names the COLUMN: what this column is
-      about is the row's ITEM — putting one on the row, or taking it off.
-
-      Nothing is lost by it, because the head was never the only channel: each
-      button still names ITSELF exactly through its own `aria-label` and tooltip,
-      and the tooltip here states the toggle outright.
-    */
-    label: 'ITEM',
+    // Both actions share one fixed column. The heading can wrap above that column.
+    label: 'LOAD / REMOVE',
     title:
       'What is on this row: LOAD binds a template to an empty row, and once one is on it this button becomes REMOVE.',
   },
@@ -139,8 +123,9 @@ const styles = {
    */
   verbHead: {
     textAlign: 'center' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+    minWidth: 0,
+    whiteSpace: 'normal' as const,
+    lineHeight: 1.2,
     fontSize: '0.58rem',
     letterSpacing: '0.02em',
   },

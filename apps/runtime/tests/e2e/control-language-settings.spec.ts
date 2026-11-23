@@ -1,6 +1,14 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures/runtime.js';
 
+async function expectLoadRemoveHeader(page: Page, label: string): Promise<void> {
+  const heading = page.locator('[data-verb-head]').first();
+  await expect(heading).toHaveText(label);
+  await expect
+    .poll(() => heading.evaluate((element) => element.scrollWidth))
+    .toBeLessThanOrEqual(await heading.evaluate((element) => element.clientWidth));
+}
+
 async function openGeneral(page: Page): Promise<void> {
   await page
     .getByRole('button', {
@@ -15,6 +23,7 @@ test('chooses English chrome and Persian command outcomes independently, and rem
   app,
 }) => {
   const { page } = app;
+  await expectLoadRemoveHeader(page, 'LOAD / REMOVE');
   await openGeneral(page);
   const languageCard = page.getByRole('region', { name: 'Language', exact: true });
   await expect(languageCard.getByRole('combobox')).toHaveCount(2);
@@ -89,6 +98,7 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(row.getByRole('button', { name: 'پخش', exact: true })).toBeVisible();
   const header = page.locator('[data-verb-head]').first();
   await expect(header).toHaveCSS('direction', 'rtl');
+  await expectLoadRemoveHeader(page, 'بارگذاری / حذف');
 
   await openGeneral(page);
   await page.locator('#cg-interface-language').selectOption('ar');
@@ -106,6 +116,7 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(page.getByTestId('monitor-head-tag')).toContainText('الخرج غير معروف');
   await expect(page.getByText(/صفوف على البث/).first()).toBeVisible();
   await expect(page.getByText('طبقات على PVW', { exact: true })).toBeVisible();
+  await expectLoadRemoveHeader(page, 'تحميل / إزالة');
   for (const label of ['تشغيل', 'إيقاف', 'التالي', 'في PVW', 'مسح']) {
     await expect(page.locator('[data-verb-head]').getByText(label, { exact: true })).toBeVisible();
   }

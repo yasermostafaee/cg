@@ -5368,6 +5368,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN the operator selects Persian or Arabic as the interface language THEN the settings, labels, fields and tables flow right to left and numeric transport fields and authored names retain their own direction.
 - WHEN Persian or Arabic is the interface language THEN modal tabs, Inspector fields, option labels, tooltips, confirmations and statuses use that language, while action messages use the selected feedback language.
 - WHEN Station setup shows an assigned graphic THEN the template name is aligned with the table direction, and the tooltip uses its display name. The visibility switch knob stays on its track in both RTL positions.
+- WHEN the operator reads the first action column in Layers THEN the localized heading names both Load and Remove and the button names its available action.
 - WHEN a developer edits a translation value before building THEN CG Control bundles the updated catalog. The root README links to the catalog source files.
 
 ## [~] R-124 — Arrange CG Control panels and save UI profiles ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/configure-control-workspace/`
