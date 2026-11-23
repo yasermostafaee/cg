@@ -119,6 +119,21 @@ Stop any earlier `pnpm --filter @cg/runtime dev` terminal first; its Vite server
 If another station process owns a required port, the launcher identifies it and refuses to replace
 it silently.
 
+### CG Control translation files
+
+Edit the CG Control language catalogs in the source checkout before building installers.
+
+- [English](apps/runtime/src/renderer/i18n/catalogs/en.json)
+- [Persian](apps/runtime/src/renderer/i18n/catalogs/fa.json)
+- [Arabic](apps/runtime/src/renderer/i18n/catalogs/ar.json)
+
+The `interface` section covers labels, tooltips, descriptions and standing status. The
+`feedback` section covers action results, warnings and toasts. Change the translated values
+and preserve the keys and placeholders such as `{row}`. Check the catalogs with
+`pnpm --filter @cg/runtime exec vitest run tests/controlLocale.test.ts` before building.
+
+Settings → General → Language selects the interface and feedback languages independently.
+
 ### The CasparCG bridge
 
 The Runtime SPA drives real CasparCG through a small local process (browsers

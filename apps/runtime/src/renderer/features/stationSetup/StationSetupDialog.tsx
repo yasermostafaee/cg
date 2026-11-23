@@ -2303,7 +2303,7 @@ export function StationSetupDialog({
 
           {active === 'general' && (
             <SetupSection id="general">
-              <LanguageSettings report={reporters.general} />
+              <LanguageSettings />
               <CalendarSection report={reporters.general} />
               <WorkspaceSettings />
             </SetupSection>

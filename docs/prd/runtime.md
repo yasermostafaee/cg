@@ -5366,7 +5366,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 - WHEN the operator keeps the interface in English and selects Persian or Arabic feedback THEN action confirmations and refusals use that language.
 - WHEN the operator selects Persian or Arabic as the interface language THEN the settings, labels, fields and tables flow right to left and numeric transport fields and authored names retain their own direction.
-- WHEN the operator exports, edits and imports a language file THEN the console applies the local overrides and restores them on restart.
+- WHEN a developer edits a translation value before building THEN CG Control bundles the updated catalog. The root README links to the catalog source files.
 
 ## [~] R-124 — Arrange CG Control panels and save UI profiles ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/configure-control-workspace/`
 

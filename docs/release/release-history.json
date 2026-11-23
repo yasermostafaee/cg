@@ -16,8 +16,8 @@
       },
       "features": [
         {
-          "fa": "در CG Control زبان رابط و پیام‌های عملیات جداگانه از بین انگلیسی، فارسی و عربی انتخاب می‌شوند. فارسی و عربی چیدمان راست‌به‌چپ دارند. فایل ترجمه از General قابل دریافت و وارد کردن است.",
-          "en": "CG Control offers independent English, Persian and Arabic choices for interface text and action feedback. Persian and Arabic use right-to-left layouts. General exports and imports language files."
+          "fa": "در CG Control زبان رابط و پیام‌های عملیات جداگانه از بین انگلیسی، فارسی و عربی انتخاب می‌شوند. فارسی و عربی چیدمان راست‌به‌چپ دارند. مسیر فایل‌های ترجمه برای ویرایش پیش از ساخت در README آمده است.",
+          "en": "CG Control offers independent English, Persian and Arabic choices for interface text and action feedback. Persian and Arabic use right-to-left layouts. The README links to the source catalogs for editing before packaging."
         },
         {
           "fa": "در General ترتیب PVW/PGM، جای لایه‌ها و سمت بازرس را تنظیم کنید و چیدمان را در پروفایل رابط ذخیره کنید.",

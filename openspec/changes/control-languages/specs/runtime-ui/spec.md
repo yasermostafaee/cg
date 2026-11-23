@@ -2,7 +2,7 @@
 
 ### Requirement: CG Control SHALL offer separate interface and action feedback languages
 
-CG Control SHALL provide independent English, Persian and Arabic choices for UI text and action feedback, and SHALL accept local plain-text translation overrides for each.
+CG Control SHALL provide independent English, Persian and Arabic choices for UI text and action feedback. CG Control SHALL bundle language catalogs from the documented source directory. Settings SHALL expose the two language selections.
 
 #### Scenario: First launch
 
@@ -12,9 +12,13 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 
 - **WHEN** an operator selects Persian for action feedback alone and plays a graphic or receives a refusal **THEN** the interface stays English and the action's success toast or refusal appears in Persian
 
-#### Scenario: Live locale choices and locally edited catalogs
+#### Scenario: Persisted locale choices
 
-- **WHEN** an operator changes interface language or imports an edited English, Persian or Arabic language file **THEN** the console uses the changes immediately and restores them after restart
+- **WHEN** an operator changes either language in Settings **THEN** the console uses the new choice immediately and restores it after restart
+
+#### Scenario: Developer catalog edits
+
+- **WHEN** a developer edits an English, Persian or Arabic JSON catalog at the source path documented in README and builds CG Control **THEN** the updated values are bundled with the app
 
 #### Scenario: Right-to-left operator surfaces
 

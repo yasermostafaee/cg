@@ -5,88 +5,33 @@ import fa from './catalogs/fa.json';
 
 export const CONTROL_LOCALES = ['en', 'fa', 'ar'] as const;
 export type Locale = (typeof CONTROL_LOCALES)[number];
-export type LanguageScope = 'interface' | 'feedback';
-
+type LanguageScope = 'interface' | 'feedback';
 type Messages = Readonly<Record<string, string>>;
-interface Catalog {
-  locale: Locale;
-  interface: Messages;
-  feedback: Messages;
-}
-interface Preferences {
-  interface: Locale;
-  feedback: Locale;
-  overrides: Partial<Record<Locale, Catalog>>;
-}
+type Catalog = Readonly<Record<LanguageScope, Messages>>;
+type Preferences = Readonly<Record<LanguageScope, Locale>>;
 type Values = Readonly<Record<string, string | number>>;
 
 const key = 'cg.runtime.language.v1';
-const bundled: Readonly<Record<Locale, Catalog>> = {
-  en: { ...en, locale: 'en' },
-  fa: { ...fa, locale: 'fa' },
-  ar: { ...ar, locale: 'ar' },
-};
-const defaults: Preferences = { interface: 'en', feedback: 'en', overrides: {} };
+const bundled: Readonly<Record<Locale, Catalog>> = { en, fa, ar };
+const defaults: Preferences = { interface: 'en', feedback: 'en' };
 const listeners = new Set<() => void>();
-const scopes: readonly LanguageScope[] = ['interface', 'feedback'];
 const placeholder = /\{([A-Za-z][A-Za-z0-9]*)\}/g;
-
-function isLocale(value: unknown): value is Locale {
-  return value === 'en' || value === 'fa' || value === 'ar';
-}
 
 export function localeDirection(locale: Locale): 'ltr' | 'rtl' {
   return locale === 'en' ? 'ltr' : 'rtl';
 }
 
 export function normalizeLocale(value: unknown): Locale {
-  return isLocale(value) ? value : 'en';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function tokens(message: string): string[] {
-  return [...message.matchAll(placeholder)].map((match) => match[1] ?? '').sort();
-}
-
-/** Language files contain plain text and may override a subset of the bundled catalog. */
-function catalogOf(value: unknown): Catalog | null {
-  if (!isRecord(value) || !isLocale(value['locale'])) return null;
-  const locale = value['locale'];
-  const catalog: Catalog = { locale, interface: {}, feedback: {} };
-  for (const scope of scopes) {
-    const entries = value[scope];
-    if (!isRecord(entries)) return null;
-    const messages: Record<string, string> = {};
-    for (const [source, translation] of Object.entries(entries)) {
-      if (!Object.hasOwn(bundled.en[scope], source)) continue;
-      if (typeof translation !== 'string' || translation.trim() === '') return null;
-      if (tokens(source).join('\n') !== tokens(translation).join('\n')) return null;
-      messages[source] = translation;
-    }
-    catalog[scope] = messages;
-  }
-  return catalog;
+  return CONTROL_LOCALES.find((locale) => locale === value) ?? 'en';
 }
 
 function readPreferences(): Preferences {
   try {
     const raw: unknown = JSON.parse(globalThis.localStorage.getItem(key) ?? 'null');
-    if (!isRecord(raw)) return defaults;
-    const overrides: Preferences['overrides'] = {};
-    const rawOverrides = raw['overrides'];
-    if (isRecord(rawOverrides)) {
-      for (const locale of CONTROL_LOCALES) {
-        const override = catalogOf(rawOverrides[locale]);
-        if (override?.locale === locale) overrides[locale] = override;
-      }
-    }
+    if (raw === null || typeof raw !== 'object') return defaults;
     return {
-      interface: normalizeLocale(raw['interface']),
-      feedback: normalizeLocale(raw['feedback']),
-      overrides,
+      interface: normalizeLocale('interface' in raw ? raw.interface : undefined),
+      feedback: normalizeLocale('feedback' in raw ? raw.feedback : undefined),
     };
   } catch {
     return defaults;
@@ -94,16 +39,6 @@ function readPreferences(): Preferences {
 }
 
 let current = readPreferences();
-
-function publish(next: Preferences): void {
-  current = next;
-  try {
-    globalThis.localStorage.setItem(key, JSON.stringify(next));
-  } catch {
-    // Private browsing or a full quota can prevent persistence for this console.
-  }
-  for (const listener of listeners) listener();
-}
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
@@ -121,42 +56,18 @@ export function useLanguages(): Preferences {
 }
 
 export function setLanguage(scope: LanguageScope, locale: Locale): void {
-  if (current[scope] !== locale) publish({ ...current, [scope]: locale });
-}
-
-export function readLanguageFile(contents: string): boolean {
+  if (current[scope] === locale) return;
+  current = { ...current, [scope]: locale };
   try {
-    const catalog = catalogOf(JSON.parse(contents.replace(/^\uFEFF/, '')));
-    if (catalog === null) return false;
-    publish({ ...current, overrides: { ...current.overrides, [catalog.locale]: catalog } });
-    return true;
+    globalThis.localStorage.setItem(key, JSON.stringify(current));
   } catch {
-    return false;
+    // The current session can still use the choice if local storage is unavailable.
   }
+  for (const listener of listeners) listener();
 }
 
-export function resetLanguageFile(locale: Locale): void {
-  const overrides = { ...current.overrides };
-  delete overrides[locale];
-  publish({ ...current, overrides });
-}
-
-export function languageFile(locale: Locale): string {
-  const catalog = bundled[locale];
-  const overrides = current.overrides[locale];
-  return `${JSON.stringify(
-    {
-      locale,
-      interface: { ...en.interface, ...catalog.interface, ...overrides?.interface },
-      feedback: { ...en.feedback, ...catalog.feedback, ...overrides?.feedback },
-    },
-    null,
-    2,
-  )}\n`;
-}
-
-function own(messages: Messages | undefined, key: string): string | undefined {
-  return messages !== undefined && Object.hasOwn(messages, key) ? messages[key] : undefined;
+function own(messages: Messages, source: string): string | undefined {
+  return Object.hasOwn(messages, source) ? messages[source] : undefined;
 }
 
 function translate(
@@ -166,11 +77,7 @@ function translate(
   values?: Values,
 ): string {
   const locale = prefs[scope];
-  const message =
-    own(prefs.overrides[locale]?.[scope], source) ??
-    own(bundled[locale][scope], source) ??
-    own(bundled.en[scope], source) ??
-    source;
+  const message = own(bundled[locale][scope], source) ?? own(bundled.en[scope], source) ?? source;
   if (values === undefined) return message;
   return message.replace(placeholder, (token: string, name: string) => {
     if (!Object.hasOwn(values, name)) return token;

@@ -16,6 +16,9 @@ test('chooses English chrome and Persian command outcomes independently, and rem
 }) => {
   const { page } = app;
   await openGeneral(page);
+  const languageCard = page.getByRole('region', { name: 'Language', exact: true });
+  await expect(languageCard.getByRole('combobox')).toHaveCount(2);
+  await expect(languageCard.getByRole('button')).toHaveCount(0);
   await expect(page.locator('#cg-interface-language')).toHaveValue('en');
   await expect(page.locator('#cg-feedback-language')).toHaveValue('en');
   await page.locator('#cg-feedback-language').selectOption('fa');
@@ -111,62 +114,6 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await tabs.getByRole('tab', { name: 'الاتصال', exact: false }).click();
   const technical = page.getByRole('dialog').locator('input[dir="ltr"]').first();
   await expect(technical).toHaveCSS('direction', 'ltr');
-});
-
-test('applies an edited Arabic catalog without changing command feedback language', async ({
-  app,
-}) => {
-  const { page } = app;
-  await openGeneral(page);
-  await page.locator('#cg-language-file').selectOption('ar');
-  await page.evaluate(() => {
-    Object.defineProperty(window, 'showSaveFilePicker', {
-      configurable: true,
-      value: ({ suggestedName }: { suggestedName: string }) => {
-        document.body.dataset['testLanguageFilename'] = suggestedName;
-        return Promise.resolve({
-          createWritable: () =>
-            Promise.resolve({
-              write: async (contents: Blob) => {
-                document.body.dataset['testLanguageCatalog'] = await contents.text();
-              },
-              close: () => Promise.resolve(),
-            }),
-        });
-      },
-    });
-  });
-  await page.getByRole('button', { name: 'Export language file' }).click();
-  await expect(page.getByText('Language file saved.', { exact: true })).toBeVisible();
-  await expect(page.locator('body')).toHaveAttribute(
-    'data-test-language-filename',
-    'cg-control-ar.json',
-  );
-  const contents = await page.locator('body').getAttribute('data-test-language-catalog');
-  const exported = JSON.parse(contents ?? 'null') as {
-    locale: string;
-    interface: Record<string, string>;
-    feedback: Record<string, string>;
-  };
-  expect(exported.locale).toBe('ar');
-  expect(exported.interface['Interface language']).toBe('لغة الواجهة');
-  exported.interface['Interface language'] = 'لغة الواجهة المعدلة';
-  const file = Buffer.from(JSON.stringify(exported));
-  await page
-    .getByRole('dialog')
-    .locator('input[type="file"][accept="application/json,.json"]')
-    .setInputFiles({
-      name: 'cg-control-ar.json',
-      mimeType: 'application/json',
-      buffer: file,
-    });
-  await expect(page.getByText('Language file applied.', { exact: true })).toBeVisible();
-  await page.locator('#cg-interface-language').selectOption('ar');
-  await expect(page.getByText('لغة الواجهة المعدلة', { exact: true })).toBeVisible();
-  await expect(page.locator('#cg-feedback-language')).toHaveValue('en');
-  await page.reload();
-  await openGeneral(page);
-  await expect(page.getByText('لغة الواجهة المعدلة', { exact: true })).toBeVisible();
 });
 
 test('keeps delimiter settings until the reset warning is confirmed', async ({ app }) => {

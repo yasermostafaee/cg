@@ -2,14 +2,7 @@ import { describe, expect, it } from 'vitest';
 import ar from '../src/renderer/i18n/catalogs/ar.json';
 import en from '../src/renderer/i18n/catalogs/en.json';
 import fa from '../src/renderer/i18n/catalogs/fa.json';
-import {
-  feedback,
-  languageFile,
-  localeDirection,
-  readLanguageFile,
-  resetLanguageFile,
-  setLanguage,
-} from '../src/renderer/i18n/locale.js';
+import { feedback, localeDirection, setLanguage } from '../src/renderer/i18n/locale.js';
 
 describe('CG Control language catalogs', () => {
   it('contains every English key in Persian and Arabic and preserves interpolation fields', () => {
@@ -26,23 +19,17 @@ describe('CG Control language catalogs', () => {
     }
   });
 
-  it('accepts a local edit, keeps built-in fallback, and validates placeholders', () => {
-    const raw = JSON.stringify({
-      locale: 'fa',
-      interface: {},
-      feedback: { '{row} is on air.': '{row} پخش شد.' },
-    });
-    expect(readLanguageFile(raw)).toBe(true);
+  it('uses the chosen feedback language and isolates authored values', () => {
     setLanguage('feedback', 'fa');
     try {
-      expect(feedback('{row} is on air.', { row: 'Logo 1' })).toBe('\u2068Logo 1\u2069 پخش شد.');
+      expect(feedback('{row} is on air.', { row: 'Logo 1' })).toBe(
+        '\u2068Logo 1\u2069 روی آنتن رفت.',
+      );
       expect(feedback('Request failed.')).toBe('درخواست ناموفق بود.');
-      expect(readLanguageFile(raw.replace('{row} پخش', 'پخش'))).toBe(false);
-      expect(JSON.parse(languageFile('fa')).feedback['{row} is on air.']).toBe('{row} پخش شد.');
+      expect(feedback('Raw engine diagnostic')).toBe('Raw engine diagnostic');
       expect(localeDirection('ar')).toBe('rtl');
       expect(localeDirection('en')).toBe('ltr');
     } finally {
-      resetLanguageFile('fa');
       setLanguage('feedback', 'en');
     }
   });

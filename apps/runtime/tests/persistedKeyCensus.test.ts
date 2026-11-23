@@ -152,8 +152,7 @@ const BEFORE_AND_AFTER = {
     'cg.runtime.frame-transition.v1',
     // Dissolve settings are shared by the input picker and Preview on this console.
     'cg.runtime.input-transition.v1',
-    // R-123: per-console interface and feedback locales plus local translation overrides.
-    // Missing or malformed preferences use English and the shipped catalogs.
+    // R-123: per-console interface and feedback locale choices. Missing or invalid values use English.
     'cg.runtime.language.v1',
     /*
       🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — NEW: whether THIS console plays the programme's sound

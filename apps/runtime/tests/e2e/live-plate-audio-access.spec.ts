@@ -303,7 +303,11 @@ test('D10/D11 — the fader never regresses mid-gesture, and rings for the keybo
     Which is why this is a selector fix and not a deletion: the fader is adjustable with the
     arrow keys, and that user has nothing else telling them where focus is.
   */
-  await fader.focus();
+  // The mouse left focus on this fader. Re-enter it with real keyboard navigation.
+  await page.keyboard.press('Tab');
+  await expect(fader).not.toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(fader).toBeFocused();
   await page.keyboard.press('ArrowRight');
   // Polled, not sampled: the ring fades in, and reading it mid-transition is what made the
   // first version of this spec compare one animation against itself.
