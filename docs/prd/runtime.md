@@ -5363,7 +5363,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 ## [~] R-123 — Choose separate interface and feedback languages in CG Control ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/control-languages/`
 
-**What:** In General, the operator can set English, Persian or Arabic independently for interface text and command feedback. The installer can set both initial languages (P-079). Without a setup choice or saved preferences, they are English.
+**What:** In General, the operator can set English, Persian or Arabic independently for interface text and command feedback. An explicit selection in the installer sets both languages on the next launch (P-079). Without a setup choice or saved preferences, they are English.
 
 **Acceptance:**
 

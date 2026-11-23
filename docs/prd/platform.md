@@ -4363,5 +4363,6 @@ operation messages in the installed console.
 
 - WHEN the user chooses a language THEN setup continues in that language and uses right-to-left text for Persian and Arabic.
 - WHEN installation succeeds THEN the choice is available on the first application launch, including a later launch from the desktop.
-- WHEN an existing console has saved language choices THEN upgrading retains those independent choices.
+- WHEN an operator explicitly selects a language during setup THEN both preferences use it on the next launch, even on an existing console. Later interface and feedback choices are independent.
+- WHEN an upgrade accepts the untouched language screen or runs silently THEN the existing language choices are preserved.
 - WHEN setup runs silently or for another product THEN the existing flow is preserved.

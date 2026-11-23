@@ -2,7 +2,12 @@ import { useCallback, useSyncExternalStore } from 'react';
 import ar from './catalogs/ar.json';
 import en from './catalogs/en.json';
 import fa from './catalogs/fa.json';
-import { CONTROL_LANGUAGE_KEY, CONTROL_LOCALES } from './localePreferences.js';
+import {
+  CONTROL_INSTALL_REQUEST_MAX_LENGTH,
+  CONTROL_INSTALL_REQUEST_PATTERN,
+  CONTROL_LANGUAGE_KEY,
+  CONTROL_LOCALES,
+} from './localePreferences.js';
 
 export { CONTROL_LOCALES };
 export type Locale = (typeof CONTROL_LOCALES)[number];
@@ -10,15 +15,24 @@ type LanguageScope = 'interface' | 'feedback';
 type Messages = Readonly<Record<string, string>>;
 type Catalog = Readonly<Record<LanguageScope, Messages>>;
 type Preferences = Readonly<Record<LanguageScope, Locale>>;
-type SavedPreferences = Readonly<Record<LanguageScope, Locale | undefined>>;
+type SavedPreferences = Readonly<
+  Record<LanguageScope, Locale | undefined> & { setupRequest: string | undefined }
+>;
 type Values = Readonly<Record<string, string | number>>;
 
 const bundled: Readonly<Record<Locale, Catalog>> = { en, fa, ar };
-const setupLanguage = normalizeLocale(
-  (globalThis as { __CG_INSTALL_LANGUAGE__?: unknown }).__CG_INSTALL_LANGUAGE__,
-);
-const defaults: Preferences = { interface: setupLanguage, feedback: setupLanguage };
-const noSavedPreferences: SavedPreferences = { interface: undefined, feedback: undefined };
+const setup = globalThis as {
+  __CG_INSTALL_LANGUAGE__?: unknown;
+  __CG_INSTALL_LANGUAGE_REQUEST__?: unknown;
+};
+const setupLanguage = supportedLocale(setup.__CG_INSTALL_LANGUAGE__);
+const preferred = setupLanguage ?? 'en';
+const defaults: Preferences = { interface: preferred, feedback: preferred };
+const noSavedPreferences: SavedPreferences = {
+  interface: undefined,
+  feedback: undefined,
+  setupRequest: undefined,
+};
 const listeners = new Set<() => void>();
 const placeholder = /\{([A-Za-z][A-Za-z0-9]*)\}/g;
 
@@ -34,6 +48,14 @@ export function normalizeLocale(value: unknown): Locale {
   return supportedLocale(value) ?? 'en';
 }
 
+function supportedSetupRequest(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.length <= CONTROL_INSTALL_REQUEST_MAX_LENGTH &&
+    CONTROL_INSTALL_REQUEST_PATTERN.test(value)
+    ? value
+    : undefined;
+}
+
 function readSavedPreferences(): SavedPreferences {
   try {
     const raw: unknown = JSON.parse(
@@ -43,13 +65,31 @@ function readSavedPreferences(): SavedPreferences {
     return {
       interface: supportedLocale('interface' in raw ? raw.interface : undefined),
       feedback: supportedLocale('feedback' in raw ? raw.feedback : undefined),
+      setupRequest: supportedSetupRequest('setupRequest' in raw ? raw.setupRequest : undefined),
     };
   } catch {
     return noSavedPreferences;
   }
 }
 
+function storePreferences(prefs: SavedPreferences): void {
+  try {
+    globalThis.localStorage.setItem(CONTROL_LANGUAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // The current session can still use the choice if local storage is unavailable.
+  }
+}
+
 let saved = readSavedPreferences();
+const setupRequest = supportedSetupRequest(setup.__CG_INSTALL_LANGUAGE_REQUEST__);
+if (
+  setupLanguage !== undefined &&
+  setupRequest !== undefined &&
+  setupRequest !== saved.setupRequest
+) {
+  saved = { interface: setupLanguage, feedback: setupLanguage, setupRequest };
+  storePreferences(saved);
+}
 let current: Preferences = {
   interface: saved.interface ?? defaults.interface,
   feedback: saved.feedback ?? defaults.feedback,
@@ -73,11 +113,7 @@ export function useLanguages(): Preferences {
 export function setLanguage(scope: LanguageScope, locale: Locale): void {
   if (saved[scope] === locale) return;
   saved = { ...saved, [scope]: locale };
-  try {
-    globalThis.localStorage.setItem(CONTROL_LANGUAGE_KEY, JSON.stringify(saved));
-  } catch {
-    // The current session can still use the choice if local storage is unavailable.
-  }
+  storePreferences(saved);
   if (current[scope] === locale) return;
   current = { ...current, [scope]: locale };
   for (const listener of listeners) listener();

@@ -96,7 +96,7 @@ fn main() {
                 .find(|window| window.label == "main")
                 .ok_or("CG Control main window is not configured")?;
             let builder = WebviewWindowBuilder::from_config(app, main)?;
-            // The main window is created here so the seed is available at document start.
+            // Render the startup page with the installer language state from the first frame.
             let builder = match install_language::initialization_script() {
                 Some(script) => builder.initialization_script(script),
                 None => builder,

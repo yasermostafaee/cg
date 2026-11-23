@@ -14,7 +14,7 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 
 #### Scenario: Persisted locale choices
 
-- **WHEN** an operator changes either language in Settings **THEN** the console uses the new choice immediately and restores it after restart
+- **WHEN** an operator changes either language in Settings **THEN** the console uses the new choice immediately and restores it after restart, until the operator changes it again or explicitly selects a language in a later installation
 
 #### Scenario: Developer catalog edits
 

@@ -35,3 +35,54 @@ test('uses each new setup language for scopes without a saved choice', async ({ 
   await expect(editInterface).toHaveValue('en');
   await expect(editFeedback).toHaveValue('ar');
 });
+
+test('applies a new setup language over old choices once and retains later Settings edits', async ({
+  app,
+}) => {
+  const { page } = app;
+
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'cg.runtime.language.v1',
+      JSON.stringify({ interface: 'en', feedback: 'ar' }),
+    );
+  });
+  await page.addInitScript(() => {
+    Object.assign(globalThis, {
+      __CG_INSTALL_LANGUAGE__: 'fa',
+      __CG_INSTALL_LANGUAGE_REQUEST__:
+        sessionStorage.getItem('cg.test.install-request') ?? '1700000000-1',
+    });
+  });
+
+  const html = page.locator('html');
+  const editInterface = page.locator('#cg-interface-language');
+  const editFeedback = page.locator('#cg-feedback-language');
+  const openPersian = async (): Promise<void> => {
+    await expect(html).toHaveAttribute('lang', 'fa');
+    await expect(html).toHaveAttribute('dir', 'rtl');
+    await page.getByRole('button', { name: 'باز کردن تنظیمات ایستگاه', exact: true }).click();
+    await page.getByRole('tab', { name: 'عمومی', exact: true }).click();
+  };
+
+  await page.reload();
+  await openPersian();
+  await expect(editInterface).toHaveValue('fa');
+  await expect(editFeedback).toHaveValue('fa');
+  await editFeedback.selectOption('ar');
+  await editInterface.selectOption('en');
+
+  await page.reload();
+  await expect(html).toHaveAttribute('lang', 'en');
+  await expect(html).toHaveAttribute('dir', 'ltr');
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
+  await expect(editInterface).toHaveValue('en');
+  await expect(editFeedback).toHaveValue('ar');
+
+  await page.evaluate(() => sessionStorage.setItem('cg.test.install-request', '1700000000-2'));
+  await page.reload();
+  await openPersian();
+  await expect(editInterface).toHaveValue('fa');
+  await expect(editFeedback).toHaveValue('fa');
+});

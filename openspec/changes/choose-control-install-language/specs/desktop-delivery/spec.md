@@ -5,8 +5,9 @@
 Interactive CG Control setup SHALL offer English, Persian and Arabic on its first page, with
 English initially selected. It SHALL use the selected language for its own pages and save the
 selection for the installed application. CG Control SHALL use the saved installer language as
-the default for both interface and feedback, with independently saved application choices
-taking precedence.
+the default for both interface and feedback. CG Control SHALL apply an explicit selection to both
+preferences on the first launch after that installation, and SHALL preserve subsequent independent
+Settings changes.
 
 #### Scenario: Complete CG Control setup in a selected language
 
@@ -22,8 +23,14 @@ taking precedence.
 
 #### Scenario: Open a console with existing preferences
 
-- **WHEN** a console with saved settings is upgraded
-- **THEN** its saved interface and feedback choices take precedence over the installer default.
+- **WHEN** a console with saved settings is upgraded and the user explicitly selects a language during setup
+- **THEN** the splash and app use that selection on the first launch, including launch from Finish or a later launch
+- **AND** editing either preference afterward persists across restarts of that installation.
+
+#### Scenario: Upgrade without selecting a language
+
+- **WHEN** an upgrade accepts the initial setup language without interacting with its radio buttons, or runs unattended
+- **THEN** the previously recorded installer language and saved interface and feedback choices remain in effect.
 
 #### Scenario: Start a console without an installer preference
 

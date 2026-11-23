@@ -7,7 +7,12 @@ import { createBuildStamp } from '@cg/splash-kit/build-stamp';
 import ar from './src/renderer/i18n/catalogs/ar.json';
 import en from './src/renderer/i18n/catalogs/en.json';
 import fa from './src/renderer/i18n/catalogs/fa.json';
-import { CONTROL_LANGUAGE_KEY, CONTROL_LOCALES } from './src/renderer/i18n/localePreferences.js';
+import {
+  CONTROL_INSTALL_REQUEST_MAX_LENGTH,
+  CONTROL_INSTALL_REQUEST_PATTERN,
+  CONTROL_LANGUAGE_KEY,
+  CONTROL_LOCALES,
+} from './src/renderer/i18n/localePreferences.js';
 
 /**
  * Runtime browser SPA. The renderer lives under `src/renderer`; the
@@ -48,10 +53,13 @@ export function injectSplashLanguage(html: string): string {
       return [locale, Object.fromEntries(splashKeys.map((key) => [key, catalog[key] ?? key]))];
     }),
   );
-  const data = JSON.stringify({ key: CONTROL_LANGUAGE_KEY, buildStamp, messages }).replace(
-    /</g,
-    '\\u003c',
-  );
+  const data = JSON.stringify({
+    key: CONTROL_LANGUAGE_KEY,
+    requestPattern: CONTROL_INSTALL_REQUEST_PATTERN.source,
+    requestMaxLength: CONTROL_INSTALL_REQUEST_MAX_LENGTH,
+    buildStamp,
+    messages,
+  }).replace(/</g, '\\u003c');
   return html.replace('/* CG_SPLASH_LOCALE */ null', () => data);
 }
 

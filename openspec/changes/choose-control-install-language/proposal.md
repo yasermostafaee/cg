@@ -8,7 +8,8 @@ first console session in that language.
 - Start interactive CG Control setup with English, Persian and Arabic choices.
 - Use the selected language on the following setup pages.
 - Keep the selection with the installed console and use it as the initial UI and feedback language.
-- Keep the console's independent saved choices across installer upgrades.
+- Apply an explicit setup choice to both language preferences on the next launch, including an upgrade.
+- Preserve an existing choice when an upgrade accepts the initial radio selection without interacting with it or runs unattended. Later Settings changes remain independent.
 
 ## Impact
 

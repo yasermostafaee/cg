@@ -1009,12 +1009,22 @@
         var locale = /* CG_SPLASH_LOCALE */ null;
         var words;
         if (locale) {
-          var language = 'en';
           var seed = window.__CG_INSTALL_LANGUAGE__;
-          if (typeof seed === 'string' && Object.hasOwn(locale.messages, seed)) language = seed;
+          var hasSeed = typeof seed === 'string' && Object.hasOwn(locale.messages, seed);
+          var language = hasSeed ? seed : 'en';
           try {
             var saved = JSON.parse(window.localStorage.getItem(locale.key));
+            var request = window.__CG_INSTALL_LANGUAGE_REQUEST__;
+            // The splash previews the initial choice. The app acknowledges the request together
+            // with both language values when its locale store starts.
+            var applySetup =
+              hasSeed &&
+              typeof request === 'string' &&
+              request.length <= locale.requestMaxLength &&
+              new RegExp(locale.requestPattern).test(request) &&
+              request !== saved?.setupRequest;
             if (
+              !applySetup &&
               saved &&
               typeof saved.interface === 'string' &&
               Object.hasOwn(locale.messages, saved.interface)

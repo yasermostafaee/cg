@@ -124,6 +124,7 @@ pub struct Model {
     pub kind: Kind,
     pub page: Page,
     pub language: SetupLanguage,
+    pub language_selected: bool,
     /// The install folder the engine is given (or keeps).
     pub dir: String,
     /// The folder was given on the command line (`/D=`).
@@ -186,6 +187,7 @@ impl Model {
                 Page::Welcome
             },
             language: SetupLanguage::default(),
+            language_selected: false,
             dir,
             dir_preset,
             space: Space::default(),
@@ -213,14 +215,13 @@ impl Model {
     }
 
     pub fn choose_language(&mut self, language: SetupLanguage) -> bool {
-        if self.product.id != ProductId::Control
-            || self.page != Page::Language
-            || self.language == language
-        {
+        if self.product.id != ProductId::Control || self.page != Page::Language {
             return false;
         }
+        self.language_selected = true;
+        let changed = self.language != language;
         self.language = language;
-        true
+        changed
     }
 
     pub fn next_page(&self) -> Option<Page> {
@@ -509,11 +510,14 @@ mod tests {
         let mut m = Model::new(&CONTROL, config(ProductId::Control), facts(), None, false);
         assert_eq!(m.page, Page::Language);
         assert_eq!(m.language, SetupLanguage::English);
+        assert!(!m.language_selected);
         assert_eq!(m.steps()[0], StepState::Current);
         assert_eq!(
             m.step_labels(),
             ["Language", "Welcome", "Location", "Installing", "Done"]
         );
+        assert!(!m.choose_language(SetupLanguage::English));
+        assert!(m.language_selected);
         assert!(m.choose_language(SetupLanguage::Persian));
         assert_eq!(m.step_labels()[0], "زبان");
         assert_eq!(m.title(), "انتخاب زبان");
@@ -533,6 +537,7 @@ mod tests {
             assert_eq!(model.page, Page::Welcome);
             assert_eq!(model.previous_page(), None);
             assert!(!model.choose_language(SetupLanguage::Arabic));
+            assert!(!model.language_selected);
         }
     }
 

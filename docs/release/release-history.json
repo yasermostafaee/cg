@@ -18,9 +18,9 @@
       },
       "features": [
         {
-          "fa": "نصاب CG Control با انتخاب فارسی، انگلیسی یا عربی آغاز می‌شود. انتخاب نصب، مقدار اولیهٔ زبان رابط و زبان پیام‌ها را برای کنسول تازه تعیین می‌کند.",
-          "en": "CG Control setup starts with English, Persian and Arabic. The selection sets the initial interface and feedback languages of a new console.",
-          "ar": "يبدأ تثبيت CG Control باختيار الإنجليزية أو الفارسية أو العربية. يحدّد الاختيار اللغة الأولية للواجهة ورسائل العمليات في وحدة تحكّم جديدة."
+          "fa": "نصاب CG Control با انتخاب فارسی، انگلیسی یا عربی آغاز می‌شود. انتخاب صریح زبان در نصب یا ارتقا، هر دو زبان رابط و پیام‌ها را در اجرای بعدی تعیین می‌کند. تغییرهای بعدی در تنظیمات عمومی حفظ می‌شوند.",
+          "en": "CG Control setup starts with English, Persian and Arabic. An explicit selection sets both the interface and feedback languages on the next launch, including upgrades. Later changes in General are remembered.",
+          "ar": "يبدأ تثبيت CG Control باختيار الإنجليزية أو الفارسية أو العربية. يحدّد الاختيار الصريح لغة الواجهة ورسائل العمليات عند التشغيل التالي، بما في ذلك بعد الترقية. وتُحفظ التعديلات اللاحقة في الإعدادات العامة."
         },
         {
           "fa": "تاریخچهٔ نسخه‌ها به فارسی، انگلیسی و عربی در دسترس است.",

@@ -8,22 +8,25 @@
  *      Tauri's own silent uninstall;
  *   1. a FRESH interactive install: Persian language selection for CG Control, then Welcome → Location →
  *      Installing (a real bar) → Done — and Installed apps lists the release;
- *   2. "Launch when ready" (CG Designer: ticked, Finish) STARTS the app; unticked (CG Control), it
- *      does not;
+ *   2. Finish with "Launch when ready" checked STARTS the app. CG Control's actual first
+ *      window renders in Persian, and a relaunch checks both persisted language preferences;
  *   3. an UPDATE: Installed apps names an older release — Welcome says "Update from … to …", the
  *      folder is the installed one (a fact, not a control), the update keeps the app's settings
- *      folder, and Installed apps names the release again. CG Control updates in Arabic;
+ *      folder, and Installed apps names the release again. CG Designer leaves launch
+ *      unchecked. CG Control updates in Arabic and opens in that language over saved English;
  *   4. a DAMAGED download (one byte of the engine flipped): the Error page says so, offers its log,
  *      and Close exits 2.
  *
  * Usage: node setup-smoke.mjs --control <setup.exe> --designer <setup.exe> --control-engine <exe>
  *   --designer-engine <exe> --version <x.y.z> --out <dir>
  */
-/* global process */
-import { execFileSync, spawnSync } from 'node:child_process';
+/* global process, document, location, localStorage, setTimeout */
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { webViewArgs } from './app-window.mjs';
+import { Cdp } from './cdp.mjs';
 import { checks, exitCode, launch, page, shot, sleep, uia, until } from './setup-window.mjs';
 
 const args = Object.fromEntries(
@@ -49,7 +52,6 @@ const APPS = [
     exe: 'cg-designer.exe',
     installer: args.designer,
     engine: args['designer-engine'],
-    launch: true,
   },
   {
     key: 'control',
@@ -57,10 +59,12 @@ const APPS = [
     exe: 'cg-control.exe',
     installer: args.control,
     engine: args['control-engine'],
-    launch: false,
   },
 ];
 const INSTALL_LANGUAGE = 'cg-control-install-language';
+const CONTROL_TITLE = 'APASAI CG CONTROL';
+const CONTROL_LANGUAGE_KEY = 'cg.runtime.language.v1';
+const CONTROL_CDP_PORT = 9238;
 const title = (a) => `${a.name} Setup`;
 
 function run(file, argv) {
@@ -89,6 +93,17 @@ function readInstallLanguage(file) {
   return file !== null && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
 }
 
+function setupLanguageRequest(seed, language) {
+  const [locale, request, extra] = seed?.split('\n') ?? [];
+  return locale === language &&
+    request !== undefined &&
+    request.length <= 96 &&
+    /^[0-9]+(?:-[0-9]+)*$/.test(request) &&
+    extra === undefined
+    ? request
+    : null;
+}
+
 // Directional controls preserve the version and folder ordering when drawn.
 const visible = (value) => value.replace(/[\u202a-\u202e\u2066-\u2069]/g, '');
 
@@ -107,6 +122,7 @@ function wizardWords(a, language) {
       stepDone: 'انجام شد',
       launch: 'اجرای CG Control پس از نصب',
       finish: 'پایان',
+      appNames: ['راه‌اندازی CG Control', 'ورود', 'نام کاربری'],
     };
   }
   if (language === 'ar') {
@@ -121,6 +137,7 @@ function wizardWords(a, language) {
       stepDone: 'مكتمل',
       launch: 'تشغيل CG Control بعد التثبيت',
       finish: 'إنهاء',
+      appNames: ['إعداد CG Control', 'تسجيل الدخول', 'اسم المستخدم'],
     };
   }
   return {
@@ -176,9 +193,115 @@ const installedExe = (a) => path.join(LOCALAPPDATA, a.name, a.exe);
 async function waitFor(what, fn, ms) {
   const deadline = Date.now() + ms;
   for (;;) {
-    if (fn()) return true;
+    if (await fn()) return true;
     if (Date.now() > deadline) return false;
     await sleep(500);
+  }
+}
+
+async function closeApp(a) {
+  if (running(a.exe)) run('taskkill', ['/IM', a.exe, '/F']);
+  return waitFor(a.exe + ' closed', () => !running(a.exe), 20_000);
+}
+
+async function verifyFinishLaunch(a, words, step) {
+  const started = await waitFor(a.exe + ' running', () => running(a.exe), 45_000);
+  check(a.name + ' (' + step + '): Finish launches the app when selected', started);
+  if (a.key === 'control' && started) {
+    // Finish opens the installed shortcut through Explorer. UI Automation observes that very
+    // window without needing to set WebView2 flags on Explorer or the user's machine.
+    const rendered = uia(CONTROL_TITLE, 'until-any', words.appNames.join('|'), 45);
+    check(
+      a.name + ' (' + step + '): its first window renders in ' + words.language,
+      rendered.ok,
+      rendered.name ?? rendered.error,
+    );
+  }
+  check(a.name + ' (' + step + '): the launched app closes', await closeApp(a));
+}
+
+function controlProfile(key) {
+  return {
+    language: document.documentElement.lang,
+    direction: document.documentElement.dir,
+    saved: JSON.parse(localStorage.getItem(key) ?? 'null'),
+  };
+}
+
+// A second, directly launched copy uses the same installed executable and WebView profile.
+// Only this child gets a DevTools port. This harness runs on the disposable Windows runner.
+async function verifyControlProfile(a, words, request, step) {
+  const child = spawn(installedExe(a), [], {
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webViewArgs(CONTROL_CDP_PORT),
+    },
+  });
+  child.on('error', (error) => check(a.name + ': direct launch succeeds', false, error.message));
+  let app;
+  try {
+    app = await Cdp.attach(CONTROL_CDP_PORT, 'http://tauri.localhost', 45_000);
+    // DevTools can publish the target before the installed console commits its first document.
+    const rendered = await waitFor(
+      'The installed CG Control console to render',
+      () =>
+        app
+          .evaluate(() => document.querySelector('#root')?.childElementCount > 0)
+          .catch(() => false),
+      30_000,
+    );
+    if (!rendered) throw new Error('the installed CG Control console did not render');
+    await app.screenshot(path.join(OUT, 'control-' + step + '-app.png'));
+    const profile = await app.evaluateWith(controlProfile, CONTROL_LANGUAGE_KEY);
+    check(
+      a.name + ' (' + step + '): the UI and both saved languages match the setup choice',
+      profile.language === words.language &&
+        profile.direction === 'rtl' &&
+        profile.saved?.interface === words.language &&
+        profile.saved?.feedback === words.language &&
+        profile.saved?.setupRequest === request,
+      JSON.stringify(profile),
+    );
+    if (step === 'fresh' && request !== null && profile.saved?.setupRequest === request) {
+      // Model independent changes made in Settings and keep the acknowledged request.
+      await app.evaluateWith((key) => {
+        const saved = JSON.parse(localStorage.getItem(key));
+        localStorage.setItem(key, JSON.stringify({ ...saved, interface: 'en', feedback: 'fa' }));
+        setTimeout(() => location.reload(), 100);
+      }, CONTROL_LANGUAGE_KEY);
+      const changed = await waitFor(
+        'Preferences after reloading CG Control',
+        () =>
+          app
+            .evaluate(
+              () =>
+                document.documentElement.lang === 'en' &&
+                document.querySelector('#root')?.childElementCount > 0,
+            )
+            .catch(() => false),
+        30_000,
+      );
+      const after = await app.evaluateWith(controlProfile, CONTROL_LANGUAGE_KEY);
+      check(
+        a.name + ': the acknowledged request preserves independent changes after reloading',
+        changed &&
+          after.direction === 'ltr' &&
+          after.saved?.interface === 'en' &&
+          after.saved?.feedback === 'fa' &&
+          after.saved?.setupRequest === request,
+        JSON.stringify(after),
+      );
+    }
+  } catch (error) {
+    check(
+      a.name + ' (' + step + '): the installed WebView profile can be checked',
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    app?.close();
+    await closeApp(a);
   }
 }
 
@@ -320,36 +443,25 @@ async function fresh(a) {
     installedExe(a),
   );
 
-  if (!a.launch) {
-    const toggle = uia(title(a), 'toggle', 'launch');
-    check(
-      a.name + ': unchecks the launch choice',
-      toggle.ok && toggle.state === 'Off',
-      toggle.error ?? toggle.state,
-    );
-  }
   uia(title(a), 'invoke', 'finish');
   const code = await exitCode(r, 30_000);
   check(a.name + ': Finish exits 0', code === 0, String(code));
-  if (a.launch) {
-    const started = await waitFor(a.exe + ' running', () => running(a.exe), 45_000);
-    check(a.name + ': Finish launches the app when selected', started);
-    run('taskkill', ['/IM', a.exe, '/F']);
-    await waitFor(a.exe + ' closed', () => !running(a.exe), 20_000);
-  } else {
-    await sleep(5000);
-    check(a.name + ': unticked, Finish starts nothing', !running(a.exe));
+  await verifyFinishLaunch(a, words, 'fresh');
+  if (a.key === 'control') {
     const seed = installLanguagePath(a);
+    const request = setupLanguageRequest(readInstallLanguage(seed), 'fa');
     check(
-      a.name + ': saves the Persian choice next to the installed executable anyway',
-      readInstallLanguage(seed) === 'fa',
+      a.name + ': saves an explicit Persian request next to the installed executable',
+      request !== null,
       seed,
     );
+    await verifyControlProfile(a, words, request, 'fresh');
   }
 }
 
 async function update(a) {
   const words = wizardWords(a, a.key === 'control' ? 'ar' : 'en');
+  const before = a.key === 'control' ? readInstallLanguage(installLanguagePath(a)) : null;
   // An older release, as Installed apps would name it, and a marker in the user's settings.
   run('reg', [
     'add',
@@ -421,7 +533,14 @@ async function update(a) {
     );
   }
   shot(title(a), path.join(OUT, a.key + '-update-done.png'));
-  uia(title(a), 'toggle', 'launch');
+  if (a.key === 'designer') {
+    const toggle = uia(title(a), 'toggle', 'launch');
+    check(
+      a.name + ' (update): unchecks the launch choice',
+      toggle.ok && toggle.state === 'Off',
+      toggle.error ?? toggle.state,
+    );
+  }
   uia(title(a), 'invoke', 'finish');
   check(a.name + ' (update): Finish exits 0', (await exitCode(r, 30_000)) === 0);
   check(
@@ -436,11 +555,17 @@ async function update(a) {
   );
   if (a.key === 'control') {
     const seed = installLanguagePath(a);
+    const request = setupLanguageRequest(readInstallLanguage(seed), 'ar');
     check(
-      a.name + ' (update): saves the explicitly chosen Arabic default',
-      readInstallLanguage(seed) === 'ar',
+      a.name + ' (update): saves a new explicit Arabic request',
+      request !== null && request !== setupLanguageRequest(before, 'fa'),
       seed,
     );
+    await verifyFinishLaunch(a, words, 'update');
+    await verifyControlProfile(a, words, request, 'update');
+  } else {
+    await sleep(5000);
+    check(a.name + ' (update): unticked, Finish starts nothing', !running(a.exe));
   }
 }
 
@@ -463,6 +588,7 @@ async function broken(a) {
   const r = launch(damaged(a));
   check(`${a.name} (damaged): the setup window opens`, uia(title(a), 'wait', '', 90).ok);
   const seed = a.key === 'control' ? installLanguagePath(a) : null;
+  const before = readInstallLanguage(seed);
   enterWelcome(a, wizardWords(a, 'en'));
   uia(title(a), 'invoke', 'next');
   until(title(a), 'FOLDER', 20);
@@ -484,7 +610,7 @@ async function broken(a) {
   if (a.key === 'control') {
     check(
       'CG Control: failed English setup keeps the previous Arabic seed',
-      readInstallLanguage(seed) === 'ar',
+      setupLanguageRequest(before, 'ar') !== null && readInstallLanguage(seed) === before,
       seed,
     );
   }

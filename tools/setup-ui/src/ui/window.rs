@@ -1142,7 +1142,9 @@ impl App {
                         .filter(|f| {
                             self.scene.widget(*f).is_some_and(|w| {
                                 w.enabled
-                                    && matches!(w.kind, WidgetKind::Button(_) | WidgetKind::Link)
+                                    && (matches!(w.kind, WidgetKind::Button(_) | WidgetKind::Link)
+                                        || (self.model.page == Page::Language
+                                            && matches!(w.kind, WidgetKind::Radio(_))))
                             })
                         })
                         .or(self.scene.primary);
@@ -1623,6 +1625,7 @@ impl App {
         let job = Job {
             product: m.product.id,
             language: m.language,
+            language_selected: m.language_selected,
             name: m.product.name,
             version: m.config.version.clone(),
             dir: PathBuf::from(&m.dir),
@@ -1715,6 +1718,7 @@ impl App {
 struct Job {
     product: ProductId,
     language: SetupLanguage,
+    language_selected: bool,
     name: &'static str,
     version: String,
     dir: PathBuf,
@@ -1725,7 +1729,7 @@ struct Job {
 }
 
 impl Job {
-    fn save_control_language(&self) -> io::Result<PathBuf> {
+    fn save_control_language(&self, log: &Path) -> io::Result<()> {
         let key = self.uninstall_key;
         let read = |value| win::reg_string(win::hkcu(), key, value, win::View::Native64);
         if read("DisplayVersion").as_deref() != Some(self.version.as_str()) {
@@ -1756,8 +1760,16 @@ impl Job {
             ));
         }
 
-        write_install_language(&executable, self.language)?;
-        Ok(executable)
+        let written = write_install_language(&executable, self.language, self.language_selected)?;
+        let action = if self.language_selected {
+            format!("saved Control language request ({})", self.language.code())
+        } else if written {
+            format!("saved Control language default ({})", self.language.code())
+        } else {
+            "kept existing Control installation language".to_string()
+        };
+        log_line(log, &format!("{action} beside {}", executable.display()));
+        Ok(())
     }
 
     fn run(self, shared: &Arc<Mutex<Shared>>, cancel: &Arc<AtomicBool>, hwnd: Hwnd, log: &Path) {
@@ -1892,18 +1904,8 @@ impl Job {
                 }
             } else {
                 let warning = if self.product == ProductId::Control {
-                    match self.save_control_language() {
-                        Ok(executable) => {
-                            log_line(
-                                log,
-                                &format!(
-                                    "saved Control language {} beside {}",
-                                    self.language.code(),
-                                    executable.display(),
-                                ),
-                            );
-                            None
-                        }
+                    match self.save_control_language(log) {
+                        Ok(()) => None,
                         Err(error) => {
                             log_line(
                                 log,

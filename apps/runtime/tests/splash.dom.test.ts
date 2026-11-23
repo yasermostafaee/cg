@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ar from '../src/renderer/i18n/catalogs/ar.json';
 import en from '../src/renderer/i18n/catalogs/en.json';
 import fa from '../src/renderer/i18n/catalogs/fa.json';
-import { CONTROL_LANGUAGE_KEY } from '../src/renderer/i18n/localePreferences.js';
+import {
+  CONTROL_INSTALL_REQUEST_MAX_LENGTH,
+  CONTROL_INSTALL_REQUEST_PATTERN,
+  CONTROL_LANGUAGE_KEY,
+} from '../src/renderer/i18n/localePreferences.js';
 import {
   SPLASH_CEILING_MS,
   SPLASH_FADE_MS,
@@ -115,6 +119,8 @@ describe('the splash uses the interface language before the renderer loads', () 
   const script = inlineScript.replace('/* CG_SPLASH_LOCALE */ null', () =>
     JSON.stringify({
       key: CONTROL_LANGUAGE_KEY,
+      requestPattern: CONTROL_INSTALL_REQUEST_PATTERN.source,
+      requestMaxLength: CONTROL_INSTALL_REQUEST_MAX_LENGTH,
       buildStamp: { version: '1.2.13', builtAt: '2026-08-01' },
       messages: { en: en.interface, fa: fa.interface, ar: ar.interface },
     }),
@@ -137,6 +143,33 @@ describe('the splash uses the interface language before the renderer loads', () 
       splash().phase(key);
       expect(phaseLabel()).toBe(fa.interface[key]);
     }
+  });
+
+  it('shows a new explicit choice on the splash and leaves its acknowledgement to the app', () => {
+    const saved = '{"interface":"en","feedback":"ar","setupRequest":"1600000000-1"}';
+    localStorage.setItem(CONTROL_LANGUAGE_KEY, saved);
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE__', 'fa');
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE_REQUEST__', '1700000000-1');
+    runSplashScript(script);
+
+    expect(document.documentElement.lang).toBe('fa');
+    expect(document.documentElement.dir).toBe('rtl');
+    expect(phaseLabel()).toBe(fa.interface.INITIALIZING);
+    expect(localStorage.getItem(CONTROL_LANGUAGE_KEY)).toBe(saved);
+  });
+
+  it('honors a later interface choice when setup has already been acknowledged', () => {
+    localStorage.setItem(
+      CONTROL_LANGUAGE_KEY,
+      '{"interface":"en","feedback":"ar","setupRequest":"1700000000-1"}',
+    );
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE__', 'fa');
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE_REQUEST__', '1700000000-1');
+    runSplashScript(script);
+
+    expect(document.documentElement.lang).toBe('en');
+    expect(document.documentElement.dir).toBe('ltr');
+    expect(phaseLabel()).toBe('INITIALIZING');
   });
 
   it('uses the Arabic installer choice when only the feedback language is saved', () => {

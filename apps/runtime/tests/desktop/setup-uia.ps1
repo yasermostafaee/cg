@@ -13,6 +13,7 @@
 #     set     <automationId>=<text>  type into a field (ValuePattern.SetValue) - RELEASE-0111-01 Part A
 #     select  <automationId> choose a radio button (SelectionItemPattern.Select)
 #     until   <text>        wait until an element's name contains <text>
+#     until-any <text>|...  wait until an element's name matches one alternative exactly
 #     focus                 bring the window to the foreground (UIA SetFocus, then the Win32 call)
 #     keys    <sendkeys>    focus the window, then type (System.Windows.Forms.SendKeys syntax)
 #     shot    <file.png>    capture the window and a margin around it (its shadow and corners)
@@ -133,6 +134,15 @@ switch ($Cmd) {
       Start-Sleep -Milliseconds 300
     }
     Fail "no element reads '$Arg'"
+  }
+  'until-any' {
+    $names = $Arg.Split('|')
+    while ((Get-Date) -lt $deadline) {
+      $hit = Elements $w | Where-Object { $names -contains $_.name } | Select-Object -First 1
+      if ($hit) { Out-Json @{ ok = $true; name = $hit.name }; exit 0 }
+      Start-Sleep -Milliseconds 300
+    }
+    Fail "no element reads any of '$Arg'"
   }
   'focus' {
     Bring $w

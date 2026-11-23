@@ -52,8 +52,12 @@ fn temporary_suffix() -> String {
     format!("{}-{}-{count}", std::process::id(), time.as_nanos())
 }
 
-/// Save the choice beside the executable verified by Setup. Replace a previous seed atomically.
-pub fn write_install_language(executable: &Path, language: SetupLanguage) -> io::Result<()> {
+/// Save the language beside the executable verified by Setup. Return whether it was written.
+pub fn write_install_language(
+    executable: &Path,
+    language: SetupLanguage,
+    explicitly_selected: bool,
+) -> io::Result<bool> {
     if !executable.metadata()?.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -61,21 +65,51 @@ pub fn write_install_language(executable: &Path, language: SetupLanguage) -> io:
         ));
     }
     let destination = executable.with_file_name(INSTALL_LANGUAGE_FILE);
-    let temporary = destination.with_extension(format!("tmp-{}", temporary_suffix()));
+    if !explicitly_selected && destination.try_exists()? {
+        return Ok(false);
+    }
+    let request = temporary_suffix();
+    let temporary = destination.with_extension(format!("tmp-{request}"));
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary)?;
     let result = (|| {
         file.write_all(language.code().as_bytes())?;
+        if explicitly_selected {
+            write!(file, "\n{request}")?;
+        }
         file.sync_all()?;
         drop(file);
-        fs::rename(&temporary, &destination)
+        if explicitly_selected {
+            fs::rename(&temporary, &destination)?;
+        } else {
+            match publish_new_seed(&temporary, &destination) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => return Ok(false),
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(true)
     })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
+    let _ = fs::remove_file(&temporary);
     result
+}
+
+// A plain default must never overwrite an explicit choice, even if both installers finish together.
+#[cfg(windows)]
+fn publish_new_seed(temporary: &Path, destination: &Path) -> io::Result<()> {
+    use windows::{core::HSTRING, Win32::Storage::FileSystem::MoveFileW};
+
+    let source = HSTRING::from(temporary.as_os_str());
+    let destination = HSTRING::from(destination.as_os_str());
+    unsafe { MoveFileW(&source, &destination) }
+        .map_err(|error| io::Error::from_raw_os_error(error.code().0 & 0xffff))
+}
+
+#[cfg(not(windows))]
+fn publish_new_seed(temporary: &Path, destination: &Path) -> io::Result<()> {
+    fs::hard_link(temporary, destination)
 }
 
 #[cfg(test)]
@@ -89,16 +123,31 @@ mod tests {
         fs::create_dir(&directory).unwrap();
         let executable = directory.join("cg-control.exe");
         let seed = directory.join(INSTALL_LANGUAGE_FILE);
-        assert!(write_install_language(&executable, SetupLanguage::English).is_err());
+        assert!(write_install_language(&executable, SetupLanguage::English, false).is_err());
         assert!(!seed.exists());
         fs::write(&executable, b"test executable").unwrap();
+        assert!(write_install_language(&executable, SetupLanguage::English, false).unwrap());
+        assert_eq!(fs::read(&seed).unwrap(), b"en");
+        assert!(!write_install_language(&executable, SetupLanguage::Persian, false).unwrap());
+        assert_eq!(fs::read(&seed).unwrap(), b"en");
+        let mut previous_request = String::new();
         for (language, code) in [
-            (SetupLanguage::English, b"en"),
-            (SetupLanguage::Persian, b"fa"),
-            (SetupLanguage::Arabic, b"ar"),
+            (SetupLanguage::English, "en"),
+            (SetupLanguage::Persian, "fa"),
+            (SetupLanguage::Arabic, "ar"),
+            (SetupLanguage::Arabic, "ar"),
         ] {
-            write_install_language(&executable, language).unwrap();
-            assert_eq!(fs::read(&seed).unwrap(), code);
+            assert!(write_install_language(&executable, language, true).unwrap());
+            let saved = fs::read_to_string(&seed).unwrap();
+            let (locale, request) = saved.split_once('\n').unwrap();
+            assert_eq!(locale, code);
+            assert!(request.split('-').all(|part| {
+                !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
+            }));
+            assert_ne!(request, previous_request);
+            assert!(!write_install_language(&executable, SetupLanguage::English, false).unwrap());
+            assert_eq!(fs::read_to_string(&seed).unwrap(), saved);
+            previous_request = request.to_owned();
         }
         assert_eq!(fs::read(&executable).unwrap(), b"test executable");
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
@@ -117,7 +166,7 @@ mod tests {
         let seed = directory.join(INSTALL_LANGUAGE_FILE);
         fs::create_dir(&seed).unwrap();
 
-        assert!(write_install_language(&executable, SetupLanguage::Persian).is_err());
+        assert!(write_install_language(&executable, SetupLanguage::Persian, true).is_err());
         assert!(seed.is_dir());
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
         fs::remove_dir(&seed).unwrap();
