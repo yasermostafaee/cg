@@ -103,6 +103,7 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(app.layerRow(99)).toContainText('بث محاكى');
   await expect(page.locator('[data-rehearsal-caption]')).toContainText('معاينة');
   await expect(page.locator('[data-pgm-screen]').first()).toContainText('لا توجد إشارة عودة');
+  await expect(page.getByTestId('monitor-head-tag')).toContainText('الخرج غير معروف');
   await expect(page.getByText(/صفوف على البث/).first()).toBeVisible();
   await expect(page.getByText('طبقات على PVW', { exact: true })).toBeVisible();
   for (const label of ['تشغيل', 'إيقاف', 'التالي', 'في PVW', 'مسح']) {

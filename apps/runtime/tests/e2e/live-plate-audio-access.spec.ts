@@ -246,7 +246,13 @@ test('D10/D11 — the fader never regresses mid-gesture, and rings for the keybo
   await expect(fader).toBeVisible();
 
   // ── D11, part 1: NO RING UNDER THE MOUSE ──────────────────────────────────────────
-  const ring = async (): Promise<string> => fader.evaluate((el) => getComputedStyle(el).boxShadow);
+  const ring = async (): Promise<string> =>
+    fader.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0
+        ? style.outline
+        : style.boxShadow;
+    });
   await page.mouse.move(5, 880);
   await expect
     .poll(async () => ring(), { message: 'the unfocused fader settles with no ring' })

@@ -61,7 +61,7 @@ export function MonitorHead({
       </span>
       {tags.map((tag) => (
         <Tag key={tag} className="cg-setup-tag cg-monitor-tag" data-testid="monitor-head-tag">
-          {tag}
+          {t(tag)}
         </Tag>
       ))}
     </span>
