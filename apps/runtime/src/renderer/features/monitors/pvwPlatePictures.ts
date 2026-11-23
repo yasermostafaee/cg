@@ -26,10 +26,11 @@ export function fullJpegRect(picture: FitRect, activeRect: FitRect): FitRect {
 }
 
 function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSourceFrame>) {
-  const frame = plate.sourceId === null ? undefined : frames.get(plate.sourceId);
+  const frame = pvwPictureForPlate(plate, frames);
+  const canvasSource = frame?.mediaPicture ?? frame?.directNdi;
   if (
     frame === undefined ||
-    (frame.jpegBase64 === undefined && frame.directNdi === undefined) ||
+    (frame.jpegBase64 === undefined && canvasSource === undefined) ||
     !frame.width ||
     !frame.height
   )
@@ -48,10 +49,27 @@ function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSource
         : fullJpegRect(fit.picture, frame.geometry.activeRect),
     sourceId: frame.sourceId,
     jpegBase64: frame.jpegBase64,
-    directNdi: frame.directNdi,
+    canvasSource,
     geometryRevision:
-      frame.geometry?.revision ?? (frame.directNdi === undefined ? '' : 'direct-ndi'),
+      frame.geometry?.revision ??
+      (frame.mediaPicture !== undefined
+        ? 'plate-media'
+        : frame.directNdi === undefined
+          ? ''
+          : 'direct-ndi'),
   };
+}
+
+export function pvwPlateMediaKey(plate: Pick<PlatePlacement, 'elementId' | 'sourceId'>): string {
+  return JSON.stringify([plate.elementId, plate.sourceId]);
+}
+
+export function pvwPictureForPlate(
+  plate: Pick<PlatePlacement, 'elementId' | 'sourceId'>,
+  frames: ReadonlyMap<string, PvwSourceFrame> | undefined,
+): PvwSourceFrame | undefined {
+  if (plate.sourceId === null) return undefined;
+  return frames?.get(pvwPlateMediaKey(plate)) ?? frames?.get(plate.sourceId);
 }
 
 function percent(value: number, extent: number): string {
@@ -72,14 +90,14 @@ function pictureWindows(plate: PlatePlacement): readonly FitRect[] {
 }
 
 type PicturePixels = HTMLImageElement | HTMLCanvasElement;
-const ndiCanvases = new WeakMap<
+const attachedCanvases = new WeakMap<
   HTMLCanvasElement,
-  { receiver: NonNullable<Picture['directNdi']>; detach: () => void }
+  { source: NonNullable<Picture['canvasSource']>; detach: () => void }
 >();
 
 function newPixels(doc: Document, picture: Picture): PicturePixels {
   const pixels =
-    picture.directNdi === undefined ? doc.createElement('img') : doc.createElement('canvas');
+    picture.canvasSource === undefined ? doc.createElement('img') : doc.createElement('canvas');
   if (pixels.tagName === 'IMG') {
     const image = pixels as HTMLImageElement;
     image.alt = '';
@@ -91,13 +109,13 @@ function newPixels(doc: Document, picture: Picture): PicturePixels {
 
 function paintPixels(pixels: PicturePixels, picture: Picture, window: FitRect): void {
   placeWithin(pixels, picture.jpeg, window);
-  const receiver = picture.directNdi;
+  const source = picture.canvasSource;
   if (pixels.tagName === 'CANVAS') {
     const canvas = pixels as HTMLCanvasElement;
-    const current = ndiCanvases.get(canvas);
-    if (receiver !== undefined && current?.receiver !== receiver) {
+    const current = attachedCanvases.get(canvas);
+    if (source !== undefined && current?.source !== source) {
       current?.detach();
-      ndiCanvases.set(canvas, { receiver, detach: receiver.attach(canvas) });
+      attachedCanvases.set(canvas, { source, detach: source.attach(canvas) });
     }
   } else if (picture.jpegBase64 !== undefined) {
     const image = pixels as HTMLImageElement;
@@ -115,8 +133,8 @@ function copyCanvas(from: HTMLCanvasElement | null, to: HTMLCanvasElement | null
 
 function removePicture(part: HTMLElement): void {
   for (const canvas of part.querySelectorAll('canvas')) {
-    ndiCanvases.get(canvas)?.detach();
-    ndiCanvases.delete(canvas);
+    attachedCanvases.get(canvas)?.detach();
+    attachedCanvases.delete(canvas);
   }
   part.remove();
 }

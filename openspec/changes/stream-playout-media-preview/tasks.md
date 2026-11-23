@@ -49,3 +49,7 @@
       A/B/A ownership transfer with decoded 3840x2160 media and audio, retaining position and
       playback. Evidence: `real-api-continuous-role-report.json` (2026-11-18). This is a
       separate harness, not acceptance of updated Bridges installed on the two servers.
+
+- [x] Verify independent manual Play/Pause for assigned media frames in PVW. A Windows Edge
+      test decodes the same WebM in two frames with separate leases. Rehearsal leaves media still,
+      pause preserves the selected frame, and stopping PVW closes both preview resources.

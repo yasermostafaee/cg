@@ -214,7 +214,7 @@ it('shows the shared input snapshot and keeps the media poster while the PVW lea
       ),
     );
     await advance(0);
-    expect(pvw.mock.calls[0]?.[0].sourceIds).toEqual(ids);
+    expect(pvw.mock.calls[0]?.[0].sourceIds).toEqual(['studio']);
     expect(thumbnails.mock.calls).toEqual([[{ channel: 1, sourceIds: ids }]]);
     expect(inspector).toHaveBeenCalledWith(sample('studio'));
     expect(shown?.get('studio')).toEqual({ ...sample('studio'), snapshotOnly: true });

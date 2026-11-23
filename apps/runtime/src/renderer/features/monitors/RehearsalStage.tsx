@@ -1,6 +1,14 @@
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { CSSProperties } from 'react';
 // The raster type comes from `@cg/shared-ipc` (`ChannelRaster`), not from
 // `@cg/template-runtime`'s structurally-identical `Raster` — a `{width, height}`
@@ -14,7 +22,12 @@ import type { CSSProperties } from 'react';
 // those four pure functions add 3.5 kB to the built SPA (1,271.6 → 1,275.1 kB with
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
-import { activeLookOf, resolvePlateSourcesForLook, type ChannelRaster } from '@cg/shared-ipc';
+import {
+  activeLookOf,
+  playoutMediaIdOf,
+  resolvePlateSourcesForLook,
+  type ChannelRaster,
+} from '@cg/shared-ipc';
 import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   liveMaskPlacementKey,
@@ -22,6 +35,9 @@ import {
   resolveOutputReference,
 } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
+import { useBridgeReadable } from '../../hooks/useBridgeSnapshot.js';
+import { useModalForeground } from '../../ui/modalForeground.js';
+import { currentSourceCatalog, subscribeSources } from '../sources/sourceStore.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
 import {
@@ -38,10 +54,16 @@ import {
 import { canMoveTemplateOutline, PreviewTemplateOutlines } from './PreviewTemplateOutlines.js';
 import { PreviewFramePlacement } from './PreviewFramePlacement.js';
 import { PreviewMaskPlacement } from './PreviewMaskPlacement.js';
+import { PvwMediaPlate } from './PvwMediaPlate.js';
+import { pvwPictureForPlate, pvwPlateMediaKey } from './pvwPlatePictures.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
-import { hasPvwSourcePicture, usePvwSourceFrames } from './usePvwSourceFrames.js';
-import type { NdiReceiver } from '../sources/directNdiPreview.js';
+import type { PreviewAudioInput } from './previewAudio.js';
+import {
+  hasPvwSourcePicture,
+  usePvwSourceFrames,
+  type PvwSourceFrame,
+} from './usePvwSourceFrames.js';
 import { hasPreviewCropReset, previewCropDraftOf } from '../inspector/draftStore.js';
 
 /**
@@ -307,7 +329,7 @@ export interface RehearsalTransport {
   panVisible: boolean;
   panAvailable: boolean;
   moveItemId: string | undefined;
-  directNdiInputs?: readonly { id: string; name: string; receiver: NdiReceiver }[];
+  previewAudioInputs?: readonly PreviewAudioInput[];
 }
 
 const REHEARSAL_CAVEATS =
@@ -393,6 +415,21 @@ export function RehearsalStage({
   const engine = useEngineName();
   const fitRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState(1);
+  const mediaForeground = useModalForeground(fitRef);
+  const mediaReadable = useBridgeReadable();
+  const sourceCatalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
+  const [mediaPictures, setMediaPictures] = useState<ReadonlyMap<string, PvwSourceFrame>>(
+    () => new Map(),
+  );
+  const onMediaPicture = useCallback((key: string, picture: PvwSourceFrame | undefined) => {
+    setMediaPictures((current) => {
+      if (current.get(key) === picture) return current;
+      const next = new Map(current);
+      if (picture === undefined) next.delete(key);
+      else next.set(key, picture);
+      return next;
+    });
+  }, []);
 
   const handles = useRef(new Map<string, RehearsalFrameHandle>());
   const [transitioningItems, setTransitioningItems] = useState<ReadonlySet<string>>(
@@ -565,25 +602,76 @@ export function RehearsalStage({
     false,
     showingSourceIds,
   );
-  const hasSourcePicture = placements.some(
-    ({ sourceId }) => sourceId !== null && hasPvwSourcePicture(sourceFrames.get(sourceId)),
+  const mediaPlates = useMemo(() => {
+    if (!playing || !visible || !mediaForeground || !mediaReadable || channel === undefined)
+      return [];
+    const clips = new Map(
+      sourceCatalog.sources
+        .filter(
+          (source) => source.producer.kind === 'media' && playoutMediaIdOf(source.id) !== null,
+        )
+        .map((source) => [source.id, source]),
+    );
+    return placements.flatMap((plate) => {
+      if (
+        !readyIds.has(plate.itemId) ||
+        plate.channel !== channel ||
+        plate.sourceId === null ||
+        !plateInRaster(plate, raster)
+      )
+        return [];
+      const source = clips.get(plate.sourceId);
+      return source === undefined ? [] : [{ plate, source, key: pvwPlateMediaKey(plate) }];
+    });
+  }, [
+    channel,
+    mediaForeground,
+    mediaReadable,
+    placements,
+    playing,
+    raster,
+    readyIds,
+    sourceCatalog,
+    visible,
+  ]);
+  const paintFrames = useMemo(() => {
+    if (mediaPictures.size === 0) return sourceFrames;
+    const combined = new Map(sourceFrames);
+    for (const { key } of mediaPlates) {
+      const media = mediaPictures.get(key);
+      if (media !== undefined) combined.set(key, media);
+    }
+    return combined;
+  }, [mediaPictures, mediaPlates, sourceFrames]);
+  const hasSourcePicture = placements.some((plate) =>
+    hasPvwSourcePicture(pvwPictureForPlate(plate, paintFrames)),
   );
-  const directNdiInputs = useMemo(() => {
-    const names = new Map(
-      placements.flatMap(({ sourceId, sourceName }) =>
-        sourceId !== null && sourceName !== null ? [[sourceId, sourceName] as const] : [],
-      ),
-    );
-    return [...sourceFrames].flatMap(([id, frame]) =>
-      frame.directNdi === undefined || frame.signal !== 'present'
-        ? []
-        : [{ id, name: names.get(id) ?? 'NDI input', receiver: frame.directNdi }],
-    );
-  }, [sourceFrames, placements]);
+  const previewAudioInputs = useMemo(() => {
+    const showing = new Set(showingSourceIds);
+    const inputs = new Map<string, PreviewAudioInput>();
+    for (const { sourceId, sourceName } of placements) {
+      if (
+        sourceId === null ||
+        sourceName === null ||
+        !showing.has(sourceId) ||
+        inputs.has(sourceId)
+      )
+        continue;
+      const frame = sourceFrames.get(sourceId);
+      const receiver = frame?.signal === 'present' ? frame.directNdi : undefined;
+      inputs.set(sourceId, {
+        id: sourceId,
+        name: sourceName,
+        ...(frame?.isDirectNdi === true && { direct: true }),
+        ...(receiver !== undefined && { receiver }),
+      });
+    }
+    return [...inputs.values()];
+  }, [sourceFrames, placements, showingSourceIds]);
   const showLiveSourceNote =
     playing &&
     anyRegionTooSmallForCaveat(
-      placements.filter((plate) => !hasPvwSourcePicture(sourceFrames.get(plate.sourceId ?? ''))),
+      placements.filter((plate) => !hasPvwSourcePicture(pvwPictureForPlate(plate, paintFrames))),
       fit,
     );
   const scopedCropItems = new Set(
@@ -760,7 +848,7 @@ export function RehearsalStage({
       panVisible,
       panAvailable,
       moveItemId,
-      ...(directNdiInputs.length > 0 && { directNdiInputs }),
+      ...(previewAudioInputs.length > 0 && { previewAudioInputs }),
     });
     return () => {
       onTransport?.(null);
@@ -775,7 +863,7 @@ export function RehearsalStage({
     panVisible,
     panAvailable,
     moveItemId,
-    directNdiInputs,
+    previewAudioInputs,
   ]);
 
   if (renderable.length === 0) {
@@ -855,7 +943,7 @@ export function RehearsalStage({
             livePlates={picturePlacements.filter(
               (plate) => plate.channel === channel && plate.itemId === subject.itemId,
             )}
-            sourceFrames={sourceFrames}
+            sourceFrames={paintFrames}
             visible={visible}
             onReadyChange={onReadyChange}
             onBoundsChange={onBoundsChange}
@@ -876,11 +964,28 @@ export function RehearsalStage({
           <LivePlateOverlay
             placements={editablePlacements}
             channel={channel ?? undefined}
-            sourceFrames={sourceFrames}
+            sourceFrames={paintFrames}
             raster={raster}
             fit={fit}
             zIndex={overlayZIndex(renderable.length)}
           />
+        )}
+        {channel !== undefined && mediaPlates.length > 0 && (
+          <div
+            className="cg-pvw-media-layer"
+            style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
+          >
+            {mediaPlates.map(({ plate, source, key }) => (
+              <PvwMediaPlate
+                key={JSON.stringify([channel, key, source.media?.fingerprint])}
+                plate={plate}
+                source={source}
+                channel={channel}
+                fit={fit}
+                onPicture={onMediaPicture}
+              />
+            ))}
+          </div>
         )}
         <PreviewTemplateOutlines
           outlines={outlines}

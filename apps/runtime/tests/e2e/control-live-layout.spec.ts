@@ -647,7 +647,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
   }
 });
 
-test('layout presets show decoded NDI and Bridge snapshot pictures in their plates', async ({
+test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound controls synchronized', async ({
   page,
 }, testInfo) => {
   const oscPort = await freeUdpPort();
@@ -779,6 +779,59 @@ test('layout presets show decoded NDI and Bridge snapshot pictures in their plat
     await editor.getByRole('button', { name: 'Two feeds', exact: true }).click();
     await expectNdi();
     await expect(cameraImage).toHaveJSProperty('naturalWidth', 320);
+
+    await editor
+      .getByRole('textbox', { name: 'Layout name', exact: true })
+      .fill('NDI preview sound');
+    await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
+    await expect(editor).toBeHidden();
+    const template = bridge.runtime
+      .templateList(1)
+      .find(({ name }) => name === 'NDI preview sound');
+    if (template === undefined) throw new Error('The preview sound layout did not save.');
+    const loaded = await page.evaluate(
+      (templateId) =>
+        window.cg.fixedLayers.load({
+          channel: 1,
+          layer: 59,
+          templateId,
+          itemId: 'audio',
+          fields: {},
+        }),
+      template.templateId,
+    );
+    expect(loaded.accepted).toBe(true);
+    await page
+      .locator('[data-layer="59"]')
+      .getByRole('button', { name: /^ON PVW/ })
+      .click();
+    const showMonitors = page.getByRole('button', { name: 'Show monitors' });
+    if (await showMonitors.isVisible()) await showMonitors.click();
+    const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+    await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+    const headerAudio = pvw.getByRole('button', { name: 'Preview live-input sound', exact: true });
+    const plateAudio = pvw.getByRole('button', {
+      name: 'Preview audio · Studio camera',
+      exact: true,
+    });
+    await expect(headerAudio).toHaveAttribute('aria-pressed', 'false');
+    await expect(plateAudio).toHaveAttribute('aria-pressed', 'false');
+
+    await plateAudio.click();
+    await expect(headerAudio).toHaveAttribute('aria-pressed', 'true');
+    await expect(plateAudio).toHaveAttribute('aria-pressed', 'true');
+    await headerAudio.click();
+    await expect(plateAudio).toHaveAttribute('aria-pressed', 'false');
+    await headerAudio.click();
+    await expect(plateAudio).toHaveAttribute('aria-pressed', 'true');
+    await pvw.getByRole('button', { name: 'STOP', exact: true }).click();
+    await expect(headerAudio).toHaveCount(0);
+    await expect(plateAudio).toHaveCount(0);
+    expect(
+      engine
+        .receivedCommands()
+        .some(({ line }) => /^(?:PLAY|CG (?:PLAY|UPDATE)|MIXER)/i.test(line)),
+    ).toBe(false);
   } finally {
     await bridge?.close();
     await engine.stop();

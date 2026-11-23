@@ -1,0 +1,26 @@
+.cg-pvw-media-layer {
+  pointer-events: none;
+}
+
+.cg-pvw-media-plate {
+  position: absolute;
+  transform-origin: top left;
+}
+
+.cg-pvw-media-transport {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  margin: var(--r-space-1);
+  padding: 2px;
+  border-radius: var(--r-radius-field);
+  background: var(--r-monitor-bg);
+  color: var(--r-text);
+  pointer-events: auto;
+}
+
+.cg-pvw-media-transport > [role='status'] {
+  max-inline-size: 11rem;
+  padding-inline-end: var(--r-space-1);
+  font-size: var(--r-text-xs);
+}

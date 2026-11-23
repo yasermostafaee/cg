@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 it.each(['empty', 'absent'] as const)(
-  'uses one independently verified B file poster after %s PVW/snapshot reads, then prefers moving recovery',
+  'the Live Layout editor uses one independently verified B file poster after %s reads, then prefers moving recovery',
   async (state) => {
     const f = fixture();
     if (state === 'absent') {
@@ -122,7 +122,7 @@ it.each(['empty', 'absent'] as const)(
     }
     let shown: ReturnType<typeof usePvwSourceFrames> = new Map();
     function Consumer(): null {
-      const frames = usePvwSourceFrames(1, [media, 'in-camera']);
+      const frames = usePvwSourceFrames(1, [media, 'in-camera'], true, 'editor');
       useEffect(() => {
         shown = frames;
       }, [frames]);
@@ -163,12 +163,12 @@ it.each(['empty', 'absent'] as const)(
 );
 
 it.each(['pvw', 'snapshot'] as const)(
-  'does not request a file poster while the normal %s already supplies a picture',
+  'does not request a file poster while a permitted %s already supplies a picture',
   async (provider) => {
     const f = fixture();
     f[provider === 'pvw' ? 'pvw' : 'thumbnails'].mockResolvedValue({ frames: [picture] });
     function Consumer(): null {
-      usePvwSourceFrames(1, [media]);
+      usePvwSourceFrames(1, [media], true, provider === 'pvw' ? 'editor' : 'stage');
       return null;
     }
     const root = createRoot(document.createElement('div'));
@@ -182,6 +182,41 @@ it.each(['pvw', 'snapshot'] as const)(
     }
   },
 );
+
+it('keeps a verified still in PVW without opening a live lease for its assigned clip', async () => {
+  const f = fixture();
+  // An unsolicited moving observation must not replace the clip's still.
+  f.pvw.mockResolvedValue({ frames: [picture] });
+  let shown: ReturnType<typeof usePvwSourceFrames> = new Map();
+  function Consumer(): null {
+    const frames = usePvwSourceFrames(1, [media, 'in-camera']);
+    useEffect(() => {
+      shown = frames;
+    }, [frames]);
+    return null;
+  }
+  const root = createRoot(document.createElement('div'));
+  const advance = (ms: number) => act(async () => await vi.advanceTimersByTimeAsync(ms));
+  try {
+    act(() => root.render(createElement(Consumer)));
+    await advance(2_000);
+    expect(f.pvw).toHaveBeenCalled();
+    for (const [request] of f.pvw.mock.calls) expect(request.sourceIds).toEqual(['in-camera']);
+    expect(f.mediaThumbnail.mock.calls).toEqual([[{ id: media, channel: 1 }]]);
+    expect(shown.get(media)).toEqual({
+      ...picture,
+      signal: 'unknown',
+      jpegBase64,
+      width: 64,
+      height: 36,
+      engine: 'B',
+      snapshotOnly: true,
+    });
+  } finally {
+    act(() => root.unmount());
+    await advance(500);
+  }
+});
 
 it.each(['removed', 'channel', 'signed-out', 'bridge', 'fingerprint'] as const)(
   'discards an awaited file poster after %s changes',

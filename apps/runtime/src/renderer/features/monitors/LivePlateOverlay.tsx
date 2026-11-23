@@ -1,14 +1,17 @@
-import type { CSSProperties } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { largestLivePlateMaskRegion } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { InputAudioMeter, InputAudioRails } from '../sources/InputAudioMeter.js';
 import { useNdiLevels, type NdiReceiver } from '../sources/directNdiPreview.js';
 import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
+import { usePreviewAudio } from './previewAudio.js';
+import { pvwPictureForPlate } from './pvwPlatePictures.js';
 import { hasPvwSourcePicture, type PvwSourceFrame } from './usePvwSourceFrames.js';
 
 /**
@@ -24,7 +27,7 @@ const styles = {
    * `pointerEvents: 'none'` on the whole layer, and it is load-bearing rather
    * than tidy: this box covers the entire rehearsal, and a layer that swallowed
    * clicks would take them from the frames underneath — including the transport
-   * an operator reaches for. The overlay is something to LOOK at.
+   * an operator reaches for. Only the explicit local audio control takes clicks.
    */
   layer: { pointerEvents: 'none' as const },
   chip: {
@@ -171,20 +174,30 @@ function regionCaveat(
   audio: PlatePlacement['audio'],
   cropEdges: PlatePlacement['cropEdges'],
   preview?: PvwSourceFrame,
+  previewAudio?: 'muted' | 'connecting' | 'audible',
 ): string {
   const source =
     sourceName === null ? 'No source is assigned to it.' : `Its source is ${sourceName}.`;
   const sound =
-    audio === undefined
-      ? 'Its audio state is not available.'
-      : audio === 'audible'
-        ? 'Its audio is on.'
-        : audio === 'held'
-          ? 'Its audio is muted because this plate is not in the active look.'
-          : 'Its audio is muted.';
+    previewAudio !== undefined
+      ? previewAudio === 'audible'
+        ? 'Local preview audio is on.'
+        : previewAudio === 'connecting'
+          ? 'Local preview audio is connecting.'
+          : 'Local preview audio is muted.'
+      : audio === undefined
+        ? 'Its audio state is not available.'
+        : audio === 'audible'
+          ? 'Its audio is on.'
+          : audio === 'held'
+            ? 'Its audio is muted because this plate is not in the active look.'
+            : 'Its audio is muted.';
   const fit = cropEdges === true ? ' Crop edges.' : '';
   if (preview?.directNdi !== undefined && preview.signal === 'present') {
     return 'Live source ' + plateId + ' — direct NDI.' + fit + ' ' + source + ' ' + sound;
+  }
+  if (preview?.mediaPicture !== undefined && preview.signal === 'present') {
+    return 'Media source ' + plateId + ' — local preview.' + fit + ' ' + source;
   }
   if (preview?.jpegBase64 !== undefined) {
     return `Live source ${plateId} — silent preview snapshots.${fit} ${source} ${sound}`;
@@ -202,6 +215,7 @@ export function LivePlateOverlay({
   fit,
   zIndex,
 }: Props): JSX.Element | null {
+  const previewAudio = usePreviewAudio();
   if (placements.length === 0) return null;
   // `fit` is positive by construction (the stage only sets it from a positive
   // box against a positive raster), but a guard here is cheaper than a frame of
@@ -222,9 +236,12 @@ export function LivePlateOverlay({
       {placements.map((p) => {
         const assigned = p.sourceName !== null;
         const source = labelledSource(p.sourceId);
-        const preview = p.sourceId === null ? undefined : sourceFrames?.get(p.sourceId);
+        const preview =
+          sourceFrames === undefined ? undefined : pvwPictureForPlate(p, sourceFrames);
         const hasPicture = hasPvwSourcePicture(preview);
-        const audio = p.audio === undefined ? undefined : AUDIO_GLYPH[p.audio];
+        const localAudio = p.sourceId === null ? undefined : previewAudio?.stateOf(p.sourceId);
+        const programmeAudio = localAudio === undefined ? p.audio : undefined;
+        const audio = programmeAudio === undefined ? undefined : AUDIO_GLYPH[programmeAudio];
         const region = largestLivePlateMaskRegion(p.mask);
         const roomForLabel = regionFitsCaveat(p.width * (region?.width ?? 0) * fit);
         const authoredFrame = p.captionInTemplate === true;
@@ -240,143 +257,184 @@ export function LivePlateOverlay({
                 maxWidth: String(region.width * fit * 100) + '%',
               };
         return (
-          <div
-            key={p.elementId}
-            data-live-plate={p.plateId}
-            data-live-plate-state={assigned ? 'assigned' : 'unassigned'}
-            /*
+          <Fragment key={p.elementId}>
+            <div
+              data-live-plate={p.plateId}
+              data-live-plate-state={assigned ? 'assigned' : 'unassigned'}
+              /*
               `role="img"` because that is what this rect IS — a stand-in for a picture — and
               because it makes the region ATOMIC: the caveat is announced as one statement
               rather than as four loose fragments read off the chip in whatever order they
               were laid out.
             */
-            role="img"
-            aria-label={regionCaveat(plateLabel, p.sourceName, p.audio, p.cropEdges, preview)}
-            style={{
-              position: 'absolute',
-              left: `${String(p.x)}px`,
-              top: `${String(p.y)}px`,
-              width: `${String(p.width)}px`,
-              height: `${String(p.height)}px`,
-              border: hasPicture
-                ? undefined
-                : `${String(2 * inv)}px dashed ${assigned ? cssVars['--r-plate-outline'] : colors.pending}`,
-              boxSizing: 'border-box',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-            }}
-          >
-            {region !== null && p.sourceId !== null && (
-              <PlateMeter
-                sourceId={p.sourceId}
-                channel={source?.unavailable === true ? undefined : channel}
-                name={source?.name ?? plateLabel}
-                preview={preview}
-                style={
-                  {
-                    '--cg-input-meter-track': String(4 * inv) + 'px',
-                    '--cg-input-meter-divider': String(inv) + 'px',
-                    '--cg-input-meter-max-width': String(96 * inv) + 'px',
-                  } as CSSProperties
-                }
-              />
-            )}
-            {region === null ? null : hasPicture ? (
-              (showPlateLabel || audio !== undefined) && (
+              role="img"
+              aria-label={regionCaveat(
+                plateLabel,
+                p.sourceName,
+                programmeAudio,
+                p.cropEdges,
+                preview,
+                localAudio,
+              )}
+              style={{
+                position: 'absolute',
+                left: `${String(p.x)}px`,
+                top: `${String(p.y)}px`,
+                width: `${String(p.width)}px`,
+                height: `${String(p.height)}px`,
+                border: hasPicture
+                  ? undefined
+                  : `${String(2 * inv)}px dashed ${assigned ? cssVars['--r-plate-outline'] : colors.pending}`,
+                boxSizing: 'border-box',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+              }}
+            >
+              {region !== null && p.sourceId !== null && (
+                <PlateMeter
+                  sourceId={p.sourceId}
+                  channel={source?.unavailable === true ? undefined : channel}
+                  name={source?.name ?? plateLabel}
+                  preview={preview}
+                  style={
+                    {
+                      '--cg-input-meter-track': String(4 * inv) + 'px',
+                      '--cg-input-meter-divider': String(inv) + 'px',
+                      '--cg-input-meter-max-width': String(96 * inv) + 'px',
+                    } as CSSProperties
+                  }
+                />
+              )}
+              {region === null ? null : hasPicture ? (
+                (showPlateLabel || audio !== undefined) && (
+                  <div
+                    data-live-plate-label=""
+                    style={{
+                      ...styles.chip,
+                      ...(p.mask !== undefined
+                        ? labelAnchor
+                        : authoredFrame
+                          ? { left: 'auto', top: 4 * inv, right: 4 * inv }
+                          : { left: 'auto', top: 'auto', bottom: 4 * inv, right: 4 * inv }),
+                      padding: '2px 4px',
+                      gap: '4px',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      transform:
+                        (p.mask === undefined ? '' : 'translate(-50%, -50%) ') +
+                        `scale(${String(inv)})`,
+                      transformOrigin:
+                        p.mask !== undefined
+                          ? 'center center'
+                          : authoredFrame
+                            ? 'right top'
+                            : 'right bottom',
+                    }}
+                  >
+                    {showPlateLabel && (
+                      <span
+                        style={{ ...styles.source, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {plateLabel}
+                      </span>
+                    )}
+                    {roomForLabel && p.cropEdges && <span style={styles.fit}>Crop edges</span>}
+                    {audio !== undefined && (
+                      <span
+                        style={{ ...styles.audio, color: audio.color }}
+                        data-live-plate-audio={programmeAudio}
+                        title="Programme audio setting"
+                      >
+                        <Icon icon={audio.icon} size={11} />
+                      </span>
+                    )}
+                  </div>
+                )
+              ) : (
                 <div
                   data-live-plate-label=""
                   style={{
                     ...styles.chip,
-                    ...(p.mask !== undefined
-                      ? labelAnchor
-                      : authoredFrame
-                        ? { left: 'auto', top: 4 * inv, right: 4 * inv }
-                        : { left: 'auto', top: 'auto', bottom: 4 * inv, right: 4 * inv }),
-                    padding: '2px 4px',
-                    gap: '4px',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    transform:
-                      (p.mask === undefined ? '' : 'translate(-50%, -50%) ') +
-                      `scale(${String(inv)})`,
-                    transformOrigin:
-                      p.mask !== undefined
-                        ? 'center center'
-                        : authoredFrame
-                          ? 'right top'
-                          : 'right bottom',
+                    ...labelAnchor,
+                    transform: `translate(-50%, -50%) scale(${String(inv)})`,
+                    transformOrigin: 'center center',
                   }}
                 >
-                  {showPlateLabel && (
-                    <span
-                      style={{ ...styles.source, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    >
-                      {plateLabel}
-                    </span>
-                  )}
-                  {roomForLabel && p.cropEdges && <span style={styles.fit}>Crop edges</span>}
-                  {audio !== undefined && (
-                    <span
-                      style={{ ...styles.audio, color: audio.color }}
-                      data-live-plate-audio={p.audio}
-                    >
-                      <Icon icon={audio.icon} size={11} />
-                    </span>
-                  )}
-                </div>
-              )
-            ) : (
-              <div
-                data-live-plate-label=""
-                style={{
-                  ...styles.chip,
-                  ...labelAnchor,
-                  transform: `translate(-50%, -50%) scale(${String(inv)})`,
-                  transformOrigin: 'center center',
-                }}
-              >
-                {/* Dropped, not clipped, when the region cannot hold it — the stamp says it
+                  {/* Dropped, not clipped, when the region cannot hold it — the stamp says it
                   instead (see `regionFitsCaveat`). The ACCESSIBLE name below is unaffected:
                   it carries the full sentence at every size. */}
-                {(preview?.signal === 'absent' || roomForLabel) && (
-                  <span style={styles.kind} data-live-plate-caveat="">
-                    {preview?.signal === 'absent' ? 'No signal' : REGION_CAVEAT}
+                  {(preview?.signal === 'absent' || roomForLabel) && (
+                    <span style={styles.kind} data-live-plate-caveat="">
+                      {preview?.signal === 'absent' ? 'No signal' : REGION_CAVEAT}
+                    </span>
+                  )}
+                  <span style={styles.plate}>
+                    <bdi>{plateLabel}</bdi>
                   </span>
-                )}
-                <span style={styles.plate}>
-                  <bdi>{plateLabel}</bdi>
-                </span>
-                {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
-                {assigned ? (
-                  // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
-                  <span style={styles.source}>
-                    <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
-                  </span>
-                ) : (
-                  <span style={styles.unassigned} data-live-plate-unassigned="">
-                    no source assigned
-                  </span>
-                )}
-                {/*
+                  {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
+                  {assigned ? (
+                    // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
+                    <span style={styles.source}>
+                      <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
+                    </span>
+                  ) : (
+                    <span style={styles.unassigned} data-live-plate-unassigned="">
+                      no source assigned
+                    </span>
+                  )}
+                  {/*
                 ABSENT means NOT STATED, and nothing is drawn for it — the stack and the ledger
                 are separate snapshots from the template registry that produced this placement,
                 and a glyph rendered before they land would assert silence on the one property
                 an operator cannot check by looking at the frame.
               */}
-                {audio !== undefined && (
-                  <span
-                    style={{ ...styles.audio, color: audio.color }}
-                    data-live-plate-audio={p.audio}
-                  >
-                    <Icon icon={audio.icon} size={11} />
-                    {audio.text}
-                  </span>
-                )}
-              </div>
+                  {audio !== undefined && (
+                    <span
+                      style={{ ...styles.audio, color: audio.color }}
+                      data-live-plate-audio={programmeAudio}
+                    >
+                      <Icon icon={audio.icon} size={11} />
+                      {audio.text}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            {region !== null && p.sourceId !== null && localAudio !== undefined && (
+              <span
+                style={{
+                  position: 'absolute',
+                  right: raster.width - p.x - p.width + 4 * inv,
+                  top: p.y + 4 * inv,
+                  transform: `scale(${String(inv)})`,
+                  transformOrigin: 'right top',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Button
+                  variant="icon"
+                  className="cg-preview-plate-audio"
+                  aria-label={'Preview audio · ' + (p.sourceName ?? plateLabel)}
+                  aria-pressed={localAudio === 'audible'}
+                  title={
+                    localAudio === 'connecting'
+                      ? 'Cancel preview audio'
+                      : localAudio === 'audible'
+                        ? 'Mute this preview input'
+                        : 'Listen to this preview input'
+                  }
+                  data-preview-plate-audio={localAudio}
+                  onClick={() => {
+                    if (p.sourceId !== null) previewAudio?.toggle(p.sourceId);
+                  }}
+                >
+                  <Icon icon={localAudio === 'audible' ? Volume2 : VolumeX} size={13} />
+                </Button>
+              </span>
             )}
-          </div>
+          </Fragment>
         );
       })}
     </div>

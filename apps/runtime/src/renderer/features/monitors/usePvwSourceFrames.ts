@@ -19,13 +19,15 @@ import { usePictureOriginPublisher } from '../sources/observedPictureOrigins.js'
 export type PvwSourceFrame = SourcePreviewFrame & {
   snapshotOnly?: true;
   directNdi?: NdiReceiver;
+  mediaPicture?: { attach: (canvas: HTMLCanvasElement) => () => void };
   isDirectNdi?: true;
 };
 
 export function hasPvwSourcePicture(frame: PvwSourceFrame | undefined): boolean {
   return (
     frame?.jpegBase64 !== undefined ||
-    (frame?.directNdi !== undefined && frame.signal === 'present')
+    ((frame?.directNdi !== undefined || frame?.mediaPicture !== undefined) &&
+      frame.signal === 'present')
   );
 }
 
@@ -44,6 +46,7 @@ interface Snapshot {
 interface Demand {
   channel: number;
   sourceIds: string[];
+  liveSourceIds: string[];
   key: string;
 }
 interface CachedFrame {
@@ -105,10 +108,25 @@ class PreviewFeed {
                 .flatMap(({ sourceIds }) => sourceIds),
             ]),
           ].slice(0, MAX_SOURCES);
+    // PVW's media buttons own their playback. The live-preview API opens a producer
+    // for each selector, so a frame bound to a clip only asks it for still pictures.
+    const editorSources = new Set(
+      readers
+        .filter((reader) => reader.channel === channel && reader.mode === 'editor')
+        .flatMap((reader) => reader.sourceIds),
+    );
+    const liveSourceIds = sourceIds.filter(
+      (id) => playoutMediaIdOf(id) === null || editorSources.has(id),
+    );
     const demand =
       channel === undefined
         ? undefined
-        : { channel, sourceIds, key: JSON.stringify([channel, sourceIds]) };
+        : {
+            channel,
+            sourceIds,
+            liveSourceIds,
+            key: JSON.stringify([channel, sourceIds, liveSourceIds]),
+          };
     if (demand?.key === this.#demand?.key) return;
     // Closing/reopening effects in the same render can briefly remove the last reader.
     // Keep its pictures until the corresponding empty release actually starts.
@@ -126,6 +144,12 @@ class PreviewFeed {
     if (demand !== undefined) this.#posters.setDemand(channel, sourceIds);
     for (const ids of [this.#readCompleted, this.#missingSnapshots])
       for (const id of ids) if (!sourceIds.includes(id)) ids.delete(id);
+    if (demand !== undefined) {
+      for (const id of this.#cache.keys()) {
+        if (playoutMediaIdOf(id) !== null && !editorSources.has(id)) this.#cache.delete(id);
+      }
+    }
+    for (const id of sourceIds) if (!liveSourceIds.includes(id)) this.#readCompleted.add(id);
     if (demand !== undefined) this.#publish();
     this.#schedule(0);
   }
@@ -230,10 +254,8 @@ class PreviewFeed {
 
   async #poll(): Promise<void> {
     const demand = this.#demand;
-    const channel = demand?.channel ?? this.#sentChannel;
-    if (channel === undefined) return;
-    this.#inFlight = true;
-    this.#sentChannel = demand?.channel;
+    const liveDemand = demand !== undefined && demand.liveSourceIds.length > 0 ? demand : undefined;
+    const channel = liveDemand?.channel ?? this.#sentChannel;
     if (demand === undefined) {
       this.#cache.clear();
       this.#snapshots.clear();
@@ -242,18 +264,21 @@ class PreviewFeed {
       this.#missingSnapshots.clear();
       this.#publish();
     }
+    if (channel === undefined) return;
+    this.#inFlight = true;
+    this.#sentChannel = liveDemand?.channel;
     try {
       const { frames } = await this.readFrames({
         channel,
         viewId: this.#viewId,
-        sourceIds: demand?.sourceIds ?? [],
+        sourceIds: liveDemand?.liveSourceIds ?? [],
       });
       const current = this.#demand;
-      if (demand !== undefined && current?.channel === channel) {
+      if (liveDemand !== undefined && current?.channel === channel) {
         for (const frame of frames) {
           if (
-            !demand.sourceIds.includes(frame.sourceId) ||
-            !current.sourceIds.includes(frame.sourceId)
+            !liveDemand.liveSourceIds.includes(frame.sourceId) ||
+            !current.liveSourceIds.includes(frame.sourceId)
           )
             continue;
           // A missing/partial batch is not loss of signal. An explicit absent observation is.
@@ -273,11 +298,11 @@ class PreviewFeed {
     } finally {
       this.#inFlight = false;
       if (demand !== undefined && this.#demand?.channel === channel) {
-        for (const id of demand.sourceIds)
-          if (this.#demand.sourceIds.includes(id)) this.#readCompleted.add(id);
+        for (const id of demand.liveSourceIds)
+          if (this.#demand.liveSourceIds.includes(id)) this.#readCompleted.add(id);
         this.#requestPosters();
       }
-      if (this.#demand !== undefined || this.#sentChannel !== undefined)
+      if ((this.#demand?.liveSourceIds.length ?? 0) > 0 || this.#sentChannel !== undefined)
         this.#schedule(demand?.key === this.#demand?.key ? POLL_MS : 0);
     }
   }

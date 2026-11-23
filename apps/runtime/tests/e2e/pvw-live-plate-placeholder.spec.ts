@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import type { Scene } from '@cg/shared-schema';
 import {
   buildVcgIndexHtml,
@@ -163,6 +164,125 @@ const pvwTransport = (page: Page, verb: 'PLAY' | 'NEXT' | 'STOP') =>
   page
     .getByRole('region', { name: 'PREVIEW (PVW)' })
     .getByRole('button', { name: verb, exact: true });
+
+test('PVW plays bound clips independently only when their own frame is started', async ({
+  app,
+}) => {
+  const { page } = app;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const clip = await readFile(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url));
+  await page.route('**/__pvw-plate-clip.webm*', (route) =>
+    route.fulfill({ status: 200, contentType: 'video/webm', body: clip }),
+  );
+  await registerTwoBox(page);
+  await stubRetainedPage(page, pageWithHoles().replaceAll('data-hole=', 'data-cg-live-source='));
+  const layer = await app.loadTemplate(TWO_BOX);
+  await app.selectLayerRow(layer);
+  const media = { media: 'Clip 001', search: 'Clip 001' };
+  await app.setTemplateDefault('guest-1', media);
+  await app.setTemplateDefault('guest-2', media);
+
+  interface PreviewProof {
+    opens: string[];
+    closes: string[];
+    liveLeases: string[];
+    takes: number;
+  }
+  await page.evaluate(() => {
+    const proof = { opens: [], closes: [], liveLeases: [], takes: 0 } as PreviewProof;
+    Object.assign(window, { plateMediaProof: proof });
+    const pvw = window.cg.sourcePreviews.pvw;
+    window.cg.sourcePreviews.pvw = (request) => {
+      proof.liveLeases.push(...request.sourceIds);
+      return pvw(request);
+    };
+    window.cg.sourcePreviews.mediaOpen = async ({ sourceId, previewId, prepare }) => {
+      if (sourceId !== 'md-m-clip-001' || (previewId === undefined && prepare !== true)) {
+        throw new Error('Expected an explicit preview of the assigned clip');
+      }
+      const lease = previewId ?? crypto.randomUUID();
+      if (previewId === undefined) proof.opens.push(lease);
+      return {
+        state: 'ready',
+        previewId: lease,
+        durationMs: 3520,
+        engine: 'A',
+        videoUrl: new URL('/__pvw-plate-clip.webm?lease=' + lease, location.href).href,
+      };
+    };
+    window.cg.sourcePreviews.mediaClose = async ({ previewId }) => {
+      proof.closes.push(previewId);
+      return { closed: true };
+    };
+    const take = window.cg.stack.take;
+    window.cg.stack.take = (request) => {
+      proof.takes++;
+      return take(request);
+    };
+  });
+  const readProof = () =>
+    page.evaluate(() => (window as unknown as { plateMediaProof: PreviewProof }).plateMediaProof);
+  await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
+  const transports = page.locator('[data-pvw-media-transport]');
+  await expect(transports).toHaveCount(2);
+  const first = transports.nth(0);
+  const second = transports.nth(1);
+  const firstPlay = first.getByRole('button', { name: /^Play preview in / });
+  const secondPlay = second.getByRole('button', { name: /^Play preview in / });
+  await expect(firstPlay).toBeEnabled();
+  await expect(secondPlay).toBeEnabled();
+  await expect(transports.locator('video')).toHaveCount(0);
+  expect((await readProof()).opens).toHaveLength(0);
+
+  await firstPlay.click();
+  const firstPause = first.getByRole('button', { name: /^Pause preview in / });
+  const firstPlayer = first.locator('video');
+  const stage = page.frameLocator('iframe[data-rehearsal-frame]');
+  const firstCanvas = stage.locator(
+    '[data-cg-live-source="guest-1"] [data-cg-pvw-picture-part] canvas',
+  );
+  const secondCanvas = stage.locator(
+    '[data-cg-live-source="guest-2"] [data-cg-pvw-picture-part] canvas',
+  );
+  await expect(firstCanvas).toBeVisible();
+  await expect(secondCanvas).toHaveCount(0);
+  await expect(firstPlayer).toHaveJSProperty('muted', true);
+  await expect(first.getByRole('button', { name: /^Listen to preview in / })).toHaveCount(0);
+  const firstFrame = await firstCanvas.evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  await expect
+    .poll(() => firstCanvas.evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL()))
+    .not.toBe(firstFrame);
+  await firstPause.click();
+  await expect(firstPlayer).toHaveJSProperty('paused', true);
+  const pausedAt = await firstPlayer.evaluate((video: HTMLVideoElement) => video.currentTime);
+  expect(pausedAt).toBeGreaterThan(0);
+  await expect(firstCanvas).toBeVisible();
+  expect((await readProof()).opens).toHaveLength(1);
+
+  await secondPlay.click();
+  await expect(secondCanvas).toBeVisible();
+  await expect(firstPlayer).toHaveJSProperty('currentTime', pausedAt);
+  await expect(firstPlayer).toHaveJSProperty('paused', true);
+  expect((await readProof()).opens).toHaveLength(2);
+  await firstPlay.click();
+  await expect
+    .poll(() => firstPlayer.evaluate((video: HTMLVideoElement) => video.currentTime))
+    .toBeGreaterThan(pausedAt);
+  expect((await readProof()).opens).toHaveLength(2);
+
+  await pvwTransport(page, 'STOP').click();
+  await expect(transports).toHaveCount(0);
+  await expect
+    .poll(async () => (await readProof()).closes.sort())
+    .toEqual((await readProof()).opens.sort());
+  await pvwTransport(page, 'PLAY').click();
+  await expect(transports).toHaveCount(2);
+  await expect(transports.locator('video')).toHaveCount(0);
+  expect((await readProof()).opens).toHaveLength(2);
+  expect((await readProof()).takes).toBe(0);
+  expect((await readProof()).liveLeases).not.toContain('md-m-clip-001');
+});
 
 /*
  * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's

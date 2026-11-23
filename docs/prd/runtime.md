@@ -5072,9 +5072,16 @@ status depended too heavily on reading a small label.
 - WHEN any shown plate on a row is asking for sound THEN the row audio button shows Volume On and
   names the state in its tooltip/accessibility label
 - WHEN no shown plate is asking for sound THEN that button shows Volume Muted
-- WHEN a PVW plate is audible, silent or held by the active look THEN its frame shows the matching
-  volume icon and includes the same fact in the frame's accessible name
-- The state remains recorded intent, not a per-input audio meter
+- WHEN a PVW frame has no local listening control THEN its configured programme sound state
+  can be read from its frame label
+- The Layers and PGM controls continue to show recorded programme audio intent.
+- WHEN an operator listens to an available input from its PVW plate THEN the plate and the PVW
+  toolbar show the same local listening state. One live input can be heard at a time. Direct NDI
+  uses its existing local stream and authorized Playout inputs can use their preview audio session.
+- WHEN the source leaves the active preset, Preview stops, or the monitor is hidden THEN its local
+  preview audio is stopped. These controls leave programme audio and measurements unchanged.
+- WHEN an assigned file is visible in PVW THEN it starts paused and plays only from its own
+  Play/Pause control. Supported audio starts muted and can be listened to separately on the plate.
 
 ## [~] R-110 — The operator can set Playlist programme-output gain without unmuting its duplicated frame route ⟨priority: high — the owner, 2026-11-08; contract supplied in 2.18.17⟩ — `openspec/changes/control-playlist-program-audio/`
 
@@ -5239,6 +5246,14 @@ applied template state after a Bridge restart. The static HTML pilot passed on a
 - WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
 - WHEN a backup is healthy but a row has media or live inputs unavailable there THEN Layers keeps
   the template name and a short backup status. Inspector expands to show the affected inputs and reasons.
+
+**Required backup-failure behavior, 2026-11-23.** The confirmed owner must remain able to Play,
+Update, Stop and Clear throughout a prolonged reserve outage. The owner stores the full applied
+layout durably, including explicit deletion through absence in the latest revision. A recovered or
+replacement reserve must install that revision and prepare any missing assets before it can take
+control. A stale or partitioned member must reject writes for its obsolete ownership. Playout
+externalcg.26 fixes membership at group creation and requires both voters in a two-member group.
+Delivering this requirement on two playout machines requires a new Playout authority capability.
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 

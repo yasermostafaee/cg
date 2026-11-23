@@ -9784,6 +9784,10 @@ input[type='checkbox']:disabled:checked {
   flex: 1;
   min-height: 0;
 }
+.cg-btn--icon.cg-preview-plate-audio {
+  background: var(--r-plate-chip-bg);
+}
+
 .cg-pvw-stage > :first-child {
   min-width: 0;
 }

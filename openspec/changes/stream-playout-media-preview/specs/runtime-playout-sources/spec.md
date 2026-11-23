@@ -63,3 +63,17 @@ sampled player and identify its sampled playback.
 - **WHEN** the Bridge or Playout reports the streamed media capability as unsupported
 - **THEN** the existing sampled player offers Play, Pause, Stop and seek
 - **AND** confirming a source continues through Select
+
+### Requirement: Assigned media plates play on explicit request in PVW
+
+PVW SHALL offer the existing read-only media preview transport inside a frame whose assigned clip
+supports playback. Each frame starts idle and muted.
+
+#### Scenario: Two preview frames use the same clip
+
+- **WHEN** the operator opens PVW or starts the layout's rehearsal
+- **THEN** neither clip plays until its frame's own Play control is pressed
+- **WHEN** the operator presses Play or Pause on one frame
+- **THEN** only that frame changes playback state
+- **AND** an available local audio channel has its own mute control
+- **AND** leaving the preset or stopping PVW closes that frame's stream without a programme write

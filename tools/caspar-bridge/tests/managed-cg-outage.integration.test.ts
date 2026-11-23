@@ -106,6 +106,10 @@ it('refuses a new layout before journaling when A cannot confirm quorum', async 
     accepted: false,
     message: 'Playout has not confirmed a unique managed CG owner.',
   });
+  expect(await runtime.out(itemId)).toMatchObject({
+    accepted: false,
+    errorCode: 'managed-cg-unavailable',
+  });
   expect(pair.posts).toHaveLength(1);
   expect(pair.journal().get(managedTestGroupId)).toBeUndefined();
   expect((await pair.readState('A')).snapshot).toEqual(before.snapshot);
@@ -121,4 +125,23 @@ it('refuses a new layout before journaling when A cannot confirm quorum', async 
   expect((await pair.readState('B')).snapshot.layers[0]?.data).toEqual({
     title: 'After quorum restored',
   });
+});
+
+it('commits Clear through A when B retains its vote but cannot apply the Native layout yet', async () => {
+  const { runtime, pair } = await boot();
+  const baseline = await pair.readState('B');
+  pair.pauseBackupReplica();
+  pair.disconnectBackupApi();
+  expect(await runtime.out(itemId)).toMatchObject({ accepted: true });
+  const cleared = await pair.readState('A');
+  expect(cleared.snapshot.layers).toEqual([]);
+  expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A']);
+  pair.reconnectBackupApi();
+  expect((await pair.readState('B')).replica.appliedRevision).toBe(
+    baseline.replica.appliedRevision,
+  );
+  pair.catchUpBackupReplica();
+  const synchronized = await pair.readState('B');
+  expect(synchronized.snapshot.layers).toEqual([]);
+  expect(synchronized.replica.appliedRevision).toBe(cleared.replica.appliedRevision);
 });

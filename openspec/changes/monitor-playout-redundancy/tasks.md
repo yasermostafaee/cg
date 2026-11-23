@@ -82,6 +82,14 @@
       blue and green respectively. Only A received the four Play, Go, Previous and Clear
       layouts. Both members cleared the test layer at revision 24 and A remained owner.
       Edge also verified independent PVW navigation and recovery on a newly selected owner.
+- [ ] Support continuing operations when the reserve Engine is completely absent. The owner
+      must commit Play, Update, Stop and Clear through the outage. A replacement Engine must
+      install only the latest complete snapshot, including cleared layers, before handoff.
+      Playout externalcg.26 has fixed membership and no separate witness or independently
+      verified fencing path for a two-member group. New Engine support is required before this
+      mode can be enabled. Test checkpoint-based rejoin across a journal retention gap.
+      The loopback Bridge tests cover both Clear refusal without quorum and a committed Clear
+      that a lagging reserve applies after recovery.
 - [ ] Integrate editable picture books with replica-safe assets and verify their page recovery
       after a physical Core restart.
 - [ ] Verify the managed export adapter with additional real graphics and collect acceptance

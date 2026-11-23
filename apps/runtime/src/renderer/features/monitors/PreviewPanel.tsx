@@ -66,7 +66,7 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
-import { stopNdiAudio, toggleNdiAudio, useNdiAudioReceiver } from '../sources/directNdiPreview.js';
+import { PreviewAudioContext, usePreviewAudioControls } from './previewAudio.js';
 import { FittedSafeAreaGuides } from './SafeAreaGuides.js';
 import { SafeGuideSettings } from './SafeGuideSettings.js';
 import { useSafeGuidePreferences } from './useSafeGuidePreferences.js';
@@ -534,6 +534,7 @@ export function PreviewPanel({
     for what is — and the three buttons read that as "disabled" rather than as an error.
   */
   const [transport, setTransport] = useState<RehearsalTransport | null>(null);
+  const previewAudio = usePreviewAudioControls(viewChannel, !hidden, transport?.previewAudioInputs);
   const hasSubjects = subjects.length > 0;
   const panVisible = hasSubjects && transport?.panVisible === true;
   const panAvailable = hasSubjects && transport?.panAvailable === true;
@@ -767,8 +768,11 @@ export function PreviewPanel({
         <span className="cg-monitor-fact" data-rehearsal-caption="">
           {rehearsalCaption(renderableCount, subjects.length)}
         </span>
-        {!hidden && transport?.directNdiInputs !== undefined && (
-          <PreviewNdiAudio inputs={transport.directNdiInputs} />
+        {previewAudio.inputs.length > 0 && <PreviewInputAudio audio={previewAudio} />}
+        {previewAudio.failure !== undefined && (
+          <span className="cg-monitor-fact" role="status">
+            {previewAudio.failure}
+          </span>
         )}
       </div>
       {selectedLayout !== undefined && (
@@ -804,23 +808,25 @@ export function PreviewPanel({
             </span>
           </div>
         ) : (
-          <RehearsalStage
-            subjects={subjects}
-            pageByItem={pageByItem}
-            templateNames={templateNames}
-            raster={raster}
-            presetFramePeriodMs={presetFramePeriodMs}
-            visible={!hidden}
-            onTransport={setTransport}
-            onSelectItem={onSelectItem}
-            panOpen={panOpen}
-            moveOpen={moveOpen}
-            frameEditOpen={frameEditOpen}
-            maskEditOpen={maskEditOpen}
-            preserveFrameAspect={resizeModes && preserveFrameAspect}
-            panSession={panSession}
-            panSourceAspects={panSourceAspects}
-          />
+          <PreviewAudioContext.Provider value={previewAudio}>
+            <RehearsalStage
+              subjects={subjects}
+              pageByItem={pageByItem}
+              templateNames={templateNames}
+              raster={raster}
+              presetFramePeriodMs={presetFramePeriodMs}
+              visible={!hidden}
+              onTransport={setTransport}
+              onSelectItem={onSelectItem}
+              panOpen={panOpen}
+              moveOpen={moveOpen}
+              frameEditOpen={frameEditOpen}
+              maskEditOpen={maskEditOpen}
+              preserveFrameAspect={resizeModes && preserveFrameAspect}
+              panSession={panSession}
+              panSourceAspects={panSourceAspects}
+            />
+          </PreviewAudioContext.Provider>
         )}
         {safeAreasVisible && (
           <FittedSafeAreaGuides
@@ -835,31 +841,31 @@ export function PreviewPanel({
   );
 }
 
-function PreviewNdiAudio({
-  inputs,
+function PreviewInputAudio({
+  audio,
 }: {
-  inputs: NonNullable<RehearsalTransport['directNdiInputs']>;
+  audio: ReturnType<typeof usePreviewAudioControls>;
 }): JSX.Element | null {
+  const { inputs, activeId } = audio;
   const [selected, select] = useState<string>();
-  const input = inputs.find(({ id }) => id === selected) ?? inputs[0];
-  const receiver = input?.receiver;
-  const listening = useNdiAudioReceiver();
-  const audible = receiver !== undefined && receiver === listening;
-  useEffect(
-    () => () => {
-      if (receiver !== undefined) stopNdiAudio(receiver);
-    },
-    [receiver],
-  );
+  const input =
+    inputs.find(({ id }) => id === activeId) ??
+    inputs.find(({ id }) => id === selected) ??
+    inputs[0];
   if (input === undefined) return null;
+  const state = audio.stateOf(input.id);
   return (
     <>
       {inputs.length > 1 && (
         <select
           className="cg-pgm-audio-select"
-          aria-label="Preview input sound source"
+          aria-label="Preview live-input sound source"
           value={input.id}
-          onChange={(event) => select(event.currentTarget.value)}
+          onChange={(event) => {
+            const id = event.currentTarget.value;
+            select(id);
+            if (activeId !== undefined && activeId !== id) audio.toggle(id);
+          }}
         >
           {inputs.map(({ id, name }) => (
             <option key={id} value={id}>
@@ -870,12 +876,21 @@ function PreviewNdiAudio({
       )}
       <Button
         variant="ghost"
-        aria-label="Preview input sound"
-        aria-pressed={audible}
-        title={(audible ? 'Mute preview · ' : 'Listen to preview · ') + input.name}
-        onClick={() => toggleNdiAudio(input.receiver)}
+        aria-label="Preview live-input sound"
+        aria-pressed={state === 'audible'}
+        title={
+          (state === 'connecting'
+            ? 'Cancel preview sound · '
+            : state === 'audible'
+              ? 'Mute preview · '
+              : 'Listen to preview · ') + input.name
+        }
+        onClick={() => {
+          select(input.id);
+          audio.toggle(input.id);
+        }}
       >
-        <Icon icon={audible ? Volume2 : VolumeX} size={13} />
+        <Icon icon={state === 'audible' ? Volume2 : VolumeX} size={13} />
       </Button>
     </>
   );

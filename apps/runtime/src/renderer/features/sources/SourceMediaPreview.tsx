@@ -38,6 +38,16 @@ interface SourceMediaPreviewProps {
   /** Each new explicit row Play request starts/resumes this player without remounting it. */
   playRequest?: number | undefined;
   onPreviewEngineChange?: PreviewOriginChanged | undefined;
+  plate?:
+    | {
+        name: string;
+        hasAudio?: boolean | undefined;
+        showPicture: (
+          element: HTMLVideoElement | HTMLImageElement | null,
+          engine?: PreviewEngine,
+        ) => void;
+      }
+    | undefined;
 }
 
 interface PreviewRequest {
@@ -57,6 +67,13 @@ interface PreviewTransport {
   message?: string;
 }
 
+interface PlateTransport {
+  name: string;
+  playing: boolean;
+  audible?: boolean | undefined;
+  toggleAudio?: (() => void) | undefined;
+}
+
 function MediaPreviewSurface({
   name,
   description,
@@ -65,6 +82,7 @@ function MediaPreviewSurface({
   picture,
   loading,
   transport,
+  plate,
 }: {
   name: string;
   description: string;
@@ -73,12 +91,13 @@ function MediaPreviewSurface({
   picture: ReactNode;
   loading: string | undefined;
   transport?: PreviewTransport | undefined;
+  plate?: PlateTransport | undefined;
 }): JSX.Element {
   const surface = useRef<HTMLElement>(null);
   const fullscreenButton = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [fullscreenError, setFullscreenError] = useState(false);
-  const togglePlayback = transport?.onTogglePlayback;
+  const togglePlayback = plate === undefined ? transport?.onTogglePlayback : undefined;
 
   useEffect(() => {
     if (togglePlayback === undefined) return;
@@ -140,6 +159,39 @@ function MediaPreviewSurface({
       window.removeEventListener('keydown', escape, true);
     };
   }, []);
+
+  if (plate !== undefined) {
+    const action = plate.playing ? 'Pause preview' : 'Play preview';
+    const audio = plate.audible ? 'Mute preview' : 'Listen to preview';
+    const toggle = transport?.onTogglePlayback;
+    const status = loading ?? transport?.message;
+    return (
+      <div className="cg-pvw-media-transport" data-pvw-media-transport="">
+        <div hidden>{picture}</div>
+        <Button
+          variant="icon"
+          aria-label={action + ' in ' + plate.name}
+          title={action}
+          disabled={toggle === undefined}
+          onClick={toggle}
+        >
+          <Icon icon={plate.playing ? Pause : Play} size={16} />
+        </Button>
+        {plate.toggleAudio !== undefined && (
+          <Button
+            variant="icon"
+            aria-label={audio + ' in ' + plate.name}
+            title={audio}
+            aria-pressed={plate.audible}
+            onClick={plate.toggleAudio}
+          >
+            <Icon icon={plate.audible ? Volume2 : VolumeX} size={16} />
+          </Button>
+        )}
+        {status !== undefined && <span role="status">{status}</span>}
+      </div>
+    );
+  }
 
   const fullscreenLabel = expanded ? 'Close fullscreen preview' : 'Fullscreen preview';
   const fullscreenToggle = document.fullscreenEnabled && (
@@ -296,13 +348,22 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     mediaOpen,
     mediaClose,
     onPreviewEngineChange,
+    plate,
   } = props;
   const foreground = useModalForeground();
   const topology = useProgramTopology(foreground ? (channel ?? null) : null);
   const route = sourcePreviewRoute(topology);
   const activeEngine = topology?.active;
   const lastRoute = useRef<string>();
-  const video = useRef<HTMLVideoElement>(null);
+  const video = useRef<HTMLVideoElement | null>(null);
+  const platePlayer = plate !== undefined;
+  const setVideo = useCallback(
+    (player: HTMLVideoElement | null) => {
+      if (platePlayer && player === null) video.current?.pause();
+      video.current = player;
+    },
+    [platePlayer],
+  );
   const playbackButton = useRef<HTMLButtonElement>(null);
   const [preview, setPreview] = useState<MediaPlaybackPreview | null>(null);
   const currentPreview = useRef<MediaPlaybackPreview | null>(null);
@@ -312,10 +373,11 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   const positionHeld = useRef(false);
   const [duration, setDuration] = useState(durationMs ?? 0);
   const [intent, setIntent] = useState<'playing' | 'paused' | 'stopped'>(
-    inline || playRequest !== undefined ? 'playing' : 'paused',
+    plate !== undefined ? 'stopped' : inline || playRequest !== undefined ? 'playing' : 'paused',
   );
   const currentIntent = useRef(intent);
   const [muted, setMuted] = useState(true);
+  const [decodedAudioUrl, setDecodedAudioUrl] = useState<string>();
   const [volume, setVolume] = useState(100);
   const [videoVisible, setVideoVisible] = useState(false);
   const [videoOrigin, setVideoOrigin] = useState<PreviewEngine>();
@@ -663,6 +725,10 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
     : posterUrl === undefined
       ? undefined
       : posterOrigin;
+  useLayoutEffect(() => {
+    plate?.showPicture(showVideo ? video.current : null, videoOrigin);
+  }, [plate, showVideo, videoOrigin, videoUrl]);
+  useLayoutEffect(() => () => plate?.showPicture(null), [plate]);
   useEffect(() => {
     if (posterUrl === undefined) setPosterOrigin(undefined);
     if (!showVideo) setVideoOrigin(undefined);
@@ -700,6 +766,9 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
   }
   const origin =
     displayedEngine === undefined ? null : `Server ${displayedEngine}${playbackOrigin}`;
+  const plateAudio =
+    showVideo &&
+    (plate?.hasAudio === true || (plate?.hasAudio !== false && decodedAudioUrl === videoUrl));
 
   return (
     <MediaPreviewSurface
@@ -707,6 +776,18 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       description={origin ?? 'Media preview'}
       inline={inline}
       file
+      plate={
+        plate === undefined
+          ? undefined
+          : {
+              name: plate.name,
+              playing: intent === 'playing',
+              ...(plateAudio && {
+                audible: !muted,
+                toggleAudio: () => setMuted((value) => !value),
+              }),
+            }
+      }
       loading={loading ? message : undefined}
       picture={
         <>
@@ -714,7 +795,7 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
             // Library preview manifests do not include caption assets.
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
-              ref={video}
+              ref={setVideo}
               src={videoUrl}
               poster={posterUrl}
               muted={muted}
@@ -765,6 +846,13 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
                   !matchesReadyPreview(event.currentTarget, currentPreview.current)
                 )
                   return;
+                if (plate !== undefined && plate.hasAudio === undefined) {
+                  const player = event.currentTarget as HTMLVideoElement & {
+                    webkitAudioDecodedByteCount?: number;
+                  };
+                  if ((player.webkitAudioDecodedByteCount ?? 0) > 0)
+                    setDecodedAudioUrl(player.getAttribute('src') ?? undefined);
+                }
                 position.current = Math.round(event.currentTarget.currentTime * 1_000);
                 setPositionMs(position.current);
               }}
@@ -882,6 +970,7 @@ function SampledSourceMediaPreview({
   playRequest,
   initialPlayback,
   onPreviewEngineChange,
+  plate,
 }: SourceMediaPreviewProps & { initialPlayback?: boolean }): JSX.Element {
   const foreground = useModalForeground();
   const end = Math.min(Math.ceil(durationMs ?? 0) - 1, MAX_MEDIA_PREVIEW_POSITION_MS);
@@ -940,7 +1029,8 @@ function SampledSourceMediaPreview({
   }, [inline, playRequest]);
 
   useEffect(() => {
-    if (!foreground || poster !== undefined || currentPoster !== undefined) return;
+    if (plate !== undefined || !foreground || poster !== undefined || currentPoster !== undefined)
+      return;
     let current = true;
     void loadPoster(id).then((src) => {
       if (current && src !== null) setLoadedPoster({ id, load: loadPoster, src });
@@ -948,7 +1038,15 @@ function SampledSourceMediaPreview({
     return () => {
       current = false;
     };
-  }, [id, loadPoster, poster, currentPoster, foreground]);
+  }, [id, loadPoster, poster, currentPoster, foreground, plate]);
+
+  useLayoutEffect(() => {
+    if (plate === undefined) return;
+    if (picture === null) plate.showPicture(null);
+    else if (decodedPicture?.src === picture)
+      plate.showPicture(sampledImage.current, decodedPicture.engine);
+  }, [plate, picture, decodedPicture]);
+  useLayoutEffect(() => () => plate?.showPicture(null), [plate]);
 
   useEffect(() => {
     if (!foreground || !enabled || channel === undefined || request === null) return;
@@ -1021,6 +1119,7 @@ function SampledSourceMediaPreview({
       name={name}
       description={enabled ? 'Silent preview · sampled frames' : 'Poster'}
       inline={inline}
+      plate={plate === undefined ? undefined : { name: plate.name, playing }}
       loading={status === 'loading' ? 'Loading frame…' : undefined}
       picture={
         src === null ? (
@@ -1049,6 +1148,7 @@ function SampledSourceMediaPreview({
               onTogglePlayback: foreground ? togglePlayback : undefined,
               onSeek: (nextPosition) => start(nextPosition, playing),
               ...(status === 'unavailable' && { message: 'Preview unavailable' }),
+              ...(plate !== undefined && status === 'ready' && { message: 'Silent preview' }),
               controls: (
                 <>
                   <Button

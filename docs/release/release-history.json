@@ -105,6 +105,10 @@
         {
           "fa": "در پایلوت External CG v2، Previous و Go to page برای Sequence Folder با تصاویر همراه قالب، حالت Static و گذار Cut در دسترس‌اند. CG Control شمارهٔ صفحه را از چیدمان اعمال‌شدهٔ Playout می‌گیرد.",
           "en": "In the External CG v2 pilot, Previous and Go to page support bundled Sequence Folder pictures in static templates with Cut transitions. CG Control reads the page from Playout's applied layout."
+        },
+        {
+          "fa": "در PVW، صدای هر ورودی قابل شنیدن از روی قاب کنترل می‌شود و آیکون قاب با کنترل صدای نوار PVW هماهنگ است. کلیپ‌ها در ابتدا متوقف و بی‌صدا هستند و هر قاب Play/Pause جداگانه دارد.",
+          "en": "In PVW, playable input audio can be controlled from its frame and the toolbar reflects the same listening state. Clips start paused and muted, with independent Play/Pause controls on their own frames."
         }
       ],
       "fixes": [
