@@ -91,6 +91,7 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **WHEN** CG Bridge last read the input catalogue from A but the selected source preview or meter is supplied by B
 - **THEN** the catalogue address names its own server, and the B badge identifies the source of the preview or meter independently of the active PGM member
 - **AND** A/B badges in Inspector and template source defaults stay beside the picker chevron for input and media selections.
+- **AND** Edit live layout shows the same compact colored A/B indicators for live inputs and media. The detailed status is available through the badges and the plate’s accessible description.
 
 #### Scenario: Read input preview states in the current interface language
 

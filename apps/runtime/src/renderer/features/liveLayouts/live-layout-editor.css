@@ -678,7 +678,6 @@
 }
 
 .cg-live-layout-frame-label > span {
-  display: block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

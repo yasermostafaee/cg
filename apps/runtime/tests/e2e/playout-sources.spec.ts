@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { promisify } from 'node:util';
 import { FRAME_A, FRAME_B } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 import { CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS } from '@cg/shared-schema';
+import { openNewLiveLayout } from './fixtures/live-layout-editor.js';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -747,6 +748,114 @@ for (const copy of [
     },
   );
 }
+
+test.describe('live layout plate source badges', () => {
+  const input = 'Studio camera with a long name assigned by the station operator';
+  const media = 'Live layout library clip with a long name assigned by the station operator';
+  test.use({
+    playoutSources: {
+      inputs: {
+        inputs: [{ id: 'studio', name: input, producer: { kind: 'ndi', source: 'Fixture (Cam)' } }],
+      },
+      media: [
+        {
+          id: 'plate-clip',
+          name: media,
+          clip: 'D:/Media Library/clips/plate-clip.mp4',
+          type: 'video',
+          durationMs: 12_000,
+        },
+      ],
+    },
+  });
+
+  test('shows compact A/B badges for long input and media names with an accessible description', async ({
+    app,
+  }) => {
+    const { page } = app;
+    await page.setViewportSize({ width: 1440, height: 980 });
+    await page.addInitScript(() => {
+      let installed: typeof window.cg | undefined;
+      Object.defineProperty(window, 'cg', {
+        configurable: true,
+        get: () => installed,
+        set: (bridge: typeof window.cg) => {
+          const capabilities = bridge.auth.capabilities;
+          bridge.auth.capabilities = () => {
+            const current = capabilities();
+            return current === null ? null : { ...current, controlLiveLayouts: true };
+          };
+          installed = bridge;
+        },
+      });
+    });
+    await page.reload();
+    await page.evaluate(() => {
+      const capabilities = window.cg.auth.capabilities();
+      if (capabilities === null) throw new Error('Expected station capabilities');
+      window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+      window.cg.link.status = () => 'live';
+      window.cg.sources.presence = async ({ sourceIds }) => ({
+        engines: ['A', 'B'],
+        sources: Object.fromEntries(
+          sourceIds.map((id) => [
+            id,
+            id === 'in-studio' ? { A: 'present', B: 'missing' } : { A: 'missing', B: 'present' },
+          ]),
+        ),
+      });
+    });
+
+    await openNewLiveLayout(page);
+    const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+    const add = editor.getByRole('button', { name: 'Add plate', exact: true });
+    const field = editor.getByRole('combobox', { name: 'Plate input', exact: true });
+    await add.click();
+    await app.chooseSource(field, { input });
+    await add.click();
+    await app.chooseSource(field, { media, search: 'Live layout library clip' });
+
+    for (const [kind, index] of [
+      ['input', 1],
+      ['media', 2],
+    ] as const) {
+      const row = editor.getByRole('button', { name: 'Edit plate ' + index, exact: true });
+      const label = row.locator('[data-source-label="' + kind + '"]');
+      const badges = label.locator('[data-source-presence]');
+      const status = kind === 'input' ? ['present', 'missing'] : ['missing', 'present'];
+      const description =
+        kind === 'input'
+          ? /Server A: available\. Server B: unavailable/
+          : /Server A: unavailable\. Server B: available/;
+      await expect(badges).toBeVisible();
+      await expect(badges.locator('[data-source-presence-server]')).toHaveText(['A', 'B']);
+      await expect(badges.locator('[data-source-presence-server="A"]')).toHaveAttribute(
+        'data-source-presence-state',
+        status[0]!,
+      );
+      await expect(badges.locator('[data-source-presence-server="B"]')).toHaveAttribute(
+        'data-source-presence-state',
+        status[1]!,
+      );
+      await expect(badges.locator('[data-source-preview-provider]')).toHaveCount(0);
+      await expect(row).toHaveAccessibleDescription(description);
+      const detail = row.locator('.cg-live-layout-frame-label > [hidden]');
+      await expect(detail).toHaveText(description);
+      await expect(detail).toBeHidden();
+      expect(
+        await label.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          const name = element.querySelector('.cg-source-label__name');
+          if (name === null || name.scrollWidth <= name.clientWidth) return false;
+          return [...element.querySelectorAll('[data-source-presence-server]')].every((badge) => {
+            const box = badge.getBoundingClientRect();
+            return box.left >= bounds.left && box.right <= bounds.right;
+          });
+        }),
+      ).toBe(true);
+    }
+  });
+});
 
 test('the input picker draws consecutive direct NDI frames and meters local PCM', async ({
   app,
