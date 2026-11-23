@@ -1,3 +1,4 @@
+import { feedback } from '../i18n/locale.js';
 /**
  * R-007 — the async-feedback state machine for a bridge-round-trip button,
  * framework-free so it unit-tests with an injected scheduler. The React
@@ -127,14 +128,14 @@ export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted
     is edited, and silently.
   */
   const ours = errorCodeMessage(res.errorCode);
-  if (ours !== null && prefersOwnMessage(res.errorCode)) return ours;
-  if (res.message !== undefined && res.message !== '') return res.message;
-  return ours ?? notAccepted;
+  if (ours !== null && prefersOwnMessage(res.errorCode)) return feedback(ours);
+  if (res.message !== undefined && res.message !== '') return feedback(res.message);
+  return feedback(ours ?? notAccepted);
 }
 
 /** The message for a REJECTED action (e.g. the link is down). Shared, see above. */
 export function asyncRejectionMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'Request failed.';
+  return feedback(err instanceof Error ? err.message : 'Request failed.');
 }
 
 const IDLE: AsyncView = {

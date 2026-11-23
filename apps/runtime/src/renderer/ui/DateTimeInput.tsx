@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { useMaskedDateTime, type MaskedInput } from '@cg/gesture';
@@ -89,6 +90,7 @@ export function DateTimeInput({
   dirty = false,
   now = Date.now,
 }: DateTimeInputProps): JSX.Element {
+  const localizeUi = useUiText();
   const [calendar, setCalendar] = useCalendarChoice();
   const shown = segmentDigits(digits, calendar);
   const m = useMaskedDateTime({
@@ -171,7 +173,7 @@ export function DateTimeInput({
       )}
       <div className="cg-datetime__choices">
         {mode === 'datetime' && (
-          <div className="cg-datetime__calendars" role="group" aria-label="Calendar">
+          <div className="cg-datetime__calendars" role="group" aria-label={localizeUi('Calendar')}>
             {CALENDAR_SYSTEMS.map((system) => (
               <Button
                 key={system}
@@ -185,7 +187,7 @@ export function DateTimeInput({
             ))}
           </div>
         )}
-        <div className="cg-datetime__shortcuts" role="group" aria-label="From now">
+        <div className="cg-datetime__shortcuts" role="group" aria-label={localizeUi('From now')}>
           {NOW_PLUS_SHORTCUTS.map((s) => (
             <Button
               key={s.label}
@@ -248,6 +250,7 @@ function DatePickerButton({
   now: () => number;
   onPick: (day: { year: number; month: number; day: number }) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const anchor = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const [view, setView] = useState<{ year: number; month: number } | null>(null);
@@ -266,7 +269,7 @@ function DatePickerButton({
       <Button
         ref={anchor}
         variant="icon"
-        aria-label="Pick a date"
+        aria-label={localizeUi('Pick a date')}
         aria-haspopup="dialog"
         aria-expanded={view !== null}
         aria-controls={view !== null ? panelId : undefined}
@@ -280,7 +283,7 @@ function DatePickerButton({
           anchor={anchor}
           onClose={() => setView(null)}
           id={panelId}
-          aria-label="Pick a date"
+          aria-label={localizeUi('Pick a date')}
           minWidth={260}
           maxHeight={360}
           initialFocusSelector="[data-grid-focus]"
@@ -320,6 +323,7 @@ function MonthGridPanel({
   onView: (view: { year: number; month: number }) => void;
   onPick: (day: { year: number; month: number; day: number }) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const grid = monthGrid(calendar, view.year, view.month, lunarAdjust);
   const rtl = calendar !== 'gregorian';
   const inMonth = picked.year === view.year && picked.month === view.month;
@@ -330,7 +334,7 @@ function MonthGridPanel({
       <div className="cg-datetime-grid__head">
         <Button
           variant="icon"
-          aria-label="Previous month"
+          aria-label={localizeUi('Previous month')}
           onClick={() => onView(addMonths(view, -1))}
         >
           <Icon icon={rtl ? ChevronRight : ChevronLeft} />
@@ -338,11 +342,15 @@ function MonthGridPanel({
         <span className="cg-datetime-grid__title" data-datetime-grid-title="">
           <bdi>{`${MONTH_NAMES[calendar][view.month - 1] ?? ''} ${n(view.year)}`}</bdi>
         </span>
-        <Button variant="icon" aria-label="Next month" onClick={() => onView(addMonths(view, 1))}>
+        <Button
+          variant="icon"
+          aria-label={localizeUi('Next month')}
+          onClick={() => onView(addMonths(view, 1))}
+        >
           <Icon icon={rtl ? ChevronLeft : ChevronRight} />
         </Button>
       </div>
-      <div className="cg-datetime-grid__days" role="group" aria-label="Days">
+      <div className="cg-datetime-grid__days" role="group" aria-label={localizeUi('Days')}>
         {grid.heads.map((h, i) => (
           <span key={`head-${String(i)}`} className="cg-datetime-grid__weekday" aria-hidden="true">
             {h}
@@ -395,6 +403,7 @@ function TimePickerButton({
   lunarAdjust: number;
   onPick: (time: { hour: number; minute: number; second: number }) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const anchor = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const [open, setOpen] = useState(false);
@@ -404,7 +413,7 @@ function TimePickerButton({
       <Button
         ref={anchor}
         variant="icon"
-        aria-label="Pick a time"
+        aria-label={localizeUi('Pick a time')}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
@@ -418,7 +427,7 @@ function TimePickerButton({
           anchor={anchor}
           onClose={() => setOpen(false)}
           id={panelId}
-          aria-label="Pick a time"
+          aria-label={localizeUi('Pick a time')}
           minWidth={240}
           maxHeight={340}
           initialFocusSelector="[data-clock-focus]"
@@ -426,7 +435,7 @@ function TimePickerButton({
           <div className="cg-datetime-clock" data-datetime-clock="">
             <div className="cg-datetime-clock__cols">
               <TimeColumn
-                label="Hours"
+                label={localizeUi('Hours')}
                 values={HOURS}
                 picked={parts.hour}
                 shown={shown}
@@ -434,14 +443,14 @@ function TimePickerButton({
                 onPick={(hour) => onPick({ ...time, hour })}
               />
               <TimeColumn
-                label="Minutes"
+                label={localizeUi('Minutes')}
                 values={SIXTY}
                 picked={parts.minute}
                 shown={shown}
                 onPick={(minute) => onPick({ ...time, minute })}
               />
               <TimeColumn
-                label="Seconds"
+                label={localizeUi('Seconds')}
                 values={SIXTY}
                 picked={parts.second}
                 shown={shown}
@@ -457,7 +466,7 @@ function TimePickerButton({
                 setOpen(false);
               }}
             >
-              Now
+              {localizeUi('Now')}
             </Button>
           </div>
         </Popover>

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { Move, RotateCcw } from 'lucide-react';
@@ -295,6 +296,7 @@ function PreviewPanDraft({
   stagedFocus: LiveCropFocus;
   onFocusChange: (focus: LiveCropFocus) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [dragFocus, setDragFocus] = useState<LiveCropFocus | null>(null);
   const focus = dragFocus ?? stagedFocus;
   const commitFocus = (next: LiveCropFocus): void => {
@@ -547,7 +549,7 @@ function PreviewPanDraft({
               className="cg-pan-draft__resize"
               data-pan-resize-corner={corner.name}
               aria-label={`Resize ${corner.name} crop corner in ${plateLabel}`}
-              title="Resize crop"
+              title={localizeUi('Resize crop')}
               {...gestureProps(corner)}
               onKeyDown={(event) => {
                 const rect = source.current?.getBoundingClientRect();
@@ -588,8 +590,8 @@ function PreviewPanDraft({
       <Button
         variant="secondary"
         className="cg-pan-draft__center"
-        aria-label="Center preview crop"
-        title="Center crop"
+        aria-label={localizeUi('Center preview crop')}
+        title={localizeUi('Center crop')}
         aria-disabled={blocked || (!horizontal && !vertical)}
         disabled={!horizontal && !vertical}
         onClick={() => commitFocus({ ...focus, ...DEFAULT_LIVE_CROP_FOCUS })}

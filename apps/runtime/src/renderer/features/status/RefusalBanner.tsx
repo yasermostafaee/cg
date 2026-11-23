@@ -1,3 +1,4 @@
+import { useUiText, useFeedbackText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useSyncExternalStore } from 'react';
 import { Notice } from '../../ui/Notice.js';
@@ -75,6 +76,8 @@ export function RefusalBanner({
    */
   scope?: number | null;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
+  const message = useFeedbackText();
   const engine = useEngineName();
   const refusal = useSyncExternalStore(onRefusal, getRefusal, getRefusal);
   useEffect(armE2ESeam, []);
@@ -87,8 +90,11 @@ export function RefusalBanner({
     only from the second press — "(1 times)" on a first refusal would be noise, and the
     plural is spelled rather than computed from a bare `s` because "1 time" never renders.
   */
+  const sentence = message(refusal.message);
   const text =
-    refusal.count > 1 ? `${refusal.message} (${String(refusal.count)} times)` : refusal.message;
+    refusal.count > 1
+      ? message('{message} ({count} times)', { message: sentence, count: refusal.count })
+      : sentence;
 
   return (
     <div className="cg-refusal" data-refusal="" data-refusal-count={String(refusal.count)}>
@@ -108,7 +114,7 @@ export function RefusalBanner({
           ? { detail: playoutEngineWording(refusal.detail, engine) }
           : {})}
         onDismiss={clearRefusal}
-        dismissLabel="Dismiss this refusal"
+        dismissLabel={localizeUi('Dismiss this refusal')}
       />
     </div>
   );

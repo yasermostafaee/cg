@@ -380,11 +380,20 @@ nothing is a recorded intent, not sound on air. The dialog's footer SHALL carry
 frames included; the two facts that qualify an irreversible write — that ON does not restore the
 previous fader level, and that there is no un-solo — SHALL be on the controls that perform them.
 The dialog SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
+Plate labels, accessible control names and refusals SHALL use the authored plate name or a
+numbered plate fallback. The source name SHALL follow the active plate binding. An unresolved
+source SHALL have a readable fallback. Technical identifiers SHALL remain in control payloads.
 
 #### Scenario: A ready row's raised plate does not read as audible
 
 - **WHEN** a plate is raised on a row that owns no seats and the dialog is opened **THEN** that
   plate reads `Not seated` at the raised percentage, and no plate in the dialog reads `Audible`
+
+#### Scenario: A declared plate is named before taking
+
+- **WHEN** the dialog opens on an unseated plate with an authored title or Focus alias
+- **THEN** it shows the authored name, the resolved source name if available, and `Not seated`
+- **AND** its visible and accessible text does not expose its frame ID
 
 #### Scenario: A held plate reads as hidden
 

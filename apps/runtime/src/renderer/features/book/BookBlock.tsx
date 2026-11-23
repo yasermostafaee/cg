@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight, ListOrdered } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
@@ -98,6 +99,7 @@ export function BookBlock({
   onAir,
   fit = 'contain',
 }: BookBlockProps): JSX.Element {
+  const localizeUi = useUiText();
   const canEdit = managedBook === undefined;
   const loaded = managedBook !== 'authored' && Array.isArray(value);
   const pages = bookPagesOf(loaded ? value : defaults);
@@ -159,7 +161,7 @@ export function BookBlock({
     >
       {canEdit && dropping && (
         <span className="cg-drop-hint" aria-hidden="true">
-          Drop to replace the pictures
+          {localizeUi('Drop to replace the pictures')}
         </span>
       )}
       <div className="cg-book__facts">
@@ -187,7 +189,10 @@ export function BookBlock({
         raster={raster}
       />
       {managedBook === 'unsupported' && (
-        <Notice noticeRole="notice" text="Page controls unavailable in External CG v2." />
+        <Notice
+          noticeRole="notice"
+          text={localizeUi('Page controls unavailable in External CG v2.')}
+        />
       )}
       {book !== null && managedBook !== 'unsupported' && (
         <BookTurn
@@ -207,11 +212,11 @@ export function BookBlock({
             onClick={() => setManaging(true)}
           >
             <Icon icon={ListOrdered} size={13} />
-            Manage pages…
+            {localizeUi('Manage pages…')}
           </Button>
           {busy !== null && (
             <span className="cg-book-count" role="status">
-              Loading {String(busy.done)} / {String(busy.total)}…
+              {localizeUi('Loading')} {String(busy.done)} / {String(busy.total)}…
             </span>
           )}
         </div>
@@ -411,6 +416,7 @@ function BookTurn({
   onAir: boolean;
   managed: boolean;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engineName = useEngineName();
   const [typed, setTyped] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -453,14 +459,14 @@ function BookTurn({
     <div data-book-bar="">
       {!managed && (
         <div className="cg-book__row cg-book__advance" role="group" aria-label={`Advance ${title}`}>
-          <span className="cg-book-count">Advance</span>
+          <span className="cg-book-count">{localizeUi('Advance')}</span>
           <Button
             variant="neutral"
             aria-pressed={book.advance === 'manual'}
             disabled={busy}
             onClick={() => void setAdvance('manual')}
           >
-            Manual
+            {localizeUi('Manual')}
           </Button>
           <Button
             variant="neutral"
@@ -468,7 +474,7 @@ function BookTurn({
             disabled={busy}
             onClick={() => void setAdvance('auto')}
           >
-            Auto
+            {localizeUi('Auto')}
           </Button>
         </div>
       )}
@@ -483,7 +489,7 @@ function BookTurn({
           onClick={() => void turn('previous')}
         >
           <Icon icon={ChevronLeft} size={13} flipRtl />
-          Previous
+          {localizeUi('Previous')}
         </Button>
         {/* The page box and its ` / 87` are one LTR readout, whatever the panel's direction. */}
         <span className="cg-book__page" dir="ltr">
@@ -509,7 +515,7 @@ function BookTurn({
           disabled={unavailable || (!book.wrap && book.page >= book.count && (managed || !onAir))}
           onClick={() => void turn('next')}
         >
-          Next
+          {localizeUi('Next')}
           <Icon icon={ChevronRight} size={13} flipRtl />
         </Button>
         <Button
@@ -520,7 +526,7 @@ function BookTurn({
             if (target !== null) void turn(target);
           }}
         >
-          Go
+          {localizeUi('Go')}
         </Button>
       </div>
       {refusal !== null && (

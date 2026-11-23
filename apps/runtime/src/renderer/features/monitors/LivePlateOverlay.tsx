@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { Fragment, type CSSProperties } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import type { ChannelRaster } from '@cg/shared-ipc';
@@ -215,6 +216,7 @@ export function LivePlateOverlay({
   fit,
   zIndex,
 }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   const previewAudio = usePreviewAudio();
   if (placements.length === 0) return null;
   // `fit` is positive by construction (the stage only sets it from a positive
@@ -340,12 +342,14 @@ export function LivePlateOverlay({
                         {plateLabel}
                       </span>
                     )}
-                    {roomForLabel && p.cropEdges && <span style={styles.fit}>Crop edges</span>}
+                    {roomForLabel && p.cropEdges && (
+                      <span style={styles.fit}>{localizeUi('Crop edges')}</span>
+                    )}
                     {audio !== undefined && (
                       <span
                         style={{ ...styles.audio, color: audio.color }}
                         data-live-plate-audio={programmeAudio}
-                        title="Programme audio setting"
+                        title={localizeUi('Programme audio setting')}
                       >
                         <Icon icon={audio.icon} size={11} />
                       </span>
@@ -373,7 +377,9 @@ export function LivePlateOverlay({
                   <span style={styles.plate}>
                     <bdi>{plateLabel}</bdi>
                   </span>
-                  {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
+                  {p.cropEdges === true && (
+                    <span style={styles.fit}>{localizeUi('Crop edges')}</span>
+                  )}
                   {assigned ? (
                     // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
                     <span style={styles.source}>
@@ -381,7 +387,7 @@ export function LivePlateOverlay({
                     </span>
                   ) : (
                     <span style={styles.unassigned} data-live-plate-unassigned="">
-                      no source assigned
+                      {localizeUi('no source assigned')}
                     </span>
                   )}
                   {/*

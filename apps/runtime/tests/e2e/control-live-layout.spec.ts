@@ -5,11 +5,12 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { SourceCatalog } from '@cg/shared-ipc';
+import { fixedBankSlots, type SourceCatalog } from '@cg/shared-ipc';
 import { controlLiveLayoutFocusLookId, type Scene } from '@cg/shared-schema';
 import { pack, sha256Hex } from '@cg/vcg-format';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockFocusArtwork } from '../../../../tools/caspar-bridge/tests/support/mock-focus-artwork.js';
+import { closeLiveLayoutCatalogue, openNewLiveLayout } from './fixtures/live-layout-editor.js';
 
 const inputNames = ['Studio camera', 'Guest line 1', 'Guest line 2'];
 const liveLayerRange = { start: 60, end: 79 };
@@ -171,10 +172,12 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
     await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
     await page.goto('/');
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page
-      .getByRole('region', { name: 'Layers' })
-      .getByRole('button', { name: 'New live layout', exact: true })
-      .click();
+    await expect(
+      page
+        .getByRole('region', { name: 'Layers' })
+        .getByRole('button', { name: 'New live layout', exact: true }),
+    ).toHaveCount(0);
+    await openNewLiveLayout(page);
     const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
     const tabs = editor.getByRole('tablist', { name: 'Layout settings', exact: true });
     await expect(tabs.getByRole('tab')).toHaveText(['Plate', 'Preset', 'Layout']);
@@ -351,7 +354,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
     await page.goto('/');
-    await page.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     const editor = page.getByRole('dialog', { name: 'New live layout' });
     const background = (dialog: Locator) =>
       dialog.getByRole('region', { name: 'Fallback background' });
@@ -513,6 +516,7 @@ test('per-plate fallback previews survive save and reopen with an independent on
     });
     await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
     await expect(editor).toBeHidden();
+    await closeLiveLayoutCatalogue(page);
 
     const stored = runtime.templateList(1).find(({ name }) => name === 'Fallback test');
     expect(stored?.controlLiveLayout?.frames[0]).toMatchObject({
@@ -662,6 +666,7 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
   try {
     const directory = testInfo.outputPath('bridge');
     fs.mkdirSync(directory, { recursive: true });
+    const bank = { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } };
     bridge = await createBridge({
       port: 0,
       connection: {
@@ -669,7 +674,7 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
         strategy: 'mirror-sync',
         autoFailoverEnabled: false,
       },
-      fixedLayers: { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } },
+      fixedLayers: bank,
       sourceCatalog: {
         layerRange: liveLayerRange,
         sources: [
@@ -684,13 +689,23 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
       stackPath: path.join(directory, 'stack.json'),
       templatesDir: path.join(directory, 'templates'),
     });
+    await bridge.runtime.whenServerHealthy(15_000);
+    const last = fixedBankSlots(bank).at(-1);
+    if (last === undefined) throw new Error('Missing declared test row');
+    await expect
+      .poll(() =>
+        engine
+          .receivedCommands()
+          .some(({ line }) => line === `MIXER ${last.channel}-${last.layer} VOLUME 1`),
+      )
+      .toBe(true);
+    const launchCommands = engine.receivedCommands().length;
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.addInitScript((url) => {
       Object.assign(window, { __CG_BRIDGE_URL__: url, __CG_SPLASH_DISABLED__: true });
     }, bridge.url);
     await page.goto('/');
-    const open = page.getByRole('button', { name: 'New live layout', exact: true });
-    await expect(open).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
     await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 320;
@@ -729,7 +744,7 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
           })),
       });
     });
-    await open.click();
+    await openNewLiveLayout(page);
     const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
     await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
     await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
@@ -785,6 +800,7 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
       .fill('NDI preview sound');
     await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
     await expect(editor).toBeHidden();
+    await closeLiveLayoutCatalogue(page);
     const template = bridge.runtime
       .templateList(1)
       .find(({ name }) => name === 'NDI preview sound');
@@ -830,8 +846,10 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
     expect(
       engine
         .receivedCommands()
-        .some(({ line }) => /^(?:PLAY|CG (?:PLAY|UPDATE)|MIXER)/i.test(line)),
-    ).toBe(false);
+        .slice(launchCommands)
+        .map(({ line }) => line)
+        .filter((line) => /^(?:PLAY|CG (?:PLAY|UPDATE)|MIXER)/i.test(line)),
+    ).toEqual([]);
   } finally {
     await bridge?.close();
     await engine.stop();
@@ -881,9 +899,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
     await page.goto('/');
     const layers = page.getByRole('region', { name: 'Layers' });
-    await expect(layers.getByRole('button', { name: 'New live layout' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(layers).toBeVisible({ timeout: 15_000 });
     // Live camera snapshots are reads, and the rest of the app and wire use the actual Bridge.
     await page.evaluate(() => {
       const canvas = document.createElement('canvas');
@@ -918,7 +934,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       window.cg.sourcePreviews.thumbnails = ({ sourceIds }) =>
         Promise.resolve(stalled() ? pictureFrames(sourceIds, true) : { frames: [] });
     });
-    await layers.getByRole('button', { name: 'New live layout' }).click();
+    await openNewLiveLayout(page);
     const editor = page.getByRole('dialog', { name: 'New live layout' });
     const stage = editor.locator('[data-layout-preview]');
     const saveLayout = editor.getByRole('button', { name: 'Save layout', exact: true });
@@ -1503,6 +1519,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
     await editor.getByRole('button', { name: 'Save layout' }).click();
     await expect(editor).toBeHidden({ timeout: 20_000 });
+    await closeLiveLayoutCatalogue(page);
 
     const listed = runtime.templateList(1).find(({ name }) => name === 'Studio panel');
     expect(listed?.controlLiveLayout?.presets.map(({ name }) => name)).toEqual([

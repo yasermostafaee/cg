@@ -290,7 +290,7 @@ test('§6 — every tag in the dialog is inert, and reads quieter than a button 
     'Connection',
     'Live sources',
     'Text file delimiters',
-    'Lunar Hijri correction',
+    'General',
     'Layers',
   ]) {
     await rail.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();

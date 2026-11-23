@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useReadOnlyReason } from '../../hooks/useCanOperate.js';
 import { colors } from '../../theme.js';
 import { Tag } from '../../ui/Tag.js';
@@ -27,11 +28,12 @@ import { Tag } from '../../ui/Tag.js';
 const style = { color: colors.textMuted } as const;
 
 export function ReadOnlyIndicator(): JSX.Element | null {
+  const localizeUi = useUiText();
   const reason = useReadOnlyReason();
   if (reason === null) return null;
 
   return (
-    <Tag className="cg-pill" role="status" aria-label="Operating state">
+    <Tag className="cg-pill" role="status" aria-label={localizeUi('Operating state')}>
       <span style={style}>{reason}</span>
     </Tag>
   );

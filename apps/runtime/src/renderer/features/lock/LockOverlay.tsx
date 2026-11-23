@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Lock } from 'lucide-react';
 import { colors, cssVars, LOCK_PX } from '../../theme.js';
@@ -153,6 +154,7 @@ const styles = {
  * LAN, a dialog left open over the scrim, a stale render).
  */
 export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   const cardRef = useRef<HTMLDivElement>(null);
 
   /*
@@ -170,13 +172,18 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
   if (!engaged) return null;
 
   return (
-    <div style={styles.scrim} role="dialog" aria-label="Lock screen" aria-modal="true">
+    <div
+      style={styles.scrim}
+      role="dialog"
+      aria-label={localizeUi('Lock screen')}
+      aria-modal="true"
+    >
       <LockCard
         cardRef={cardRef}
         {...(engagedAt !== undefined ? { engagedAt } : {})}
         {...(reason !== undefined ? { reason } : {})}
         onRelease={onRelease}
-        title="Console locked"
+        title={localizeUi('Console locked')}
         sub="Playout continues. Enter your PIN to use the console."
         submitLabel="Unlock console"
       />
@@ -213,6 +220,7 @@ export function LockCard({
   sub: string;
   submitLabel: string;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [wrongAttempts, setWrongAttempts] = useState(0);
@@ -266,7 +274,7 @@ export function LockCard({
           <div style={styles.metaRow}>
             {reason !== undefined && <span style={styles.chip}>{reason.toUpperCase()}</span>}
             {elapsed !== '' && (
-              <span style={styles.chip} aria-label="Locked for">
+              <span style={styles.chip} aria-label={localizeUi('Locked for')}>
                 {elapsed}
               </span>
             )}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useLink } from '../../hooks/useLink.js';
 import { colors, cssVars } from '../../theme.js';
@@ -159,6 +160,7 @@ export function LinkIndicator({
 }: {
   reach: CasparReach;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const status = useLink();
   const engine = useEngineName();
   const v = visual(status, reach);
@@ -166,8 +168,8 @@ export function LinkIndicator({
     <Tag
       className="cg-pill"
       role="status"
-      aria-label="Bridge link"
-      title={playoutEngineWording(v.title, engine)}
+      aria-label={localizeUi('Bridge link')}
+      title={playoutEngineWording(localizeUi(v.title), engine)}
     >
       {/*
         THE DOT MAY CARRY A HUE THE LABEL MAY NOT (owner: «فقط دایره کنار bridge
@@ -191,7 +193,7 @@ export function LinkIndicator({
         every other fault state, where one value clears both.
       */}
       <span style={{ color: v.dotColor ?? v.color }}>●</span>
-      <span style={{ color: v.color }}>{playoutEngineWording(v.text, engine)}</span>
+      <span style={{ color: v.color }}>{playoutEngineWording(localizeUi(v.text), engine)}</span>
     </Tag>
   );
 }

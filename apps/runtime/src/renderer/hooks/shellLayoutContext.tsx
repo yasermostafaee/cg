@@ -3,7 +3,8 @@ import {
   DEFAULT_INSPECTOR_PX,
   DEFAULT_MONITOR_PX,
   DEFAULT_MONITORS_SHOWN,
-  type ShellLayout,
+  DEFAULT_WORKSPACE_POSITIONS,
+  type ConfigurableShellLayout,
 } from './useShellLayout.js';
 
 /**
@@ -22,13 +23,13 @@ import {
  * author forgets to pass `layout`, and the missing button is invisible until an
  * operator needs it. Here the primitive cannot be used without the context.
  */
-const ShellLayoutContext = createContext<ShellLayout | null>(null);
+const ShellLayoutContext = createContext<ConfigurableShellLayout | null>(null);
 
 export function ShellLayoutProvider({
   layout,
   children,
 }: {
-  layout: ShellLayout;
+  layout: ConfigurableShellLayout;
   children: ReactNode;
 }): JSX.Element {
   return <ShellLayoutContext.Provider value={layout}>{children}</ShellLayoutContext.Provider>;
@@ -54,7 +55,7 @@ export function ShellLayoutProvider({
  * The stand-in reports `focus: 'none'` and no-op setters, so a panel outside the
  * provider renders normally and simply offers no fullscreen toggle.
  */
-const INERT: ShellLayout = {
+const INERT: ConfigurableShellLayout = {
   // The hook's own defaults, imported rather than re-spelled: two copies of a number is how
   // one of them comes to be wrong (they read 320 / 180 here after the defaults moved).
   inspectorPx: DEFAULT_INSPECTOR_PX,
@@ -65,6 +66,12 @@ const INERT: ShellLayout = {
   narrow: true,
   // The hook's own default, imported for the same reason the two sizes above are.
   monitorsShown: DEFAULT_MONITORS_SHOWN,
+  positions: DEFAULT_WORKSPACE_POSITIONS,
+  uiProfiles: [],
+  setPositions: () => undefined,
+  saveProfile: () => undefined,
+  loadProfile: () => undefined,
+  deleteProfile: () => undefined,
   setInspectorPx: () => undefined,
   setMonitorPx: () => undefined,
   setFocus: () => undefined,
@@ -73,6 +80,6 @@ const INERT: ShellLayout = {
   customized: false,
 };
 
-export function useShellLayoutContext(): ShellLayout {
+export function useShellLayoutContext(): ConfigurableShellLayout {
   return useContext(ShellLayoutContext) ?? INERT;
 }

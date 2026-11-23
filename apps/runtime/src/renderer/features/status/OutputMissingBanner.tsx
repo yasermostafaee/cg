@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import {
   checksLosingAir,
@@ -130,6 +131,7 @@ export function OutputMissingStrip({
   server: ServerHealth;
   scope?: number | null;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const configuration = playoutEngineWording('casparcg.config', engine);
   const verdict = outputVerdictOf(server);
@@ -149,14 +151,16 @@ export function OutputMissingStrip({
 
   if (verdict.kind === 'unverifiable') {
     return (
-      <div role="alert" aria-label="Program output unverified" style={styles.banner}>
+      <div role="alert" aria-label={localizeUi('Program output unverified')} style={styles.banner}>
         <span style={styles.text}>
-          PROGRAM OUTPUT UNVERIFIED — {engine === 'CasparCG' ? 'CASPARCG' : engine} ON SERVER{' '}
-          {server.label} IS UNREACHABLE, AND THE LAST CHECK FOUND CHANNEL {channels} WITHOUT ITS{' '}
-          {kinds} OUTPUT.
+          {localizeUi('PROGRAM OUTPUT UNVERIFIED —')} {engine === 'CasparCG' ? 'CASPARCG' : engine}{' '}
+          {localizeUi('ON SERVER')} {server.label}{' '}
+          {localizeUi('IS UNREACHABLE, AND THE LAST CHECK FOUND CHANNEL')} {channels}{' '}
+          {localizeUi('WITHOUT ITS')} {kinds} {localizeUi('OUTPUT.')}
           <span style={styles.detail}>
-            Last seen missing at {formatTime(verdict.lastObservedAt)}; this stays until the bridge
-            can reach {engine} and check again. {OUTPUT_DETAIL_POINTER}
+            {localizeUi('Last seen missing at')} {formatTime(verdict.lastObservedAt)}
+            {localizeUi('; this stays until the bridge can reach')} {engine}{' '}
+            {localizeUi('and check again.')} {OUTPUT_DETAIL_POINTER}
           </span>
         </span>
       </div>
@@ -164,15 +168,17 @@ export function OutputMissingStrip({
   }
 
   return (
-    <div role="alert" aria-label="Program output missing" style={styles.banner}>
+    <div role="alert" aria-label={localizeUi('Program output missing')} style={styles.banner}>
       <span style={styles.text}>
-        PROGRAM OUTPUT MISSING — CHANNEL {channels} HAS NO {kinds} OUTPUT. NOTHING ON THIS CHANNEL
-        REACHES AIR.
+        {localizeUi('PROGRAM OUTPUT MISSING — CHANNEL')} {channels} {localizeUi('HAS NO')} {kinds}{' '}
+        {localizeUi('OUTPUT. NOTHING ON THIS CHANNEL REACHES AIR.')}
         {losing.map((check) => (
           <span key={check.channel} style={styles.detail}>
-            Channel {String(check.channel)} on server {server.label}: {configuration} declares{' '}
-            {missingWords(check.missing.filter((m) => isAirOutputKind(m.kind)))} and {engine} is not
-            running it. The fix is on the playout machine, not here. {OUTPUT_DETAIL_POINTER}
+            {localizeUi('Channel')} {String(check.channel)} {localizeUi('on server')} {server.label}
+            : {configuration} {localizeUi('declares')}{' '}
+            {missingWords(check.missing.filter((m) => isAirOutputKind(m.kind)))} {localizeUi('and')}{' '}
+            {engine} {localizeUi('is not running it. The fix is on the playout machine, not here.')}{' '}
+            {OUTPUT_DETAIL_POINTER}
           </span>
         ))}
       </span>

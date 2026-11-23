@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { SharedTemplateThumbnail as TemplateThumbnail } from '@cg/shared-ipc';
 import type * as StaticScene from '@cg/template-runtime/static-scene';
@@ -86,6 +87,7 @@ export function SharedTemplateThumbnail({
   layoutSourceSha?: string | undefined;
   loadLayoutPosters?: LayoutPosterPreviewLoader | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [still, setStill] = useState<{ preview: ScenePreview; html: string }>();
   const [failedImage, setFailedImage] = useState<string>();
   useEffect(() => {
@@ -125,7 +127,7 @@ export function SharedTemplateThumbnail({
     <iframe
       className="cg-shared-template-entry__picture"
       aria-hidden="true"
-      title="Template thumbnail"
+      title={localizeUi('Template thumbnail')}
       tabIndex={-1}
       sandbox=""
       srcDoc={still.html}

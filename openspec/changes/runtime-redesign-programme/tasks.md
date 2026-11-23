@@ -1586,3 +1586,10 @@ renders answers "is this handled?" with a yes.
       `success`, not skipped; the one skipped step is the browser INSTALL, a cache hit).
       Checked both directions per `P-029` / `P-046`: a green run whose `e2e` was skipped would
       not discharge this, and neither would a red job that never reached the suite.
+
+## Plate audio naming
+
+- [x] Use authored and resolved source names in the dialog, fader and refusal.
+- [x] Add browser and DOM coverage for an unseated plate.
+- [x] Windows Chromium verified both dialog entry points, unseated labels and dialog geometry. The targeted Audio DOM suite passed 27 cases.
+- [ ] Record the Linux E2E run.

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import {
   activeLookOf,
@@ -60,6 +61,7 @@ export function LiveFrameAdjustments({
   previewLookId?: string | undefined;
   controlLiveLayout?: ControlLiveLayout | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const capabilities = useAuthCapabilities();
   const canOperate = useCanOperate();
   const lock = useLockCoverage();
@@ -216,20 +218,20 @@ export function LiveFrameAdjustments({
         <Button
           variant="neutral"
           disabled={!canResetFrames}
-          title="Restore the authored size and position of this template’s frames"
+          title={localizeUi('Restore the authored size and position of this template’s frames')}
           onClick={() => stageFramePlacementsReset(item.itemId, hasAppliedFrames)}
         >
-          Reset frames
+          {localizeUi('Reset frames')}
         </Button>
       )}
       {showResetCrop && (
         <Button
           variant="neutral"
           disabled={cropResets.length === 0}
-          title="Restore the authored crop and zoom in the active preset"
+          title={localizeUi('Restore the authored crop and zoom in the active preset')}
           onClick={resetCrop}
         >
-          Reset crop
+          {localizeUi('Reset crop')}
         </Button>
       )}
       {showAspect && (
@@ -240,7 +242,7 @@ export function LiveFrameAdjustments({
             onChange={setPreserveFrameAspect}
             disabled={!canEdit}
           />
-          Preserve frame aspect ratio
+          {localizeUi('Preserve frame aspect ratio')}
         </label>
       )}
       {controlLiveLayout === undefined ? (
@@ -257,7 +259,7 @@ export function LiveFrameAdjustments({
           {presetEffect && authoredEffect !== undefined && (
             <FrameEffectControls
               key={arrangeLookId}
-              label="Preset effect"
+              label={localizeUi('Preset effect')}
               disabled={!canEdit}
               preset={{
                 itemId: item.itemId,
@@ -273,7 +275,7 @@ export function LiveFrameAdjustments({
           {presetEffect && (
             <FrameEffectControls
               key={item.itemId}
-              label="Preset effect"
+              label={localizeUi('Preset effect')}
               disabled={!canEdit}
               preset={{ itemId: item.itemId, value: controlLiveLayout.effects.focus }}
             />
@@ -282,8 +284,9 @@ export function LiveFrameAdjustments({
       )}
       {layout?.kind === 'permissions' && (
         <p className="cg-frame-auto-layout cg-frame-auto-layout__notice" role="status">
-          Auto layout unavailable. In Designer, enable Allow move and unlock Resize for every frame
-          in this preset.
+          {localizeUi(
+            'Auto layout unavailable. In Designer, enable Allow move and unlock Resize for every frame in this preset.',
+          )}
         </p>
       )}
       <FrameAutoLayout

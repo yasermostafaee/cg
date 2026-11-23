@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { LucideIcon } from 'lucide-react';
@@ -87,6 +88,7 @@ function variantColor(variant: ContextMenuItem['variant']): string | undefined {
 }
 
 export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Element {
+  const t = useUiText();
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<number | null>(null);
 
@@ -183,7 +185,7 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
           const color = variantColor(item.variant);
           return (
             <div
-              key={item.label}
+              key={t(item.label)}
               data-index={i}
               role="menuitem"
               tabIndex={disabled ? -1 : 0}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useRef, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import type { TemplateInfo } from '@cg/shared-ipc';
@@ -63,6 +64,7 @@ function BackupDetails({
   template: TemplateInfo | null | undefined;
   compact: boolean;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const anchor = useRef<HTMLButtonElement>(null);
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -72,11 +74,11 @@ function BackupDetails({
         ref={anchor}
         variant="caution"
         className="cg-backup-status"
-        aria-label="Backup incomplete"
+        aria-label={localizeUi('Backup incomplete')}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        title="Backup incomplete. View details"
+        title={localizeUi('Backup incomplete. View details')}
         onClick={() => setOpen(!open)}
       >
         <Icon icon={TriangleAlert} size={12} />
@@ -87,7 +89,7 @@ function BackupDetails({
           anchor={anchor}
           onClose={() => setOpen(false)}
           id={id}
-          aria-label="Backup details"
+          aria-label={localizeUi('Backup details')}
           minWidth={320}
           maxHeight={360}
         >
@@ -108,12 +110,16 @@ function BackupDetails({
                 })}
               </ul>
             )}
-            {live && <p>Live inputs routed through Playout remain on the primary engine.</p>}
+            {live && (
+              <p>
+                {localizeUi('Live inputs routed through Playout remain on the primary engine.')}
+              </p>
+            )}
             {Array.from(new Set(clips.map(({ reason }) => reason)), (reason) => (
               <p key={reason}>{MEDIA_ISSUES[reason].next}</p>
             ))}
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Close
+              {localizeUi('Close')}
             </Button>
           </div>
         </Popover>

@@ -53,3 +53,10 @@
       Windows Edge decoded direct NDI pixels and rendered DeckLink snapshots inside their assigned plates.
       The native canvas kept the correct aspect, and the pictures returned to the matching frames when
       the operator returned to the two-input preset.
+
+## Local video transport in Preview
+
+- [x] Reuse the PVW plate player for eligible video in the live-layout editor.
+- [x] Add a browser scenario for manual Play, Pause and Reset.
+- [x] Windows Chromium verified manual Play, Pause and Reset in the editor with no automatic playback or Take.
+- [ ] Record the Linux E2E run.

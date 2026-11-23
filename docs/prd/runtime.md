@@ -4493,8 +4493,7 @@ bound by date, or revisit page by page. **Acceptance:**
 - WHEN a matching row is written while page 1 is open THEN it appears at the top; on an older page the
   operator is told a new event exists without that page shifting
 - WHEN a connected station admin downloads the archive in Windows CG Control THEN the already
-  authorized ZIP is saved to Windows Downloads. Audit reports the actual filename and path
-  after the complete write and shows any write failure.
+  authorized ZIP awaits confirmation in the Windows Save As picker. Audit reports the chosen path after writing, and cancelling leaves the archive unsaved.
 
 ## [~] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3; BUILT 2026-10-04 by `RELEASE-0111-01-A` A1 (change `console-polish`, tasks §11)
 
@@ -5358,3 +5357,49 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN playback survived the outage, a row was deliberately stopped or cleared, or the active engine changed THEN automatic recovery sends no new take for that row.
 - WHEN the window expires or a row cannot be recovered THEN the remaining affected rows use the operator-confirmed recovery notice.
 - WHEN a station admin edits the window in Connection → Advanced THEN Apply servers saves it with the connection settings.
+
+## [~] R-123 — Choose separate interface and feedback languages in CG Control ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/control-languages/`
+
+**What:** In General, the operator can set English, Persian or Arabic independently for interface text and command feedback. Both default to English.
+
+**Acceptance:**
+
+- WHEN the operator keeps the interface in English and selects Persian or Arabic feedback THEN action confirmations and refusals use that language.
+- WHEN the operator selects Persian or Arabic as the interface language THEN the settings, labels, fields and tables flow right to left and numeric transport fields and authored names retain their own direction.
+- WHEN the operator exports, edits and imports a language file THEN the console applies the local overrides and restores them on restart.
+
+## [~] R-124 — Arrange CG Control panels and save UI profiles ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/configure-control-workspace/`
+
+**What:** Choose the physical monitor order, whether layers are above or below monitors, and the Inspector side. Save and restore those positions and panel dimensions in local UI profiles.
+
+**Acceptance:**
+
+- WHEN a workspace option is changed THEN its panel moves and current previews and selected layers stay active.
+- WHEN a UI profile is loaded in any supported interface language THEN the saved physical positions and dimensions return.
+
+## [~] R-125 — Control local video preview per plate ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/author-live-layouts/`
+
+**What:** Give video plates in New live layout local Play/Pause and both PVW and New live layout a reset control after playback starts.
+
+**Acceptance:**
+
+- WHEN the editor preview first shows a video THEN it stays paused until that plate's Play is pressed.
+- WHEN Reset is pressed after playback then only that video's local preview returns to the start and pauses.
+
+## [~] R-126 — Group everyday CG Control settings in General ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/organize-control-general-settings/`
+
+**What:** Put language, workspace and the Lunar Hijri correction in one General tab.
+
+**Acceptance:**
+
+- WHEN Settings is opened THEN General contains the date correction and local preferences.
+- WHEN a station admin changes the correction THEN the existing bridge write and authorization apply.
+
+## [~] R-127 — Confirm reset of the delimiter list ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/confirm-delimiter-reset/`
+
+**What:** Explain how replacing custom delimiter choices can affect future file settings for graphics.
+
+**Acceptance:**
+
+- WHEN the operator cancels the warning THEN the list stays unchanged.
+- WHEN the operator confirms THEN the shipped delimiter list is restored.

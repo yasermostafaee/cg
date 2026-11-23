@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
@@ -11,6 +12,7 @@ export function FieldDescription({
   label: string;
   description: string | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const anchor = useRef<HTMLButtonElement>(null);
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -21,7 +23,7 @@ export function FieldDescription({
       <Button
         ref={anchor}
         variant="ghost"
-        title="Field description"
+        title={localizeUi('Field description')}
         aria-label={name}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -42,7 +44,7 @@ export function FieldDescription({
           <div className="cg-field-description">
             <p dir="auto">{description}</p>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Close
+              {localizeUi('Close')}
             </Button>
           </div>
         </Popover>

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState } from 'react';
 import { DEFAULT_OSC_PORT } from '@cg/shared-ipc';
 import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
@@ -29,6 +30,7 @@ export function BackupServerDialog({
   onCancel: () => void;
   onAdd: (draft: { host: string; amcpPort: string; oscPort: string }) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [host, setHost] = useState('');
   /*
     🔴 `SERVERS-SIMPLIFY-01` (T2, T5) — the ports are their DEFAULTS, shown as placeholders: an empty field
@@ -45,7 +47,7 @@ export function BackupServerDialog({
 
   return (
     <RecordDialog
-      title="Add backup server"
+      title={localizeUi('Add backup server')}
       /*
         🔴 `SETTINGS-MATCH-02` §8a — **THE VERB IS THE CONTRACT.** `Add to draft`, not `Add
         backup`: this dialog writes into the Servers DRAFT and the pane's `Apply servers` is
@@ -54,7 +56,7 @@ export function BackupServerDialog({
         prevent — that this small dialog is a way round it. It is not, and now it does not
         look like one either.
       */
-      confirmLabel="Add to draft"
+      confirmLabel={localizeUi('Add to draft')}
       lede="Changes will be applied with the rest of your server settings."
       confirmDisabled={invalid}
       onCancel={onCancel}
@@ -70,12 +72,12 @@ export function BackupServerDialog({
       }}
     >
       {/* §8a — the host takes the row on its own, and the two ports share the next one. */}
-      <DialogField label="Host address" id="backup-host" error={hostBad} focusFirst>
+      <DialogField label={localizeUi('Host address')} id="backup-host" error={hostBad} focusFirst>
         <TextInput
           className="cg-field--mono"
           dir="ltr"
           value={host}
-          aria-label="New backup host"
+          aria-label={localizeUi('New backup host')}
           invalid={hostBad === null ? undefined : true}
           data={{ 'data-modal-autofocus': '' }}
           /* `CLIENT-TEST-RELEASE-01` — a documentation address (RFC 5737), never a real station's. */
@@ -84,23 +86,23 @@ export function BackupServerDialog({
         />
       </DialogField>
       <div className="cg-setup-fields">
-        <DialogField label="AMCP port" id="backup-amcp" error={amcpBad}>
+        <DialogField label={localizeUi('AMCP port')} id="backup-amcp" error={amcpBad}>
           <NumericInput
             className="cg-field cg-field--mono"
             dir="ltr"
             allow="digits"
-            aria-label="New backup AMCP port"
+            aria-label={localizeUi('New backup AMCP port')}
             placeholder={String(AMCP_PORT)}
             value={amcpPort}
             onValueChange={setAmcpPort}
           />
         </DialogField>
-        <DialogField label="OSC port" id="backup-osc" error={oscBad}>
+        <DialogField label={localizeUi('OSC port')} id="backup-osc" error={oscBad}>
           <NumericInput
             className="cg-field cg-field--mono"
             dir="ltr"
             allow="digits"
-            aria-label="New backup OSC port"
+            aria-label={localizeUi('New backup OSC port')}
             placeholder={String(DEFAULT_OSC_PORT + 1)}
             value={oscPort}
             onValueChange={setOscPort}

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
   useCallback,
   useEffect,
@@ -39,6 +40,7 @@ export function LiveInputCheckTile({
   onStall: (previewId: string) => void;
   onPreviewEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const { channel, previewId } = view;
   const canvas = useRef<HTMLCanvasElement>(null);
   const ready = view.state === 'ready';
@@ -192,7 +194,7 @@ export function LiveInputCheckTile({
     <span
       className="cg-input-picture-meter"
       role="region"
-      aria-label="Live input preview"
+      aria-label={localizeUi('Live input preview')}
       data-input-check=""
     >
       <span className="cg-input-thumbnail cg-input-check-tile" data-input-thumbnail="active">
@@ -228,7 +230,7 @@ export function LiveInputCheckTile({
           <span className="cg-input-check-tile__actions">
             <Button
               variant="icon"
-              aria-label="Input preview sound"
+              aria-label={localizeUi('Input preview sound')}
               aria-pressed={audible}
               title={audible ? 'Mute input preview' : 'Listen to input preview'}
               disabled={!pictureLive}
@@ -239,7 +241,7 @@ export function LiveInputCheckTile({
             </Button>
             <Button
               variant="icon"
-              aria-label="Close input check"
+              aria-label={localizeUi('Close input check')}
               onClick={onClose}
               onKeyDown={handleButtonKey}
             >

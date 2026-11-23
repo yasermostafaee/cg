@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, useState } from 'react';
 import { FolderOpen, Image as ImageIcon } from 'lucide-react';
 import {
@@ -55,6 +56,7 @@ export function ImageFieldControl({
   channel?: number | undefined;
   onChange: (assetId: string | undefined) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const assetId = imageAssetId(value);
   const authoredPictures = useAuthoredPictureThumbnails(templateId, channel);
   const uploadedThumbnail = usePictureThumbnail(
@@ -92,7 +94,7 @@ export function ImageFieldControl({
             {selectedOption?.label ??
               (assetId === '' ? 'No picture selected' : 'Current uploaded picture')}
           </span>
-          <span className="cg-image-picker-trigger__hint">Choose…</span>
+          <span className="cg-image-picker-trigger__hint">{localizeUi('Choose…')}</span>
         </Button>
       )}
       {!imageFieldAllowsChoices(field) && thumbnailUrl !== undefined && (
@@ -123,7 +125,7 @@ export function ImageFieldControl({
             onClick={() => uploadInput.current?.click()}
           >
             <Icon icon={FolderOpen} size={14} />
-            Browse…
+            {localizeUi('Browse…')}
           </Button>
         </>
       )}
@@ -141,7 +143,7 @@ export function ImageFieldControl({
           onClose={() => setPickerOpen(false)}
           footer={
             <ModalAction actionRole="cancel" onClick={() => setPickerOpen(false)}>
-              Close
+              {localizeUi('Close')}
             </ModalAction>
           }
         >
@@ -158,7 +160,9 @@ export function ImageFieldControl({
               <span className="cg-image-picker-choice__thumb" aria-hidden="true">
                 <Icon icon={ImageIcon} size={22} />
               </span>
-              <span className="cg-image-picker-choice__label">No picture selected</span>
+              <span className="cg-image-picker-choice__label">
+                {localizeUi('No picture selected')}
+              </span>
             </Button>
             {assetId !== '' && selectedOption === undefined && (
               <Button
@@ -174,7 +178,9 @@ export function ImageFieldControl({
                     <img src={thumbnailUrl} alt="" />
                   )}
                 </span>
-                <span className="cg-image-picker-choice__label">Current uploaded picture</span>
+                <span className="cg-image-picker-choice__label">
+                  {localizeUi('Current uploaded picture')}
+                </span>
               </Button>
             )}
             {authoredOptions.map((option) => {

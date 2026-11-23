@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   Check,
@@ -48,6 +49,7 @@ export function SafeGuideSettings({
   onChange: (profile: BroadcastGuideProfile) => void;
   onReset: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -153,8 +155,8 @@ export function SafeGuideSettings({
       <Button
         ref={anchor}
         variant="icon"
-        aria-label="Safe area settings"
-        title="Safe area settings"
+        aria-label={localizeUi('Safe area settings')}
+        title={localizeUi('Safe area settings')}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
@@ -166,17 +168,17 @@ export function SafeGuideSettings({
         <Popover
           anchor={anchor}
           id={id}
-          aria-label="Safe area settings"
+          aria-label={localizeUi('Safe area settings')}
           minWidth={460}
           maxHeight={560}
           onClose={() => (confirmReset ? finishReset(false) : setOpen(false))}
         >
           <div className="cg-form cg-safe-guide-settings">
             <header className="cg-safe-guide-settings__heading">
-              <strong>Safe area settings</strong>
+              <strong>{localizeUi('Safe area settings')}</strong>
               <Button
                 variant="icon"
-                aria-label="Close safe area settings"
+                aria-label={localizeUi('Close safe area settings')}
                 onClick={() => {
                   setOpen(false);
                   setConfirmReset(false);
@@ -191,17 +193,18 @@ export function SafeGuideSettings({
                 role="group"
                 aria-labelledby={`${id}-question`}
               >
-                <strong id={`${id}-question`}>Restore safe area defaults?</strong>
+                <strong id={`${id}-question`}>{localizeUi('Restore safe area defaults?')}</strong>
                 <p>
-                  This resets frame ratios, borders and colors, and removes added frames and named
-                  guides from Preview and New live layout.
+                  {localizeUi(
+                    'This resets frame ratios, borders and colors, and removes added frames and named guides from Preview and New live layout.',
+                  )}
                 </p>
                 <div className="cg-safe-guide-settings__actions">
                   <Button variant="neutral" ref={cancelButton} onClick={() => finishReset(false)}>
-                    Cancel
+                    {localizeUi('Cancel')}
                   </Button>
                   <Button variant="danger" onClick={() => finishReset(true)}>
-                    Restore defaults
+                    {localizeUi('Restore defaults')}
                   </Button>
                 </div>
               </section>
@@ -209,16 +212,16 @@ export function SafeGuideSettings({
               <>
                 <div className="cg-safe-guide-settings__scroll">
                   <div className="cg-safe-guide-settings__legend">
-                    <strong>Edit frame</strong>
+                    <strong>{localizeUi('Edit frame')}</strong>
                     <span>
-                      <Icon icon={Eye} size={13} /> Shown in preview
+                      <Icon icon={Eye} size={13} /> {localizeUi('Shown in preview')}
                     </span>
                   </div>
                   <div
                     className="cg-safe-guide-settings__frames"
                     ref={frameList}
                     role="radiogroup"
-                    aria-label="Guide aspect ratio"
+                    aria-label={localizeUi('Guide aspect ratio')}
                     tabIndex={-1}
                     onKeyDown={(event) => {
                       const current = frames.findIndex((frame) => frame.id === editing?.id);
@@ -284,7 +287,9 @@ export function SafeGuideSettings({
                           )}
                           {frame.aspect === 'custom' ? (
                             <span className="cg-safe-guide-settings__custom-label">
-                              <span>Custom {customIndex}</span>
+                              <span>
+                                {localizeUi('Custom')} {customIndex}
+                              </span>
                               <small>{guideFrameLabel(frame).replace('Custom ', '')}</small>
                             </span>
                           ) : (
@@ -302,19 +307,19 @@ export function SafeGuideSettings({
                   <div className="cg-safe-guide-settings__actions">
                     <Button
                       variant="add"
-                      aria-label="Add custom safe area"
+                      aria-label={localizeUi('Add custom safe area')}
                       disabled={frames.length >= MAX_BROADCAST_GUIDE_FRAMES}
                       onClick={addCustomFrame}
                     >
-                      <Icon icon={Plus} size={13} /> Add custom
+                      <Icon icon={Plus} size={13} /> {localizeUi('Add custom')}
                     </Button>
                     {editing?.aspect === 'custom' && (
                       <Button
                         variant="danger"
-                        aria-label="Remove custom safe area"
+                        aria-label={localizeUi('Remove custom safe area')}
                         onClick={removeCustomFrame}
                       >
-                        <Icon icon={Trash2} size={13} /> Remove custom
+                        <Icon icon={Trash2} size={13} /> {localizeUi('Remove custom')}
                       </Button>
                     )}
                   </div>
@@ -334,17 +339,17 @@ export function SafeGuideSettings({
                             checked={editing.visible}
                             onChange={(visible) => changeFrame({ visible })}
                           />{' '}
-                          Show frame
+                          {localizeUi('Show frame')}
                         </label>
                         <label
                           className="cg-form-field cg-form-field--inline"
                           htmlFor={`${id}-frame-color`}
                         >
-                          Frame color
+                          {localizeUi('Frame color')}
                           <ColorInput
                             appearance="swatch"
                             id={`${id}-frame-color`}
-                            aria-label="Frame color"
+                            aria-label={localizeUi('Frame color')}
                             value={editing.color}
                             onChange={(color) => changeFrame({ color })}
                           />
@@ -353,7 +358,7 @@ export function SafeGuideSettings({
                       <div
                         className="cg-safe-guide-settings__borders"
                         role="group"
-                        aria-label="Safe area borders"
+                        aria-label={localizeUi('Safe area borders')}
                       >
                         {editing.borders.map((border) => (
                           <div key={border.percent} className="cg-safe-guide-settings__heading">
@@ -375,7 +380,7 @@ export function SafeGuideSettings({
                               <Button
                                 variant="icon"
                                 aria-label={`Use frame color for ${GUIDE_BORDER_LABELS[border.percent]}`}
-                                title="Use frame color"
+                                title={localizeUi('Use frame color')}
                                 disabled={border.color === undefined}
                                 onClick={() => inheritBorder(border.percent)}
                               >
@@ -388,34 +393,36 @@ export function SafeGuideSettings({
                     </>
                   )}
                   <details className="cg-safe-guide-settings__about">
-                    <summary>About safe areas</summary>
+                    <summary>{localizeUi('About safe areas')}</summary>
                     <p>
-                      100% marks the full ratio frame. EBU R95 defines Action 93% and Graphics 90%
-                      for 16:9. Other ratios use proportional guides; 80% is an additional guide.
+                      {localizeUi(
+                        '100% marks the full ratio frame. EBU R95 defines Action 93% and Graphics 90% for 16:9. Other ratios use proportional guides; 80% is an additional guide.',
+                      )}
                     </p>
                     <p>
-                      Frame visibility, borders and colors are independent. Guides appear only in
-                      Preview and New live layout; they never enter programme output.
+                      {localizeUi(
+                        'Frame visibility, borders and colors are independent. Guides appear only in Preview and New live layout; they never enter programme output.',
+                      )}
                     </p>
                   </details>
                   <div className="cg-safe-guide-settings__heading">
-                    <strong>Named guides</strong>
+                    <strong>{localizeUi('Named guides')}</strong>
                     <span className="cg-safe-guide-settings__label">
                       {profile.lines.length}/{MAX_BROADCAST_GUIDE_LINES}
                     </span>
                   </div>
                   <span className="cg-safe-guide-settings__label">
-                    Named guides use the selected frame ratio.
+                    {localizeUi('Named guides use the selected frame ratio.')}
                   </span>
                   <label
                     className="cg-form-field cg-form-field--inline"
                     htmlFor={`${id}-guide-color`}
                   >
-                    Named guide color
+                    {localizeUi('Named guide color')}
                     <ColorInput
                       appearance="swatch"
                       id={`${id}-guide-color`}
-                      aria-label="Guide color"
+                      aria-label={localizeUi('Guide color')}
                       value={profile.color}
                       onChange={(color) => onChange({ ...profile, color })}
                     />
@@ -423,21 +430,21 @@ export function SafeGuideSettings({
                   <div className="cg-safe-guide-settings__add">
                     <Button
                       variant="neutral"
-                      aria-label="Add horizontal guide"
+                      aria-label={localizeUi('Add horizontal guide')}
                       disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
                       onClick={() => add('y')}
                     >
                       <Icon icon={Plus} size={13} />
-                      <Icon icon={MoveHorizontal} size={14} /> Horizontal
+                      <Icon icon={MoveHorizontal} size={14} /> {localizeUi('Horizontal')}
                     </Button>
                     <Button
                       variant="neutral"
-                      aria-label="Add vertical guide"
+                      aria-label={localizeUi('Add vertical guide')}
                       disabled={profile.lines.length >= MAX_BROADCAST_GUIDE_LINES}
                       onClick={() => add('x')}
                     >
                       <Icon icon={Plus} size={13} />
-                      <Icon icon={MoveVertical} size={14} /> Vertical
+                      <Icon icon={MoveVertical} size={14} /> {localizeUi('Vertical')}
                     </Button>
                   </div>
                   <div className="cg-safe-guide-settings__lines">
@@ -470,7 +477,7 @@ export function SafeGuideSettings({
                 </div>
                 <footer className="cg-safe-guide-settings__footer">
                   <Button variant="ghost" ref={resetButton} onClick={() => setConfirmReset(true)}>
-                    <Icon icon={RotateCcw} size={13} /> Restore defaults…
+                    <Icon icon={RotateCcw} size={13} /> {localizeUi('Restore defaults…')}
                   </Button>
                 </footer>
               </>
@@ -489,6 +496,7 @@ function CustomAspectFields({
   value: BroadcastGuideCustomAspect;
   onChange: (value: BroadcastGuideCustomAspect) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const id = useId();
   const [width, setWidth] = useState(String(value.width));
   const [height, setHeight] = useState(String(value.height));
@@ -511,14 +519,14 @@ function CustomAspectFields({
     <div
       className="cg-form-grid cg-safe-guide-settings__ratio"
       role="group"
-      aria-label="Custom reference ratio"
+      aria-label={localizeUi('Custom reference ratio')}
     >
       <label className="cg-form-field" htmlFor={`${id}-width`}>
-        <span>Width</span>
+        <span>{localizeUi('Width')}</span>
         <NumericInput
           className="cg-field"
           id={`${id}-width`}
-          aria-label="Custom aspect width"
+          aria-label={localizeUi('Custom aspect width')}
           value={width}
           min={1}
           max={MAX_BROADCAST_GUIDE_ASPECT_PART}
@@ -532,11 +540,11 @@ function CustomAspectFields({
         />
       </label>
       <label className="cg-form-field" htmlFor={`${id}-height`}>
-        <span>Height</span>
+        <span>{localizeUi('Height')}</span>
         <NumericInput
           className="cg-field"
           id={`${id}-height`}
-          aria-label="Custom aspect height"
+          aria-label={localizeUi('Custom aspect height')}
           value={height}
           min={1}
           max={MAX_BROADCAST_GUIDE_ASPECT_PART}
@@ -568,6 +576,7 @@ function GuideRow({
   onInherit: () => void;
   onRemove: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [position, setPosition] = useState(String(line.position));
   useEffect(() => setPosition(String(line.position)), [line.position]);
   const number = parseLocalizedNumber(position);
@@ -627,7 +636,7 @@ function GuideRow({
           <Button
             variant="icon"
             aria-label={`Use guide color for ${label.toLowerCase()}`}
-            title="Use guide color"
+            title={localizeUi('Use guide color')}
             disabled={line.color === undefined}
             onClick={onInherit}
           >

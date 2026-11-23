@@ -388,7 +388,7 @@ describe('source availability by server', () => {
         observe(): void {
           this.receive([{ isIntersecting: true }]);
         }
-        disconnect(): void {}
+        disconnect = (): void => undefined;
       },
     );
     try {

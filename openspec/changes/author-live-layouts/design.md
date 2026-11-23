@@ -57,3 +57,9 @@ Store newly attached graphics on the shared frame identity. Preserve each attach
 artwork identity and frame-relative coordinates in preset and Focus compositions so the frame
 transition carries its graphics. Existing scoped attachments remain readable. Explicit edits share
 legacy attachments unless incompatible masked placements would change a preset's picture.
+
+## Local plate video
+
+The editor mounts the same plate player as PVW. Each instance leases only its own clip on Play
+and paints decoded pixels through the editor's existing shot crop and mask. A pause or reset
+changes the local player clock. Changing the source or closing the editor releases its session.

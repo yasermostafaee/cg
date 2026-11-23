@@ -6844,3 +6844,9 @@ match", so each one is recorded:
   renaming a test title (`P-025`). Nothing else in the gate fails on one — prettier does not
   strip it, tsc and eslint read the file happily — which is how seven survived here before.
   Stripped with node: the tool that caused it cannot be the tool that fixes it.
+
+## Plate audio labels
+
+Both audio entry points resolve the displayed source through the row's active binding. The audio
+dialog uses the same plate naming helper as source assignment and preview. Its writable volume
+map retains the plate IDs.

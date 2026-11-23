@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import type { ReactNode } from 'react';
 import type { ChannelOutput } from '@cg/shared-ipc';
 import { Tag } from './Tag.js';
@@ -44,6 +45,7 @@ export function MonitorHead({
   /** Neutral facts after the label — `Output unknown`, the playlist's state. Never a colour. */
   tags?: readonly string[];
 }): JSX.Element {
+  const t = useUiText();
   /*
     ONE group, not a fragment: the head bar is `space-between`, and a fragment's children would be
     spread across it — the tag landed mid-bar, apart from the word it qualifies (`UI-POLISH-01` G).
@@ -54,7 +56,7 @@ export function MonitorHead({
         className={`cg-monitor-label cg-monitor-label--${tone}`}
         {...(output !== undefined ? { 'data-output': output } : {})}
       >
-        {word}
+        {t(word)}
         {channel !== null && <span className="cg-monitor-ch">CH {channel}</span>}
       </span>
       {tags.map((tag) => (

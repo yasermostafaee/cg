@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useSyncExternalStore } from 'react';
 import { Cable, Film } from 'lucide-react';
@@ -104,6 +105,7 @@ export function SourceLabel({
   originDescription?: string | undefined;
   onMeterEngineChange?: PreviewOriginChanged | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const source = labelledSource(sourceId);
   if (source === null) {
@@ -154,7 +156,7 @@ export function SourceLabel({
       />
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>
-          Unavailable
+          {localizeUi('Unavailable')}
         </Tag>
       )}
     </span>

@@ -42,8 +42,8 @@ async function open(options: StationSetupStubOptions): Promise<{
   calendarSet: ReturnType<typeof stationSetupStub>['calendarSet'];
 }> {
   const stub = stationSetupStub(options);
-  const dialog = await renderStationSetup({ section: 'calendar' });
-  return { pane: sectionOf(dialog, 'calendar'), calendarSet: stub.calendarSet };
+  const dialog = await renderStationSetup({ section: 'general' });
+  return { pane: sectionOf(dialog, 'general'), calendarSet: stub.calendarSet };
 }
 
 const chip = (pane: HTMLElement, days: number): HTMLButtonElement | null =>

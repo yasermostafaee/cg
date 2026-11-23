@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
   imageFieldAllowsUpload,
   numberFieldAllowedValues,
@@ -176,6 +177,7 @@ export function StructuredRowsDialog({
   templateId?: string | undefined;
   channel?: number | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const pictureUrls = useAuthoredPictureThumbnails(templateId, channel);
   if (!open) return null;
   const invalidCount = rows.reduce(
@@ -187,7 +189,7 @@ export function StructuredRowsDialog({
 
   return (
     <Modal
-      title="Current file-only data"
+      title={localizeUi('Current file-only data')}
       subtitle={label}
       ariaLabel={`Current file-only data · ${label}`}
       size="wide"
@@ -195,13 +197,17 @@ export function StructuredRowsDialog({
       onClose={onClose}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
-          Close
+          {localizeUi('Close')}
         </ModalAction>
       }
     >
       <div style={styles.summary} role="status">
-        <Tag>{String(rows.length)} rows</Tag>
-        <Tag>{String(fields.length)} columns</Tag>
+        <Tag>
+          {String(rows.length)} {localizeUi('rows')}
+        </Tag>
+        <Tag>
+          {String(fields.length)} {localizeUi('columns')}
+        </Tag>
         <Tag
           className={
             invalidCount === 0
@@ -219,7 +225,7 @@ export function StructuredRowsDialog({
           <thead>
             <tr>
               <th scope="col" style={{ ...styles.head, ...styles.rowNumber }}>
-                Row
+                {localizeUi('Row')}
               </th>
               {fields.map((field) => (
                 <th key={field.id} scope="col" style={styles.head} title={field.id}>

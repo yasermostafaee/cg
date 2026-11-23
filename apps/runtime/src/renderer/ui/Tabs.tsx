@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { Lock, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX, cssVars } from '../theme.js';
@@ -386,6 +387,7 @@ export function RailStationCard({
       }
     | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div className="cg-rail-foot">
       <div className="cg-rail-station" data-rail-station="">
@@ -404,18 +406,18 @@ export function RailStationCard({
       {version !== undefined && (
         <div className="cg-rail-foot__release">
           <Tag className="cg-rail-foot__version" title={version.build} data-testid="app-version">
-            <span>Version</span> <strong>{version.release}</strong>
+            <span>{localizeUi('Version')}</span> <strong>{version.release}</strong>
           </Tag>
           {version.buildId !== undefined && (
-            <bdi className="cg-rail-foot__build" dir="ltr" data-testid="app-build">
-              Build {version.buildId}
-            </bdi>
+            <span className="cg-rail-foot__build" data-testid="app-build">
+              {localizeUi('Build')} <bdi dir="ltr">{version.buildId}</bdi>
+            </span>
           )}
         </div>
       )}
       {version?.onOpenHistory !== undefined && (
         <Button variant="neutral" className="cg-rail-foot__history" onClick={version.onOpenHistory}>
-          Version history
+          {localizeUi('Version history')}
         </Button>
       )}
     </div>

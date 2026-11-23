@@ -489,6 +489,13 @@
   overflow: hidden;
 }
 
+.cg-live-layout-shot-transport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
 .cg-live-layout-focus-action.cg-btn {
   position: absolute;
   top: 0.28rem;

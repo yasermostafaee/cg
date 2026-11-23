@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId } from 'react';
 import { ArrowLeftRight, ChevronDown, Maximize2, Sparkles } from 'lucide-react';
 import {
@@ -41,6 +42,7 @@ export function LiveLayoutEditorEffects({
   effects: ControlLiveLayout['effects'];
   onChange: (effects: ControlLiveLayout['effects']) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const { focus, switch: change } = effects;
   const fadeId = useId();
   const setFocus = (patch: Partial<typeof focus>): void =>
@@ -52,23 +54,23 @@ export function LiveLayoutEditorEffects({
     <details className="cg-live-layout-effects">
       <summary>
         <Icon icon={Sparkles} size={16} />
-        <span>Layout effects</span>
+        <span>{localizeUi('Layout effects')}</span>
         <Icon icon={ChevronDown} size={14} />
       </summary>
       <div className="cg-live-layout-effect-grid">
         <fieldset className="cg-live-layout-effect-controls">
           <legend>
-            <Icon icon={Maximize2} size={14} /> Focus and Return
+            <Icon icon={Maximize2} size={14} /> {localizeUi('Focus and Return')}
           </legend>
           <div className="cg-form-grid cg-live-layout-effect-fields">
             <label
               className="cg-form-field cg-live-layout-effect-method"
               htmlFor={fadeId + '-motion'}
             >
-              Motion
+              {localizeUi('Motion')}
               <SelectInput
                 id={fadeId + '-motion'}
-                aria-label="Motion"
+                aria-label={localizeUi('Motion')}
                 value={focus.motion}
                 onChange={(event) => {
                   const parsed = FrameTransitionSchema.shape.motion.safeParse(
@@ -85,7 +87,7 @@ export function LiveLayoutEditorEffects({
               </SelectInput>
             </label>
             <LiveLayoutEditorNumber
-              label="Focus duration (ms)"
+              label={localizeUi('Focus duration (ms)')}
               value={focus.durationMs}
               min={FRAME_TRANSITION_MIN_MS}
               max={FRAME_TRANSITION_MAX_MS}
@@ -94,7 +96,7 @@ export function LiveLayoutEditorEffects({
             />
             <label className="cg-live-layout-effect-fade" htmlFor={fadeId}>
               <Checkbox id={fadeId} checked={focus.fade} onChange={(fade) => setFocus({ fade })} />
-              Fade
+              {localizeUi('Fade')}
             </label>
             {(focus.motion !== 'cut' || focus.fade) && (
               <>
@@ -114,17 +116,17 @@ export function LiveLayoutEditorEffects({
         </fieldset>
         <fieldset className="cg-live-layout-effect-controls">
           <legend>
-            <Icon icon={ArrowLeftRight} size={14} /> Switch focused plate
+            <Icon icon={ArrowLeftRight} size={14} /> {localizeUi('Switch focused plate')}
           </legend>
           <div className="cg-form-grid cg-live-layout-effect-fields">
             <label
               className="cg-form-field cg-live-layout-effect-method"
               htmlFor={fadeId + '-switch'}
             >
-              Effect
+              {localizeUi('Effect')}
               <SelectInput
                 id={fadeId + '-switch'}
-                aria-label="Effect"
+                aria-label={localizeUi('Effect')}
                 value={change.mode}
                 onChange={(event) => {
                   const mode = ControlLiveLayoutSwitchModeSchema.safeParse(
@@ -133,15 +135,15 @@ export function LiveLayoutEditorEffects({
                   if (mode.success) setSwitch({ mode: mode.data });
                 }}
               >
-                <option value="motion">Focus and Return motion</option>
-                <option value="cut">Cut</option>
-                <option value="fade">Fade</option>
-                <option value="push">Push</option>
-                <option value="slide-over">Slide over</option>
+                <option value="motion">{localizeUi('Focus and Return motion')}</option>
+                <option value="cut">{localizeUi('Cut')}</option>
+                <option value="fade">{localizeUi('Fade')}</option>
+                <option value="push">{localizeUi('Push')}</option>
+                <option value="slide-over">{localizeUi('Slide over')}</option>
               </SelectInput>
             </label>
             <LiveLayoutEditorNumber
-              label="Switch duration (ms)"
+              label={localizeUi('Switch duration (ms)')}
               value={change.durationMs}
               min={FRAME_TRANSITION_MIN_MS}
               max={FRAME_TRANSITION_MAX_MS}
@@ -151,10 +153,10 @@ export function LiveLayoutEditorEffects({
             />
             {(change.mode === 'push' || change.mode === 'slide-over') && (
               <label className="cg-form-field" htmlFor={fadeId + '-direction'}>
-                Direction
+                {localizeUi('Direction')}
                 <SelectInput
                   id={fadeId + '-direction'}
-                  aria-label="Direction"
+                  aria-label={localizeUi('Direction')}
                   value={change.direction}
                   onChange={(event) => {
                     const parsed = InputTransitionDirectionSchema.safeParse(

@@ -14222,15 +14222,20 @@ muted and prevent new graphics writes through a legacy fallback. Keep ordinary p
 errors actionable. Verify both Engines after any approved restoration of their local
 pre-migration settings, then prove legacy Play and confirm the programme mapping separately.
 
-## [~] B-450 — Report the completed Windows Audit archive save ⟨priority: high — owner, 2026-11-23⟩ — `openspec/changes/download-logs-without-navigation/`
+## [~] B-450 — Choose where the Windows Audit archive is saved ⟨priority: high — owner, 2026-11-23⟩ — `openspec/changes/download-logs-without-navigation/`
 
 **Reported.** Download logs in installed CG Control needs a reliable local save. The ticketed
 archive is already fetched by Control before the web download path. Three archives from
 the reported attempts were in Windows Downloads with no visible confirmation in Control.
 
-**Expected.** In the Windows desktop app, save the fetched ZIP to the Windows Downloads
-folder and show the actual file path after the write completes. A duplicate filename
-gets a distinct name. A write failure is shown in the Audit log.
+**Expected.** Download logs opens the Windows Save As picker. A confirmed location receives the complete ZIP and Audit reports the actual path. Cancel leaves the file system untouched. A duplicate filename receives a distinct name in the chosen directory. A write failure is shown in Audit.
 The connected station-admin or auth-off grant and the Bridge's one-use archive ticket
-continue to authorize the download. The browser can save the fetched archive through its
-local Blob download path.
+continue to authorize access to the archive. A browser with the file picker API opens its destination chooser. Other browsers use their own download preferences.
+
+## [~] B-452 — Keep technical IDs out of the Live plate audio list ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/show-live-plate-audio-state/`
+
+**Repro.** Load a live layout whose unseated plates have generated frame IDs and open Live plate audio.
+
+**Actual.** A `frame-…` ID appears as the operator's primary name.
+
+**Expected.** The authored frame name or friendly numbered label identifies the frame. The assigned source uses its display name and empty or unknown sources use a readable status. The regression covers authored Persian names and the absence of raw IDs in visible text.

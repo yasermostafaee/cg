@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { Fragment, useId, useRef, useState, type ReactNode } from 'react';
 import { GripVertical, Plus, TableProperties, X } from 'lucide-react';
 import {
@@ -172,6 +173,7 @@ function StructuredRowEditor({
   modalForm: boolean;
   onChange: (key: string, value: unknown) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const id = useId();
   return (
     <div className="cg-list-item__structured">
@@ -206,7 +208,7 @@ function StructuredRowEditor({
           >
             <span title={field.id}>
               {label}
-              {!editable && <small className="cg-list-cell__lock"> · locked</small>}
+              {!editable && <small className="cg-list-cell__lock"> {localizeUi('· locked')}</small>}
             </span>
             {field.type === 'boolean' ? (
               <Checkbox
@@ -356,6 +358,7 @@ export function ListFieldEditor({
   templateId?: string | undefined;
   channel?: number | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const items = toListItems(value);
   // `RUN-NEXT-VERSION-02` Q4 — the most items the list takes (a repeater's row limit, from import).
   const maxItems = field?.type === 'list' ? field.maxItems : undefined;
@@ -438,7 +441,7 @@ export function ListFieldEditor({
             }}
           >
             <Icon icon={TableProperties} />
-            Edit rows…
+            {localizeUi('Edit rows…')}
           </Button>
         </div>
         {footer}
@@ -453,7 +456,7 @@ export function ListFieldEditor({
             footer={
               <>
                 <ModalAction actionRole="cancel" onClick={() => setEditorOpen(false)}>
-                  Close
+                  {localizeUi('Close')}
                 </ModalAction>
                 <ModalAction
                   actionRole="primary"
@@ -463,7 +466,7 @@ export function ListFieldEditor({
                     setEditorOpen(false);
                   }}
                 >
-                  Apply
+                  {localizeUi('Apply')}
                 </ModalAction>
               </>
             }
@@ -490,7 +493,7 @@ export function ListFieldEditor({
       style={styles.list}
       aria-label={`${fieldId} items`}
     >
-      {items.length === 0 && <p style={styles.empty}>No items.</p>}
+      {items.length === 0 && <p style={styles.empty}>{localizeUi('No items.')}</p>}
       {items.map((item, i) => {
         const n = String(i + 1);
         const isDropTarget = drop !== null && drop.index === i && dragIndex !== i;
@@ -514,7 +517,7 @@ export function ListFieldEditor({
                 role="separator"
                 aria-label={`Page ${String(pageNumber)}`}
               >
-                Page {String(pageNumber)}
+                {localizeUi('Page')} {String(pageNumber)}
               </div>
             )}
             <div
@@ -602,7 +605,7 @@ export function ListFieldEditor({
                   className="cg-list-handle"
                   disabled={rowStructureLocked}
                   aria-label={`Reorder ${fieldId} item ${n}`}
-                  title="Drag to reorder, or focus this and press ↑ / ↓"
+                  title={localizeUi('Drag to reorder, or focus this and press ↑ / ↓')}
                   onPointerDown={() => {
                     const el = rows.current.get(i);
                     if (el !== undefined) el.draggable = true;
@@ -679,7 +682,7 @@ export function ListFieldEditor({
           {/* lucide, not the mock's `＋` glyph — the design system routes every icon
               through `Icon` so it inherits `currentColor` and one size. */}
           <Icon icon={Plus} />
-          Add item
+          {localizeUi('Add item')}
         </Button>
         {maxItems !== undefined && (
           <span style={styles.empty} data-list-count={fieldId}>

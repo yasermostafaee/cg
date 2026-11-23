@@ -105,6 +105,18 @@ The Layers table SHALL put ON PVW before Play in the heading and row controls. I
 - **WHEN** the operator opens Layers **THEN** ON PVW precedes Play and both actions align to their headings
 - **AND** the toolbar offers Stop All and Clear All and an eligible row retains its Remove action
 
+### Requirement: A manually played PVW plate can be reset independently
+
+Once the operator starts a clip in a PVW plate, its transport SHALL show Reset. Reset pauses that
+
+plate and rewinds it to the first frame. It SHALL leave other plate previews and Programme alone.
+
+#### Scenario: Reset one of two plate video previews
+
+- **WHEN** two plate clips have started in PVW and the operator resets one of them
+- **THEN** the selected preview is paused at zero and the other clip keeps its state
+- **AND** no on-air command is sent
+
 ## MODIFIED Requirements
 
 ### Requirement: Server settings panel and Remove-All

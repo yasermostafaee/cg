@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * R-028 part B — the operator's own workspace geometry: how wide the Inspector
@@ -100,6 +100,36 @@ export type PanelId = 'layers' | 'inspector' | 'pgm' | 'pvw';
 
 export type ShellFocus = 'none' | PanelId;
 
+export interface WorkspacePositions {
+  monitorOrder: 'pvw-first' | 'pgm-first';
+  layerPosition: 'below' | 'above';
+  inspectorSide: 'right' | 'left';
+}
+
+export const DEFAULT_WORKSPACE_POSITIONS: Readonly<WorkspacePositions> = {
+  monitorOrder: 'pvw-first',
+  layerPosition: 'below',
+  inspectorSide: 'right',
+};
+
+export interface WorkspaceProfile {
+  name: string;
+  positions: WorkspacePositions;
+  inspectorPx: number;
+  monitorPx: number;
+}
+
+export const WORKSPACE_PROFILE_NAME_MAX = 60;
+
+export interface ConfigurableShellLayout extends ShellLayout {
+  positions: WorkspacePositions;
+  uiProfiles: readonly WorkspaceProfile[];
+  setPositions: (positions: Partial<WorkspacePositions>) => void;
+  saveProfile: (name: string) => void;
+  loadProfile: (name: string) => void;
+  deleteProfile: (name: string) => void;
+}
+
 export interface ShellLayout {
   /** Inspector column width in px (ignored while narrow or focused). */
   inspectorPx: number;
@@ -120,8 +150,8 @@ export interface ShellLayout {
    * writes it: not the selection, not the rehearse set.
    *
    * ⚠ SESSION STATE, NOT PERSISTED — deliberately, and not for lack of a slot. Phase 5's
-   * constraint is _no persisted key, file or schema change_; this hook's `write()` keeps its
-   * `{inspectorPx, monitorPx, focus}` shape. Whether the flag should join it under
+   * constraint was _no persisted key, file or schema change_; this hook's `write()` retains
+   * compatibility with `{inspectorPx, monitorPx, focus}` while omitting `monitorsShown`. Whether the flag should join it under
    * `cg.runtime.shell-layout.v1` is filed for the owner (design.md §12.7). That half is
    * UNCHANGED and stays owner answer A13's: the flag does not persist, in either direction.
    *
@@ -164,15 +194,69 @@ interface Persisted {
   inspectorPx?: number;
   monitorPx?: number;
   focus?: ShellFocus;
+  positions?: WorkspacePositions;
+  uiProfiles?: WorkspaceProfile[];
 }
 
-function read(): Persisted {
+type SavedWorkspace = Required<Persisted>;
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function positionsOf(value: unknown): WorkspacePositions {
+  const { monitorOrder, layerPosition, inspectorSide } = record(value);
+  return {
+    monitorOrder:
+      monitorOrder === 'pgm-first' ? monitorOrder : DEFAULT_WORKSPACE_POSITIONS.monitorOrder,
+    layerPosition:
+      layerPosition === 'above' ? layerPosition : DEFAULT_WORKSPACE_POSITIONS.layerPosition,
+    inspectorSide:
+      inspectorSide === 'left' ? inspectorSide : DEFAULT_WORKSPACE_POSITIONS.inspectorSide,
+  };
+}
+
+function isDefaultPosition({
+  monitorOrder,
+  layerPosition,
+  inspectorSide,
+}: WorkspacePositions): boolean {
+  const defaults = DEFAULT_WORKSPACE_POSITIONS;
+  return (
+    monitorOrder === defaults.monitorOrder &&
+    layerPosition === defaults.layerPosition &&
+    inspectorSide === defaults.inspectorSide
+  );
+}
+
+function finiteSize(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function profilesOf(value: unknown): WorkspaceProfile[] {
+  if (!Array.isArray(value)) return [];
+  const profiles = new Map<string, WorkspaceProfile>();
+  for (const entry of value) {
+    const { name, positions, inspectorPx, monitorPx } = record(entry);
+    if (typeof name !== 'string' || name.trim() === '' || name.length > WORKSPACE_PROFILE_NAME_MAX)
+      continue;
+    profiles.set(name.trim(), {
+      name: name.trim(),
+      positions: positionsOf(positions),
+      inspectorPx: finiteSize(inspectorPx, DEFAULT_INSPECTOR_PX),
+      monitorPx: finiteSize(monitorPx, DEFAULT_MONITOR_PX),
+    });
+  }
+  return [...profiles.values()];
+}
+
+function readPersisted(): Record<string, unknown> {
   try {
     const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
     if (raw === null || raw === undefined) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return {};
-    return parsed as Persisted;
+    return record(JSON.parse(raw));
   } catch {
     // A corrupt or unavailable store must never break the shell — the default
     // layout is always usable.
@@ -180,9 +264,30 @@ function read(): Persisted {
   }
 }
 
-function write(value: Persisted): void {
+function read(): SavedWorkspace {
+  const { inspectorPx, monitorPx, focus, positions, uiProfiles } = readPersisted();
+  return {
+    inspectorPx: finiteSize(inspectorPx, DEFAULT_INSPECTOR_PX),
+    monitorPx: finiteSize(monitorPx, DEFAULT_MONITOR_PX),
+    focus:
+      focus === 'inspector' || focus === 'layers' || focus === 'pgm' || focus === 'pvw'
+        ? focus
+        : 'none',
+    positions: positionsOf(positions),
+    uiProfiles: profilesOf(uiProfiles),
+  };
+}
+
+function write({ inspectorPx, monitorPx, focus, positions, uiProfiles }: SavedWorkspace): void {
+  const persisted: Persisted = {
+    inspectorPx,
+    monitorPx,
+    focus,
+    ...(!isDefaultPosition(positions) && { positions }),
+    ...(uiProfiles.length > 0 && { uiProfiles }),
+  };
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(value));
+    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(persisted));
   } catch {
     /* private mode / quota — the layout simply does not persist */
   }
@@ -205,11 +310,16 @@ export function clampMonitor(px: number, viewportHeightPx: number): number {
   return Math.min(Math.max(px, MIN_MONITOR_PX), ceiling);
 }
 
-export function useShellLayout(): ShellLayout {
-  const persisted = read();
-  const [inspectorPx, setInspectorPxRaw] = useState(persisted.inspectorPx ?? DEFAULT_INSPECTOR_PX);
-  const [monitorPx, setMonitorPxRaw] = useState(persisted.monitorPx ?? DEFAULT_MONITOR_PX);
-  const [focus, setFocusRaw] = useState<ShellFocus>(persisted.focus ?? 'none');
+export function useShellLayout(): ConfigurableShellLayout {
+  const [saved, setSaved] = useState(read);
+  const savedRef = useRef(saved);
+  const { inspectorPx, monitorPx, focus, positions, uiProfiles } = saved;
+  const update = useCallback((patch: Partial<SavedWorkspace>) => {
+    const next = { ...savedRef.current, ...patch };
+    savedRef.current = next;
+    setSaved(next);
+    write(next);
+  }, []);
   // Session-only — see the interface note. NOT read from `persisted`, NOT written by `write()`.
   const [monitorsShown, setMonitorsShown] = useState(DEFAULT_MONITORS_SHOWN);
   const [viewportPx, setViewportPx] = useState(() => globalThis.innerWidth ?? 1280);
@@ -226,42 +336,67 @@ export function useShellLayout(): ShellLayout {
 
   const setInspectorPx = useCallback(
     (px: number) => {
-      const clamped = clampInspector(px, viewportPx);
-      setInspectorPxRaw(clamped);
-      write({ inspectorPx: clamped, monitorPx, focus });
+      update({ inspectorPx: clampInspector(px, viewportPx) });
     },
-    [viewportPx, monitorPx, focus],
+    [viewportPx, update],
   );
 
   const setMonitorPx = useCallback(
     (px: number) => {
-      const clamped = clampMonitor(px, viewportHeightPx);
-      setMonitorPxRaw(clamped);
-      write({ inspectorPx, monitorPx: clamped, focus });
+      update({ monitorPx: clampMonitor(px, viewportHeightPx) });
     },
-    [viewportHeightPx, inspectorPx, focus],
+    [viewportHeightPx, update],
   );
 
   const setFocus = useCallback(
     (next: ShellFocus) => {
-      setFocusRaw(next);
-      write({ inspectorPx, monitorPx, focus: next });
+      update({ focus: next });
     },
-    [inspectorPx, monitorPx],
+    [update],
   );
 
+  const setPositions = (change: Partial<WorkspacePositions>): void =>
+    update({ positions: { ...savedRef.current.positions, ...change } });
+
+  const saveProfile = (value: string): void => {
+    const name = value.trim();
+    if (name.length === 0 || name.length > WORKSPACE_PROFILE_NAME_MAX) return;
+    const { inspectorPx, monitorPx, positions, uiProfiles } = savedRef.current;
+    const profile = { name, inspectorPx, monitorPx, positions };
+    update({ uiProfiles: [...uiProfiles.filter((entry) => entry.name !== name), profile] });
+  };
+
+  const loadProfile = (name: string): void => {
+    const profile = savedRef.current.uiProfiles.find((entry) => entry.name === name);
+    if (profile !== undefined) {
+      update({
+        inspectorPx: profile.inspectorPx,
+        monitorPx: profile.monitorPx,
+        positions: profile.positions,
+      });
+    }
+  };
+
+  const deleteProfile = (name: string): void =>
+    update({ uiProfiles: savedRef.current.uiProfiles.filter((entry) => entry.name !== name) });
+
   const reset = useCallback(() => {
-    setInspectorPxRaw(DEFAULT_INSPECTOR_PX);
-    setMonitorPxRaw(DEFAULT_MONITOR_PX);
-    setFocusRaw('none');
-    // The way out covers the monitors too — it returns them to the SHIPPED DEFAULT rather
-    // than to "shown", which is the same thing `reset()` does for every other member of the
-    // shell's geometry. The persisted shape written here is unchanged.
     setMonitorsShown(DEFAULT_MONITORS_SHOWN);
-    write({ inspectorPx: DEFAULT_INSPECTOR_PX, monitorPx: DEFAULT_MONITOR_PX, focus: 'none' });
-  }, []);
+    update({
+      inspectorPx: DEFAULT_INSPECTOR_PX,
+      monitorPx: DEFAULT_MONITOR_PX,
+      focus: 'none',
+      positions: DEFAULT_WORKSPACE_POSITIONS,
+    });
+  }, [update]);
 
   return {
+    positions,
+    uiProfiles,
+    setPositions,
+    saveProfile,
+    loadProfile,
+    deleteProfile,
     inspectorPx: clampInspector(inspectorPx, viewportPx),
     monitorPx: clampMonitor(monitorPx, viewportHeightPx),
     focus,
@@ -276,6 +411,7 @@ export function useShellLayout(): ShellLayout {
       inspectorPx !== DEFAULT_INSPECTOR_PX ||
       monitorPx !== DEFAULT_MONITOR_PX ||
       focus !== 'none' ||
+      !isDefaultPosition(positions) ||
       // Against the DEFAULT, not against `true`: with the strip folded away by default, a
       // console the operator has OPENED it on is the customised one.
       monitorsShown !== DEFAULT_MONITORS_SHOWN,

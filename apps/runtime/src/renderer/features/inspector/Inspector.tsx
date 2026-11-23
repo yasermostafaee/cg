@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -393,6 +394,7 @@ export function Inspector({
   previewOnly,
   disclosures,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const [detailsOpen, setDetailsOpen] = useState(true);
   const layerDetailsOpen = disclosures?.layerDetails.open ?? detailsOpen;
   const layerDetailsId = useId();
@@ -586,7 +588,13 @@ export function Inspector({
 
   if (item === null) {
     return (
-      <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
+      <Panel
+        id="inspector"
+        as="aside"
+        title={localizeUi('INSPECTOR')}
+        ariaLabel="Inspector"
+        onClose={onClose}
+      >
         <div className="cg-inspector-body" style={styles.scroll}>
           {/*
             🔴 `MODAL-CHROME-10` ADDENDUM C §C4(c), FOUND IN PASSING. It read _"Select a stack
@@ -594,7 +602,7 @@ export function Inspector({
             operator's screen anywhere — he selects a ROW. Found by the second sweep axis while
             taking the same vocabulary out of the deletion refusal; one defect, two surfaces.
           */}
-          <p style={styles.empty}>Select a row to inspect its fields.</p>
+          <p style={styles.empty}>{localizeUi('Select a row to inspect its fields.')}</p>
         </div>
       </Panel>
     );
@@ -731,7 +739,13 @@ export function Inspector({
   const stateColor = onPvw ? REHEARSE_STATE_COLOR : stateVisual.color;
 
   return (
-    <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
+    <Panel
+      id="inspector"
+      as="aside"
+      title={localizeUi('INSPECTOR')}
+      ariaLabel="Inspector"
+      onClose={onClose}
+    >
       {/*
         `cg-inspector-body` on THIS branch too. It was only on the empty branch above, so the
         container query `controls.css` writes against it (`@container inspector`) matched no
@@ -743,7 +757,7 @@ export function Inspector({
             <button
               type="button"
               className="cg-inspector-disclosure"
-              aria-label="Layer details"
+              aria-label={localizeUi('Layer details')}
               aria-controls={layerDetailsId}
               aria-expanded={layerDetailsOpen}
               onClick={disclosures?.layerDetails.toggle ?? (() => setDetailsOpen((open) => !open))}
@@ -795,8 +809,8 @@ export function Inspector({
                 <MetaChip value={layerDetail(undefined)} />
               ) : (
                 <>
-                  <MetaChip label="layer" value={String(item.slot.layer)} />
-                  <MetaChip label="channel" value={String(item.slot.channel)} />
+                  <MetaChip label={localizeUi('layer')} value={String(item.slot.layer)} />
+                  <MetaChip label={localizeUi('channel')} value={String(item.slot.channel)} />
                   <MetaChip value={item.slot.server} />
                 </>
               )}
@@ -866,14 +880,14 @@ export function Inspector({
             `TemplateInfo.playout` existed, rather than guessing what it does. */}
         <TimingSection item={item} info={resolvedInfo} disclosure={disclosures?.timing} />
         <div className="cg-inspector-section cg-inspector-fields">
-          <h2>Fields</h2>
+          <h2>{localizeUi('Fields')}</h2>
           {isEmpty ? (
-            <p style={styles.empty}>No fields.</p>
+            <p style={styles.empty}>{localizeUi('No fields.')}</p>
           ) : (
             <>
               <div className="cg-inspector-fields__columns" aria-hidden="true">
-                <span>Field</span>
-                <span>Value</span>
+                <span>{localizeUi('Field')}</span>
+                <span>{localizeUi('Value')}</span>
               </div>
               {rootFields.map((row) => (
                 // Key by item+path so switching stack items remounts the controls
@@ -944,11 +958,11 @@ export function Inspector({
             shape is untouched, because there a column of peers makes it legible. */}
           <Button
             variant="neutral"
-            aria-label="Discard staged edits"
+            aria-label={localizeUi('Discard staged edits')}
             disabled={!dirty}
             onClick={() => onDiscard(itemId)}
           >
-            Discard
+            {localizeUi('Discard')}
           </Button>
           {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
@@ -1055,7 +1069,7 @@ export function Inspector({
           >
             {onAir ? 'Update on air' : 'Update'}
           </AsyncButton>
-          {dirty && <DraftChip label="unapplied edits" />}
+          {dirty && <DraftChip label={localizeUi('unapplied edits')} />}
           {/*
             🔴 THE `.target-hint` SUB-LINE IS GONE — owner decision, `INSPECTOR-AUDIT-05`
             §3. It read _"Saves this row’s configuration. No Take is sent."_ and

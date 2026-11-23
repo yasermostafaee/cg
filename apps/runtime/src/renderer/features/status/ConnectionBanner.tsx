@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -86,6 +87,7 @@ export function ConnectionBanner({
    */
   reload?: () => void;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const link = useLink();
   // `CENTRAL-BRIDGE-01` §1 C — WHERE CG Bridge was looked for.
@@ -97,17 +99,18 @@ export function ConnectionBanner({
     return (
       <div
         role="alert"
-        aria-label="Test mode"
+        aria-label={localizeUi('Test mode')}
         style={{ ...styles.banner, background: TEST_STRIPES }}
       >
         <span style={styles.text}>
-          TEST MODE — SIMULATION ONLY. NOTHING IS ON AIR.
+          {localizeUi('TEST MODE — SIMULATION ONLY. NOTHING IS ON AIR.')}
           <span style={styles.detail}>
-            No command reaches {engine}. Every status below is simulated, not real air.
+            {localizeUi('No command reaches')} {engine}
+            {localizeUi('. Every status below is simulated, not real air.')}
           </span>
         </span>
         <Button variant="secondary" onClick={() => setTestMode(false)}>
-          Leave test mode
+          {localizeUi('Leave test mode')}
         </Button>
       </div>
     );
@@ -117,12 +120,12 @@ export function ConnectionBanner({
   return (
     <div
       role="alert"
-      aria-label="Bridge disconnected"
+      aria-label={localizeUi('Bridge disconnected')}
       data-tone="alarm"
       style={{ ...styles.banner, background: colors.alarmFill, color: cssVars['--r-ink-on-fill'] }}
     >
       <span style={styles.text}>
-        NOT CONNECTED — NOTHING CAN REACH AIR.
+        {localizeUi('NOT CONNECTED — NOTHING CAN REACH AIR.')}
         <span style={styles.detail}>
           {/*
             🔴 `R-093` (`RELEASE-0114-01` Part C) — THE STATE, THE ADDRESS, AND THE ONE FACT AN
@@ -133,11 +136,11 @@ export function ConnectionBanner({
             pinned (`connectionBannerSetUpAgain.dom.test.ts`, `R-093`).
           */}
           {address === null ? 'CG Bridge not reachable.' : `CG Bridge not reachable at ${address}.`}{' '}
-          Takes are refused until it is back.
+          {localizeUi('Takes are refused until it is back.')}
         </span>
       </span>
       <Button variant="secondary" onClick={reload}>
-        Retry connection
+        {localizeUi('Retry connection')}
       </Button>
       {/*
         `CENTRAL-BRIDGE-01` (D8) — THE WAY BACK, inside CG Control: a console pointed at a CG Bridge it

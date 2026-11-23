@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef } from 'react';
 import { ArrowDown, ArrowUp, Image, ImagePlus, Move, Scan, Trash2 } from 'lucide-react';
 import { type ControlLiveLayoutFrameAttachment, type LiveRevealRect } from '@cg/shared-schema';
@@ -47,6 +48,7 @@ export function LiveLayoutEditorFrameAttachments({
   onEditChange,
   onRectChange,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const picker = useRef<HTMLInputElement>(null);
   const selectedIndex = attachments.findIndex(({ id }) => id === selectedId);
   const selected = attachments[selectedIndex];
@@ -67,8 +69,12 @@ export function LiveLayoutEditorFrameAttachments({
         if (!event.currentTarget.open && editing) onEditChange(false);
       }}
     >
-      <LiveLayoutEditorSectionHeading icon={Image} label="Plate graphics" />
-      <div className="cg-live-layout-title-scope" role="group" aria-label="Plate graphics">
+      <LiveLayoutEditorSectionHeading icon={Image} label={localizeUi('Plate graphics')} />
+      <div
+        className="cg-live-layout-title-scope"
+        role="group"
+        aria-label={localizeUi('Plate graphics')}
+      >
         {attachments.map((attachment) => (
           <Button
             key={attachment.id}
@@ -86,7 +92,7 @@ export function LiveLayoutEditorFrameAttachments({
           ref={picker}
           accept=".vcg"
           hidden
-          aria-label="Choose plate graphic VCG"
+          aria-label={localizeUi('Choose plate graphic VCG')}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
@@ -99,8 +105,9 @@ export function LiveLayoutEditorFrameAttachments({
       </div>
       {selected !== undefined && isLegacy(selected.id) && (
         <p className="cg-live-layout-effect-help">
-          This graphic was saved for this preset. Editing shares it if the plate has no conflicting
-          masked input graphics.
+          {localizeUi(
+            'This graphic was saved for this preset. Editing shares it if the plate has no conflicting masked input graphics.',
+          )}
         </p>
       )}
       {selected !== undefined && (
@@ -108,12 +115,12 @@ export function LiveLayoutEditorFrameAttachments({
           <div
             className="cg-live-layout-attachment-actions"
             role="group"
-            aria-label="Graphic actions"
+            aria-label={localizeUi('Graphic actions')}
           >
             <Button
               variant="neutral"
-              aria-label="Bring graphic forward"
-              title="Bring graphic forward"
+              aria-label={localizeUi('Bring graphic forward')}
+              title={localizeUi('Bring graphic forward')}
               disabled={!canReorder(1)}
               onClick={() => onReorder(selected.id, 1)}
             >
@@ -121,8 +128,8 @@ export function LiveLayoutEditorFrameAttachments({
             </Button>
             <Button
               variant="neutral"
-              aria-label="Send graphic backward"
-              title="Send graphic backward"
+              aria-label={localizeUi('Send graphic backward')}
+              title={localizeUi('Send graphic backward')}
               disabled={!canReorder(-1)}
               onClick={() => onReorder(selected.id, -1)}
             >
@@ -130,15 +137,15 @@ export function LiveLayoutEditorFrameAttachments({
             </Button>
             <Button
               variant="neutral"
-              aria-label="Remove graphic"
-              title="Remove graphic"
+              aria-label={localizeUi('Remove graphic')}
+              title={localizeUi('Remove graphic')}
               onClick={() => onRemove(selected.id)}
             >
               <Icon icon={Trash2} size={14} />
             </Button>
             {selectedMask !== undefined && (
               <Button variant="neutral" onClick={() => onRectChange(selected.id, selectedMask)}>
-                <Icon icon={Scan} size={14} /> Align to mask
+                <Icon icon={Scan} size={14} /> {localizeUi('Align to mask')}
               </Button>
             )}
             <Button
@@ -148,7 +155,7 @@ export function LiveLayoutEditorFrameAttachments({
               disabled={!canEdit}
               onClick={() => onEditChange(!editing)}
             >
-              <Icon icon={Move} size={14} /> Edit graphic in preview
+              <Icon icon={Move} size={14} /> {localizeUi('Edit graphic in preview')}
             </Button>
           </div>
           <div className="cg-form-grid cg-live-layout-title-fields" key={selected.id}>

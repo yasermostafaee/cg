@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState, useSyncExternalStore } from 'react';
@@ -87,6 +88,7 @@ export function LiveSourceSwapDialog({
   onSwap,
   onClose,
 }: LiveSourceSwapDialogProps): React.JSX.Element {
+  const localizeUi = useUiText();
   const engineName = useEngineName();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -119,7 +121,7 @@ export function LiveSourceSwapDialog({
 
   return (
     <Modal
-      title="Live source for this row"
+      title={localizeUi('Live source for this row')}
       onClose={onClose}
       size="wide"
       {...(refusal !== null && {
@@ -127,7 +129,7 @@ export function LiveSourceSwapDialog({
       })}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
-          Close
+          {localizeUi('Close')}
         </ModalAction>
       }
     >
@@ -184,7 +186,7 @@ export function LiveSourceSwapDialog({
                     }}
                   />
                   {swapped !== undefined && (
-                    <span style={styles.overridden}> · swapped for this row</span>
+                    <span style={styles.overridden}> {localizeUi('· swapped for this row')}</span>
                   )}
                 </span>
               </div>

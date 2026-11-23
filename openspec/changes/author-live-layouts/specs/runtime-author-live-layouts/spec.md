@@ -147,3 +147,19 @@ Layouts saved before this setting existed SHALL keep their Programme output.
 - **THEN** the image remains visible in the editor and in PVW when the source leaves the plate empty
 - **AND** the Programme plate remains transparent in that area
 - **AND** reopening the saved layout restores the image and the switch
+
+### Requirement: The author can manually preview an assigned video in its plate
+
+The live-layout editor preview SHALL offer a Play control on each visible plate assigned an
+eligible video. Its sound SHALL start muted. The plate displays the decoded clip through its
+current crop and mask. Playback, Pause and Reset are local to that plate and send no playout
+command.
+
+#### Scenario: A plate clip starts only on request and resets to its start
+
+- **WHEN** the editor preview shows two plates assigned video
+- **THEN** each shows Play and no clip starts automatically
+- **WHEN** the operator starts or pauses the first plate
+- **THEN** only the first plate's clip responds
+- **WHEN** the operator resets the first plate after playing
+- **THEN** it pauses at the first frame and the second plate retains its current state

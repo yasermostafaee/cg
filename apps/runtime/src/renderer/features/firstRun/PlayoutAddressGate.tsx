@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState } from 'react';
 import { NOT_A_BRIDGE_ADDRESS, NOT_A_PLAYOUT_ADDRESS } from '@cg/shared-ipc';
 import type { PlayoutStationAddress } from '../../../shared/station-address.js';
@@ -70,6 +71,7 @@ export function PlayoutAddressGate({
   /** Start the console again once the address is saved (a test passes its own). */
   reload?: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [fields, setFields] = useState<StationFields>({
     playout: NO_HOST_PORT,
     bridge: NO_HOST_PORT,
@@ -124,9 +126,9 @@ export function PlayoutAddressGate({
   */
   return (
     <SignInCard
-      label="Set up CG Control"
+      label={localizeUi('Set up CG Control')}
       ground="page"
-      title="Set up"
+      title={localizeUi('Set up')}
       groundData={{ 'data-playout-address-gate': '' }}
       footer={
         <Button variant="primary" disabled={nothingTyped || busy} onClick={() => void connect()}>

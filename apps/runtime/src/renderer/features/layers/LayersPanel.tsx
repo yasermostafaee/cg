@@ -1,3 +1,4 @@
+import { feedback, useUiText } from '../../i18n/locale.js';
 import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -48,6 +49,7 @@ import {
   operatorRowName,
   placeName,
   plateDisplayName,
+  sourceDisplayName,
   type OperatorRowName,
 } from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
@@ -113,7 +115,6 @@ interface Props {
   selectedId: string | null;
   onUpdate: (itemId: string) => Promise<{ accepted: boolean; errorCode?: string | undefined }>;
   independentPreview?: boolean;
-  onNewLiveLayout?: (channel: number) => Promise<void>;
   /** R-028 part B — the operator's workspace geometry (see `useShellLayout`). */
   layout: ShellLayout;
   /** Narrow screens only: is the Inspector overlay showing? */
@@ -312,7 +313,6 @@ export function LayersPanel({
   selectedId,
   onUpdate,
   independentPreview = false,
-  onNewLiveLayout,
   layout,
   inspectorOpen,
   onToggleInspector,
@@ -323,6 +323,7 @@ export function LayersPanel({
   filter = NO_FILTER,
   onFilterChange,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
    *
@@ -812,9 +813,18 @@ export function LayersPanel({
             `and may still be on air. Try CLEAR on those rows.${refusedNote}`,
         );
       } else if (res.cleared > 0) {
-        reportCommandSuccess(
-          `Cleared · ${String(res.cleared)} ${res.cleared === 1 ? 'row' : 'rows'}${refusedNote}`,
+        const cleared = feedback(
+          res.cleared === 1 ? 'Cleared · {count} row' : 'Cleared · {count} rows',
+          { count: res.cleared },
         );
+        const leftAlone =
+          res.refused.length === 0
+            ? ''
+            : ' · ' +
+              feedback("{count} live source layer(s) left alone, not this console's to clear", {
+                count: res.refused.length,
+              });
+        reportCommandSuccess(cleared + leftAlone);
       } else {
         // Never a green "done": nothing was sent, and saying so is the whole point.
         reportCommandError(`No row holds a layer to clear — nothing was sent.${refusedNote}`);
@@ -855,7 +865,12 @@ export function LayersPanel({
       */
       if (onAirCount > 0) {
         reportCommandSuccess(
-          `Stopped · ${String(onAirCount)} ${onAirCount === 1 ? 'row' : 'rows'}. They stay loaded.`,
+          feedback(
+            onAirCount === 1
+              ? 'Stopped · {count} row. They stay loaded.'
+              : 'Stopped · {count} rows. They stay loaded.',
+            { count: onAirCount },
+          ),
         );
       }
     } catch (err) {
@@ -925,6 +940,10 @@ export function LayersPanel({
   */
   const liveSourceName = (itemId: string, plateId: string): string | null =>
     liveSourceEntry(itemId, plateId)?.name ?? null;
+  const audioSourceName = (itemId: string, plateId: string): string | null => {
+    const entry = liveSourceEntry(itemId, plateId);
+    return entry === null ? null : sourceDisplayName(entry.name, entry.origin);
+  };
   /*
     🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — A PLATE ON THE PLAYOUT'S PLAYLIST OUTPUT IS LOCKED AT 0: every
     audio control is disabled with the reason and its pill reads `Locked · 0`. Through the SAME resolution
@@ -1113,7 +1132,7 @@ export function LayersPanel({
     [scopeChannel],
   );
   const tabs: TabSpec[] = [
-    { id: 'layers', label: 'Layers' },
+    { id: 'layers', label: localizeUi('Layers') },
     {
       /*
         🔴 THE ID IS `live-sources` AND THE LABEL IS `Live plates`, AND THAT IS DELIBERATE.
@@ -1142,7 +1161,7 @@ export function LayersPanel({
         above them is the design, not an inconsistency in it.
       */
       id: 'live-sources',
-      label: 'Live plates',
+      label: localizeUi('Live plates'),
       /*
         The dot means a live producer is lit with NO ROW THAT CAN REACH IT — the
         emergency this whole item exists for. It is deliberately NOT raised for an
@@ -1161,7 +1180,7 @@ export function LayersPanel({
     },
     {
       id: 'station-layers',
-      label: 'Station layers',
+      label: localizeUi('Station layers'),
       // The dot means "something IS on a playout layer" — never raised for an
       // unknown, which is the absence of a claim rather than a claim. It is
       // scoped to the channel whose tab is open, which is why the channel axis
@@ -1314,6 +1333,9 @@ export function LayersPanel({
                 ? undefined
                 : (plateId: string) => liveSourceLocked(item.itemId, plateId)
             }
+            audioSourceNameOf={
+              item === null ? undefined : (plateId) => audioSourceName(item.itemId, plateId)
+            }
             // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
             // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
             holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
@@ -1339,7 +1361,7 @@ export function LayersPanel({
           <Fragment key={`${String(slot.channel)}:${String(slot.layer)}`}>
             <h3 style={styles.bedGroupHead} data-bed-group-head="">
               <Icon icon={LayoutGrid} size={14} />
-              Live layers
+              {localizeUi('Live layers')}
             </h3>
             {row}
           </Fragment>
@@ -1390,6 +1412,7 @@ export function LayersPanel({
         )}
         seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
         audioLockedOf={(plateId) => liveSourceLocked(audioItem.itemId, plateId)}
+        sourceNameOf={(plateId) => audioSourceName(audioItem.itemId, plateId)}
         focusPlateId={plateAudioFor.plateId}
         onApplyVolumes={(volumes) => applyPlateVolumes(audioItem.itemId, volumes)}
         onClose={() => {
@@ -1403,7 +1426,7 @@ export function LayersPanel({
 
   if (selectedOnly) {
     return (
-      <section aria-label="Selected layer" style={styles.compactCompanion}>
+      <section aria-label={localizeUi('Selected layer')} style={styles.compactCompanion}>
         {selectedHeld && listReady && bank !== null && renderLayerList(bank)}
         {renderHiddenShortcutRows()}
         {renderPlateAudioDialog()}
@@ -1414,7 +1437,7 @@ export function LayersPanel({
   return (
     <Panel
       id="layers"
-      title="LAYERS"
+      title={localizeUi('LAYERS')}
       ariaLabel="Layers"
       style={{ flex: 1 }}
       /*
@@ -1435,11 +1458,6 @@ export function LayersPanel({
       }
       actions={
         <>
-          {canOperate && onNewLiveLayout !== undefined && listReady && bank !== null && (
-            <Button variant="neutral" onClick={() => void onNewLiveLayout(bank.channel)}>
-              New live layout
-            </Button>
-          )}
           {canOperate && capabilities?.layerProfiles === true && listReady && bank !== null && (
             <LayerProfiles key={bank.channel} bank={bank} snapshot={items} />
           )}
@@ -1492,7 +1510,7 @@ export function LayersPanel({
               <Button
                 variant="neutral"
                 disabled={needsCaspar || onAirCount === 0}
-                aria-label="Stop all on-air items"
+                aria-label={localizeUi('Stop all on-air items')}
                 data-verb-tone="stop"
                 title={
                   needsCaspar
@@ -1502,7 +1520,7 @@ export function LayersPanel({
                 onClick={() => void stopAll()}
               >
                 <Icon icon={CircleArrowOutDownRight} />
-                STOP ALL
+                {localizeUi('STOP ALL')}
               </Button>
               {/*
             CLEAR ALL is ALWAYS ENABLED — the bulk twin of the row's CLEAR escape
@@ -1528,7 +1546,7 @@ export function LayersPanel({
               <Button
                 variant="neutral"
                 disabled={needsCaspar}
-                aria-label="Clear all rows holding a layer"
+                aria-label={localizeUi('Clear all rows holding a layer')}
                 data-verb-tone="clear"
                 title={
                   needsCaspar
@@ -1538,7 +1556,7 @@ export function LayersPanel({
                 onClick={() => void clearAll()}
               >
                 <Icon icon={XSquare} />
-                CLEAR ALL
+                {localizeUi('CLEAR ALL')}
               </Button>
             </>
           )}
@@ -1586,8 +1604,8 @@ export function LayersPanel({
           {layout.customized && (
             <Button
               variant="ghost"
-              aria-label="Reset the panel layout"
-              title="Put every panel back to its default size"
+              aria-label={localizeUi('Reset the panel layout')}
+              title={localizeUi('Put every panel back to its default size')}
               onClick={layout.reset}
             >
               <Icon icon={RotateCcw} />
@@ -1612,7 +1630,7 @@ export function LayersPanel({
         {!selectedHeld ? (
           // `CENTRAL-BRIDGE-01` (D4) — see `selectedHeld`: a fact, in place of every tab's rows.
           <div style={styles.empty} role="status" data-layers-not-held="">
-            This channel is not in your sign-in.
+            {localizeUi('This channel is not in your sign-in.')}
           </div>
         ) : activeTab === 'layers' ? (
           !listReady ? (
@@ -1652,14 +1670,20 @@ export function LayersPanel({
                   not an empty list — …"): read once, never again, on an operator surface that
                   carries no explanatory prose. The title says the state; the absence is pinned.
                 */
-                <strong style={{ color: colors.text }}>The layer list was refused.</strong>
+                <strong style={{ color: colors.text }}>
+                  {localizeUi('The layer list was refused.')}
+                </strong>
               ) : (
-                <strong style={{ color: colors.text }}>Loading the layer list…</strong>
+                <strong style={{ color: colors.text }}>
+                  {localizeUi('Loading the layer list…')}
+                </strong>
               )}
             </div>
           ) : bank === null ? (
             <div style={styles.empty}>
-              <strong style={{ color: colors.text }}>No candidate layers are declared.</strong>
+              <strong style={{ color: colors.text }}>
+                {localizeUi('No candidate layers are declared.')}
+              </strong>
               <span>
                 This station has no rows to load onto yet. The channel and the range of candidate
                 layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config file
@@ -1669,11 +1693,12 @@ export function LayersPanel({
                   above. That button is gone, so the sentence names where the section
                   actually is: one door, and the rail inside it. */}
               <span>
-                Once a range exists, <strong>SETTINGS ▸ Layers</strong> is where you show or hide
-                individual rows and give them names.
+                {localizeUi('Once a range exists,')}{' '}
+                <strong>{localizeUi('SETTINGS ▸ Layers')}</strong>{' '}
+                {localizeUi('is where you show or hide individual rows and give them names.')}
               </span>
               <Button variant="secondary" onClick={() => openStationSetup('candidate-layers')}>
-                What the bridge needs
+                {localizeUi('What the bridge needs')}
               </Button>
             </div>
           ) : (
@@ -1708,10 +1733,10 @@ export function LayersPanel({
                   <Icon icon={TriangleAlert} size={13} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <strong>
-                      {restoreSkips.length} {restoreSkips.length === 1 ? 'row' : 'rows'} did not
-                      come back
+                      {restoreSkips.length} {restoreSkips.length === 1 ? 'row' : 'rows'}{' '}
+                      {localizeUi('did not come back')}
                     </strong>{' '}
-                    after the bridge restarted:{' '}
+                    {localizeUi('after the bridge restarted:')}{' '}
                     {/*
                       `B-233` — THE ROWS, IN THE OPERATOR'S WORDS. This printed
                       `item-e602d912-… — its template is no longer registered`: a raw item id
@@ -1732,7 +1757,7 @@ export function LayersPanel({
                   </span>
                   <Button
                     variant="ghost"
-                    aria-label="Dismiss the restore notice"
+                    aria-label={localizeUi('Dismiss the restore notice')}
                     onClick={() => {
                       setDismissedSkips(skipsKey);
                       // `CENTRAL-BRIDGE-01` — on the bridge too, for this channel, so every console
@@ -1759,9 +1784,9 @@ export function LayersPanel({
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <strong>
                       {restoreMigrations.length} {restoreMigrations.length === 1 ? 'row' : 'rows'}{' '}
-                      came back on a different row
+                      {localizeUi('came back on a different row')}
                     </strong>{' '}
-                    after the bridge restarted:{' '}
+                    {localizeUi('after the bridge restarted:')}{' '}
                     {/*
                       `B-232` — THE ROW, IN THE OPERATOR'S WORDS. This said
                       `item-e602d912-… — it declares live plates, so it moved…`: a raw
@@ -1784,7 +1809,7 @@ export function LayersPanel({
                   </span>
                   <Button
                     variant="ghost"
-                    aria-label="Dismiss the migrated-row notice"
+                    aria-label={localizeUi('Dismiss the migrated-row notice')}
                     onClick={() => {
                       setDismissedMigrations(migrationsKey);
                       void window.cg.stack
@@ -1810,8 +1835,8 @@ export function LayersPanel({
                   <input
                     type="search"
                     className="cg-field"
-                    aria-label="Find row or template"
-                    placeholder="Find row or template…"
+                    aria-label={localizeUi('Find row or template')}
+                    placeholder={localizeUi('Find row or template…')}
                     value={filter.query}
                     data-layers-search=""
                     onChange={(e) => onFilterChange?.({ ...filter, query: e.target.value })}
@@ -1824,7 +1849,7 @@ export function LayersPanel({
                     data-layers-hide-empty=""
                     onChange={(e) => onFilterChange?.({ ...filter, hideEmpty: e.target.checked })}
                   />
-                  Hide empty
+                  {localizeUi('Hide empty')}
                 </label>
                 {/*
                   🔴 THE AWAITING LIVE REGION, on a line that exists either way.
@@ -1881,7 +1906,9 @@ export function LayersPanel({
                     many rows are loaded is background, how many are on air is not, and the
                     type says so before a word is read.
                   */}
-                  <span className="cg-layers-subbar__loaded">{filterTally.loaded} loaded</span>
+                  <span className="cg-layers-subbar__loaded">
+                    {filterTally.loaded} {localizeUi('loaded')}
+                  </span>
                   {/*
                     🔴 DELTA D5 — THE TWO STATE COUNTS LIVE HERE NOW, and they are the ones that
                     used to sit inside the table's STATE head (`LayerTableHeader` says why they
@@ -1905,7 +1932,7 @@ export function LayersPanel({
                         : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play ${engine} accepted, or one still waiting for its answer. A refused row is counted separately.`
                     }
                   >
-                    {tally.onAir} on air
+                    {tally.onAir} {localizeUi('on air')}
                   </span>
                   {/*
                     🔴 `B-301` — the ROWS in error (`isRowError`, the predicate `tally` counts by),
@@ -1936,7 +1963,7 @@ export function LayersPanel({
                     mock's number, not the station's — the real bank shows seven.
                   */}
                   <span data-layers-tally-rows="">
-                    {filterTally.shown}/{filterTally.total} rows
+                    {filterTally.shown}/{filterTally.total} {localizeUi('rows')}
                   </span>
                 </span>
               </div>

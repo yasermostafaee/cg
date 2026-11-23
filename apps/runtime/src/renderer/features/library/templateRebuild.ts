@@ -1,3 +1,4 @@
+import { feedback } from '../../i18n/locale.js';
 import type {
   ChannelRequest,
   ChannelResponse,
@@ -163,12 +164,21 @@ export function rebuiltLine(
 ): string | null {
   const total = result.rebuilt + result.deferred.length;
   if (total === 0) return null;
-  const head = `Rebuilt for this CG Control · ${String(total)} template${total === 1 ? '' : 's'}`;
+  const head = feedback(
+    total === 1
+      ? 'Rebuilt for this CG Control · {count} template'
+      : 'Rebuilt for this CG Control · {count} templates',
+    { count: total },
+  );
   if (result.deferred.length === 0) return head;
   const names = result.deferred.map((t) => `“${templateDisplayName(t)}”`).join(', ');
-  const verb =
-    result.deferred.length === 1 ? 'waits until its row is' : 'wait until their rows are';
-  return `${head} · ${names} ${verb} stopped`;
+  const deferred = feedback(
+    result.deferred.length === 1
+      ? '{names} waits until its row is stopped'
+      : '{names} wait until their rows are stopped',
+    { names },
+  );
+  return `${head} · ${deferred}`;
 }
 
 /**

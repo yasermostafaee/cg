@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import {
@@ -82,6 +83,7 @@ export function LayerProfiles({
   bank: FixedLayerBank;
   snapshot: readonly StackItemState[];
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<{
@@ -217,8 +219,8 @@ export function LayerProfiles({
     <>
       <Button
         variant="neutral"
-        aria-label="Layer profiles"
-        title="Save or load layer profiles"
+        aria-label={localizeUi('Layer profiles')}
+        title={localizeUi('Save or load layer profiles')}
         onClick={() => {
           setSelected(null);
           setResult(null);
@@ -227,11 +229,11 @@ export function LayerProfiles({
           setOpen(true);
         }}
       >
-        <Icon icon={FolderOpen} size={14} /> Profiles
+        <Icon icon={FolderOpen} size={14} /> {localizeUi('Profiles')}
       </Button>
       {open && (
         <Modal
-          title="Layer profiles"
+          title={localizeUi('Layer profiles')}
           message={
             problem !== null
               ? { role: 'refusal', text: problem }
@@ -250,40 +252,44 @@ export function LayerProfiles({
               disabled={busy || selected === null}
               onClick={() => void load()}
             >
-              Load profile
+              {localizeUi('Load profile')}
             </ModalAction>
           }
         >
-          <p>Channel {String(channel)}</p>
+          <p>
+            {localizeUi('Channel')} {String(channel)}
+          </p>
           <Button variant="neutral" disabled={busy} onClick={() => void save()}>
-            Save profile…
+            {localizeUi('Save profile…')}
           </Button>
           <Button variant="neutral" disabled={busy} onClick={() => void choose()}>
-            Choose profile…
+            {localizeUi('Choose profile…')}
           </Button>
           <FileInput
             ref={picker}
             accept=".json,application/json"
-            aria-label="Profile file"
+            aria-label={localizeUi('Profile file')}
             hidden
           />
           {selected !== null && (
             <>
               <p>
-                Load <IsolatedName>{selected.name}</IsolatedName> and replace prepared layers on
-                channel {String(channel)}?
+                {localizeUi('Load')} <IsolatedName>{selected.name}</IsolatedName>{' '}
+                {localizeUi('and replace prepared layers on channel')} {String(channel)}?
               </p>
               {selected.profile.layerShortcuts !== undefined && (
-                <p>This profile includes keyboard shortcuts.</p>
+                <p>{localizeUi('This profile includes keyboard shortcuts.')}</p>
               )}
-              {selected.safeGuides !== null && <p>This profile includes safe guides.</p>}
+              {selected.safeGuides !== null && (
+                <p>{localizeUi('This profile includes safe guides.')}</p>
+              )}
             </>
           )}
           {result !== null && result.issues.length > 0 && (
             <ul>
               {result.issues.map(({ layer, label, reason }, index) => (
                 <li key={`${String(layer)}:${String(index)}`}>
-                  Layer {String(layer)}
+                  {localizeUi('Layer')} {String(layer)}
                   {label ? (
                     <>
                       {' '}

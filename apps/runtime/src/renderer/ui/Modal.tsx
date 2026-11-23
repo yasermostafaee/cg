@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X, type LucideIcon } from 'lucide-react';
@@ -847,6 +848,7 @@ export function Modal({
   rail,
   layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
+  const localizeUi = useUiText();
   const ref = useRef<HTMLDivElement>(null);
   /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
   const fixed = size === 'fixed';
@@ -995,11 +997,15 @@ export function Modal({
             </span>
           )}
           {subtitle === undefined ? (
-            <h2 style={titleStyle}>{title}</h2>
+            <h2 dir="auto" style={titleStyle}>
+              {title}
+            </h2>
           ) : (
             <div style={styles.titleStack}>
-              <h2 style={titleStyle}>{title}</h2>
-              <p style={styles.subtitle} data-modal-subtitle="">
+              <h2 dir="auto" style={titleStyle}>
+                {title}
+              </h2>
+              <p dir="auto" style={styles.subtitle} data-modal-subtitle="">
                 {subtitle}
               </p>
             </div>
@@ -1019,8 +1025,8 @@ export function Modal({
           */}
           <Button
             variant="ghost"
-            aria-label="Close"
-            title="Close (Escape)"
+            aria-label={localizeUi('Close')}
+            title={localizeUi('Close (Escape)')}
             onClick={onClose}
             disabled={busy}
             className="cg-modal-close"

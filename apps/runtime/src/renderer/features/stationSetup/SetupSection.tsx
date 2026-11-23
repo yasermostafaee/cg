@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Check, Lock, Layers3, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX } from '../../theme.js';
@@ -76,6 +77,7 @@ export function SetupSection({
   children: ReactNode;
 }): JSX.Element {
   // `MULTI-CHANNEL-01` §2 M — the section as it is for THIS principal (`sectionSpecFor`).
+  const text = useUiText();
   const spec = sectionSpecFor(id, useHoldsStationAdmin());
   const ref = useRef<HTMLElement>(null);
 
@@ -91,19 +93,24 @@ export function SetupSection({
   }, [id]);
 
   return (
-    <section ref={ref} aria-label={spec.title} id={`station-setup-${id}`} data-station-section={id}>
+    <section
+      ref={ref}
+      aria-label={text(spec.title)}
+      id={`station-setup-${id}`}
+      data-station-section={id}
+    >
       <div
         className="cg-setup-head"
         {...(summary !== undefined ? { style: { marginBottom: 0 } } : {})}
       >
         <div>
-          <h2 className="cg-setup-title">{spec.title}</h2>
-          <p className="cg-setup-description">{spec.legend}</p>
+          <h2 className="cg-setup-title">{text(spec.title)}</h2>
+          <p className="cg-setup-description">{text(spec.legend)}</p>
           {summary}
         </div>
         <Tag className="cg-setup-tag" data-section-commit={spec.commit}>
           <Icon icon={CONTRACT_ICON[spec.commit]} size={STATION_SETUP_PX.tagIcon} />
-          {contractTag(spec.commit)}
+          {text(contractTag(spec.commit))}
         </Tag>
       </div>
       {helper}

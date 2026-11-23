@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { useId, useSyncExternalStore } from 'react';
 import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
@@ -252,6 +253,7 @@ export function LooksBindingsSection({
   rehearsing?: boolean | undefined;
   previewOnly?: boolean | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const bindingId = useId();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -304,9 +306,9 @@ export function LooksBindingsSection({
             `would use.`
           }
         >
-          on air:{' '}
+          {localizeUi('on air:')}{' '}
           <SourceLabel sourceId={onAir.sourceId} fallback="nothing" meterChannel={channel} />{' '}
-          (patched on this row)
+          {localizeUi('(patched on this row)')}
         </span>
       );
     }
@@ -326,9 +328,9 @@ export function LooksBindingsSection({
             `the row again to adopt it, or set this look’s input to change it now.`
           }
         >
-          this row:{' '}
+          {localizeUi('this row:')}{' '}
           <SourceLabel sourceId={frozen.sourceId} fallback="nothing" meterChannel={channel} />{' '}
-          (frozen at take)
+          {localizeUi('(frozen at take)')}
         </span>
       );
     }
@@ -361,7 +363,7 @@ export function LooksBindingsSection({
   );
 
   return (
-    <div className="cg-inspector-section" aria-label="Plate inputs">
+    <div className="cg-inspector-section" aria-label={localizeUi('Plate inputs')}>
       {/*
         🔴 **THE DEFAULTS LINK LIVES HERE — owner, 2026-09-14 (gh2):** «لینک مودال هم بالای
         فریمها باشه مثل gh2 نیاز نیست توی دو بخش جدا باشن.» The reference puts it in this
@@ -371,7 +373,7 @@ export function LooksBindingsSection({
         other. Sentence case in the source; the CAPS are the stylesheet's (`Inspector.tsx`).
       */}
       <div className="cg-section-caption">
-        <h2>Plate inputs</h2>
+        <h2>{localizeUi('Plate inputs')}</h2>
         <SourceDefaultsLink
           templateId={item.templateId}
           info={info}
@@ -398,12 +400,12 @@ export function LooksBindingsSection({
         The remaining sentence states that editing plate inputs leaves the programme alone
         until the operator applies an update.
       */}
-      <p style={styles.scope}>Editing plate inputs does not take them on air.</p>
+      <p style={styles.scope}>{localizeUi('Editing plate inputs does not take them on air.')}</p>
       {/*
         THE TABS. One per authored look, the live one marked, and a dot on any look holding
         an unapplied edit — see `dirtyLooks`.
       */}
-      <div style={styles.lookTabs} role="group" aria-label="Look to edit">
+      <div style={styles.lookTabs} role="group" aria-label={localizeUi('Look to edit')}>
         {looks.map((look) => {
           const isLive = look.id === liveLookId;
           const isActive = look.id === inputLook.id;
@@ -482,7 +484,7 @@ export function LooksBindingsSection({
             */}
             {plates.length === 0 && (
               <p className="cg-form-rows__wide" style={styles.empty}>
-                No frames in this look.
+                {localizeUi('No frames in this look.')}
               </p>
             )}
             {plates.map((plate) => {
@@ -573,7 +575,7 @@ export function LooksBindingsSection({
                     {masked && (
                       <>
                         <span style={styles.masked} data-look-binding-patched={plate.sourceId}>
-                          not in force — patched to{' '}
+                          {localizeUi('not in force — patched to')}{' '}
                           <SourceLabel sourceId={patch} meterChannel={channel} />
                         </span>
                         {/*
@@ -601,11 +603,11 @@ export function LooksBindingsSection({
                               });
                           }}
                         >
-                          Clear patch
+                          {localizeUi('Clear patch')}
                         </Button>
                       </>
                     )}
-                    {dirty && <DraftChip label="unapplied" />}
+                    {dirty && <DraftChip label={localizeUi('unapplied')} />}
                     {/*
                     🔴 §2.3 — VISIBLE, not an `aria-label`. `DraftChip` renders the fixed text
                     "● draft" and carries its `label` as an accessible name only, so putting
@@ -616,7 +618,7 @@ export function LooksBindingsSection({
                   */}
                     {dirty && masked && (
                       <span style={styles.masked} data-look-binding-waiting={plate.sourceId}>
-                        takes effect when the patch is cleared
+                        {localizeUi('takes effect when the patch is cleared')}
                       </span>
                     )}
                     {/*

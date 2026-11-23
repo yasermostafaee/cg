@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
@@ -81,6 +82,7 @@ function detailFor(missing: readonly string[]): string {
 }
 
 export function BridgeSkewBanner(): JSX.Element | null {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const [missing, setMissing] = useState<readonly string[] | null>(() => window.cg.link.skew());
   const [mismatch, setMismatch] = useState<string | null>(() => window.cg.link.versionMismatch());
@@ -104,7 +106,7 @@ export function BridgeSkewBanner(): JSX.Element | null {
       <div style={styles.banner} role="alert" data-version-mismatch-banner data-tone="caution">
         <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
         <span style={styles.text}>
-          <span style={styles.headline}>DIFFERENT RELEASES</span>
+          <span style={styles.headline}>{localizeUi('DIFFERENT RELEASES')}</span>
           <span style={styles.detail}>{mismatch}</span>
         </span>
       </div>
@@ -120,7 +122,7 @@ export function BridgeSkewBanner(): JSX.Element | null {
     <div style={styles.banner} role="alert" data-bridge-skew-banner data-tone="caution">
       <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
       <span style={styles.text}>
-        <span style={styles.headline}>BRIDGE IS OUT OF DATE</span>
+        <span style={styles.headline}>{localizeUi('BRIDGE IS OUT OF DATE')}</span>
         <span style={styles.detail} title={[...missing].slice(0, NAMED).join(', ')}>
           {playoutEngineWording(detailFor(missing), engine)}
         </span>

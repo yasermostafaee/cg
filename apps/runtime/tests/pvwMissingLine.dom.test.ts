@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RehearsalStage } from '../src/renderer/features/monitors/RehearsalStage.js';
 import type { RehearsalSubject } from '../src/renderer/features/monitors/rehearsalFrames.js';
 import type { PvwPage } from '../src/shared/pvwPage.js';
+import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — **A ROW WITH NO PAGE SAYS WHY, IN ONE LINE THAT NAMES ITS
@@ -16,11 +17,17 @@ import type { PvwPage } from '../src/shared/pvwPage.js';
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
+
+beforeEach(() => {
+  vi.stubGlobal('cg', createMockBridge());
+});
+
 afterEach(() => {
   if (root !== null) act(() => root?.unmount());
   host?.remove();
   root = null;
   host = null;
+  vi.unstubAllGlobals();
 });
 
 function subject(itemId: string, channel: number): RehearsalSubject {

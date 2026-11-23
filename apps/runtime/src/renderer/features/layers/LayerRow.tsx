@@ -1,3 +1,4 @@
+import { useUiText, feedback } from '../../i18n/locale.js';
 import { templateTypeLabel } from '../library/templateName.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
@@ -170,6 +171,7 @@ interface Props {
   seatedPlates?: readonly RowPlateAudio[];
   /** `PLAYOUT-FEATURES-01` C — which of this row's plates show the playlist output (audio locked at 0). */
   audioLockedOf?: ((plateId: string) => boolean) | undefined;
+  audioSourceNameOf?: ((plateId: string) => string | null) | undefined;
   /**
    * `FIELD-FIXES-01-A` Decision 2 — does the bridge's ledger hold a seat for this row's item?
    * Resolved by the PANEL from the one ledger snapshot, for `rehearsing`'s reason, and handed to
@@ -353,12 +355,14 @@ export function LayerRow({
   templateThumbnailsAvailable = false,
   seatedPlates = [],
   audioLockedOf,
+  audioSourceNameOf,
   holdsLiveSeats = false,
   operatorName,
   density = 'full',
   onSelect,
   onUpdate,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const link = useLink();
   const linkDown = link === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
@@ -682,7 +686,12 @@ export function LayerRow({
       */
       if (res.accepted) {
         onSelect(itemId);
-        reportCommandSuccess(`${rowName} loaded · ${displayLabel(chosen) ?? chosen.templateId}`);
+        reportCommandSuccess(
+          feedback('{row} loaded · {template}', {
+            row: rowName,
+            template: displayLabel(chosen) ?? chosen.templateId,
+          }),
+        );
         return res;
       }
       /*
@@ -869,11 +878,11 @@ export function LayerRow({
             iconOnly
             active={action.active === true}
             {...(action.tone !== undefined ? { 'data-verb-tone': action.tone } : {})}
-            aria-label={action.label}
-            title={action.title ?? action.label}
+            aria-label={localizeUi(action.label)}
+            title={localizeUi(action.title ?? action.label)}
             {...(action.icon !== undefined ? { icon: action.icon } : {})}
           >
-            {action.label}
+            {localizeUi(action.label)}
           </AsyncButton>
         ))}
     </span>
@@ -1035,7 +1044,7 @@ export function LayerRow({
       // Both carry the real layer number now that its column is gone — the
       // tooltip for a pointer, the accessible name for a screen reader.
       title={rowTitle}
-      aria-label={`${rowTitle} · ${state.label}`}
+      aria-label={`${rowTitle} · ${localizeUi(state.label)}`}
       onKeyDown={(e) => {
         /*
           `RUNTIME-REDESIGN-01` Phase 6 — KEYBOARD PARITY for the row's menu: the `ContextMenu`
@@ -1074,7 +1083,7 @@ export function LayerRow({
       <span
         style={{ ...styles.state, color: state.color }}
         title={state.title ?? state.label}
-        aria-label={`status ${state.label}`}
+        aria-label={`status ${localizeUi(state.label)}`}
         /*
           The state's ROLE, as a stable hook.
 
@@ -1125,7 +1134,7 @@ export function LayerRow({
                 : styles.stateLabel
             }
           >
-            {state.label}
+            {localizeUi(state.label)}
           </span>
         )}
       </span>
@@ -1343,12 +1352,12 @@ export function LayerRow({
                 }
               >
                 {' '}
-                (not in this browser)
+                {localizeUi('(not in this browser)')}
               </span>
             )}
           </span>
         ) : (
-          <span style={styles.empty}>Empty</span>
+          <span style={styles.empty}>{localizeUi('Empty')}</span>
         ))}
       {/* No DESCRIPTION column — what the wire reports about this layer is carried by
           the STATE cell's tooltip above, which always ends with CasparCG's own words
@@ -1459,6 +1468,7 @@ export function LayerRow({
           }
           seatedPlates={seatedPlates}
           audioLockedOf={audioLockedOf}
+          sourceNameOf={audioSourceNameOf}
           /*
             `add-multibox-audio` — the MAP door, not the single-plate one. SOLO is a
             cross-plate statement and the bridge holds the row's live-seat lock for the whole

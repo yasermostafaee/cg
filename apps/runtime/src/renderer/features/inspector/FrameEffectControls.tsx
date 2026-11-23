@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useState } from 'react';
 import {
   FRAME_TRANSITION_MAX_MS,
@@ -49,6 +50,7 @@ export function PresetPlateDirectionControl({
   direction: InputTransitionDirection | undefined;
   onChange: (direction: InputTransitionDirection | undefined) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const label = phase === 'enter' ? 'Arriving plates' : 'Departing plates';
   const choices = phase === 'enter' ? ARRIVAL_LABELS : DEPARTURE_LABELS;
   return (
@@ -64,7 +66,7 @@ export function PresetPlateDirectionControl({
           if (value === '' || parsed.success) onChange(parsed.success ? parsed.data : undefined);
         }}
       >
-        <option value="">Fade</option>
+        <option value="">{localizeUi('Fade')}</option>
         {InputTransitionDirectionSchema.options.map((option) => (
           <option key={option} value={option}>
             {choices[option]}
@@ -84,6 +86,7 @@ export function FrameEffectControls({
   label?: string;
   preset?: { itemId: string; value: FrameTransition; defaultLabel?: string } | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const controlId = useId();
   const consoleDefault = useFrameTransitionPreference();
   const override = useRowEffectOverrides(preset?.itemId ?? '')?.preset;
@@ -107,10 +110,10 @@ export function FrameEffectControls({
     <fieldset className="cg-position-effect" disabled={disabled}>
       <legend>{label}</legend>
       <label>
-        Motion
+        {localizeUi('Motion')}
         <select
           className="cg-field"
-          aria-label="Motion"
+          aria-label={localizeUi('Motion')}
           value={preset !== undefined && override === undefined ? 'default' : motion}
           onChange={(event) => {
             if (event.currentTarget.value === 'default' && preset !== undefined) {
@@ -140,11 +143,11 @@ export function FrameEffectControls({
           checked={fade}
           onChange={(next) => changeEffect({ fade: next })}
         />
-        Fade
+        {localizeUi('Fade')}
       </label>
       {hasEffect && (
         <label htmlFor={`${controlId}-duration`}>
-          Duration (ms)
+          {localizeUi('Duration (ms)')}
           <NumericInput
             id={`${controlId}-duration`}
             className="cg-field"

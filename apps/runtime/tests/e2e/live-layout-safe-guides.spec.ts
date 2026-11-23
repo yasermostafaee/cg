@@ -6,6 +6,7 @@ import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { fixedBankSlots } from '@cg/shared-ipc';
 import { expect, test, type Locator } from '@playwright/test';
+import { closeLiveLayoutCatalogue, openNewLiveLayout } from './fixtures/live-layout-editor.js';
 
 function freeUdpPort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -93,7 +94,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     }, bridge.url);
     await page.goto('/');
     const layers = page.getByRole('region', { name: 'Layers' });
-    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
     const layoutName = editor.getByRole('textbox', { name: 'Layout name', exact: true });
     const layoutField = await layoutName.evaluate((element) => {
@@ -203,6 +204,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expectAligned(stage);
     await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
     await expect(editor).toBeHidden();
+    await closeLiveLayoutCatalogue(page);
     const saved = runtime.templateList(1).find(({ name }) => name === 'Guide-free layout');
     if (saved?.controlLiveLayout === undefined) throw new Error('Missing saved layout');
     expect(JSON.stringify(saved.controlLiveLayout)).not.toMatch(/safe.guides|تیتر|standardVisible/);
@@ -241,7 +243,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await pvwToggle.click();
     await expect(pvw.locator('[data-safe-area-guides]')).toHaveCount(0);
-    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await expect(stage.locator('[data-safe-area-guides]')).toHaveCount(0);
     await toggle.click();
@@ -257,9 +259,10 @@ test('New live layout safe guides fit its active picture and share only view pre
     );
     await expect(stage.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(204, 85, 170)');
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     await page.reload();
     await expect(layers).toBeVisible();
-    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(stage.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(153, 221, 68)');
     await expect(stage.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(204, 85, 170)');
@@ -301,6 +304,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await expectAligned(stage);
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     if (await showMonitors.isVisible()) await showMonitors.click();
     await expect(pvwToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(pvw.locator('[data-guide-reference="custom"]')).toHaveAttribute('width', '607.5');
@@ -315,7 +319,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     });
     await page.reload();
     await expect(layers).toBeVisible();
-    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(portrait).toHaveAttribute('width', '607.5');
     await editor.getByRole('button', { name: 'Safe area settings', exact: true }).click();
@@ -351,12 +355,13 @@ test('New live layout safe guides fit its active picture and share only view pre
     await page.screenshot({ path: testInfo.outputPath('new-layout-two-custom-safe-areas.png') });
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     if (await showMonitors.isVisible()) await showMonitors.click();
     await expect(pvwToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(pvw.locator('[data-guide-reference="custom"]')).toHaveCount(2);
     await page.reload();
     await expect(layers).toBeVisible();
-    await layers.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(stage.locator('[data-guide-reference="custom"]')).toHaveCount(2);
     await expect(
@@ -374,6 +379,7 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expect(stage.locator('[data-guide-reference="custom"]')).toHaveCount(1);
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     expect(runtime.templatePage(saved.templateId, 1)).toEqual(served);
     expect(
       engine

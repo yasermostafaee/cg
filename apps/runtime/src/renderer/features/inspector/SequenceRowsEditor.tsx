@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   CircleCheck,
@@ -375,6 +376,7 @@ function CurrentSequenceRowsDialog({
   templateId?: string | undefined;
   channel?: number | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const pictureUrls = useAuthoredPictureThumbnails(templateId, channel);
   if (!open) return null;
   const invalidCount = rows.reduce(
@@ -385,7 +387,7 @@ function CurrentSequenceRowsDialog({
 
   return (
     <Modal
-      title="Current file-only data"
+      title={localizeUi('Current file-only data')}
       subtitle={label}
       ariaLabel={`Current file-only data · ${label}`}
       size="wide"
@@ -393,13 +395,17 @@ function CurrentSequenceRowsDialog({
       onClose={onClose}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
-          Close
+          {localizeUi('Close')}
         </ModalAction>
       }
     >
       <div style={styles.previewSummary} role="status">
-        <Tag>{String(rows.length)} rows</Tag>
-        <Tag>{String(fields.length)} columns</Tag>
+        <Tag>
+          {String(rows.length)} {localizeUi('rows')}
+        </Tag>
+        <Tag>
+          {String(fields.length)} {localizeUi('columns')}
+        </Tag>
         <Tag
           className={
             invalidCount === 0
@@ -417,7 +423,7 @@ function CurrentSequenceRowsDialog({
           <thead>
             <tr>
               <th scope="col" style={{ ...styles.previewHead, ...styles.previewRowNumber }}>
-                Row
+                {localizeUi('Row')}
               </th>
               {fields.map((field) => (
                 <th key={field.id} scope="col" style={styles.previewHead} title={field.id}>
@@ -436,7 +442,7 @@ function CurrentSequenceRowsDialog({
                       scope="rowgroup"
                       style={styles.previewPageBoundary}
                     >
-                      Page {String(Math.floor(rowIndex / pageSize) + 1)}
+                      {localizeUi('Page')} {String(Math.floor(rowIndex / pageSize) + 1)}
                     </th>
                   </tr>
                 )}
@@ -501,6 +507,7 @@ function SequenceRowsFileControl({
   fileOnly: boolean;
   onViewCurrentData?: (() => void) | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const sourceVersion = useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const path = sourcePath(set);
   const state = fromFileState(item.itemId, path);
@@ -619,7 +626,7 @@ function SequenceRowsFileControl({
     return (
       <div className={fileOnly ? 'cg-file-managed-connection' : undefined} style={styles.wrap}>
         <div style={styles.source}>
-          {fileOnly && <Tag>File managed</Tag>}
+          {fileOnly && <Tag>{localizeUi('File managed')}</Tag>}
           <Tag className="cg-sequence-file-status">
             <Icon
               icon={fileOnly && authoredPath !== undefined ? CircleCheck : Unplug}
@@ -635,7 +642,7 @@ function SequenceRowsFileControl({
           {fileOnly && onViewCurrentData !== undefined && (
             <Button variant="secondary" onClick={onViewCurrentData}>
               <Icon icon={Eye} />
-              View current data…
+              {localizeUi('View current data…')}
             </Button>
           )}
           {!fileOnly && (
@@ -646,17 +653,17 @@ function SequenceRowsFileControl({
               onClick={() => void saveExcel()}
             >
               <Icon icon={FilePlus2} />
-              Save and connect Excel…
+              {localizeUi('Save and connect Excel…')}
             </Button>
           )}
         </div>
         {fileOnly && authoredPath !== undefined && (
           <code style={styles.sourcePath} title={authoredPath}>
-            Share file · {authoredPath}
+            {localizeUi('Share file ·')} {authoredPath}
           </code>
         )}
         {fileOnly && authoredPath === undefined && (
-          <span style={styles.hint}>Connect this workbook in Designer.</span>
+          <span style={styles.hint}>{localizeUi('Connect this workbook in Designer.')}</span>
         )}
       </div>
     );
@@ -688,18 +695,18 @@ function SequenceRowsFileControl({
         {state.permission === 'granted' ? (
           <Button variant="secondary" onClick={() => void load(state.source)}>
             <Icon icon={RefreshCw} />
-            Reload
+            {localizeUi('Reload')}
           </Button>
         ) : (
           <Button variant="secondary" onClick={() => void grant()}>
             <Icon icon={KeyRound} />
-            Grant access
+            {localizeUi('Grant access')}
           </Button>
         )}
         {onViewCurrentData !== undefined && (
           <Button variant="secondary" onClick={onViewCurrentData}>
             <Icon icon={Eye} />
-            View current data…
+            {localizeUi('View current data…')}
           </Button>
         )}
         {!fileOnly && !sourceLocked && (
@@ -710,21 +717,21 @@ function SequenceRowsFileControl({
               aria-label={`Detach ${state.source.name}`}
             >
               <Icon icon={Unlink} />
-              Detach
+              {localizeUi('Detach')}
             </Button>
             <Button variant="secondary" onClick={() => void saveExcel()}>
               <Icon icon={FilePlus2} />
-              Save and connect another Excel…
+              {localizeUi('Save and connect another Excel…')}
             </Button>
           </>
         )}
       </div>
       <code style={styles.sourcePath} title={sharedFilePath}>
-        Share file · {sharedFilePath}
+        {localizeUi('Share file ·')} {sharedFilePath}
       </code>
       {resolvedSourcePath !== sharedFilePath && (
         <code style={styles.sourcePath} title={resolvedSourcePath}>
-          Read from · {resolvedSourcePath}
+          {localizeUi('Read from ·')} {resolvedSourcePath}
         </code>
       )}
       {state.permission !== 'granted' && (
@@ -732,8 +739,9 @@ function SequenceRowsFileControl({
       )}
       {schemaNeedsUpdate && (
         <p style={styles.warning} role="status">
-          Template fields changed after this file was generated. Reload still checks its data, but
-          its Excel choices may be outdated.{' '}
+          {localizeUi(
+            'Template fields changed after this file was generated. Reload still checks its data, but its Excel choices may be outdated.',
+          )}{' '}
           {fileOnly
             ? 'Reconnect the updated workbook in Designer.'
             : 'Save and connect a new Excel file.'}
@@ -752,6 +760,7 @@ export function SequenceRowsEditor({
   item: StackItemState;
   set: SequenceRowsPageSet;
 }): JSX.Element {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const rows = rowsFromPages(item, set);
   // Connecting a Sequence workbook makes that workbook the editing authority. No second checkbox
@@ -784,7 +793,9 @@ export function SequenceRowsEditor({
   return (
     <section style={styles.section} aria-label={`${set.sequenceName} all rows`}>
       <h3 style={styles.heading}>
-        <span>{set.field.label} · all pages</span>
+        <span>
+          {set.field.label} {localizeUi('· all pages')}
+        </span>
         {dirty && (
           <span className="cg-dirty-dot" aria-label={`${set.field.id} has unapplied edits`}>
             ●
@@ -793,7 +804,7 @@ export function SequenceRowsEditor({
       </h3>
       <p style={styles.hint}>
         {String(rows.length)} {rows.length === 1 ? 'row' : 'rows'} · {String(pageCount)}{' '}
-        {pageCount === 1 ? 'page' : 'pages'} · {String(set.maxItems)} per page
+        {pageCount === 1 ? 'page' : 'pages'} · {String(set.maxItems)} {localizeUi('per page')}
       </p>
       {fileOnly ? (
         <>

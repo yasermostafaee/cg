@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import {
   useCallback,
@@ -149,6 +150,7 @@ export function ChoiceLabel({
   onMeterEngineChange?: PreviewOriginChanged | undefined;
   observePicture?: ((sourceId: string, engine: PreviewEngine) => void) | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const { origins, publish } = usePreviewOrigins(observePicture);
   if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
   if (choice.names === null) {
@@ -205,7 +207,7 @@ export function ChoiceLabel({
           className="cg-source-tag cg-source-tag--unavailable"
           title={source?.reason ?? INPUT_GONE_REASON}
         >
-          Unavailable
+          {localizeUi('Unavailable')}
         </Tag>
       )}
     </span>
@@ -262,6 +264,7 @@ export function SourcePicker({
   title,
   data,
 }: SourcePickerProps): JSX.Element {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const field = useRef<HTMLButtonElement>(null);
   const base = useId();
@@ -397,7 +400,7 @@ export function SourcePicker({
       {open && (
         <Modal
           id={panelId}
-          title="Choose a source"
+          title={localizeUi('Choose a source')}
           subtitle={ariaLabel}
           emblem={Cable}
           size="library"
@@ -406,10 +409,10 @@ export function SourcePicker({
           footer={
             <>
               <ModalAction actionRole="cancel" onClick={close}>
-                Cancel
+                {localizeUi('Cancel')}
               </ModalAction>
               <ModalAction actionRole="primary" disabled={!hasSelectionChange} onClick={select}>
-                Select
+                {localizeUi('Select')}
               </ModalAction>
             </>
           }
@@ -675,6 +678,7 @@ function InputsTab({
   view: InputView;
   onViewChange: (view: InputView) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [filter, setFilter] = useState('');
   const observePicture = usePictureOriginPublisher(previewChannel);
   const { origins, publish } = usePreviewOrigins(observePicture);
@@ -745,7 +749,9 @@ function InputsTab({
             previewEngine={origins.get(source.id)}
           />
           {source.status === 'unavailable' && (
-            <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
+            <Tag className="cg-source-tag cg-source-tag--unavailable">
+              {localizeUi('Unavailable')}
+            </Tag>
           )}
           {selected && <SourceSelectionCheck />}
         </span>
@@ -768,8 +774,8 @@ function InputsTab({
           <TextInput
             value={filter}
             onChange={setFilter}
-            placeholder="Filter inputs"
-            aria-label="Filter inputs"
+            placeholder={localizeUi('Filter inputs')}
+            aria-label={localizeUi('Filter inputs')}
             dir="auto"
             onKeyDown={(e) => keys.onKeyDown(e, true)}
           />
@@ -777,14 +783,14 @@ function InputsTab({
       )}
       {inputs.length === 0 ? (
         <p className="cg-picker-empty" data-picker-empty="inputs">
-          No inputs from the Playout.
+          {localizeUi('No inputs from the Playout.')}
         </p>
       ) : (
         <VirtualList
           key={view}
           ref={list}
           id={listId}
-          aria-label="Inputs"
+          aria-label={localizeUi('Inputs')}
           rows={rows}
           rowHeight={INPUT_ROW}
           height={
@@ -1042,6 +1048,7 @@ function MediaTab({
   view: InputView;
   onViewChange: (view: InputView) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
   const sortAnchor = useRef<HTMLButtonElement>(null);
@@ -1158,8 +1165,8 @@ function MediaTab({
             ref={search}
             value={media.q}
             onChange={media.setQuery}
-            placeholder="Search media"
-            aria-label="Search media"
+            placeholder={localizeUi('Search media')}
+            aria-label={localizeUi('Search media')}
             dir="auto"
             className="cg-picker-search"
             onKeyDown={(e) => keys.onKeyDown(e, true)}
@@ -1168,7 +1175,7 @@ function MediaTab({
           <Button
             ref={sortAnchor}
             variant="neutral"
-            aria-label="Sort media"
+            aria-label={localizeUi('Sort media')}
             aria-haspopup="dialog"
             aria-expanded={sortOpen}
             aria-controls={sortOpen ? sortMenuId : undefined}
@@ -1183,7 +1190,7 @@ function MediaTab({
               anchor={sortAnchor}
               onClose={() => setSortOpen(false)}
               id={sortMenuId}
-              aria-label="Sort media"
+              aria-label={localizeUi('Sort media')}
               minWidth={160}
               maxHeight={140}
               initialFocusSelector="[aria-checked=true]"
@@ -1192,7 +1199,7 @@ function MediaTab({
                 className="cg-picker-sort-options"
                 role="menu"
                 tabIndex={-1}
-                aria-label="Media order"
+                aria-label={localizeUi('Media order')}
                 onKeyDown={(event) => {
                   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
                   event.preventDefault();
@@ -1236,7 +1243,7 @@ function MediaTab({
           <div
             className="cg-picker-progress"
             role="progressbar"
-            aria-label="Loading media"
+            aria-label={localizeUi('Loading media')}
             data-picker-loading=""
           />
         )}
@@ -1244,7 +1251,7 @@ function MediaTab({
           <div className="cg-picker-empty" data-picker-failed="">
             <span>{media.failed}</span>
             <Button variant="neutral" data-picker-retry="" onClick={media.retry}>
-              Retry
+              {localizeUi('Retry')}
             </Button>
           </div>
         ) : empty && rows.length === 0 ? (
@@ -1256,7 +1263,7 @@ function MediaTab({
             key={view}
             ref={list}
             id={listId}
-            aria-label="Media"
+            aria-label={localizeUi('Media')}
             rows={rows}
             rowHeight={grid ? tileHeight : MEDIA_ROW}
             {...(grid && { columns, gap: MEDIA_TILE_GAP })}
@@ -1282,11 +1289,11 @@ function MediaTab({
         )}
       </div>
       {!grid && (
-        <section className="cg-picker-player" aria-label="Media preview">
+        <section className="cg-picker-player" aria-label={localizeUi('Media preview')}>
           {preview === undefined ? (
             <div className="cg-picker-player__empty" data-picker-preview-empty="">
               <Icon icon={Film} size={28} />
-              <p>Use Preview on a media item to watch it here.</p>
+              <p>{localizeUi('Use Preview on a media item to watch it here.')}</p>
             </div>
           ) : (
             <SourceMediaPreview

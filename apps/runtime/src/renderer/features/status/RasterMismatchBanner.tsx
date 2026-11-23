@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { mismatchedChannels, rasterVerdict } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
@@ -71,6 +72,7 @@ export function RasterMismatchBanner({
    */
   scope?: number | null;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const state = useChannelSettings();
   const mismatched = inScope(mismatchedChannels(state), (entry) => entry.channel, scope);
@@ -89,9 +91,9 @@ export function RasterMismatchBanner({
   });
 
   return (
-    <div role="alert" aria-label="Channel raster mismatch" style={styles.banner}>
+    <div role="alert" aria-label={localizeUi('Channel raster mismatch')} style={styles.banner}>
       <span style={styles.text}>
-        CHANNEL RASTER MISMATCH — EVERY GRAPHIC ON THIS CHANNEL IS MIS-PLACED.
+        {localizeUi('CHANNEL RASTER MISMATCH — EVERY GRAPHIC ON THIS CHANNEL IS MIS-PLACED.')}
         {details.map((line) => (
           <span key={line} style={styles.detail}>
             {line}
@@ -112,10 +114,9 @@ export function RasterMismatchBanner({
           was declined, and what declines it is AIR.
         */}
         <span style={styles.detail}>
-          The server owns this value — the console adopts the channel’s real raster when it reads
-          one, but never while anything is on air, because that would move a live graphic. This
-          clears once air is empty and the bridge reads the channel again. If the SERVER is the one
-          that is wrong, fix the channel’s video mode in{' '}
+          {localizeUi(
+            'The server owns this value — the console adopts the channel’s real raster when it reads one, but never while anything is on air, because that would move a live graphic. This clears once air is empty and the bridge reads the channel again. If the SERVER is the one that is wrong, fix the channel’s video mode in',
+          )}{' '}
           {playoutEngineWording('casparcg.config', engine)}.
         </span>
       </span>

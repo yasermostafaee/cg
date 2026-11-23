@@ -39,7 +39,7 @@ export type StationSetupSection =
   | 'sources'
   | 'shared-files'
   | 'delimiters'
-  | 'calendar'
+  | 'general'
   | 'candidate-layers';
 
 /**
@@ -240,8 +240,8 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
       `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment. The delimiter list's
       contract exactly: a `station-admin` setting that commits as it is pressed (`calendar.set`).
     */
-    id: 'calendar',
-    title: 'Lunar Hijri correction',
+    id: 'general',
+    title: 'General',
     commit: 'immediate',
     group: 'Content',
     legend: 'Saves as you go.',
@@ -329,7 +329,7 @@ export function sectionSpecFor(
   const spec = sectionSpec(id);
   if (stationAdmin) return id === 'channel' ? { ...spec, ...CHANNEL_FOR_STATION_ADMIN } : spec;
   // Channel is read-only for this principal already — its one control is a station-admin's.
-  if (spec.commit === 'read-only') return spec;
+  if (spec.commit === 'read-only' || id === 'general') return spec;
   // The blocked clause is about a commit this principal does not have, so it goes with it.
   const { footerBlocked: _notTheirs, ...rest } = spec;
   return { ...rest, ...READ_ONLY_FOR_THIS_SIGN_IN };

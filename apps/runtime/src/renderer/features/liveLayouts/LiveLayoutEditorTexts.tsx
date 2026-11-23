@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useState } from 'react';
 import { List, Plus, Trash2 } from 'lucide-react';
 import type {
@@ -31,6 +32,7 @@ export function LiveLayoutEditorTexts({
   onSharedStyle: (index: number, patch: ControlLiveLayoutTitleStyle) => void;
   onAddFont: (file: File, scope: 'shared' | 'frame', text: { id: string; index: number }) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const id = useId();
   const [selectedId, select] = useState<string>();
   const texts = frame.additionalTexts ?? [];
@@ -53,8 +55,12 @@ export function LiveLayoutEditorTexts({
 
   return (
     <details className="cg-live-layout-title-style">
-      <LiveLayoutEditorSectionHeading icon={List} label="Additional text" />
-      <div className="cg-live-layout-title-scope" role="group" aria-label="Additional texts">
+      <LiveLayoutEditorSectionHeading icon={List} label={localizeUi('Additional text')} />
+      <div
+        className="cg-live-layout-title-scope"
+        role="group"
+        aria-label={localizeUi('Additional texts')}
+      >
         {texts.map((item, index) => (
           <Button
             key={item.id}
@@ -62,11 +68,11 @@ export function LiveLayoutEditorTexts({
             aria-pressed={item.id === selected?.id}
             onClick={() => select(item.id)}
           >
-            Text {index + 2}
+            {localizeUi('Text')} {index + 2}
           </Button>
         ))}
         <Button variant="neutral" onClick={addText}>
-          <Icon icon={Plus} size={14} /> Add text
+          <Icon icon={Plus} size={14} /> {localizeUi('Add text')}
         </Button>
       </div>
       {selected !== undefined && (
@@ -93,7 +99,7 @@ export function LiveLayoutEditorTexts({
             key={selected.id}
             frameId={selected.id}
             frameNumber={frameNumber}
-            heading="Text style"
+            heading={localizeUi('Text style')}
             raster={layout.resolution}
             shared={controlLiveLayoutAdditionalTextStyle(layout, undefined, selectedIndex)}
             individualBase={controlLiveLayoutAdditionalTextStyle(

@@ -211,7 +211,7 @@ describe('the PLATE door — on LIVE PLATES, a seated plate opens its OWNING ROW
     expect(dialog()?.querySelector('[data-audio-subtitle]')?.getAttribute('title')).toContain(NEWS);
     // Both of the owner's seated plates are listed; the one pointed at holds focus.
     expect(dialog()?.querySelectorAll('[data-audio-plate]')).toHaveLength(2);
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Volume for guest-2');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Volume for Plate 2');
     // …and the hidden frame reads as hidden, never as audible (A12).
     const hidden = dialog()?.querySelector('[data-audio-plate="guest-2"]');
     expect(hidden?.textContent).toContain('Hidden by look');
@@ -224,7 +224,7 @@ describe('the PLATE door — on LIVE PLATES, a seated plate opens its OWNING ROW
     shown.focus();
     await key(shown, { key: 'F10', shiftKey: true });
     expect(dialog(), 'Shift+F10 opened the dialog').not.toBeNull();
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Volume for guest-1');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Volume for Plate 1');
     await closeDialog();
 
     shown.focus();
@@ -249,7 +249,7 @@ describe('🔴 SOLO is scoped to the OWNING ROW — item-irib-news — hidden fr
     await openLiveSourcesTab();
     await rightClick(plateRow('1-60'));
     expect(dialog()).not.toBeNull();
-    const solo = dialog()?.querySelector<HTMLButtonElement>('button[aria-label^="Solo guest-1"]');
+    const solo = dialog()?.querySelector<HTMLButtonElement>('button[aria-label^="Solo Plate 1"]');
     expect(solo?.disabled).toBe(false);
     await click(solo ?? null);
 

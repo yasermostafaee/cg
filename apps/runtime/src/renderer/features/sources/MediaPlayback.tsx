@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Pause, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import {
@@ -67,6 +68,7 @@ export function MediaPlaybackControl({
   /** The catalogue id bound where this sits. Anything but a clip renders nothing. */
   sourceId: string | null | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const button = useRef<HTMLButtonElement>(null);
   const base = useId();
@@ -91,7 +93,7 @@ export function MediaPlaybackControl({
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={`Playback: ${entry.name}`}
-        title="Playback"
+        title={localizeUi('Playback')}
         className="cg-form-row__action"
         data-media-playback={entry.id}
         onClick={() => setOpen(true)}
@@ -103,7 +105,7 @@ export function MediaPlaybackControl({
           anchor={button}
           onClose={() => setOpen(false)}
           id={panelId}
-          aria-label="Playback"
+          aria-label={localizeUi('Playback')}
           minWidth={PLAYBACK_MIN_WIDTH}
           maxHeight={PLAYBACK_MAX_HEIGHT}
           initialFocusSelector="[data-media-loop] input"
@@ -114,7 +116,7 @@ export function MediaPlaybackControl({
             </h3>
             <div className="cg-playback__row" data-media-loop="">
               <label className="cg-playback__label" htmlFor={loopId}>
-                Loop
+                {localizeUi('Loop')}
               </label>
               <Checkbox
                 id={loopId}
@@ -123,8 +125,12 @@ export function MediaPlaybackControl({
               />
             </div>
             <div className="cg-playback__row">
-              <span className="cg-playback__label">When hidden</span>
-              <div className="cg-playback__choices" role="group" aria-label="When hidden">
+              <span className="cg-playback__label">{localizeUi('When hidden')}</span>
+              <div
+                className="cg-playback__choices"
+                role="group"
+                aria-label={localizeUi('When hidden')}
+              >
                 {MEDIA_WHEN_HIDDEN.map((whenHidden) => (
                   <Button
                     key={whenHidden}
@@ -157,6 +163,7 @@ export function MediaTransport({
   /** The BRIDGE's statement that this plate's seat carries a clip, and how it is playing. */
   state: MediaPlateState;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const press = (action: MediaPlateTransportAction) => async () => {
     const res = await window.cg.stack.mediaPlateTransport({ itemId, plateId, action });
     return {
@@ -182,12 +189,12 @@ export function MediaTransport({
         variant="icon"
         iconOnly
         icon={RotateCcw}
-        title="Restart"
+        title={localizeUi('Restart')}
         data-media-transport-restart=""
         run={press('restart')}
         onError={(message) => reportCommandError(message)}
       >
-        Restart
+        {localizeUi('Restart')}
       </AsyncButton>
       {state.remainingMs !== undefined && (
         <span className="cg-media-transport__time" data-media-remaining="">
@@ -196,12 +203,12 @@ export function MediaTransport({
       )}
       {state.paused && (
         <Tag className="cg-source-tag cg-source-tag--paused" data-testid="media-paused">
-          Paused
+          {localizeUi('Paused')}
         </Tag>
       )}
       {state.ended && (
         <Tag className="cg-source-tag cg-source-tag--ended" data-testid="media-ended">
-          Ended
+          {localizeUi('Ended')}
         </Tag>
       )}
     </span>

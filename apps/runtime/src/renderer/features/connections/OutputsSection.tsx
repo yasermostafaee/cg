@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import {
   Cable,
@@ -168,14 +169,15 @@ function configuredWords(declared: DeclaredConsumer): string {
 }
 
 function OutputTable({ rows }: { rows: readonly OutputRow[] }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div className="cg-card">
       <table className="cg-output-table" data-output-table="">
         <thead>
           <tr>
-            <th scope="col">Slot</th>
-            <th scope="col">Configured output</th>
-            <th scope="col">Runtime status</th>
+            <th scope="col">{localizeUi('Slot')}</th>
+            <th scope="col">{localizeUi('Configured output')}</th>
+            <th scope="col">{localizeUi('Runtime status')}</th>
           </tr>
         </thead>
         <tbody>
@@ -225,6 +227,7 @@ function ChannelRows({
   server: ServerHealth;
   check: ChannelOutputCheck;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const reachable = isServerReachable(server.state);
   const air = check.missing.filter((m) => isAirOutputKind(m.kind));
@@ -235,7 +238,7 @@ function ChannelRows({
     <div data-testid={`outputs-channel-${String(check.channel)}`}>
       <div className="cg-output-check">
         <span>
-          Channel {String(check.channel)} on server {server.label} —{' '}
+          {localizeUi('Channel')} {String(check.channel)} {localizeUi('on server')} {server.label} —{' '}
           {reachable
             ? `checked ${formatClock(check.observedAt)}`
             : `last checked ${formatClock(check.observedAt)}; ${engine} is unreachable, so this cannot be re-checked`}
@@ -250,18 +253,21 @@ function ChannelRows({
       <div className="cg-output-detail">
         {check.declared === null ? (
           <span style={styles.fact}>
-            The declaration could not be read from INFO CONFIG — a gap in the check, not a fault.
+            {localizeUi(
+              'The declaration could not be read from INFO CONFIG — a gap in the check, not a fault.',
+            )}
           </span>
         ) : (
           <span style={styles.fact}>
-            Declared:{' '}
+            {localizeUi('Declared:')}{' '}
             {check.declared.length === 0 ? 'nothing' : check.declared.map((d) => d.kind).join(', ')}
-            . Running: {runningWords(check.running)}.
+            {localizeUi('. Running:')} {runningWords(check.running)}.
           </span>
         )}
         {air.length > 0 && (
           <span style={styles.air} data-severity="air">
-            AIR — {missingWords(air)} declared and not running. Nothing on this channel reaches air.
+            {localizeUi('AIR —')} {missingWords(air)}{' '}
+            {localizeUi('declared and not running. Nothing on this channel reaches air.')}
           </span>
         )}
         {air.flatMap((m) =>
@@ -279,13 +285,16 @@ function ChannelRows({
         )}
         {local.map((m) => (
           <span key={m.kind} style={styles.local} data-severity="local">
-            {m.kind === 'screen' ? 'Preview' : 'Local monitor'} — {missingWords([m])} is declared
-            and not running: {m.kind === 'screen' ? 'a preview window' : 'the sound device'} on the
-            playout machine, with no effect on air. Nothing for the operator to do.
+            {m.kind === 'screen' ? 'Preview' : 'Local monitor'} — {missingWords([m])}{' '}
+            {localizeUi('is declared and not running:')}{' '}
+            {m.kind === 'screen' ? 'a preview window' : 'the sound device'}{' '}
+            {localizeUi(
+              'on the playout machine, with no effect on air. Nothing for the operator to do.',
+            )}
           </span>
         ))}
         {check.missing.length === 0 && check.declared !== null && (
-          <span style={styles.fact}>Every declared consumer is running.</span>
+          <span style={styles.fact}>{localizeUi('Every declared consumer is running.')}</span>
         )}
       </div>
     </div>
@@ -299,6 +308,7 @@ function ServerBlock({
   server: ServerHealth;
   channel: number | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const checks = [...(server.outputs ?? [])]
     .filter((c) => channel === undefined || c.channel === channel)
@@ -306,7 +316,8 @@ function ServerBlock({
   if (checks.length === 0) {
     return (
       <span style={styles.status}>
-        Server {server.label}: no output check has completed yet
+        {localizeUi('Server')} {server.label}
+        {localizeUi(': no output check has completed yet')}
         {channel === undefined ? '' : ` for channel ${String(channel)}`}
         {isServerReachable(server.state) ? '' : ` (${engine} is unreachable)`}.
       </span>
@@ -337,14 +348,15 @@ export function OutputsSection({
   health: ConnectionHealth | null;
   channel?: number;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   return (
-    <section className="cg-output-block" aria-label="Program outputs">
+    <section className="cg-output-block" aria-label={localizeUi('Program outputs')}>
       <div className="cg-output-head">
-        <h3>Outputs</h3>
+        <h3>{localizeUi('Outputs')}</h3>
       </div>
       {health === null ? (
-        <span style={styles.status}>No health reading from the bridge yet.</span>
+        <span style={styles.status}>{localizeUi('No health reading from the bridge yet.')}</span>
       ) : (
         <>
           <ServerBlock server={health.primary} channel={channel} />
@@ -355,13 +367,13 @@ export function OutputsSection({
           it was declared once and read only at this one call site, so every OTHER `<details>`
           in the dialog sat flush against what was above it (owner, on the plant). */}
       <details className="cg-setup-details">
-        <summary>How are outputs identified?</summary>
+        <summary>{localizeUi('How are outputs identified?')}</summary>
         <p>
-          What {playoutEngineWording('casparcg.config', engine)} declares versus what is running,
-          read over AMCP: INFO CONFIG for the declaration, INFO &lt;channel&gt; for the running set,
-          re-read every minute. A program output (decklink, bluefish, ndi, ffmpeg, artnet) that is
-          declared and not running is the operator alarm; a preview window or the local sound device
-          is noted here only.
+          {localizeUi('What')} {playoutEngineWording('casparcg.config', engine)} declares versus
+          what is running, read over AMCP: INFO CONFIG for the declaration, INFO &lt;channel&gt; for
+          the running set, re-read every minute. A program output (decklink, bluefish, ndi, ffmpeg,
+          artnet) that is declared and not running is the operator alarm; a preview window or the
+          local sound device is noted here only.
         </p>
       </details>
     </section>

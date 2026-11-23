@@ -1,3 +1,4 @@
+import { feedback } from '../../i18n/locale.js';
 import {
   ArrowLeftFromLine,
   ArrowRightFromLine,
@@ -555,24 +556,26 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     const layer = deps.layerName;
     switch (key) {
       case 'play':
-        return `${who} is on air.`;
+        return feedback('{row} is on air.', { row: who });
       case 'stop':
-        return `${who} stopped. It stays loaded, so it can be taken again.`;
+        return feedback('{row} stopped. It stays loaded, so it can be taken again.', { row: who });
       case 'next':
-        return `${who} advanced to its next step.`;
+        return feedback('{row} advanced to its next step.', { row: who });
       // `R-100` — a book's page turns; the counter on the row says which page.
       case 'page-next':
-        return `${who} turned to the next page.`;
+        return feedback('{row} turned to the next page.', { row: who });
       case 'page-previous':
-        return `${who} turned back a page.`;
+        return feedback('{row} turned back a page.', { row: who });
       case 'rehearse':
         return deps.rehearsing
-          ? `${who} left PVW.`
-          : `${who} is on PVW — a local preview. Nothing was sent to air.`;
+          ? feedback('{row} left PVW.', { row: who })
+          : feedback('{row} is on PVW — a local preview. Nothing was sent to air.', { row: who });
       case 'update':
         return onAir
-          ? `${who} updated. The change is on air now.`
-          : `${who} saved. Nothing was sent to air — the next take seats it.`;
+          ? feedback('{row} updated. The change is on air now.', { row: who })
+          : feedback('{row} saved. Nothing was sent to air — the next take seats it.', {
+              row: who,
+            });
       case 'load-remove':
         /*
           🔴 THE LOAD HALF IS ANNOUNCED BY ITS OWN HANDLER, NOT HERE, and the reason is that
@@ -590,7 +593,10 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         */
         return empty
           ? null
-          : `${who} emptied. The template is off the row; layer ${layer} is untouched.`;
+          : feedback('{row} emptied. The template is off the row; layer {layer} is untouched.', {
+              row: who,
+              layer,
+            });
       default:
         // `swap-source`, `plate-audio` and `menu` open something rather than completing an
         // act; the thing they open announces its own result. Silence here is correct.

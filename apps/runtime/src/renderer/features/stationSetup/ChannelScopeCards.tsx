@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import type { ConnectionConfig, StationStray } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
@@ -33,6 +34,7 @@ const styles = {
 
 /** e — Change channel…, reusing first-run's channel step with this station's own writes. */
 export function ChangeChannelCard(): JSX.Element {
+  const localizeUi = useUiText();
   const [open, setOpen] = useState(false);
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   // `MULTI-CHANNEL-01` §2 M — the station's set, read where it is edited.
@@ -57,9 +59,9 @@ export function ChangeChannelCard(): JSX.Element {
   const serveHost = config?.templateServeHost ?? '';
 
   return (
-    <section className="cg-card" aria-label="Change channel" data-change-channel="">
+    <section className="cg-card" aria-label={localizeUi('Change channel')} data-change-channel="">
       <div className="cg-card__head">
-        <span className="cg-card__title">Channel</span>
+        <span className="cg-card__title">{localizeUi('Channel')}</span>
         <span className="cg-card__spacer" />
         {!open && (
           <Button
@@ -68,7 +70,7 @@ export function ChangeChannelCard(): JSX.Element {
               setOpen(true);
             }}
           >
-            Change channel…
+            {localizeUi('Change channel…')}
           </Button>
         )}
       </div>
@@ -124,6 +126,7 @@ export function useStrays(): readonly StationStray[] {
 
 /** j — On air on another channel. Absent when there is none. */
 export function StraysCard(): JSX.Element | null {
+  const localizeUi = useUiText();
   const strays = useStrays();
   const { confirm, confirmDialog } = useConfirm();
   const [error, setError] = useState<string | null>(null);
@@ -157,9 +160,13 @@ export function StraysCard(): JSX.Element | null {
   };
 
   return (
-    <section className="cg-card" aria-label="On air on another channel" data-strays="">
+    <section
+      className="cg-card"
+      aria-label={localizeUi('On air on another channel')}
+      data-strays=""
+    >
       <div className="cg-card__head">
-        <span className="cg-card__title">On air on another channel</span>
+        <span className="cg-card__title">{localizeUi('On air on another channel')}</span>
       </div>
       <div className="cg-card__body">
         {strays.map((stray) => {
@@ -175,7 +182,7 @@ export function StraysCard(): JSX.Element | null {
                 disabled={busy !== null}
                 onClick={() => void takeOff(stray)}
               >
-                Take off air
+                {localizeUi('Take off air')}
               </Button>
             </div>
           );

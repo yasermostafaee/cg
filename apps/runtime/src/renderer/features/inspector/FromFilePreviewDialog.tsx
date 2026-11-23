@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -165,6 +166,7 @@ export function FromFilePreviewDialog({
   lockFile: boolean;
   itemFields?: readonly ListItemField[] | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const state = fromFileState(item.itemId, path);
@@ -217,7 +219,7 @@ export function FromFilePreviewDialog({
 
   return (
     <Modal
-      title="File content and fields"
+      title={localizeUi('File content and fields')}
       ariaLabel={`File content and fields · ${fieldId}`}
       size="wide"
       frame="fixed"
@@ -233,15 +235,15 @@ export function FromFilePreviewDialog({
           })}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
-          Done
+          {localizeUi('Done')}
         </ModalAction>
       }
     >
       <div style={styles.toolbar}>
         <div style={styles.file}>
-          <span>Selected file</span>
+          <span>{localizeUi('Selected file')}</span>
           <strong style={styles.fileName}>{state.source.name.split(/[\\/]/).at(-1)}</strong>
-          <span>File path</span>
+          <span>{localizeUi('File path')}</span>
           <code style={styles.filePath}>{state.source.displayPath ?? state.source.name}</code>
         </div>
         <Button variant="secondary" disabled={loading} onClick={() => void readPreview()}>
@@ -279,7 +281,7 @@ export function FromFilePreviewDialog({
 
       {kind === 'list' && !lockFile && (
         <div style={styles.split}>
-          <span>File format</span>
+          <span>{localizeUi('File format')}</span>
           <div className="cg-form" style={styles.splitControls}>
             <SelectInput
               className="cg-file-preview__delimiter"
@@ -291,9 +293,9 @@ export function FromFilePreviewDialog({
               }
               aria-label={`${fieldId} file format`}
             >
-              <option value="text">Text / delimiter</option>
-              <option value="json">JSON rows</option>
-              <option value="csv">CSV rows</option>
+              <option value="text">{localizeUi('Text / delimiter')}</option>
+              <option value="json">{localizeUi('JSON rows')}</option>
+              <option value="csv">{localizeUi('CSV rows')}</option>
             </SelectInput>
             {state.format === 'text' && (
               <label>
@@ -302,7 +304,7 @@ export function FromFilePreviewDialog({
                   onChange={(checked) => updateSplitConfig(item.itemId, path, { split: checked })}
                   aria-label={`Split ${fieldId} into items`}
                 />{' '}
-                Split file
+                {localizeUi('Split file')}
               </label>
             )}
             {state.format === 'text' && state.split && (
@@ -315,7 +317,9 @@ export function FromFilePreviewDialog({
                 aria-label={`${fieldId} split delimiter`}
               >
                 {delimiters.every((entry) => entry.value !== state.delimiter) && (
-                  <option value={state.delimiter}>{state.delimiter} (in use)</option>
+                  <option value={state.delimiter}>
+                    {state.delimiter} {localizeUi('(in use)')}
+                  </option>
                 )}
                 {delimiters.map((entry) => (
                   <option key={entry.id} value={entry.value}>
@@ -339,14 +343,14 @@ export function FromFilePreviewDialog({
       )}
 
       <div style={styles.columns}>
-        <section style={styles.pane} aria-label="File content">
-          <h3 style={styles.heading}>File content</h3>
+        <section style={styles.pane} aria-label={localizeUi('File content')}>
+          <h3 style={styles.heading}>{localizeUi('File content')}</h3>
           <pre style={styles.pre} data-file-preview-content="">
             {content ?? (loading ? 'Loading…' : '')}
           </pre>
         </section>
-        <section style={styles.pane} aria-label="Parsed fields">
-          <h3 style={styles.heading}>Parsed fields</h3>
+        <section style={styles.pane} aria-label={localizeUi('Parsed fields')}>
+          <h3 style={styles.heading}>{localizeUi('Parsed fields')}</h3>
           {parsed === null ? (
             <p style={styles.loadingText}>{parseError === null ? 'Loading…' : 'No valid rows.'}</p>
           ) : (

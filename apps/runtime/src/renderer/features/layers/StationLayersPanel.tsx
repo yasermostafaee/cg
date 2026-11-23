@@ -1,3 +1,4 @@
+import { feedback, useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import type { OrphanLayer, PlayoutLayerState } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
@@ -138,6 +139,7 @@ export function describeLayerRanges(layers: readonly number[]): string {
  * tab; the operator is told whose layer it is and confirms.
  */
 export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
@@ -274,7 +276,12 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
           `Check the rows for the reason.`,
       );
     } else if (cleared > 0) {
-      reportCommandSuccess(`Cleared · ${String(cleared)} playout layer${cleared === 1 ? '' : 's'}`);
+      reportCommandSuccess(
+        feedback(
+          cleared === 1 ? 'Cleared · {count} playout layer' : 'Cleared · {count} playout layers',
+          { count: cleared },
+        ),
+      );
     }
     // `cancelled` so AsyncButton stays silent: this function has already said
     // precisely what happened, and a generic follow-up would overwrite it.
@@ -293,7 +300,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
   return (
     <>
       <div style={styles.intro}>
-        <span>Playout layers on this channel</span>
+        <span>{localizeUi('Playout layers on this channel')}</span>
         {clearable.length > 0 && (
           <AsyncButton
             variant="caution-strong"
@@ -303,7 +310,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
             {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
             aria-label={`Clear all ${String(clearable.length)} clearable playout layers`}
           >
-            CLEAR ALL
+            {localizeUi('CLEAR ALL')}
           </AsyncButton>
         )}
       </div>
@@ -326,7 +333,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
                   {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
                   aria-label={`Clear playout layer ${String(layer.layer)}`}
                 >
-                  CLEAR
+                  {localizeUi('CLEAR')}
                 </AsyncButton>
               ) : (
                 // Deliberately NOT a disabled button: an operator must not be
@@ -365,10 +372,11 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
  * golden rule 6 is about. This group NAMES the layer and points at the one control.
  */
 function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX.Element | null {
+  const localizeUi = useUiText();
   if (orphans.length === 0) return null;
   return (
     <div style={styles.group} data-undeclared-layers="">
-      <span style={styles.groupTitle}>Occupied outside reserved ranges</span>
+      <span style={styles.groupTitle}>{localizeUi('Occupied outside reserved ranges')}</span>
       {[...orphans]
         .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
         .map((o) => (
@@ -378,7 +386,8 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
             dir="ltr"
             data-undeclared-layer={String(o.layer)}
           >
-            Channel {String(o.channel)}, layer {String(o.layer)} — {o.producer}
+            {localizeUi('Channel')} {String(o.channel)}
+            {localizeUi(', layer')} {String(o.layer)} — {o.producer}
           </span>
         ))}
     </div>
@@ -391,6 +400,7 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
  * The reserved ranges and live layers are a read-only summary of Bridge state.
  */
 function StationLayerDeclarations(): JSX.Element {
+  const localizeUi = useUiText();
   const station = useStationLayers();
   const live = useLiveLayers();
 
@@ -403,19 +413,19 @@ function StationLayerDeclarations(): JSX.Element {
   return (
     <>
       <div style={styles.group} data-reserved-layers="">
-        <span style={styles.groupTitle}>Reserved for Playout</span>
+        <span style={styles.groupTitle}>{localizeUi('Reserved for Playout')}</span>
         {reserved.length === 0 ? (
-          <span style={styles.groupValue}>No reserved Playout layers.</span>
+          <span style={styles.groupValue}>{localizeUi('No reserved Playout layers.')}</span>
         ) : (
           reserved.map(([channel, ls]) => (
             <span key={channel} style={styles.groupValue} dir="ltr">
-              Channel {String(channel)}: {describeLayerRanges(ls)}
+              {localizeUi('Channel')} {String(channel)}: {describeLayerRanges(ls)}
             </span>
           ))
         )}
       </div>
       <div style={styles.group} data-live-layer-ledger="">
-        <span style={styles.groupTitle}>Live plate layers</span>
+        <span style={styles.groupTitle}>{localizeUi('Live plate layers')}</span>
         <span style={styles.groupValue} dir="ltr">
           {!live.ready
             ? 'Waiting for Bridge.'
@@ -426,7 +436,9 @@ function StationLayerDeclarations(): JSX.Element {
                   .join(', ')}`}
         </span>
         {live.ready && live.value.length > 0 && (
-          <p style={styles.groupNote}>Open Live plates to see which rows use these layers.</p>
+          <p style={styles.groupNote}>
+            {localizeUi('Open Live plates to see which rows use these layers.')}
+          </p>
         )}
       </div>
     </>

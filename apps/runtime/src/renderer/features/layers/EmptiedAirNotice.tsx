@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import type { EmptiedAirNotice as Notice, EmptiedAirRefusal } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
@@ -126,6 +127,7 @@ const REFUSAL_TEXT: Record<EmptiedAirRefusal, string> = {
  * the rest of the console's chrome rather than a lone half-localised surface.
  */
 export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   // Above the idle-quiet early return: hooks cannot be called conditionally.
   const { confirm, confirmDialog } = useConfirm();
   /*
@@ -178,14 +180,19 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
 
   return (
     <>
-      <div style={styles.strip} role="alert" aria-label="Air emptied by the playout server">
+      <div
+        style={styles.strip}
+        role="alert"
+        aria-label={localizeUi('Air emptied by the playout server')}
+      >
         <div style={styles.row}>
           <span>
-            ⚠ The channel is alive and carrying nothing — {count} {rowWord} that{' '}
-            {count === 1 ? 'was' : 'were'} on air {count === 1 ? 'is' : 'are'} gone.{' '}
+            {localizeUi('⚠ The channel is alive and carrying nothing —')} {count} {rowWord}{' '}
+            {localizeUi('that')} {count === 1 ? 'was' : 'were'} {localizeUi('on air')}{' '}
+            {count === 1 ? 'is' : 'are'} {localizeUi('gone.')}{' '}
             <span style={styles.detail}>
               {cause}
-              {seats} Nothing has been put back.
+              {seats} {localizeUi('Nothing has been put back.')}
             </span>
           </span>
           <span style={styles.actions}>
@@ -229,18 +236,18 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
                 })();
               }}
             >
-              PUT BACK ON AIR
+              {localizeUi('PUT BACK ON AIR')}
             </Button>
             {wholeNotice && (
               <Button
                 variant="ghost"
-                aria-label="Dismiss the emptied-air notice"
-                title="Hide this notice. Nothing is sent and nothing changes on air."
+                aria-label={localizeUi('Dismiss the emptied-air notice')}
+                title={localizeUi('Hide this notice. Nothing is sent and nothing changes on air.')}
                 onClick={() => {
                   void window.cg.emptiedAir.dismiss();
                 }}
               >
-                DISMISS
+                {localizeUi('DISMISS')}
               </Button>
             )}
           </span>
@@ -265,7 +272,10 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
                   </>
                 )}
                 {row.refusal !== undefined && (
-                  <span style={styles.refusal}> — not put back: {REFUSAL_TEXT[row.refusal]}</span>
+                  <span style={styles.refusal}>
+                    {' '}
+                    {localizeUi('— not put back:')} {REFUSAL_TEXT[row.refusal]}
+                  </span>
                 )}
               </li>
             );

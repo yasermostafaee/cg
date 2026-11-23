@@ -1,3 +1,4 @@
+import { feedback, useUiText } from '../../i18n/locale.js';
 import { templateTypeLabel } from '../library/templateName.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
@@ -432,9 +433,9 @@ export function useTemplatePicker(
   ) => Promise<TemplateChoice>;
   /** Open the same catalogue as a management surface, with no row or Load action. */
   openTemplateLibrary: (channel: number) => Promise<void>;
-  openNewLiveLayout: (channel: number) => Promise<void>;
   pickerDialog: JSX.Element | null;
 } {
+  const t = useUiText();
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
@@ -867,7 +868,7 @@ export function useTemplatePicker(
           setReferences(res.references ?? []);
           return;
         }
-        reportCommandSuccess(`Removed · ${label}`);
+        reportCommandSuccess(feedback('Removed · {name}', { name: label }));
         await deleteTemplateSource(template.templateId, onChannel);
         await refreshTemplateSources(onChannel);
         const templates = await window.cg.templates.list(listRequest(onChannel));
@@ -1006,7 +1007,9 @@ export function useTemplatePicker(
           role: 'notice',
           // A message that names a control has to name the control that is actually there:
           // the row's icon is `Remove <name> from CH n` (`CHANNEL-TEMPLATES-01`).
-          text: `Removed the item ${place}. Press Remove again to remove the template.`,
+          text: feedback('Removed the item {place}. Press Remove again to remove the template.', {
+            place,
+          }),
         });
       } catch (err) {
         setMessage({
@@ -1264,9 +1267,17 @@ export function useTemplatePicker(
             ...(reloaded > 0 || failures.length > 1 ? { detail: failures.join(' ') } : {}),
           });
         } else if (reloaded > 0) {
-          reportCommandSuccess(
-            `Reloaded · ${String(reloaded)} template${reloaded === 1 ? '' : 's'}${policy === 'file-defaults' ? ` · ${String(resetRows)} row${resetRows === 1 ? '' : 's'} reset` : ' · current row data kept'}`,
+          const reload = feedback(
+            reloaded === 1 ? 'Reloaded · {count} template' : 'Reloaded · {count} templates',
+            { count: reloaded },
           );
+          const rows =
+            policy === 'file-defaults'
+              ? feedback(resetRows === 1 ? '{count} row reset' : '{count} rows reset', {
+                  count: resetRows,
+                })
+              : feedback('current row data kept');
+          reportCommandSuccess(`${reload} · ${rows}`);
         }
       } finally {
         setImportBusy(false);
@@ -1380,7 +1391,11 @@ export function useTemplatePicker(
   const pickerDialog =
     request === null ? null : (
       <Modal
-        title={request.title}
+        title={
+          request.mode === 'manage'
+            ? t('Templates · {scope}', { scope: listScope(channel) })
+            : request.title
+        }
         /*
           `RUNTIME-REPAIR-05` §3 — eleven words to five. It read "Choose a template already on
           this station, or import a .vcg package." — half of which advertised a control that
@@ -1531,8 +1546,8 @@ export function useTemplatePicker(
                   <TextInput
                     id="template-search"
                     type="search"
-                    placeholder="Search templates…"
-                    aria-label="Search templates"
+                    placeholder={t('Search templates…')}
+                    aria-label={t('Search templates')}
                     autoComplete="off"
                     value={query}
                     onChange={setQuery}
@@ -1552,7 +1567,7 @@ export function useTemplatePicker(
                     disabled={layoutEditor.busy}
                     onClick={() => void layoutEditor.open(channel)}
                   >
-                    <Icon icon={Plus} size={14} /> New live layout
+                    <Icon icon={Plus} size={14} /> {t('New live layout')}
                   </Button>
                 )}
                 {sharedFolderAvailable && (
@@ -1561,7 +1576,7 @@ export function useTemplatePicker(
                     disabled={importBusy}
                     onClick={() => setSharedFolderOpen(true)}
                   >
-                    <Icon icon={FolderOpen} size={14} /> Shared folder…
+                    <Icon icon={FolderOpen} size={14} /> {t('Shared folder…')}
                   </Button>
                 )}
                 <Button
@@ -1571,7 +1586,9 @@ export function useTemplatePicker(
                     importBusy ||
                     request.templates.every((template) => !templateSources.has(template.templateId))
                   }
-                  title="Reload every template whose original file is remembered on this CG Control"
+                  title={t(
+                    'Reload every template whose original file is remembered on this CG Control',
+                  )}
                   onClick={() =>
                     askReload(
                       request.templates.filter((template) =>
@@ -1581,7 +1598,7 @@ export function useTemplatePicker(
                   }
                 >
                   <Icon icon={RefreshCw} size={14} />
-                  Reload all
+                  {t('Reload all')}
                 </Button>
               </div>
               {/*
@@ -1623,11 +1640,11 @@ export function useTemplatePicker(
                     panel that no longer exists (§6).
                   */
                       <div className="cg-tpl-empty" data-template-empty="">
-                        <h3>Nothing on {listScope(channel)} yet</h3>
-                        <p>Import a .vcg package to begin.</p>
+                        <h3>{t('Nothing on {scope} yet', { scope: listScope(channel) })}</h3>
+                        <p>{t('Import a .vcg package to begin.')}</p>
                         <Button variant="primary" disabled={importBusy} onClick={openImport}>
                           <Icon icon={FileUp} size={14} />
-                          Import a .vcg
+                          {t('Import a .vcg')}
                         </Button>
                       </div>
                     ) : (
@@ -1823,7 +1840,6 @@ export function useTemplatePicker(
   return {
     pickTemplate,
     openTemplateLibrary,
-    openNewLiveLayout: (target) => layoutEditor.open(target),
     pickerDialog:
       layoutEditor.dialog === null ? (
         pickerDialog
@@ -1846,6 +1862,7 @@ export function useTemplatePicker(
  * change made overnight.
  */
 function ImportDoor({ onImport, busy }: { onImport: () => void; busy: boolean }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <Button
       variant="neutral"
@@ -1854,7 +1871,7 @@ function ImportDoor({ onImport, busy }: { onImport: () => void; busy: boolean })
       disabled={busy}
       onClick={onImport}
     >
-      Import a .vcg
+      {localizeUi('Import a .vcg')}
     </Button>
   );
 }
@@ -1925,6 +1942,7 @@ function PickerList({
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
   loadThumbnail: ThumbnailLoader<string> | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   // Newest first: the template the operator most recently imported is the one they
   // are looking for. Then the search, then the kind chip.
   const shown = [...request.templates]
@@ -1933,7 +1951,7 @@ function PickerList({
     .filter((t) => kind === 'all' || kindOf(t) === kind);
   return (
     <>
-      <div className="cg-tpl-filter" role="group" aria-label="Template kind">
+      <div className="cg-tpl-filter" role="group" aria-label={localizeUi('Template kind')}>
         {KIND_CHIPS.map((chip) => (
           <Button
             key={chip.key}
@@ -1964,8 +1982,8 @@ function PickerList({
         {shown.length === 0 ? (
           /* The reference's own words for a search that found nothing. */
           <div className="cg-tpl-empty" data-template-empty="search">
-            <h3>No templates found</h3>
-            <p>Try another search.</p>
+            <h3>{localizeUi('No templates found')}</h3>
+            <p>{localizeUi('Try another search.')}</p>
           </div>
         ) : (
           shown.map((t) => {
@@ -2019,6 +2037,7 @@ function PickerRow({
   onDelete: () => void;
   loadThumbnail: ThumbnailLoader<string> | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const label = templateDisplayName(t);
   const carrier = liveSourceCarrierState(t);
   const templateKind = kindOf(t);
@@ -2111,7 +2130,7 @@ function PickerRow({
                 data-plates-unassigned={needsSource.join(',')}
                 title={UNASSIGNED_TITLE}
               >
-                Needs a source: {needsSource.join(', ')}
+                {localizeUi('Needs a source:')} {needsSource.join(', ')}
               </Tag>
             )}
           </span>

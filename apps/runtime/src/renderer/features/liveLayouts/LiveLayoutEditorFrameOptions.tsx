@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useRef } from 'react';
 import { ImagePlus, Info, Move, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
@@ -98,6 +99,7 @@ export function LiveLayoutEditorFrameOptions({
   onMaskEditingChange: (editing: boolean) => void;
   onChange: (patch: Partial<ControlLiveLayoutFrame>) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const id = useId();
   const fallbackPick = useRef<HTMLInputElement>(null);
   const fit = frame.fitMode ?? DEFAULT_LIVE_FIT_MODE;
@@ -150,16 +152,23 @@ export function LiveLayoutEditorFrameOptions({
         if (crop?.editing === true) crop.onEditChange(false);
       }}
     >
-      <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced plate controls" />
+      <LiveLayoutEditorSectionHeading
+        icon={SlidersHorizontal}
+        label={localizeUi('Advanced plate controls')}
+      />
       <div
         className="cg-live-layout-frame-option-section"
         role="group"
         aria-labelledby={id + '-appearance'}
       >
-        <h4 id={id + '-appearance'}>Plate appearance</h4>
+        <h4 id={id + '-appearance'}>{localizeUi('Plate appearance')}</h4>
         {presetOverrides !== undefined && (
-          <div className="cg-live-layout-frame-option-group" role="group" aria-label="This preset">
-            <span>In this preset</span>
+          <div
+            className="cg-live-layout-frame-option-group"
+            role="group"
+            aria-label={localizeUi('This preset')}
+          >
+            <span>{localizeUi('In this preset')}</span>
             <LiveLayoutEditorPlatePresentation
               key={`${presetOverrides.id}:${frame.id}`}
               scope="plate"
@@ -181,10 +190,10 @@ export function LiveLayoutEditorFrameOptions({
         <div
           className="cg-live-layout-frame-option-group"
           role="group"
-          aria-label="Plate input fit across presets"
+          aria-label={localizeUi('Plate input fit across presets')}
         >
           <div className="cg-live-layout-fit-label">
-            <span>Default plate fit</span>
+            <span>{localizeUi('Default plate fit')}</span>
             <button
               type="button"
               className="cg-live-layout-fit-info"
@@ -208,8 +217,11 @@ export function LiveLayoutEditorFrameOptions({
             ))}
           </div>
         </div>
-        <section className="cg-live-layout-frame-option-group" aria-label="Fallback background">
-          <span>Fallback background</span>
+        <section
+          className="cg-live-layout-frame-option-group"
+          aria-label={localizeUi('Fallback background')}
+        >
+          <span>{localizeUi('Fallback background')}</span>
           <div className="cg-live-layout-frame-option-buttons">
             <Button
               active={fallback?.kind === 'bars'}
@@ -217,7 +229,7 @@ export function LiveLayoutEditorFrameOptions({
               disabled={fallbackImage.reading}
               onClick={() => onChange({ fallback: { kind: 'bars' } })}
             >
-              Bars
+              {localizeUi('Bars')}
             </Button>
             <span className="cg-live-layout-solid-color">
               <Button
@@ -236,12 +248,12 @@ export function LiveLayoutEditorFrameOptions({
                   })
                 }
               >
-                Solid colour
+                {localizeUi('Solid colour')}
               </Button>
               {fallback?.kind === 'color' && (
                 <ColorInput
                   appearance="swatch"
-                  aria-label="Fallback colour"
+                  aria-label={localizeUi('Fallback colour')}
                   value={fallback.color.slice(0, 7)}
                   onChange={(color) => onChange({ fallback: { kind: 'color', color } })}
                 />
@@ -259,11 +271,11 @@ export function LiveLayoutEditorFrameOptions({
               ) : (
                 <Icon icon={ImagePlus} size={14} />
               )}
-              Image…
+              {localizeUi('Image…')}
             </Button>
             <FileInput
               ref={fallbackPick}
-              aria-label="Fallback image file"
+              aria-label={localizeUi('Fallback image file')}
               accept={CONTROL_LIVE_LAYOUT_FALLBACK_ACCEPT}
               hidden
               onChange={(event) => {
@@ -276,7 +288,9 @@ export function LiveLayoutEditorFrameOptions({
           <label
             className="cg-live-layout-frame-option-check"
             htmlFor={id + '-fallback-on-air'}
-            title="Show the selected background on air when the input is empty or leaves space in the plate."
+            title={localizeUi(
+              'Show the selected background on air when the input is empty or leaves space in the plate.',
+            )}
           >
             <Checkbox
               id={id + '-fallback-on-air'}
@@ -288,23 +302,26 @@ export function LiveLayoutEditorFrameOptions({
                 })
               }
             />
-            Show fallback on air
+            {localizeUi('Show fallback on air')}
           </label>
         </section>
-        <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
+        <section
+          className="cg-live-layout-frame-option-group"
+          aria-label={localizeUi('Plate border')}
+        >
           <div className="cg-live-layout-plate-border-fields">
             <div className="cg-live-layout-plate-border-color">
-              <span>Border</span>
+              <span>{localizeUi('Border')}</span>
               <ColorInput
                 appearance="swatch"
-                aria-label="Border color"
+                aria-label={localizeUi('Border color')}
                 value={border.color.slice(0, 7)}
                 onChange={(color) => onChange({ border: { ...border, color } })}
               />
             </div>
             <LiveLayoutEditorNumber
               key={frame.id}
-              label="Border width (px)"
+              label={localizeUi('Border width (px)')}
               min={0}
               max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
               value={border.width}
@@ -320,7 +337,7 @@ export function LiveLayoutEditorFrameOptions({
                   disabled={!borderVisibility.belongsToPreset}
                   onChange={borderVisibility.onPresetChange}
                 />
-                Show border in preset
+                {localizeUi('Show border in preset')}
               </label>
               <label className="cg-live-layout-frame-option-check" htmlFor={id + '-border-focus'}>
                 <Checkbox
@@ -328,12 +345,12 @@ export function LiveLayoutEditorFrameOptions({
                   checked={borderVisibility.showInFocus}
                   onChange={borderVisibility.onFocusChange}
                 />
-                Show border in Focus
+                {localizeUi('Show border in Focus')}
               </label>
             </div>
           )}
         </section>
-        <section className="cg-live-layout-frame-mask" aria-label="Plate mask">
+        <section className="cg-live-layout-frame-mask" aria-label={localizeUi('Plate mask')}>
           <div className="cg-live-layout-frame-option-buttons">
             <Button
               variant="neutral"
@@ -341,13 +358,13 @@ export function LiveLayoutEditorFrameOptions({
               onClick={addWindow}
             >
               <Icon icon={Plus} size={14} />
-              Add mask window
+              {localizeUi('Add mask window')}
             </Button>
             {mask !== undefined && (
               <>
                 <Button variant="neutral" onClick={removeWindow}>
                   <Icon icon={Trash2} size={14} />
-                  Remove mask window
+                  {localizeUi('Remove mask window')}
                 </Button>
                 <Button
                   variant="neutral"
@@ -362,7 +379,7 @@ export function LiveLayoutEditorFrameOptions({
                   onClick={() => onMaskEditingChange(!editingMask)}
                 >
                   <Icon icon={Move} size={14} />
-                  Edit mask in preview
+                  {localizeUi('Edit mask in preview')}
                 </Button>
               </>
             )}
@@ -372,28 +389,28 @@ export function LiveLayoutEditorFrameOptions({
               <div
                 className="cg-live-layout-frame-option-buttons"
                 role="group"
-                aria-label="Mask mode"
+                aria-label={localizeUi('Mask mode')}
               >
                 <Button
                   active={mask.mode === 'inside'}
                   aria-pressed={mask.mode === 'inside'}
                   onClick={() => onChange({ liveMask: { ...mask, mode: 'inside' } })}
                 >
-                  Show inside
+                  {localizeUi('Show inside')}
                 </Button>
                 <Button
                   active={mask.mode === 'outside'}
                   aria-pressed={mask.mode === 'outside'}
                   onClick={() => onChange({ liveMask: { ...mask, mode: 'outside' } })}
                 >
-                  Show outside
+                  {localizeUi('Show outside')}
                 </Button>
               </div>
               {windows.length > 1 && (
                 <div
                   className="cg-live-layout-frame-option-buttons"
                   role="group"
-                  aria-label="Mask windows"
+                  aria-label={localizeUi('Mask windows')}
                 >
                   {windows.map((_, index) => (
                     <Button
@@ -434,7 +451,7 @@ export function LiveLayoutEditorFrameOptions({
         aria-labelledby={id + '-operator'}
       >
         <h4 id={id + '-operator'}>
-          <Icon icon={ShieldCheck} size={14} /> Operator permissions in CG Control
+          <Icon icon={ShieldCheck} size={14} /> {localizeUi('Operator permissions in CG Control')}
         </h4>
         <label htmlFor={id + '-move'} className="cg-live-layout-frame-option-check">
           <Checkbox
@@ -442,10 +459,14 @@ export function LiveLayoutEditorFrameOptions({
             checked={frame.operatorMove ?? true}
             onChange={(operatorMove) => onChange({ operatorMove })}
           />
-          Move plate
+          {localizeUi('Move plate')}
         </label>
-        <div className="cg-live-layout-frame-option-group" role="group" aria-label="Resize plate">
-          <span>Resize plate</span>
+        <div
+          className="cg-live-layout-frame-option-group"
+          role="group"
+          aria-label={localizeUi('Resize plate')}
+        >
+          <span>{localizeUi('Resize plate')}</span>
           <div className="cg-live-layout-frame-option-buttons">
             {RESIZE_CHOICES.map(([operatorPlacement, label]) => (
               <Button
@@ -462,8 +483,8 @@ export function LiveLayoutEditorFrameOptions({
         <label
           htmlFor={id + '-crop'}
           className="cg-live-layout-frame-option-check"
-          aria-label="Crop input"
-          title="Available for unmasked plates using Crop edges"
+          aria-label={localizeUi('Crop input')}
+          title={localizeUi('Available for unmasked plates using Crop edges')}
         >
           <Checkbox
             id={id + '-crop'}
@@ -471,7 +492,7 @@ export function LiveLayoutEditorFrameOptions({
             disabled={mask !== undefined}
             onChange={(operatorCrop) => onChange({ operatorCrop })}
           />
-          Crop input
+          {localizeUi('Crop input')}
         </label>
         {mask !== undefined && (
           <label htmlFor={id + '-mask-edit'} className="cg-live-layout-frame-option-check">
@@ -480,7 +501,7 @@ export function LiveLayoutEditorFrameOptions({
               checked={frame.allowOperatorMaskEdit === true}
               onChange={(allowOperatorMaskEdit) => onChange({ allowOperatorMaskEdit })}
             />
-            Allow mask editing
+            {localizeUi('Allow mask editing')}
           </label>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { PLAYOUT_ENGINE_NAME, playoutEngineWording } from '../../ui/engineWording.js';
 import {
   Check,
@@ -150,6 +151,7 @@ export function ConnectionCheckList({
    */
   actions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const still = usePrefersReducedMotion();
   const [showAll, setShowAll] = useState(readShowAll);
   const operatorLines = lines.map((line) => ({
@@ -168,7 +170,12 @@ export function ConnectionCheckList({
   if (grouped) {
     const anyPass = lines.some((l) => l.status === 'pass');
     return (
-      <div style={styles.groups} aria-label="Connection check" aria-busy={checking} role="group">
+      <div
+        style={styles.groups}
+        aria-label={localizeUi('Connection check')}
+        aria-busy={checking}
+        role="group"
+      >
         {CONNECTION_CHECK_GROUPS.map((group) => {
           // In the group's own order, whatever order the lines arrived in.
           const mine = (group.lines as readonly string[]).flatMap((id) =>
@@ -229,7 +236,7 @@ export function ConnectionCheckList({
     );
   }
   return (
-    <ul style={styles.list} aria-label="Connection check" aria-busy={checking}>
+    <ul style={styles.list} aria-label={localizeUi('Connection check')} aria-busy={checking}>
       <CheckLineItems lines={operatorLines} still={still} actions={actions} />
     </ul>
   );
@@ -247,6 +254,7 @@ function CheckLineItems({
   hidePasses?: boolean;
   actions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <>
       {lines.map((line) => (
@@ -284,8 +292,8 @@ function CheckLineItems({
               </code>
               <Button
                 variant="icon"
-                aria-label="Copy"
-                title="Copy"
+                aria-label={localizeUi('Copy')}
+                title={localizeUi('Copy')}
                 onClick={() => {
                   void navigator.clipboard?.writeText(line.command ?? '');
                 }}

@@ -1,3 +1,4 @@
+import { useFeedbackText } from '../../i18n/locale.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   CG_UNLICENSED_CODE,
@@ -242,6 +243,7 @@ function lowerFirst(sentence: string): string {
  * chrome, so the English clause is never flipped by the name beside it.
  */
 export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Element {
+  const t = useFeedbackText();
   if (line.playoutWords !== undefined) {
     // The row and the Playout's sentence are both data, each isolated; only `: ` is chrome.
     return (
@@ -279,7 +281,7 @@ export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Elemen
         </>
       )}
       {': '}
-      {line.clause}
+      <bdi>{t(line.clause)}</bdi>
     </>
   );
 }

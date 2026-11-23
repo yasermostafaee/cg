@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { LayoutTemplate, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
@@ -66,6 +67,7 @@ export function AppHeader({
   onOpenTemplates,
   channelSignals,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const rehearsals = useRehearse();
 
@@ -79,7 +81,7 @@ export function AppHeader({
         }}
         target="_blank"
         rel="noreferrer"
-        aria-label="APASAI website"
+        aria-label={localizeUi('APASAI website')}
         data-apasai-brand=""
       >
         <ApasaiMark />
@@ -130,7 +132,7 @@ export function AppHeader({
       */}
       <Button
         variant="ghost"
-        aria-label={layout.monitorsShown ? 'Hide monitors' : 'Show monitors'}
+        aria-label={localizeUi(layout.monitorsShown ? 'Hide monitors' : 'Show monitors')}
         aria-expanded={layout.monitorsShown}
         aria-controls="monitor-strip"
         title={
@@ -143,7 +145,7 @@ export function AppHeader({
         }}
       >
         <Icon icon={layout.monitorsShown ? MonitorOff : Monitor} />
-        {layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS'}
+        {localizeUi(layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS')}
       </Button>
       {/*
         R-108 — TEMPLATES IS NOW A REAL HEADER DOOR. The earlier design rejected it because a
@@ -152,9 +154,9 @@ export function AppHeader({
         empty. This door therefore opens management mode and offers NO Load action; row LOAD stays
         the one path that binds a template to a destination.
       */}
-      <Button onClick={onOpenTemplates} aria-label="Open templates">
+      <Button onClick={onOpenTemplates} aria-label={localizeUi('Open templates')}>
         <Icon icon={LayoutTemplate} />
-        TEMPLATES
+        {localizeUi('TEMPLATES')}
       </Button>
       {/*
         SETTINGS and AUDIT LOG — the other two doors the reference puts up here. Both keep their
@@ -167,8 +169,8 @@ export function AppHeader({
       */}
       <Button
         onClick={onOpenSettings}
-        aria-label="Open Station setup"
-        title="Station setup — the station's settings, in one place"
+        aria-label={localizeUi('Open Station setup')}
+        title={localizeUi("Station setup — the station's settings, in one place")}
       >
         {/*
           🔴 `MODAL-CHROME-10` §1(b) — A GEAR, WHICH THIS WAS NOT. It was `SlidersHorizontal`,
@@ -183,7 +185,7 @@ export function AppHeader({
           wear one mark.
         */}
         <Icon icon={Settings} />
-        SETTINGS
+        {localizeUi('SETTINGS')}
       </Button>
       {/*
         ~~🔴 `CONSOLE-MATCH-03` §5 — the reference's own word, which is `Audit log` and not
@@ -205,9 +207,9 @@ export function AppHeader({
         The CASING is the bar's own, which is CAPS on every label it carries —
         `CG CONTROL`, `PVW · N`, `SHOW MONITORS` / `HIDE MONITORS`, `SETTINGS`.
       */}
-      <Button onClick={onOpenAudit} aria-label="Open audit log">
+      <Button onClick={onOpenAudit} aria-label={localizeUi('Open audit log')}>
         <Icon icon={ScrollText} />
-        LOG
+        {localizeUi('LOG')}
       </Button>
     </header>
   );

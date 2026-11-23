@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
   useId,
   useLayoutEffect,
@@ -224,6 +225,7 @@ export function programHeadTags(air: ChannelAir): string[] {
 }
 
 function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
+  const localizeUi = useUiText();
   const anchor = useRef<HTMLButtonElement>(null);
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -232,7 +234,7 @@ function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
       <Button
         ref={anchor}
         variant="ghost"
-        aria-label="Monitor volume"
+        aria-label={localizeUi('Monitor volume')}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
@@ -246,20 +248,20 @@ function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
           anchor={anchor}
           onClose={() => setOpen(false)}
           id={id}
-          aria-label="Monitor volume"
+          aria-label={localizeUi('Monitor volume')}
           minWidth={192}
           maxHeight={100}
           initialFocusSelector="input"
         >
           <label className="cg-pgm-volume">
             <span>
-              Volume <output>{String(sound.volume)}%</output>
+              {localizeUi('Volume')} <output>{String(sound.volume)}%</output>
             </span>
             <RangeInput
               min={0}
               max={100}
               value={sound.volume}
-              aria-label="Volume"
+              aria-label={localizeUi('Volume')}
               onChange={(event) => sound.setVolume(event.currentTarget.valueAsNumber)}
             />
           </label>
@@ -314,14 +316,15 @@ export function MonitorPanel({
   backupLine = null,
   companionActions,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const liveCount = returns.filter((item) => item.programReturn.signal === 'live').length;
   const stalled = returns.some((item) => item.programReturn.signal === 'stalled');
   const overallSignal: ProgramSignal =
     liveCount === returns.length && returns.length > 0 ? 'live' : stalled ? 'stalled' : 'none';
   const words =
     returns.length > 1
-      ? `${String(liveCount)} of ${String(returns.length)} return signals`
-      : PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none'];
+      ? localizeUi('{live} of {total} return signals', { live: liveCount, total: returns.length })
+      : localizeUi(PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none']);
   const legacy = topologyTargets === undefined;
   const legacyEngines: readonly PgmEngine[] = backupConfigured === false ? ['A'] : ['A', 'B'];
   const pictureModes = new Set<ProgramDisplayMode>(
@@ -356,7 +359,7 @@ export function MonitorPanel({
       className="cg-pgm-source-controls"
       data-pgm-topology-controls={legacy ? undefined : ''}
     >
-      <div style={styles.controls} role="group" aria-label="Programme picture source">
+      <div style={styles.controls} role="group" aria-label={localizeUi('Programme picture source')}>
         {[...pictureModes].map((mode) => (
           <Button
             key={mode}
@@ -378,7 +381,11 @@ export function MonitorPanel({
         ))}
       </div>
       {monitorPreferences.display === 'both' && (legacy || returns.length === 2) && (
-        <div style={styles.controls} role="group" aria-label="Programme picture layout">
+        <div
+          style={styles.controls}
+          role="group"
+          aria-label={localizeUi('Programme picture layout')}
+        >
           {(['horizontal', 'vertical'] as const).map((layout) => (
             <Button
               key={layout}
@@ -401,14 +408,14 @@ export function MonitorPanel({
     <div style={styles.controls} className="cg-pgm-source-controls">
       <select
         className="cg-pgm-audio-select"
-        aria-label="Programme sound source"
-        title="Local programme sound source"
+        aria-label={localizeUi('Programme sound source')}
+        title={localizeUi('Local programme sound source')}
         value={monitorPreferences.audio}
         onChange={(event) =>
           monitorPreferences.setAudio(event.currentTarget.value as ProgramAudioChoice)
         }
       >
-        <option value="follow">Follow</option>
+        <option value="follow">{localizeUi('Follow')}</option>
         {[...audioModes].map((engine) => (
           <option key={engine} value={engine}>
             {selectName(engine)}
@@ -420,7 +427,7 @@ export function MonitorPanel({
         aria-pressed={programSound.on}
         data-toggle-on={programSound.on ? '' : undefined}
         data-pgm-audio={programSound.status}
-        aria-label="Programme sound"
+        aria-label={localizeUi('Programme sound')}
         title={
           selectedAudio === null
             ? 'No active programme sound source'
@@ -433,7 +440,7 @@ export function MonitorPanel({
       <ProgramVolume sound={programSound} />
       <Button
         variant="ghost"
-        aria-label="VU meter"
+        aria-label={localizeUi('VU meter')}
         aria-pressed={monitorPreferences.showMeter}
         data-toggle-on={monitorPreferences.showMeter ? '' : undefined}
         title={monitorPreferences.showMeter ? 'Hide VU meter' : 'Show VU meter'}
@@ -444,7 +451,7 @@ export function MonitorPanel({
       {(meterTargets.length > 1 || showAllMeters) && (
         <Button
           variant="ghost"
-          aria-label="All programme meters"
+          aria-label={localizeUi('All programme meters')}
           aria-pressed={showAllMeters}
           data-toggle-on={showAllMeters ? '' : undefined}
           title={showAllMeters ? 'Show selected source meter' : 'Show a meter beside each return'}
@@ -528,9 +535,13 @@ export function MonitorPanel({
         fact={
           <MonitorHeadFact
             testId="data-monitor-air-count"
-            title="What this console believes is on air on this channel. It is the same count the layer table's header carries."
+            title={localizeUi(
+              "What this console believes is on air on this channel. It is the same count the layer table's header carries.",
+            )}
           >
-            {onAirRows} {onAirRows === 1 ? 'row' : 'rows'} on air
+            {localizeUi(onAirRows === 1 ? '{count} row on air' : '{count} rows on air', {
+              count: onAirRows,
+            })}
           </MonitorHeadFact>
         }
       />
@@ -560,7 +571,7 @@ export function MonitorPanel({
           {returns.map((tile) => {
             const { engine, physicalChannel, programReturn, name, active } = tile;
             const { src, signal, onError } = programReturn;
-            const tileWords = PROGRAM_SIGNAL_WORDS[signal];
+            const tileWords = localizeUi(PROGRAM_SIGNAL_WORDS[signal]);
             const member = meterTargets.find((target) => target.engine === engine) ?? tile;
             const showTileMeter =
               monitorPreferences.showMeter && (showAllMeters || engine === meterPictureEngine);
@@ -581,7 +592,9 @@ export function MonitorPanel({
                         · <IsolatedName title={name}>{name}</IsolatedName>
                       </>
                     )}
-                    {active === true && <span className="cg-pgm-tile-active">Active</span>}
+                    {active === true && (
+                      <span className="cg-pgm-tile-active">{localizeUi('Active')}</span>
+                    )}
                   </span>
                   {src !== null && (
                     <ProgramPicture

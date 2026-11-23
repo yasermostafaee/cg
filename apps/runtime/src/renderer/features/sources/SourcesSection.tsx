@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState, useSyncExternalStore } from 'react';
 import {
   canCheckLiveInput,
@@ -84,6 +85,7 @@ export function SourcesSection({
   report: (message: ModalMessage | null) => void;
   channel: number;
 }): JSX.Element {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
@@ -153,7 +155,8 @@ export function SourcesSection({
     <>
       <div className="cg-setup-list-head cg-input-catalogue-heading">
         <h3>
-          Inputs from the Playout <span className="cg-setup-count">{String(inputs.length)}</span>
+          {localizeUi('Inputs from the Playout')}{' '}
+          <span className="cg-setup-count">{String(inputs.length)}</span>
         </h3>
         <div className="cg-input-catalogue-read">
           <InputCatalogueServer server={catalog.inputsServer} />
@@ -172,12 +175,12 @@ export function SourcesSection({
             : 'cg-setup-source-catalogue cg-card cg-resource-list'
         }
         data-input-view={view}
-        aria-label="Inputs from the Playout"
+        aria-label={localizeUi('Inputs from the Playout')}
       >
         {inputs.length === 0 ? (
           <div className={view === 'grid' ? 'cg-card cg-card__body' : 'cg-card__body'}>
             <span style={styles.empty} role="status" data-sources-empty="">
-              No inputs from the Playout.
+              {localizeUi('No inputs from the Playout.')}
             </span>
           </div>
         ) : (
@@ -227,12 +230,12 @@ export function SourcesSection({
                   </span>
                   {source.status === 'unusable' && (
                     <Tag className="cg-source-tag" title={source.reason}>
-                      Unusable
+                      {localizeUi('Unusable')}
                     </Tag>
                   )}
                   {source.status === 'unavailable' && (
                     <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>
-                      Unavailable
+                      {localizeUi('Unavailable')}
                     </Tag>
                   )}
                   <bdi
@@ -252,11 +255,11 @@ export function SourcesSection({
         🔴 THE LAYER BAND — the one control on this tab that is APPLIED rather than read, which is
         why it carries its own button.
       */}
-      <section className="cg-card" aria-label="Layer band" style={styles.bandCard}>
+      <section className="cg-card" aria-label={localizeUi('Layer band')} style={styles.bandCard}>
         <div className="cg-card__head">
-          <span className="cg-card__title">Live source layer band</span>
+          <span className="cg-card__title">{localizeUi('Live source layer band')}</span>
           <span className="cg-card__spacer" />
-          {admin && <Tag className="cg-setup-card-tag">Apply separately</Tag>}
+          {admin && <Tag className="cg-setup-card-tag">{localizeUi('Apply separately')}</Tag>}
         </div>
         <div className="cg-card__body">
           {admin && (
@@ -267,12 +270,12 @@ export function SourcesSection({
                 ⚠ The band's OVERLAP refusal is the bridge's to judge, on apply, naming both ranges.
               */}
               <div className="cg-setup-field">
-                <span className="cg-setup-field__label">First layer</span>
+                <span className="cg-setup-field__label">{localizeUi('First layer')}</span>
                 <NumericInput
                   className="cg-field cg-field--mono"
                   dir="ltr"
                   allow="digits"
-                  aria-label="Live source band start layer"
+                  aria-label={localizeUi('Live source band start layer')}
                   placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}
                   value={bandStartText}
                   onValueChange={setBandStart}
@@ -283,12 +286,12 @@ export function SourcesSection({
                 —
               </span>
               <div className="cg-setup-field">
-                <span className="cg-setup-field__label">Last layer</span>
+                <span className="cg-setup-field__label">{localizeUi('Last layer')}</span>
                 <NumericInput
                   className="cg-field cg-field--mono"
                   dir="ltr"
                   allow="digits"
-                  aria-label="Live source band end layer"
+                  aria-label={localizeUi('Live source band end layer')}
                   placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}
                   value={bandEndText}
                   onValueChange={setBandEnd}
@@ -296,7 +299,7 @@ export function SourcesSection({
                 />
               </div>
               <Button variant="primary" onClick={applyBand} disabled={!bandChanged || applyingBand}>
-                Apply band
+                {localizeUi('Apply band')}
               </Button>
             </div>
           )}

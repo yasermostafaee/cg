@@ -7,8 +7,9 @@ import {
   DEFAULT_INSPECTOR_PX,
   DEFAULT_MONITOR_PX,
   DEFAULT_MONITORS_SHOWN,
+  DEFAULT_WORKSPACE_POSITIONS,
   useShellLayout,
-  type ShellLayout,
+  type ConfigurableShellLayout,
 } from '../src/renderer/hooks/useShellLayout.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
@@ -40,7 +41,7 @@ const KEY = 'cg.runtime.shell-layout.v1';
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
-let latest: ShellLayout | null = null;
+let latest: ConfigurableShellLayout | null = null;
 let storage: Storage;
 
 function Probe(): null {
@@ -69,10 +70,56 @@ afterEach(() => {
   latest = null;
 });
 
-function layout(): ShellLayout {
+function layout(): ConfigurableShellLayout {
   if (latest === null) throw new Error('hook did not render');
   return latest;
 }
+
+describe('local workspace settings', () => {
+  it('keeps old records readable and persists named layouts without session visibility', async () => {
+    storage.setItem(KEY, JSON.stringify({ inspectorPx: 370, monitorPx: 205, focus: 'none' }));
+    const reload = async (): Promise<void> => {
+      if (host === null) throw new Error('probe host is missing');
+      act(() => root?.unmount());
+      root = createRoot(host);
+      await act(async () => root?.render(createElement(Probe)));
+    };
+    await reload();
+    expect(layout().positions).toEqual(DEFAULT_WORKSPACE_POSITIONS);
+    expect(layout().inspectorPx).toBe(370);
+    expect(layout().monitorPx).toBe(205);
+
+    const reversed = {
+      monitorOrder: 'pgm-first',
+      layerPosition: 'above',
+      inspectorSide: 'left',
+    } as const;
+    await act(async () => {
+      layout().setPositions(reversed);
+      layout().saveProfile('Gallery');
+      layout().setPositions(DEFAULT_WORKSPACE_POSITIONS);
+      layout().setInspectorPx(300);
+      layout().setMonitorsShown(true);
+      layout().loadProfile('Gallery');
+    });
+    expect(layout().positions).toEqual(reversed);
+    expect(layout().inspectorPx).toBe(370);
+    expect(layout().monitorsShown).toBe(true);
+    const stored: unknown = JSON.parse(storage.getItem(KEY) ?? '{}');
+    expect(stored).not.toHaveProperty('monitorsShown');
+    expect(stored).toMatchObject({
+      positions: reversed,
+      uiProfiles: [{ name: 'Gallery', positions: reversed }],
+    });
+
+    await reload();
+    expect(layout().positions).toEqual(reversed);
+    expect(layout().monitorsShown).toBe(DEFAULT_MONITORS_SHOWN);
+    await act(async () => layout().reset());
+    expect(layout().positions).toEqual(DEFAULT_WORKSPACE_POSITIONS);
+    expect(layout().uiProfiles.map(({ name }) => name)).toEqual(['Gallery']);
+  });
+});
 
 describe('useShellLayout — monitorsShown', () => {
   it('boots with the monitors HIDDEN — the decision, spelled', () => {

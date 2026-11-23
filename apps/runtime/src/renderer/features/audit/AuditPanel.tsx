@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -95,6 +96,7 @@ function eventCount(count: number): string {
 }
 
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -349,9 +351,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   return (
     <Modal
-      title="Audit log"
+      title={localizeUi('Audit log')}
       emblem={ScrollText}
-      subtitle="Station actions and their recorded outcomes."
+      subtitle={localizeUi('Station actions and their recorded outcomes.')}
       ariaLabel="Audit log"
       size="ledger"
       frame="fixed"
@@ -367,7 +369,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
               </span>
             )}
             {totalRead.kind === 'ready' && total !== null ? (
-              <span data-audit-total={String(total)}>{eventCount(total)} total</span>
+              <span data-audit-total={String(total)}>
+                {eventCount(total)} {localizeUi('total')}
+              </span>
             ) : (
               <span data-audit-total-read={totalRead.kind}>
                 {totalRead.kind === 'reading' ? 'Counting…' : 'Total unavailable'}
@@ -375,40 +379,43 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             )}
             <label className="cg-audit-follow" htmlFor="cg-audit-follow-new">
               <Checkbox id="cg-audit-follow-new" checked={followNew} onChange={setFollowNew} />
-              Follow new events
+              {localizeUi('Follow new events')}
             </label>
             {pendingEvents > 0 && (
               <Button variant="ghost" data-audit-new-events="" onClick={() => loadFirst.current()}>
-                {String(pendingEvents)} new {pendingEvents === 1 ? 'event' : 'events'}
+                {String(pendingEvents)} {localizeUi('new')}{' '}
+                {pendingEvents === 1 ? 'event' : 'events'}
               </Button>
             )}
             {filtered && (
               <Button variant="ghost" onClick={resetFilters} data-audit-reset="">
-                Reset filters
+                {localizeUi('Reset filters')}
               </Button>
             )}
           </span>
-          <div className="cg-audit-pagination" aria-label="Audit pages">
+          <div className="cg-audit-pagination" aria-label={localizeUi('Audit pages')}>
             <Button
               variant="neutral"
-              aria-label="Previous audit page"
+              aria-label={localizeUi('Previous audit page')}
               disabled={pageIndex === 0 || busy}
               onClick={goPrevious}
             >
-              <Icon icon={ChevronLeft} flipRtl /> Previous
+              <Icon icon={ChevronLeft} flipRtl /> {localizeUi('Previous')}
             </Button>
-            <span data-audit-page={String(pageIndex + 1)}>Page {String(pageIndex + 1)}</span>
+            <span data-audit-page={String(pageIndex + 1)}>
+              {localizeUi('Page')} {String(pageIndex + 1)}
+            </span>
             <Button
               variant="neutral"
-              aria-label="Next audit page"
+              aria-label={localizeUi('Next audit page')}
               disabled={next === null || busy}
               onClick={goNext}
             >
-              Next <Icon icon={ChevronRight} flipRtl />
+              {localizeUi('Next')} <Icon icon={ChevronRight} flipRtl />
             </Button>
           </div>
           <ModalAction actionRole="cancel" onClick={onClose} data-audit-close="">
-            Close
+            {localizeUi('Close')}
           </ModalAction>
         </div>
       }
@@ -419,8 +426,8 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           <TextInput
             id="audit-search"
             type="search"
-            placeholder="Search events or templates…"
-            aria-label="Search events, names, ids and actors"
+            placeholder={localizeUi('Search events or templates…')}
+            aria-label={localizeUi('Search events, names, ids and actors')}
             autoComplete="off"
             value={query}
             onChange={setQuery}
@@ -428,7 +435,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         </label>
         <FilterSelect
           id="audit-action"
-          label="Action"
+          label={localizeUi('Action')}
           value={actionFilter}
           onChange={(value) => setActionFilter(value as ActionFilter)}
           options={ACTION_OPTIONS.map((value) => ({
@@ -438,7 +445,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         />
         <FilterSelect
           id="audit-result"
-          label="Result"
+          label={localizeUi('Result')}
           value={outcomeFilter}
           onChange={(value) => setOutcomeFilter(value as OutcomeFilter)}
           options={OUTCOME_OPTIONS.map((value) => ({
@@ -449,7 +456,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         {channelsOf(bank).length > 0 && (
           <FilterSelect
             id="audit-channel"
-            label="Channel"
+            label={localizeUi('Channel')}
             value={String(channelFilter)}
             onChange={(value) => setChannelFilter(Number(value))}
             options={[
@@ -465,16 +472,16 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           />
         )}
         <div className="cg-audit-field">
-          <label htmlFor="audit-actor">Actor</label>
+          <label htmlFor="audit-actor">{localizeUi('Actor')}</label>
           <TextInput
             id="audit-actor"
-            placeholder="any"
+            placeholder={localizeUi('any')}
             value={actorFilter}
             onChange={setActorFilter}
           />
         </div>
         <div className="cg-audit-field cg-audit-field--date">
-          <label htmlFor="audit-from">From</label>
+          <label htmlFor="audit-from">{localizeUi('From')}</label>
           <DateInput
             id="audit-from"
             ariaLabel="Audit from date"
@@ -484,7 +491,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           />
         </div>
         <div className="cg-audit-field cg-audit-field--date">
-          <label htmlFor="audit-to">To</label>
+          <label htmlFor="audit-to">{localizeUi('To')}</label>
           <DateInput
             id="audit-to"
             ariaLabel="Audit to date"
@@ -494,7 +501,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           />
         </div>
         <AsyncButton variant="neutral" icon={RefreshCw} run={refresh}>
-          Refresh
+          {localizeUi('Refresh')}
         </AsyncButton>
         {canDownload && (
           <AsyncButton
@@ -503,33 +510,40 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             run={downloadLogs}
             data-audit-download-logs=""
           >
-            Download logs
+            {localizeUi('Download logs')}
           </AsyncButton>
         )}
       </div>
       {canDownload && savedLogPath !== undefined && (
-        <Notice noticeRole="notice" aria="status" text="Audit logs saved" detail={savedLogPath} />
+        <Notice
+          noticeRole="notice"
+          aria="status"
+          text={localizeUi('Audit logs saved')}
+          detail={savedLogPath}
+        />
       )}
       {rangeError && (
         <p className="cg-audit-range-error" role="status" data-audit-range-error="">
-          From must not be after To.
+          {localizeUi('From must not be after To.')}
         </p>
       )}
       <div className="cg-audit-browser" data-audit-details-open={String(selected !== null)}>
         <div className="cg-audit-table" data-audit-table="" ref={tableRef}>
           <div className="cg-audit-head" data-audit-head="">
-            <span data-audit-column="channel">Channel</span>
-            <span data-audit-column="time">Time</span>
+            <span data-audit-column="channel">{localizeUi('Channel')}</span>
+            <span data-audit-column="time">{localizeUi('Time')}</span>
             <span
               data-audit-column="actor"
               data-audit-actor-head=""
-              title="The signed-in operator, as the bridge verified them. 'console': a console did it and nobody was signed in. 'unattributed': no console caused it."
+              title={localizeUi(
+                "The signed-in operator, as the bridge verified them. 'console': a console did it and nobody was signed in. 'unattributed': no console caused it.",
+              )}
             >
-              Actor
+              {localizeUi('Actor')}
             </span>
-            <span data-audit-column="action">Action</span>
-            <span data-audit-column="item">Item</span>
-            <span data-audit-column="result">Result</span>
+            <span data-audit-column="action">{localizeUi('Action')}</span>
+            <span data-audit-column="item">{localizeUi('Item')}</span>
+            <span data-audit-column="result">{localizeUi('Result')}</span>
           </div>
           {entries.length === 0 ? (
             <EmptyState health={health} filtered={filtered} read={read} rangeError={rangeError} />
@@ -603,7 +617,9 @@ function EmptyState({
   read: ReadState;
   rangeError: boolean;
 }): JSX.Element {
-  if (rangeError) return <p className="cg-audit-empty">Choose a possible date range.</p>;
+  const localizeUi = useUiText();
+  if (rangeError)
+    return <p className="cg-audit-empty">{localizeUi('Choose a possible date range.')}</p>;
   if (read.kind === 'failed') {
     return (
       <div className="cg-audit-fault">
@@ -612,7 +628,7 @@ function EmptyState({
     );
   }
   if (read.kind === 'reading' || health === null) {
-    return <p className="cg-audit-empty">Reading the audit record…</p>;
+    return <p className="cg-audit-empty">{localizeUi('Reading the audit record…')}</p>;
   }
   if (!health.configured) {
     return (
@@ -620,7 +636,7 @@ function EmptyState({
         <Notice
           noticeRole="refusal"
           aria="status"
-          text="No audit record is configured, so nothing has been written."
+          text={localizeUi('No audit record is configured, so nothing has been written.')}
           detail="Audit recording is unavailable."
         />
       </div>
@@ -660,6 +676,7 @@ function AuditRow({
   channelNames: ReadonlyMap<number, string>;
   onSelect: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const time = auditTimeParts(entry.ts);
   const place = placeName(entry.slot, bank);
   const template = templateName(entry.templateId, templates);
@@ -718,20 +735,20 @@ function AuditRow({
             <OperatorNames name={{ names, layer: null, title: '' }} />
           </span>
         ) : (
-          <span className="cg-audit-names">Station event</span>
+          <span className="cg-audit-names">{localizeUi('Station event')}</span>
         )}
         {entry.slot !== undefined && (
           <span
             className="cg-audit-slot"
             data-audit-slot={`${String(entry.slot.channel)}-${String(entry.slot.layer)}`}
           >
-            CH {String(entry.slot.channel)} · layer {String(entry.slot.layer)}
+            CH {String(entry.slot.channel)} {localizeUi('· layer')} {String(entry.slot.layer)}
           </span>
         )}
       </span>
       <span className="cg-audit-outcome" data-audit-cell="result">
         <span className={outcomeTag(entry.outcome)} data-audit-outcome={entry.outcome}>
-          {outcomeLabel(entry.outcome)}
+          {localizeUi(outcomeLabel(entry.outcome))}
         </span>
       </span>
     </Button>
@@ -749,6 +766,7 @@ function EventDetails({
   bank: readonly FixedLayerBank[] | null;
   onClose: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const time = auditTimeParts(entry.ts);
   const place = placeName(entry.slot, bank);
   const template = templateName(entry.templateId, templates);
@@ -789,14 +807,18 @@ function EventDetails({
   add('Rebuild', entry.rebuild === undefined ? undefined : rebuildDetail(entry.rebuild));
 
   return (
-    <aside className="cg-audit-details" aria-label="Event details" data-audit-details="">
+    <aside
+      className="cg-audit-details"
+      aria-label={localizeUi('Event details')}
+      data-audit-details=""
+    >
       <div className="cg-audit-details__head">
-        <strong>Event details</strong>
-        <Button variant="icon" aria-label="Close event details" onClick={onClose}>
+        <strong>{localizeUi('Event details')}</strong>
+        <Button variant="icon" aria-label={localizeUi('Close event details')} onClick={onClose}>
           <Icon icon={X} />
         </Button>
       </div>
-      <span className={outcomeTag(entry.outcome)}>{outcomeLabel(entry.outcome)}</span>
+      <span className={outcomeTag(entry.outcome)}>{localizeUi(outcomeLabel(entry.outcome))}</span>
       <div className="cg-audit-details__title">
         <strong>{entry.action}</strong>
         {names.length > 0 && <OperatorNames name={{ names, layer: null, title: '' }} />}
@@ -810,21 +832,21 @@ function EventDetails({
         />
       )}
       <dl className="cg-audit-details__facts">
-        <dt>Time</dt>
+        <dt>{localizeUi('Time')}</dt>
         <dd>
           {time.date} {time.time}
         </dd>
         <dt>UTC</dt>
         <dd>{time.utc}</dd>
-        <dt>Actor</dt>
+        <dt>{localizeUi('Actor')}</dt>
         <dd>
           <bdi>{entry.actor}</bdi>
         </dd>
-        <dt>Action</dt>
+        <dt>{localizeUi('Action')}</dt>
         <dd>{entry.action}</dd>
         {entry.inputPreview !== undefined && (
           <>
-            <dt>Input preview</dt>
+            <dt>{localizeUi('Input preview')}</dt>
             <dd>
               CH {entry.inputPreview.channel} · <bdi>{entry.inputPreview.sourceName}</bdi> ·{' '}
               {entry.inputPreview.operation}
@@ -833,7 +855,7 @@ function EventDetails({
         )}
         {entry.slot !== undefined && (
           <>
-            <dt>Channel / layer</dt>
+            <dt>{localizeUi('Channel / layer')}</dt>
             <dd>
               {String(entry.slot.channel)} / {String(entry.slot.layer)}
             </dd>
@@ -841,14 +863,14 @@ function EventDetails({
         )}
         {entry.rebuild !== undefined && (
           <>
-            <dt>Change</dt>
+            <dt>{localizeUi('Change')}</dt>
             <dd>{rebuildClause(entry.rebuild)}</dd>
           </>
         )}
       </dl>
       {technical.length > 0 && (
         <section className="cg-audit-details__technical">
-          <h3>Technical details</h3>
+          <h3>{localizeUi('Technical details')}</h3>
           {technical.map((fact) => (
             <div
               key={fact.label}
@@ -863,9 +885,9 @@ function EventDetails({
         </section>
       )}
       <CopyValue
-        label="event details"
+        label={localizeUi('event details')}
         value={JSON.stringify(entry, null, 2)}
-        text="Copy event details"
+        text={localizeUi('Copy event details')}
       />
     </aside>
   );

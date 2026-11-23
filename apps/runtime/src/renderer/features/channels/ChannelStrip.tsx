@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { cgUnlicensedReason } from '@cg/shared-ipc';
 import { useLicense } from '../../hooks/useLicense.js';
 import { useLockCoverage } from '../../hooks/useLock.js';
@@ -37,6 +38,7 @@ export function ChannelStrip({
   signals?: ReadonlyMap<number, ChannelSignal>;
 } = {}): JSX.Element {
   const { channels, selected, operable, standaloneCoreChannels, names, air } = useSelectedChannel();
+  const t = useUiText();
   const license = useLicense();
   const coverage = useLockCoverage();
   const locked = coverage.kind === 'partial' ? coverage.channels : [];
@@ -120,7 +122,8 @@ export function ChannelStrip({
           label: (
             <>
               {dot}
-              {`CHANNEL ${String(channel)}${suffix}`}
+              {t('CHANNEL {channel}', { channel })}
+              {suffix}
             </>
           ),
           ...reasonTitle,
@@ -146,7 +149,7 @@ export function ChannelStrip({
       tabs={tabs}
       activeId={String(selected)}
       onSelect={(id) => selectChannel(Number(id))}
-      ariaLabel="Channels"
+      ariaLabel={t('Channels')}
       idPrefix="channel"
       level="outer"
       inPanelBar

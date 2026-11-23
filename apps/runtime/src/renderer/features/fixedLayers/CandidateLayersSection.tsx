@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { templateTypeLabel } from '../library/templateName.js';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -163,13 +164,14 @@ export function CandidateLayersSection({
   onDirtyCountChange,
   footerSlot = null,
 }: CandidateLayersSectionProps): JSX.Element {
+  const localizeUi = useUiText();
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: this section edits the channel on screen.
   const { bank, banks, banksReady: ready, multiChannel } = useSelectedChannel();
   const { slots } = useFixedSlotsState();
   if (!ready) {
     return (
       <span style={styles.waiting} role="status">
-        Waiting for the bridge to send the declared bank…
+        {localizeUi('Waiting for the bridge to send the declared bank…')}
       </span>
     );
   }
@@ -206,6 +208,7 @@ function bankKey(bank: FixedLayerBank): string {
  * explicit that this section cannot create one.
  */
 function NoBank(): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div style={styles.needsConfig} data-candidate-layers-unconfigured="">
       <span>
@@ -215,9 +218,9 @@ function NoBank(): JSX.Element {
         startup.
       </span>
       <span>
-        Create <code>bridge-fixed-layers.json</code> in the bridge&rsquo;s config directory (
-        <code>~/.cg-runtime/</code> by default, or wherever <code>--fixed-layers-path</code> points)
-        and restart the bridge:
+        {localizeUi('Create')} <code>bridge-fixed-layers.json</code> in the bridge&rsquo;s config
+        directory (<code>~/.cg-runtime/</code> {localizeUi('by default, or wherever')}{' '}
+        <code>--fixed-layers-path</code> points) and restart the bridge:
       </span>
       <div style={styles.code}>
         {`{
@@ -228,13 +231,15 @@ function NoBank(): JSX.Element {
 }`}
       </div>
       <span>
-        <strong>start</strong> is the first layer and <strong>count</strong> how many follow it. The
-        range must not overlap the playout system&rsquo;s reserved layers or the dynamic ranges, and
-        the bridge refuses to start if it does — naming both ranges, so a clash is quick to fix.
+        <strong>{localizeUi('start')}</strong> {localizeUi('is the first layer and')}{' '}
+        <strong>{localizeUi('count')}</strong> how many follow it. The range must not overlap the
+        playout system&rsquo;s reserved layers or the dynamic ranges, and the bridge refuses to
+        start if it does — naming both ranges, so a clash is quick to fix.
       </span>
       <span>
-        Once the bridge restarts with a valid file, this section becomes where you show or hide
-        individual rows and give them names.
+        {localizeUi(
+          'Once the bridge restarts with a valid file, this section becomes where you show or hide individual rows and give them names.',
+        )}
       </span>
     </div>
   );
@@ -249,17 +254,20 @@ function NoBank(): JSX.Element {
  * read, so the tags and the table cannot name different ranges.
  */
 export function CandidateLayersSummary(): JSX.Element | null {
+  const localizeUi = useUiText();
   const { bank } = useChannelBankState();
   if (bank === null) return null;
   return (
     <div className="cg-setup-summary" data-layer-summary="">
-      <Tag className="cg-setup-tag">Channel {String(bank.channel)}</Tag>
       <Tag className="cg-setup-tag">
-        Layers {String(bank.start)}–{String(fixedBankEnd(bank))}
+        {localizeUi('Channel')} {String(bank.channel)}
+      </Tag>
+      <Tag className="cg-setup-tag">
+        {localizeUi('Layers')} {String(bank.start)}–{String(fixedBankEnd(bank))}
       </Tag>
       <Tag className="cg-setup-tag">
         <Icon icon={Lock} size={STATION_SETUP_PX.tagIcon} />
-        Fixed bank
+        {localizeUi('Fixed bank')}
       </Tag>
     </div>
   );
@@ -275,9 +283,10 @@ export function CandidateLayersSummary(): JSX.Element | null {
  * they are read at a glance, and the rules moved here, where they are read once.
  */
 export function CandidateLayersHelper(): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <details className="cg-setup-details" data-layers-helper="">
-      <summary>Visibility and layer safety</summary>
+      <summary>{localizeUi('Visibility and layer safety')}</summary>
       <p>
         Hiding a row removes it from the Layers panel only — the layer stays fenced from automatic
         allocation, and nothing on it is touched. An occupied row cannot be hidden: remove its
@@ -334,6 +343,7 @@ function BankEditor({
   onDirtyCountChange: ((count: number) => void) | undefined;
   footerSlot: HTMLElement | null;
 }): JSX.Element {
+  const localizeUi = useUiText();
   // ONE edit model across BOTH halves, keyed by layer. The split back into the two
   // sub-banks happens once, in `apply`, through `isLowBankLayer` — the same predicate the
   // bridge refuses on.
@@ -542,21 +552,21 @@ function BankEditor({
     <>
       <Button
         variant="neutral"
-        aria-label="Revert candidate layer edits"
-        title="Back to what the bridge holds; nothing is sent"
+        aria-label={localizeUi('Revert candidate layer edits')}
+        title={localizeUi('Back to what the bridge holds; nothing is sent')}
         disabled={!dirty || busy}
         onClick={revert}
       >
-        Revert
+        {localizeUi('Revert')}
       </Button>
       <Button
         variant="primary"
-        aria-label="Apply layers"
-        title="Applies visibility and names"
+        aria-label={localizeUi('Apply layers')}
+        title={localizeUi('Applies visibility and names')}
         disabled={!dirty || busy}
         onClick={apply}
       >
-        Apply layers
+        {localizeUi('Apply layers')}
       </Button>
     </>
   );
@@ -696,12 +706,12 @@ function BankEditor({
         <table className="cg-table cg-layer-table">
           <thead>
             <tr>
-              <th scope="col">Layer</th>
-              <th scope="col">Show</th>
-              <th scope="col">Row name</th>
-              <th scope="col">Template</th>
+              <th scope="col">{localizeUi('Layer')}</th>
+              <th scope="col">{localizeUi('Show')}</th>
+              <th scope="col">{localizeUi('Row name')}</th>
+              <th scope="col">{localizeUi('Template')}</th>
               <th scope="col" className="cg-table__actions">
-                <span className="cg-visually-hidden">Actions</span>
+                <span className="cg-visually-hidden">{localizeUi('Actions')}</span>
               </th>
             </tr>
           </thead>
@@ -717,7 +727,9 @@ function BankEditor({
                     helping (golden rule 11). The operator's own row number sits under it. */}
                 <td>
                   <span className="cg-layer-id">{String(row.layer)}</span>
-                  <span className="cg-layer-row-number">Row {String(row.position)}</span>
+                  <span className="cg-layer-row-number">
+                    {localizeUi('Row')} {String(row.position)}
+                  </span>
                 </td>
                 <td>
                   {/*
@@ -819,7 +831,7 @@ function BankEditor({
                       */}
                       <span className="cg-layer-locked" data-layer-locked="">
                         <Icon icon={Lock} size={STATION_SETUP_PX.occupiedIcon} />
-                        {row.onAir ? 'On air' : 'Occupied'} · visibility locked
+                        {row.onAir ? 'On air' : 'Occupied'} {localizeUi('· visibility locked')}
                       </span>
                     </>
                   )}
@@ -861,11 +873,11 @@ function BankEditor({
   );
 
   const emptyState = (
-    <section className="cg-card" aria-label="No matching rows">
+    <section className="cg-card" aria-label={localizeUi('No matching rows')}>
       <div className="cg-setup-empty-state" data-layers-empty="">
         <Icon icon={Search} size={STATION_SETUP_PX.emptyStateIcon} />
-        <h3>No matching rows</h3>
-        <p>Try another name, or turn off “Shown only”.</p>
+        <h3>{localizeUi('No matching rows')}</h3>
+        <p>{localizeUi('Try another name, or turn off “Shown only”.')}</p>
       </div>
     </section>
   );
@@ -885,8 +897,8 @@ function BankEditor({
             className="cg-field"
             type="search"
             autoComplete="off"
-            aria-label="Filter by name, template or layer"
-            placeholder="Filter by name, template or layer…"
+            aria-label={localizeUi('Filter by name, template or layer')}
+            placeholder={localizeUi('Filter by name, template or layer…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -897,14 +909,14 @@ function BankEditor({
             checked={shownOnly}
             onChange={(e) => setShownOnly(e.target.checked)}
           />
-          Shown only
+          {localizeUi('Shown only')}
         </label>
         <span className="cg-setup-results" data-layers-results="" role="status">
-          {String(shown)} of {String(total)} rows
+          {String(shown)} {localizeUi('of')} {String(total)} {localizeUi('rows')}
         </span>
         {canEditShortcuts && (
           <Button variant="neutral" disabled={busy} onClick={() => setEditingShortcuts(true)}>
-            Layer shortcuts…
+            {localizeUi('Layer shortcuts…')}
           </Button>
         )}
       </div>
@@ -917,13 +929,13 @@ function BankEditor({
           {shownOperator.length > 0 && (
             <p className="cg-layer-footnote">
               <Icon icon={ArrowDown} size={STATION_SETUP_PX.footnoteIcon} />
-              Highest layer first · rows from the active channel.
+              {localizeUi('Highest layer first · rows from the active channel.')}
             </p>
           )}
           {shownBeds.length > 0 && (
             <div className="cg-setup-beds-head">
-              <h3>Live layers</h3>
-              <p>Composited below the live source layers.</p>
+              <h3>{localizeUi('Live layers')}</h3>
+              <p>{localizeUi('Composited below the live source layers.')}</p>
             </div>
           )}
           {shownBeds.length > 0 && table(shownBeds, 'Live layer rows')}

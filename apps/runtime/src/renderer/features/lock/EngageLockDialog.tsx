@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState } from 'react';
 import { normalizeDigits } from '../../ui/NumericInput.js';
 import { Notice } from '../../ui/Notice.js';
@@ -44,13 +45,14 @@ export function EngageLockDialog({
   /** The confirmed PIN, already digit-normalised. */
   onEngage: (pin: string) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [pin, setPin] = useState('');
   const [again, setAgain] = useState('');
 
   return (
     <RecordDialog
-      title="Engage lock"
-      confirmLabel="Lock"
+      title={localizeUi('Engage lock')}
+      confirmLabel={localizeUi('Lock')}
       layer="base"
       onCancel={onCancel}
       onSubmit={() => {
@@ -84,14 +86,14 @@ export function EngageLockDialog({
         />
       </DialogField>
       <DialogField
-        label="PIN again"
+        label={localizeUi('PIN again')}
         hint="Asked twice on purpose — a PIN you mistype is a PIN you cannot use to get back in."
       >
         <input
           className="cg-field"
           type="password"
           value={again}
-          aria-label="Lock PIN again"
+          aria-label={localizeUi('Lock PIN again')}
           autoComplete="off"
           onChange={(e) => setAgain(e.target.value)}
         />
@@ -103,7 +105,9 @@ export function EngageLockDialog({
       <Notice
         noticeRole="refusal"
         aria="note"
-        text="While locked the console refuses everything, including Clear and Stop. The way out is to unlock. The PIN is not stored — it lives only in this bridge process."
+        text={localizeUi(
+          'While locked the console refuses everything, including Clear and Stop. The way out is to unlock. The PIN is not stored — it lives only in this bridge process.',
+        )}
       />
     </RecordDialog>
   );

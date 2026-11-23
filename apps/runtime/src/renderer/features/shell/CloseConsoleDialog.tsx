@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 
 /**
@@ -33,24 +34,29 @@ export function CloseConsoleDialog({
   onCancel: () => void;
   onClose: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const fact = stayOnAirLine(onAir);
   return (
     <Modal
-      title="Close CG Control?"
+      title={localizeUi('Close CG Control?')}
       layer="window"
       onClose={onCancel}
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onCancel} data-modal-autofocus="">
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           {/*
             ⚠ NAMED `Close CG Control`, shown `Close`. The primitive's ✕ is named `Close` too, and
             it means CANCEL: two buttons announced alike with opposite effects is a trap for anyone
             who hears the dialog rather than sees it. The name keeps the visible word in it.
           */}
-          <ModalAction actionRole="primary" onClick={onClose} aria-label="Close CG Control">
-            Close
+          <ModalAction
+            actionRole="primary"
+            onClick={onClose}
+            aria-label={localizeUi('Close CG Control')}
+          >
+            {localizeUi('Close')}
           </ModalAction>
         </>
       }

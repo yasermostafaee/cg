@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId } from 'react';
 import { ArrowLeftRight, LayoutGrid, Move, MoveHorizontal, MoveVertical } from 'lucide-react';
 import {
@@ -59,9 +60,12 @@ function MarginFields({
   margins: LiveSourceLayoutMargins;
   onChange: (margins: LiveSourceLayoutMargins) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div className="cg-live-layout-margin-row" role="group" aria-label={kind + ' margins (px)'}>
-      <span>{kind} margins (px)</span>
+      <span>
+        {kind} {localizeUi('margins (px)')}
+      </span>
       <div className="cg-live-layout-margin-fields">
         {EDGES.map(({ side, name, axis, opposite }) => (
           <LiveLayoutEditorNumber
@@ -79,7 +83,7 @@ function MarginFields({
           disabled={Object.values(margins).every((value) => value === 0)}
           onClick={() => onChange(ZERO_MARGINS)}
         >
-          Zero margins
+          {localizeUi('Zero margins')}
         </Button>
       </div>
     </div>
@@ -111,6 +115,7 @@ export function LiveLayoutEditorArrange({
     | { id: string; rect: LiveSourceRect; onChange: (rect: LiveSourceRect) => void }
     | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const fillId = useId();
   const count = preset.frameIds.length;
   if (count === 0) return null;
@@ -127,10 +132,10 @@ export function LiveLayoutEditorArrange({
   }
 
   return (
-    <section className="cg-live-layout-arrange" aria-label="Arrange">
+    <section className="cg-live-layout-arrange" aria-label={localizeUi('Arrange')}>
       <div className="cg-live-layout-panel-head">
         <h3>
-          <Icon icon={LayoutGrid} size={16} /> Arrange
+          <Icon icon={LayoutGrid} size={16} /> {localizeUi('Arrange')}
         </h3>
         {custom && (
           <Button
@@ -139,7 +144,7 @@ export function LiveLayoutEditorArrange({
             aria-pressed={editingPlacement}
             onClick={() => onEditingPlacementChange(!editingPlacement)}
           >
-            <Icon icon={Move} size={14} /> Edit plate layout
+            <Icon icon={Move} size={14} /> {localizeUi('Edit plate layout')}
           </Button>
         )}
         {count > 1 && !custom && (
@@ -149,7 +154,7 @@ export function LiveLayoutEditorArrange({
             aria-pressed={preset.reverse}
             onClick={() => changeGeometry({ reverse: !preset.reverse })}
           >
-            <Icon icon={ArrowLeftRight} size={14} /> Reverse order
+            <Icon icon={ArrowLeftRight} size={14} /> {localizeUi('Reverse order')}
           </Button>
         )}
       </div>
@@ -158,9 +163,9 @@ export function LiveLayoutEditorArrange({
           key={preset.id + ':' + selectedPlate.id}
           className="cg-live-layout-margin-row"
           role="group"
-          aria-label="Plate position and size (px)"
+          aria-label={localizeUi('Plate position and size (px)')}
         >
-          <span>Plate position and size (px)</span>
+          <span>{localizeUi('Plate position and size (px)')}</span>
           <div className="cg-live-layout-margin-fields">
             {RECT_FIELDS.map(({ key, limit, name, axis, min }) => (
               <LiveLayoutEditorNumber
@@ -190,7 +195,11 @@ export function LiveLayoutEditorArrange({
           if ('fitMode' in patch) onFitChange(patch.fitMode);
         }}
       />
-      <div className="cg-live-layout-arrange-buttons" role="group" aria-label="Arrangement">
+      <div
+        className="cg-live-layout-arrange-buttons"
+        role="group"
+        aria-label={localizeUi('Arrangement')}
+      >
         {(count === 1
           ? [{ value: 'side-by-side' as const, name: 'Single plate' }]
           : choices.filter(({ counts }) => counts.includes(count))
@@ -225,7 +234,7 @@ export function LiveLayoutEditorArrange({
             }}
             className="cg-live-layout-arrangement-glyph"
           />
-          Custom
+          {localizeUi('Custom')}
         </Button>
       </div>
       {!custom && (
@@ -235,16 +244,20 @@ export function LiveLayoutEditorArrange({
             checked={preset.fill === true}
             onChange={(fill) => changeGeometry({ fill })}
           />
-          Fill available area
+          {localizeUi('Fill available area')}
         </label>
       )}
       {count > 1 && !custom && (
-        <div className="cg-live-layout-gaps" role="group" aria-label="Plate gaps, pixels">
+        <div
+          className="cg-live-layout-gaps"
+          role="group"
+          aria-label={localizeUi('Plate gaps, pixels')}
+        >
           <div className="cg-live-layout-gap-control">
             <Icon icon={MoveHorizontal} size={14} />
             <LiveLayoutEditorNumber
               key={`${preset.id}-horizontal`}
-              label="Horizontal gap"
+              label={localizeUi('Horizontal gap')}
               value={preset.horizontalGap}
               min={0}
               max={layout.resolution.width}
@@ -256,7 +269,7 @@ export function LiveLayoutEditorArrange({
             <Icon icon={MoveVertical} size={14} />
             <LiveLayoutEditorNumber
               key={`${preset.id}-vertical`}
-              label="Vertical gap"
+              label={localizeUi('Vertical gap')}
               value={preset.verticalGap}
               min={0}
               max={layout.resolution.height}

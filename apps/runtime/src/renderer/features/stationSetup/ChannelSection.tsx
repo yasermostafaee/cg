@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { rasterVerdict, type ChannelSettingsState, type ConnectionHealth } from '@cg/shared-ipc';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
@@ -131,6 +132,7 @@ function channelToken(channel: number): string {
 }
 
 export function ChannelSection({ health }: { health: ConnectionHealth | null }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const state = useChannelSettings();
   const { selected: channel } = useSelectedChannel();
@@ -189,12 +191,12 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
       */}
       <section
         className="cg-card cg-card--video"
-        aria-label="Video format"
+        aria-label={localizeUi('Video format')}
         data-raster-channel={String(channel)}
         data-video-read={observed === undefined ? 'no' : 'yes'}
       >
         <div className="cg-video-head">
-          <span className="cg-video-eyebrow">Video format</span>
+          <span className="cg-video-eyebrow">{localizeUi('Video format')}</span>
           <span className="cg-video-token">{channelToken(channel)}</span>
         </div>
         <div className="cg-video-mode">
@@ -205,7 +207,7 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         </div>
         <dl className="cg-video-metrics">
           <div className="cg-video-metric">
-            <dt>Resolution</dt>
+            <dt>{localizeUi('Resolution')}</dt>
             <dd>
               {configured === undefined
                 ? 'not configured'
@@ -213,22 +215,22 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
             </dd>
           </div>
           <div className="cg-video-metric">
-            <dt>Frame rate</dt>
+            <dt>{localizeUi('Frame rate')}</dt>
             <dd>{words.rate}</dd>
           </div>
           <div className="cg-video-metric">
-            <dt>Server mode</dt>
+            <dt>{localizeUi('Server mode')}</dt>
             <dd className="cg-video-metric__mono">{modeLine(state, channel)}</dd>
           </div>
         </dl>
         {/* The app's own two facts (`B-236`) — the reference draws neither; the guard keeps both. */}
         <dl className="cg-video-metrics">
           <div className="cg-video-metric">
-            <dt>Declared by</dt>
+            <dt>{localizeUi('Declared by')}</dt>
             <dd>{playoutEngineWording(declaredBy(state, channel), engine)}</dd>
           </div>
           <div className="cg-video-metric">
-            <dt>Check</dt>
+            <dt>{localizeUi('Check')}</dt>
             <dd style={styles.verdict[verdict]}>
               <span data-raster-verdict={verdict}>{VERDICT_TEXT[verdict]}</span>
             </dd>
@@ -238,13 +240,15 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
       {/* The reference folds the "why read only" paragraph under a summary; the app's own
           sentence goes there unchanged. */}
       <details className="cg-setup-details">
-        <summary>Why is the video format read only?</summary>
+        <summary>{localizeUi('Why is the video format read only?')}</summary>
         <p>
-          The console needs this because plate geometry, the rehearsal preview and the on-air
-          position boxes are computed in channel pixels. It is <b>not</b> typed here: the server
-          owns the value, and a second place to set it would be a second source of truth — a wrong
-          one moves every graphic without raising an error. If the console and the channel disagree,
-          the mismatch banner says so.
+          {localizeUi(
+            'The console needs this because plate geometry, the rehearsal preview and the on-air position boxes are computed in channel pixels. It is',
+          )}{' '}
+          <b>{localizeUi('not')}</b>{' '}
+          {localizeUi(
+            'typed here: the server owns the value, and a second place to set it would be a second source of truth — a wrong one moves every graphic without raising an error. If the console and the channel disagree, the mismatch banner says so.',
+          )}
         </p>
       </details>
 

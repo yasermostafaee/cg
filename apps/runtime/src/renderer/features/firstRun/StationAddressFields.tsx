@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { PLAYOUT_ENGINE_NAME } from '../../ui/engineWording.js';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { STANDALONE_BRIDGE_HOST } from '../../../shared/station-address.js';
@@ -90,6 +91,7 @@ function HostPortFields({
   onKeyDown: ((e: KeyboardEvent<HTMLInputElement>) => void) | undefined;
   describedBy?: string | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const hostBad = hostFieldError(value.host);
   const portBad = portFieldError(value.port);
   const hostErrorId = `${idRoot}-host-error`;
@@ -99,7 +101,7 @@ function HostPortFields({
     undefined;
   return (
     <div className="cg-setup-fields cg-setup-fields--host-port">
-      <Field label="Host" error={hostBad} errorId={hostErrorId}>
+      <Field label={localizeUi('Host')} error={hostBad} errorId={hostErrorId}>
         {/* An address is not prose: LTR is a statement about the CONTENT (golden rule 4). */}
         <TextInput
           id={`${idRoot}-address`}
@@ -116,7 +118,7 @@ function HostPortFields({
           onKeyDown={onKeyDown}
         />
       </Field>
-      <Field label="Port" error={portBad} errorId={portErrorId}>
+      <Field label={localizeUi('Port')} error={portBad} errorId={portErrorId}>
         <NumericInput
           id={`${idRoot}-port`}
           className="cg-field cg-field--mono"
@@ -160,6 +162,7 @@ export function StationAddressFields({
   statusId?: string | undefined;
   standalone?: boolean | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   // CG Bridge is on the Playout's host unless a person says otherwise: so that host IS its placeholder.
   const playoutHost = playoutHostOf(playoutAddressOf(value.playout));
   const onKeyDown =
@@ -177,7 +180,7 @@ export function StationAddressFields({
           aria-label={`${PLAYOUT_ENGINE_NAME} address`}
         >
           <span className="cg-station-fields__name" aria-hidden="true">
-            {PLAYOUT_ENGINE_NAME} address
+            {PLAYOUT_ENGINE_NAME} {localizeUi('address')}
           </span>
           <HostPortFields
             name="Playout"
@@ -193,9 +196,13 @@ export function StationAddressFields({
         </div>
       )}
       {show.bridge && (
-        <div className="cg-station-fields__group" role="group" aria-label="CG Bridge address">
+        <div
+          className="cg-station-fields__group"
+          role="group"
+          aria-label={localizeUi('CG Bridge address')}
+        >
           <span className="cg-station-fields__name" aria-hidden="true">
-            CG Bridge address
+            {localizeUi('CG Bridge address')}
           </span>
           <HostPortFields
             name="CG Bridge"

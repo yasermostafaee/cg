@@ -23,7 +23,6 @@ import {
   Server,
   Settings,
   Type,
-  CalendarDays,
   FolderOpen,
   type LucideIcon,
 } from 'lucide-react';
@@ -64,6 +63,9 @@ import {
 } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { CalendarSection } from '../calendar/CalendarSection.js';
+import { LanguageSettings } from './LanguageSettings.js';
+import { WorkspaceSettings } from '../workspace/WorkspaceSettings.js';
+import { useUiText } from '../../i18n/locale.js';
 import { SharedFilesSection } from './SharedFilesSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
 import { BackupServerDialog } from './BackupServerDialog.js';
@@ -170,7 +172,7 @@ const SECTION_ICONS: Record<StationSetupSection, LucideIcon> = {
   sources: Radio,
   'shared-files': FolderOpen,
   delimiters: Type,
-  calendar: CalendarDays,
+  general: Settings,
   'candidate-layers': Layers,
 };
 
@@ -427,6 +429,7 @@ function SetupField({
   readOnlyValue?: string | undefined;
   children: ReactNode;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
   const control = isValidElement(children)
@@ -444,7 +447,7 @@ function SetupField({
   const labelContent = (
     <>
       {label}
-      {optional && <span className="cg-setup-field__optional"> · optional</span>}
+      {optional && <span className="cg-setup-field__optional"> {localizeUi('· optional')}</span>}
     </>
   );
   return (
@@ -544,6 +547,7 @@ export function StationSetupDialog({
   requestId = 0,
   onClose,
 }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   const items = useStack();
   // B-223 — the output check's technical surface reads the same health the banner does.
   const health = useConnections();
@@ -554,6 +558,7 @@ export function StationSetupDialog({
     the Channel tab cannot name three different channels. Station-wide tabs never read it.
   */
   const { selected: channel, names: channelNames, air: channelAirs } = useSelectedChannel();
+  const localizeSettings = useUiText();
   const [active, setActive] = useState<StationSetupSection>(section);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [primary, setPrimary] = useState<EndpointDraft>(UNREAD_SERVERS.primary);
@@ -736,7 +741,7 @@ export function StationSetupDialog({
       sources: make('sources'),
       sharedFiles: make('shared-files'),
       delimiters: make('delimiters'),
-      calendar: make('calendar'),
+      general: make('general'),
       candidateLayers: make('candidate-layers'),
     };
   }, []);
@@ -1075,7 +1080,7 @@ export function StationSetupDialog({
                 setAdvancedOpen(true);
               }}
             >
-              Detect automatically
+              {localizeUi('Detect automatically')}
             </Button>
           ),
         }
@@ -1227,18 +1232,25 @@ export function StationSetupDialog({
 
   const tabs: readonly TabSpec[] = STATION_SETUP_SECTIONS.map((s) => ({
     id: s.id,
-    label: s.title,
-    group: s.group,
+    label: localizeSettings(s.title),
+    group: localizeSettings(s.group),
     icon: SECTION_ICONS[s.id],
     // BLOCKED beats EDITED: a section you cannot apply is the more urgent fact, and two
     // marks on one row would be a puzzle rather than a signal.
     ...(isBlocked(s.id)
-      ? { badge: { tone: 'warn' as const, label: `${s.title} is blocked` } }
+      ? {
+          badge: {
+            tone: 'warn' as const,
+            label: localizeSettings('{section} is blocked', { section: localizeSettings(s.title) }),
+          },
+        }
       : isDirty(s.id)
         ? {
             badge: {
               tone: 'edited' as const,
-              label: `${s.title} has unapplied changes`,
+              label: localizeSettings('{section} has unapplied changes', {
+                section: localizeSettings(s.title),
+              }),
               // `SETTINGS-MATCH-02` — the chip says HOW MANY. Servers is one draft however
               // many fields were typed into it: the section applies atomically, so `1` is the
               // honest number rather than a count of keystrokes (`B-324`: one more for the card).
@@ -1368,7 +1380,7 @@ export function StationSetupDialog({
     */
     <div className="cg-setup-fields cg-setup-fields--three">
       <SetupField
-        label="Host"
+        label={localizeUi('Host')}
         {...(holdsStationAdmin && !fact ? {} : { readOnlyValue: draft.host })}
         error={hostError(draft.host, { label: 'Host' })}
         id={`${prefix}-host`}
@@ -1385,7 +1397,7 @@ export function StationSetupDialog({
         />
       </SetupField>
       <SetupField
-        label="AMCP port"
+        label={localizeUi('AMCP port')}
         {...(holdsStationAdmin && !fact
           ? {}
           : { readOnlyValue: draft.amcpPort.trim() === '' ? defaults.amcpPort : draft.amcpPort })}
@@ -1405,7 +1417,7 @@ export function StationSetupDialog({
         />
       </SetupField>
       <SetupField
-        label="OSC port"
+        label={localizeUi('OSC port')}
         {...(holdsStationAdmin && !fact
           ? {}
           : { readOnlyValue: draft.oscPort.trim() === '' ? defaults.oscPort : draft.oscPort })}
@@ -1427,14 +1439,14 @@ export function StationSetupDialog({
 
   return (
     <Modal
-      title="Station setup"
+      title={localizeUi('Station setup')}
       /* `REPAIR-03` B, audit row 72 — the reference draws an emblem in this head. */
       emblem={Settings}
       subtitle={
         <>
           {/* `UI-POLISH-01` G — the output dot, before the channel's name, as on the strip. */}
           <OutputDot air={channelAirs.get(channel) ?? NO_AIR} />
-          Channel {String(channel)}
+          {localizeUi('Channel')} {String(channel)}
           {channelNames.get(channel) !== undefined && (
             <>
               {' · '}
@@ -1448,21 +1460,29 @@ export function StationSetupDialog({
                 'Programme role unknown'
               ) : (
                 <>
-                  Programme · <span title={railName}>{programmeActive.engine} active</span>
+                  {localizeUi('Programme ·')}{' '}
+                  <span title={railName}>
+                    {programmeActive.engine} {localizeUi('active')}
+                  </span>
                   {programmeStandbys.map((member) => (
                     <span
                       key={member.engine}
                       title={programmeServerDisplayName(member, capabilities?.signInUrl)}
                     >
                       {' · '}
-                      {member.engine} standby
+                      {member.engine} {localizeUi('standby')}
                     </span>
                   ))}
                 </>
               )}
             </>
           ) : (
-            health !== null && <> · Primary {health.currentPrimary}</>
+            health !== null && (
+              <>
+                {' '}
+                {localizeUi('· Primary')} {health.currentPrimary}
+              </>
+            )
           )}
         </>
       }
@@ -1492,7 +1512,7 @@ export function StationSetupDialog({
           tabs={tabs}
           activeId={active}
           onSelect={(id) => setActive(id as StationSetupSection)}
-          ariaLabel="Station setup sections"
+          ariaLabel={localizeSettings('Station setup sections')}
           idPrefix="station"
           orientation="vertical"
           /*
@@ -1561,8 +1581,8 @@ export function StationSetupDialog({
               size={STATION_SETUP_PX.footMessageIcon}
             />
             {footerBlocked && activeSpec.footerBlocked !== undefined
-              ? activeSpec.footerBlocked
-              : activeSpec.footerRest}
+              ? localizeSettings(activeSpec.footerBlocked)
+              : localizeSettings(activeSpec.footerRest)}
           </span>
           {/*
             The slot a section's own commit controls portal into (the bank's).
@@ -1597,9 +1617,11 @@ export function StationSetupDialog({
                 <ModalAction
                   actionRole="cancel"
                   onClick={revertServers}
-                  title="Puts this tab's fields back to what is in force. Nothing is sent, and the dialog stays open."
+                  title={localizeUi(
+                    "Puts this tab's fields back to what is in force. Nothing is sent, and the dialog stays open.",
+                  )}
                 >
-                  Revert
+                  {localizeUi('Revert')}
                 </ModalAction>
               )}
             </>
@@ -1635,11 +1657,13 @@ export function StationSetupDialog({
             */
             <ModalAction
               actionRole="cancel"
-              aria-label="Close Station setup"
+              aria-label={localizeUi('Close Station setup')}
               onClick={dismiss}
-              title="Closes Station setup. Nothing in this section is waiting to be applied."
+              title={localizeUi(
+                'Closes Station setup. Nothing in this section is waiting to be applied.',
+              )}
             >
-              Close
+              {localizeUi('Close')}
             </ModalAction>
           )}
         </>
@@ -1760,13 +1784,13 @@ export function StationSetupDialog({
                   <span className="cg-card__spacer" />
                   {aNotApplied && (
                     <Tag className="cg-setup-card-tag" data-not-applied="">
-                      Not applied
+                      {localizeUi('Not applied')}
                     </Tag>
                   )}
                   {playoutStation && (
                     <>
                       <Tag className="cg-setup-card-tag" data-caspar-placement="">
-                        On the Playout machine
+                        {localizeUi('On the Playout machine')}
                       </Tag>
                       {serverAState !== null && (
                         <Tag className="cg-setup-card-tag" data-caspar-health="">
@@ -1832,7 +1856,9 @@ export function StationSetupDialog({
                   <Tag className="cg-setup-server-chip" aria-hidden="true">
                     B
                   </Tag>
-                  <span className="cg-card__title">{engineName} B · backup</span>
+                  <span className="cg-card__title">
+                    {engineName} {localizeUi('B · backup')}
+                  </span>
                   {/*
                       The reference's `.tag` on this head, and it says something TRUE that the
                       card otherwise only implies: a station may run on one server, so the
@@ -1844,22 +1870,24 @@ export function StationSetupDialog({
                       tag (`Read only` / `Apply together` / `Auto-save`) at the pane's head.
                       The reference draws both, at those two levels, for that reason.
                     */}
-                  <Tag className="cg-setup-card-tag">Optional</Tag>
+                  <Tag className="cg-setup-card-tag">{localizeUi('Optional')}</Tag>
                   <span className="cg-card__spacer" />
                   {/* T6 — a changed backup is shown as not applied, never as saved. */}
                   {bNotApplied && (
                     <Tag className="cg-setup-card-tag" data-not-applied="">
-                      Not applied
+                      {localizeUi('Not applied')}
                     </Tag>
                   )}
                   {/* Removing a declared backup commits only that endpoint through the server gate. */}
                   {holdsStationAdmin && backupEnabled && (
                     <AsyncButton
-                      aria-label="Remove backup"
+                      aria-label={localizeUi('Remove backup')}
                       disabled={
                         loaded === null || (loaded.servers.B !== undefined && onAirCount > 0)
                       }
-                      title="Removes the backup connection. Refused while anything is on air."
+                      title={localizeUi(
+                        'Removes the backup connection. Refused while anything is on air.',
+                      )}
                       onError={(message) => setRefusal((previous) => previous ?? message)}
                       run={async () => {
                         if (loaded === null) return { accepted: false };
@@ -1898,7 +1926,7 @@ export function StationSetupDialog({
                         }
                       }}
                     >
-                      Remove backup
+                      {localizeUi('Remove backup')}
                     </AsyncButton>
                   )}
                 </div>
@@ -1918,18 +1946,20 @@ export function StationSetupDialog({
                       <Icon icon={Server} size={20} />
                     </span>
                     <div className="cg-setup-empty__text">
-                      <span className="cg-setup-empty__title">No backup declared</span>
+                      <span className="cg-setup-empty__title">
+                        {localizeUi('No backup declared')}
+                      </span>
                       <p className="cg-setup-empty__body">
-                        Single-server operation (B-046: quiet by design).
+                        {localizeUi('Single-server operation (B-046: quiet by design).')}
                       </p>
                     </div>
                     {holdsStationAdmin && (
                       <Button
                         variant="primary"
-                        aria-label="Add backup"
+                        aria-label={localizeUi('Add backup')}
                         onClick={() => setAddingBackup(true)}
                       >
-                        Add backup
+                        {localizeUi('Add backup')}
                       </Button>
                     )}
                   </div>
@@ -1972,7 +2002,7 @@ export function StationSetupDialog({
               >
                 <summary className="cg-card__head cg-setup-advanced__head">
                   <Icon icon={advancedShown ? ChevronDown : ChevronRight} size={16} flipRtl />
-                  <span className="cg-card__title">Advanced</span>
+                  <span className="cg-card__title">{localizeUi('Advanced')}</span>
                 </summary>
                 <div className="cg-card__body">
                   {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
@@ -1985,7 +2015,7 @@ export function StationSetupDialog({
                       {/* Both genuinely derive when left empty, which is why blank is legal on both
                           (§10.3) — and why their placeholders say so. */}
                       <SetupField
-                        label="Host"
+                        label={localizeUi('Host')}
                         readOnlyValue={
                           managedGraphicsHost ??
                           (holdsStationAdmin ? undefined : serveHost || 'derived automatically')
@@ -1999,7 +2029,7 @@ export function StationSetupDialog({
                                   className="cg-setup-chips"
                                   data-serve-candidates=""
                                   role="group"
-                                  aria-label="CG Bridge's machine's addresses"
+                                  aria-label={localizeUi("CG Bridge's machine's addresses")}
                                 >
                                   {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates its own
                                         machine's interfaces; it cannot know which one the plant
@@ -2027,14 +2057,14 @@ export function StationSetupDialog({
                         <TextInput
                           className="cg-field--mono"
                           dir="ltr"
-                          aria-label="Graphics host"
-                          placeholder="Detect automatically"
+                          aria-label={localizeUi('Graphics host')}
+                          placeholder={localizeUi('Detect automatically')}
                           value={serveHost}
                           onChange={(value) => setServeHost(hostValue(value))}
                         />
                       </SetupField>
                       <SetupField
-                        label="Port"
+                        label={localizeUi('Port')}
                         readOnlyValue={
                           managedGraphicsPort ??
                           (holdsStationAdmin ? undefined : servePort || 'assigned automatically')
@@ -2046,8 +2076,8 @@ export function StationSetupDialog({
                           className="cg-field cg-field--mono"
                           dir="ltr"
                           allow="digits"
-                          aria-label="Graphics port"
-                          placeholder="Assign automatically"
+                          aria-label={localizeUi('Graphics port')}
+                          placeholder={localizeUi('Assign automatically')}
                           value={servePort}
                           onValueChange={setServePort}
                         />
@@ -2056,14 +2086,17 @@ export function StationSetupDialog({
                   </section>
 
                   {playoutStation && holdsStationAdmin && (
-                    <section className="cg-station-fields__group" aria-label="Graphics recovery">
+                    <section
+                      className="cg-station-fields__group"
+                      aria-label={localizeUi('Graphics recovery')}
+                    >
                       <span className="cg-station-fields__name" aria-hidden="true">
-                        Graphics recovery
+                        {localizeUi('Graphics recovery')}
                       </span>
                       <div className="cg-setup-fields">
                         <SetupField
                           id="quick-restore"
-                          label="Restore window (seconds)"
+                          label={localizeUi('Restore window (seconds)')}
                           error={quickRestoreError}
                           hint="Restore on-air graphics after a short engine outage. Enter 0 to turn it off."
                         >
@@ -2071,7 +2104,7 @@ export function StationSetupDialog({
                             className="cg-field cg-field--mono"
                             dir="ltr"
                             allow="digits"
-                            aria-label="Restore window (seconds)"
+                            aria-label={localizeUi('Restore window (seconds)')}
                             placeholder={String(DEFAULT_QUICK_RESTORE_SECONDS)}
                             value={quickRestore}
                             onValueChange={setQuickRestore}
@@ -2089,11 +2122,11 @@ export function StationSetupDialog({
                             className="cg-setup-field__label"
                             htmlFor="station-redundancy-strategy"
                           >
-                            Strategy
+                            {localizeUi('Strategy')}
                           </label>
                           <SelectInput
                             id="station-redundancy-strategy"
-                            aria-label="Redundancy strategy"
+                            aria-label={localizeUi('Redundancy strategy')}
                             aria-describedby="station-redundancy-strategy-hint"
                             value={strategy}
                             onChange={(e) =>
@@ -2105,7 +2138,9 @@ export function StationSetupDialog({
                             <option value="journal-replay">journal-replay</option>
                           </SelectInput>
                           <p className="cg-setup-field__hint" id="station-redundancy-strategy-hint">
-                            How the backup is kept in step while both servers are configured.
+                            {localizeUi(
+                              'How the backup is kept in step while both servers are configured.',
+                            )}
                           </p>
                         </div>
                       </div>
@@ -2113,10 +2148,10 @@ export function StationSetupDialog({
                       <div className="cg-setup-switch-row">
                         <div className="cg-setup-switch-row__text">
                           <label className="cg-setup-field__label" htmlFor="station-auto-failover">
-                            Automatic failover
+                            {localizeUi('Automatic failover')}
                           </label>
                           <p className="cg-setup-field__hint" id="station-auto-failover-hint">
-                            Switch to the backup if the primary becomes unavailable.
+                            {localizeUi('Switch to the backup if the primary becomes unavailable.')}
                           </p>
                         </div>
                         {/*
@@ -2130,7 +2165,7 @@ export function StationSetupDialog({
                             id="station-auto-failover"
                             type="checkbox"
                             role="switch"
-                            aria-label="Auto-failover enabled"
+                            aria-label={localizeUi('Auto-failover enabled')}
                             aria-describedby="station-auto-failover-hint"
                             checked={autoFailover}
                             onChange={(e) => setAutoFailover(e.target.checked)}
@@ -2165,9 +2200,13 @@ export function StationSetupDialog({
                   <p className="cg-card__note cg-card__note--inline" data-remote-host-note="">
                     <Icon icon={Info} size={STATION_SETUP_PX.helpIcon} />
                     <span>
-                      Remote server ({remoteHosts.join(', ')}): the template server and OSC listener
-                      will use a LAN address so {engineName} can reach CG Bridge&apos;s machine. The
-                      control connection stays on 127.0.0.1.
+                      {localizeUi('Remote server (')}
+                      {remoteHosts.join(', ')}
+                      {localizeUi(
+                        '): the template server and OSC listener will use a LAN address so',
+                      )}{' '}
+                      {engineName} can reach CG Bridge&apos;s machine. The control connection stays
+                      on 127.0.0.1.
                     </span>
                   </p>
                 )}
@@ -2178,8 +2217,10 @@ export function StationSetupDialog({
                   >
                     <AsyncButton
                       variant="primary"
-                      aria-label="Apply server settings"
-                      title="Applies this tab's server settings. Refused while anything is on air."
+                      aria-label={localizeUi('Apply server settings')}
+                      title={localizeUi(
+                        "Applies this tab's server settings. Refused while anything is on air.",
+                      )}
                       disabled={!serversDirty || onAirCount > 0 || validationError !== null}
                       run={async () => {
                         if (typeof validated === 'string') return { accepted: false };
@@ -2234,7 +2275,7 @@ export function StationSetupDialog({
                         return { accepted: true };
                       }}
                     >
-                      Apply servers
+                      {localizeUi('Apply servers')}
                     </AsyncButton>
                   </div>
                 )}
@@ -2260,9 +2301,11 @@ export function StationSetupDialog({
             </SetupSection>
           )}
 
-          {active === 'calendar' && (
-            <SetupSection id="calendar">
-              <CalendarSection report={reporters.calendar} />
+          {active === 'general' && (
+            <SetupSection id="general">
+              <LanguageSettings report={reporters.general} />
+              <CalendarSection report={reporters.general} />
+              <WorkspaceSettings />
             </SetupSection>
           )}
 
@@ -2305,19 +2348,19 @@ export function StationSetupDialog({
       )}
       {historyOpen && (
         <Modal
-          title="Version history"
+          title={localizeUi('Version history')}
           size="history"
           layer="sub"
           onClose={() => setHistoryOpen(false)}
           footer={
             <ModalAction actionRole="cancel" onClick={() => setHistoryOpen(false)}>
-              Close
+              {localizeUi('Close')}
             </ModalAction>
           }
         >
           <iframe
             src={historyUrl}
-            title="Version history"
+            title={localizeUi('Version history')}
             sandbox="allow-scripts allow-downloads"
             tabIndex={0}
             style={{ display: 'block', width: '100%', flex: 1, minHeight: 0, border: 0 }}

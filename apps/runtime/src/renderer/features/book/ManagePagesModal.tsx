@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState, type DragEvent } from 'react';
 import {
   ArrowDownAZ,
@@ -101,6 +102,7 @@ export function ManagePagesModal({
   onDone,
   onClose,
 }: ManagePagesModalProps): JSX.Element {
+  const localizeUi = useUiText();
   const [draft, setDraft] = useState<BookPage[]>(() => [...pages]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<string | null>(null);
@@ -194,7 +196,7 @@ export function ManagePagesModal({
 
   return (
     <Modal
-      title="Manage pages"
+      title={localizeUi('Manage pages')}
       subtitle={
         <>
           <bdi>{title}</bdi> · {draft.length === 1 ? '1 page' : `${String(draft.length)} pages`}
@@ -208,7 +210,7 @@ export function ManagePagesModal({
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onClose}>
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           <ModalAction
             actionRole="primary"
@@ -216,7 +218,7 @@ export function ManagePagesModal({
             data-manage-done=""
             onClick={() => onDone(draft)}
           >
-            Done
+            {localizeUi('Done')}
           </ModalAction>
         </>
       }
@@ -248,7 +250,7 @@ export function ManagePagesModal({
       >
         {dropping && (
           <span className="cg-drop-hint" aria-hidden="true">
-            Drop to add pages
+            {localizeUi('Drop to add pages')}
           </span>
         )}
         <div className="cg-pages__tools" role="toolbar" aria-label={`${title} — page tools`}>
@@ -260,19 +262,19 @@ export function ManagePagesModal({
           </Button>
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, false)}>
             <Icon icon={FolderOpen} size={13} />
-            Add folder…
+            {localizeUi('Add folder…')}
           </Button>
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(false, true)}>
             <Icon icon={Images} size={13} />
-            Replace with pictures…
+            {localizeUi('Replace with pictures…')}
           </Button>
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, true)}>
             <Icon icon={FolderSync} size={13} />
-            Replace with folder…
+            {localizeUi('Replace with folder…')}
           </Button>
           <Button variant="neutral" disabled={busy !== null} onClick={addTextPage}>
             <Icon icon={Type} size={13} />
-            Add text page
+            {localizeUi('Add text page')}
           </Button>
           <Button
             variant="neutral"
@@ -280,7 +282,7 @@ export function ManagePagesModal({
             onClick={() => setDraft((now) => withPicturesSortedByName(now))}
           >
             <Icon icon={ArrowDownAZ} size={13} />
-            Sort by name
+            {localizeUi('Sort by name')}
           </Button>
           <Button
             variant="neutral"
@@ -317,7 +319,7 @@ export function ManagePagesModal({
                   <span className="cg-page-tile__num">{String(n)}</span>
                   {page.id === onAirId && (
                     <Tag className="cg-meta-chip" data-page-mark="air">
-                      On air
+                      {localizeUi('On air')}
                     </Tag>
                   )}
                   {page.id === pvwId && (
@@ -335,7 +337,7 @@ export function ManagePagesModal({
                     variant="icon"
                     aria-pressed={isSelected}
                     aria-label={`Select page ${String(n)}`}
-                    title="Select"
+                    title={localizeUi('Select')}
                     onClick={() =>
                       setSelected((now) => {
                         const next = new Set(now);
@@ -350,7 +352,7 @@ export function ManagePagesModal({
                   <Button
                     variant="icon"
                     aria-label={`Move page ${String(n)} earlier`}
-                    title="Move earlier"
+                    title={localizeUi('Move earlier')}
                     disabled={i === 0}
                     onClick={() => move(i, i - 1)}
                   >
@@ -359,7 +361,7 @@ export function ManagePagesModal({
                   <Button
                     variant="icon"
                     aria-label={`Move page ${String(n)} later`}
-                    title="Move later"
+                    title={localizeUi('Move later')}
                     disabled={i === draft.length - 1}
                     onClick={() => move(i, i + 2)}
                   >
@@ -369,7 +371,7 @@ export function ManagePagesModal({
                     <Button
                       variant="icon"
                       aria-label={`Edit page ${String(n)}`}
-                      title="Edit"
+                      title={localizeUi('Edit')}
                       onClick={() => setEditing(page.id)}
                     >
                       <Icon icon={Pencil} size={13} />
@@ -378,7 +380,7 @@ export function ManagePagesModal({
                   <Button
                     variant="icon"
                     aria-label={`Remove page ${String(n)}`}
-                    title="Remove"
+                    title={localizeUi('Remove')}
                     onClick={() => removeIds(new Set([page.id]))}
                   >
                     <Icon icon={Trash2} size={13} />
@@ -410,7 +412,7 @@ export function ManagePagesModal({
               }}
             />
             <Button variant="neutral" onClick={() => setEditing(null)}>
-              Done editing
+              {localizeUi('Done editing')}
             </Button>
           </div>
         )}

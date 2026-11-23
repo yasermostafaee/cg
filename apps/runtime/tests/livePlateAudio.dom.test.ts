@@ -7,6 +7,7 @@ import { toMenuItems } from '../src/renderer/ui/rowAction.js';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
 import { LivePlateAudioDialog } from '../src/renderer/features/layers/LivePlateAudioDialog.js';
 import type { RowPlateAudio } from '../src/renderer/features/layers/plateAudio.js';
+import { createControlLiveLayout } from '../src/renderer/features/liveLayouts/controlLiveLayoutCompiler.js';
 import { operatorRowName } from '../src/renderer/ui/operatorNaming.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
 import { clearPortals, openDialog } from './support/dialog.js';
@@ -69,6 +70,9 @@ function renderDialog(
   ) => Promise<{ ok: boolean; refused: readonly string[] }>,
   over: Parameters<typeof itemWith>[1] = {},
   seatedPlates: readonly RowPlateAudio[] = [],
+  details: Pick<Parameters<typeof LivePlateAudioDialog>[0], 'template' | 'sourceNameOf'> = {
+    template: TEMPLATE,
+  },
 ): void {
   host = document.createElement('div');
   document.body.append(host);
@@ -78,7 +82,7 @@ function renderDialog(
     r.render(
       createElement(LivePlateAudioDialog, {
         item: itemWith('on-air', over),
-        template: TEMPLATE,
+        ...details,
         name: NAME,
         seatedPlates,
         onApplyVolumes,
@@ -218,8 +222,8 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     );
     expect(sliders()).toHaveLength(2);
     const text = openDialog()?.textContent ?? '';
-    expect(text).toContain('guest-1');
-    expect(text).toContain('guest-2');
+    expect(text).toContain('Plate 1');
+    expect(text).toContain('Plate 2');
     // 🔴 `PLATES-AUDIO-11` §3 — SENTENCE CASE, superseding `design.md` §31.4's second half.
     expect(text).toContain('Audible');
     expect(text).toContain('Hidden by look');
@@ -325,7 +329,7 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     // ⚠ It NAMES the plate. A partial application must say WHICH guest did not move —
     // "refused" alone would have the operator re-press a SOLO whose other three plates
     // already landed.
-    expect(openDialog()?.textContent).toMatch(/refused for guest-1/i);
+    expect(openDialog()?.textContent).toMatch(/refused for Plate 1/i);
   });
 });
 
@@ -473,4 +477,33 @@ describe('add-multibox-audio — ON / OFF and SOLO in the dialog', () => {
     expect(Object.keys(sent ?? {}).sort()).toEqual(['guest-1', 'guest-2']);
     expect(sent?.['guest-2']).toBe(0);
   });
+});
+
+it('names a declared unseated plate with authored and source names, leaving its UUID out of the dialog', () => {
+  const source = TEMPLATE.liveSources?.sources[0];
+  if (source === undefined || TEMPLATE.liveSources === undefined)
+    throw new Error('Fixture needs a plate');
+  const layout = createControlLiveLayout();
+  const plate = layout.frames[0];
+  if (plate === undefined) throw new Error('Fixture needs an authored plate');
+  const { id } = plate;
+  renderDialog(async () => ({ ok: true, refused: [] }), {}, [], {
+    template: {
+      ...TEMPLATE,
+      liveSources: { ...TEMPLATE.liveSources, sources: [{ ...source, sourceId: id }] },
+      controlLiveLayout: {
+        ...layout,
+        frames: [{ ...plate, title: 'مهمان استودیو' }, ...layout.frames.slice(1)],
+      },
+    },
+    sourceNameOf: (plateId) => (plateId === id ? 'Studio feed' : null),
+  });
+  const dialog = openDialog();
+  expect(dialog?.textContent).toContain('مهمان استودیو');
+  expect(dialog?.textContent).toContain('Studio feed');
+  expect(dialog?.textContent).toContain('Not seated');
+  expect(dialog?.textContent).not.toContain(id);
+  expect(dialog?.querySelector('input[type="range"]')?.getAttribute('aria-label')).toBe(
+    'Volume for مهمان استودیو',
+  );
 });

@@ -1,3 +1,4 @@
+import { feedback } from '../../i18n/locale.js';
 import { ledgerChannels, type LiveLayerState } from '@cg/shared-ipc';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 
@@ -30,14 +31,19 @@ export type PanicScope =
   | { kind: 'every' };
 
 /** The clause that names the scope, appended to the sentence; empty for the one-channel PANIC. */
-function scopeClause(scope: PanicScope): string {
+function scopeClause(scope: PanicScope, localized = false): string {
   switch (scope.kind) {
     case 'station':
       return '';
     case 'channel':
-      return ` · CH ${String(scope.channel)}`;
+      return (
+        ' · ' +
+        (localized
+          ? feedback('CH {channel}', { channel: scope.channel })
+          : `CH ${String(scope.channel)}`)
+      );
     case 'every':
-      return ' · every channel';
+      return ' · ' + (localized ? feedback('every channel') : 'every channel');
   }
 }
 
@@ -72,8 +78,8 @@ export function readPanicReport(
   res: PanicReport,
   scope: PanicScope,
 ): { accepted: boolean; cancelled?: boolean } {
-  const where = scopeClause(scope);
   if (res.failed.length > 0) {
+    const where = scopeClause(scope);
     const names = res.failed.map((f) => f.plateId).join(', ');
     reportCommandError(
       `Silenced ${String(res.silenced)} plate(s)${where}, but ${names} did not take — those ` +
@@ -89,10 +95,16 @@ export function readPanicReport(
   }
   const held = res.recorded - res.silenced;
   reportCommandSuccess(
-    `Silenced · ${String(res.silenced)} plate(s) on ${String(res.rows.length)} row(s)` +
-      where +
+    feedback('Silenced · {plates} plate(s) on {rows} row(s)', {
+      plates: res.silenced,
+      rows: res.rows.length,
+    }) +
+      scopeClause(scope, true) +
       (held > 0
-        ? ` · ${String(held)} already silent in the current look, now armed silent too`
+        ? ' · ' +
+          feedback('{count} already silent in the current look, now armed silent too', {
+            count: held,
+          })
         : ''),
   );
   return { accepted: true };

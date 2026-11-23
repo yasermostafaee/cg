@@ -10,6 +10,7 @@ import {
 } from '@cg/single-file-export';
 import { pack } from '@cg/vcg-format';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
+import { openNewLiveLayout } from './fixtures/live-layout-editor.js';
 
 /**
  * R-049 — A LIVE PLATE IS VISIBLE IN PVW, AND SAYS WHICH SOURCE IS BEHIND IT.
@@ -165,23 +166,11 @@ const pvwTransport = (page: Page, verb: 'PLAY' | 'NEXT' | 'STOP') =>
     .getByRole('region', { name: 'PREVIEW (PVW)' })
     .getByRole('button', { name: verb, exact: true });
 
-test('PVW plays bound clips independently only when their own frame is started', async ({
-  app,
-}) => {
-  const { page } = app;
-  await page.setViewportSize({ width: 1600, height: 900 });
+async function installPlateMediaProof(page: Page) {
   const clip = await readFile(new URL('./fixtures/seek-safe-64x64.webm', import.meta.url));
   await page.route('**/__pvw-plate-clip.webm*', (route) =>
     route.fulfill({ status: 200, contentType: 'video/webm', body: clip }),
   );
-  await registerTwoBox(page);
-  await stubRetainedPage(page, pageWithHoles().replaceAll('data-hole=', 'data-cg-live-source='));
-  const layer = await app.loadTemplate(TWO_BOX);
-  await app.selectLayerRow(layer);
-  const media = { media: 'Clip 001', search: 'Clip 001' };
-  await app.setTemplateDefault('guest-1', media);
-  await app.setTemplateDefault('guest-2', media);
-
   interface PreviewProof {
     opens: string[];
     closes: string[];
@@ -220,8 +209,85 @@ test('PVW plays bound clips independently only when their own frame is started',
       return take(request);
     };
   });
-  const readProof = () =>
+  return () =>
     page.evaluate(() => (window as unknown as { plateMediaProof: PreviewProof }).plateMediaProof);
+}
+
+test('New live layout starts and resets video only in the commanded plate', async ({ app }) => {
+  const { page } = app;
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.addInitScript(() => {
+    let held: typeof window.cg | undefined;
+    Object.defineProperty(window, 'cg', {
+      configurable: true,
+      get: () => held,
+      set: (bridge: typeof window.cg) => {
+        const capabilities = bridge.auth.capabilities;
+        bridge.auth.capabilities = () => {
+          const current = capabilities();
+          return current === null ? null : { ...current, controlLiveLayouts: true };
+        };
+        held = bridge;
+      },
+    });
+  });
+  await page.reload();
+  const readProof = await installPlateMediaProof(page);
+  await openNewLiveLayout(page);
+  const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+  await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
+  await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
+  await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
+  const plateTab = editor.getByRole('tab', { name: 'Plate', exact: true });
+  await plateTab.click();
+  for (const plate of [1, 2]) {
+    await editor.getByRole('button', { name: `Edit plate ${plate}`, exact: true }).click();
+    await app.chooseSource(editor.getByRole('combobox', { name: 'Plate input' }), {
+      media: 'Clip 001',
+      search: 'Clip 001',
+    });
+  }
+  const first = editor.locator('[data-layout-preview-shot][data-frame-number="1"]');
+  const second = editor.locator('[data-layout-preview-shot][data-frame-number="2"]');
+  const firstPlay = first.getByRole('button', { name: 'Play preview in Plate 1' });
+  const secondPlay = second.getByRole('button', { name: 'Play preview in Plate 2' });
+  const firstReset = first.getByRole('button', { name: 'Reset preview in Plate 1' });
+  await expect(firstPlay).toBeEnabled();
+  await expect(secondPlay).toBeEnabled();
+  await expect(firstReset).toHaveCount(0);
+  expect((await readProof()).opens).toHaveLength(0);
+  await firstPlay.click();
+  const player = first.locator('video');
+  await expect(first.locator('.cg-live-layout-shot-picture canvas')).toBeVisible();
+  await expect(player).toHaveJSProperty('muted', true);
+  await expect
+    .poll(() => player.evaluate((video: HTMLVideoElement) => video.currentTime))
+    .toBeGreaterThan(0);
+  await expect(second.locator('video')).toHaveCount(0);
+  await first.getByRole('button', { name: 'Pause preview in Plate 1' }).click();
+  await expect(player).toHaveJSProperty('paused', true);
+  await firstReset.click();
+  await expect(player).toHaveJSProperty('currentTime', 0);
+  await expect(player).toHaveJSProperty('paused', true);
+  await expect(secondPlay).toBeEnabled();
+  expect((await readProof()).opens).toHaveLength(1);
+  expect((await readProof()).takes).toBe(0);
+});
+
+test('PVW plays bound clips independently only when their own frame is started', async ({
+  app,
+}) => {
+  const { page } = app;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await registerTwoBox(page);
+  await stubRetainedPage(page, pageWithHoles().replaceAll('data-hole=', 'data-cg-live-source='));
+  const layer = await app.loadTemplate(TWO_BOX);
+  await app.selectLayerRow(layer);
+  const media = { media: 'Clip 001', search: 'Clip 001' };
+  await app.setTemplateDefault('guest-1', media);
+  await app.setTemplateDefault('guest-2', media);
+
+  const readProof = await installPlateMediaProof(page);
   await rehearseRow(page, layer);
   await pvwTransport(page, 'PLAY').click();
   const transports = page.locator('[data-pvw-media-transport]');
@@ -232,6 +298,8 @@ test('PVW plays bound clips independently only when their own frame is started',
   const secondPlay = second.getByRole('button', { name: /^Play preview in / });
   await expect(firstPlay).toBeEnabled();
   await expect(secondPlay).toBeEnabled();
+  const firstReset = first.getByRole('button', { name: /^Reset preview in / });
+  await expect(firstReset).toHaveCount(0);
   await expect(transports.locator('video')).toHaveCount(0);
   expect((await readProof()).opens).toHaveLength(0);
 
@@ -270,6 +338,15 @@ test('PVW plays bound clips independently only when their own frame is started',
     .poll(() => firstPlayer.evaluate((video: HTMLVideoElement) => video.currentTime))
     .toBeGreaterThan(pausedAt);
   expect((await readProof()).opens).toHaveLength(2);
+
+  const secondPlayer = second.locator('video');
+  await second.getByRole('button', { name: /^Pause preview in / }).click();
+  const secondTime = await secondPlayer.evaluate((video: HTMLVideoElement) => video.currentTime);
+  await firstReset.click();
+  await expect(firstPlayer).toHaveJSProperty('paused', true);
+  await expect(firstPlayer).toHaveJSProperty('currentTime', 0);
+  await expect(firstCanvas).toBeVisible();
+  await expect(secondPlayer).toHaveJSProperty('currentTime', secondTime);
 
   await pvwTransport(page, 'STOP').click();
   await expect(transports).toHaveCount(0);

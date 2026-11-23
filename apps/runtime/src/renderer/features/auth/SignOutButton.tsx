@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { LogOut } from 'lucide-react';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Icon } from '../../ui/Icon.js';
@@ -29,17 +30,18 @@ import { useAuthSession } from '../../hooks/useAuthSession.js';
  * control could say.
  */
 export function SignOutButton(): JSX.Element | null {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
   if (auth.kind !== 'signed-in') return null;
 
   return (
     <AsyncButton
-      aria-label="Sign out"
-      title="Sign out of this console. Playout continues; nothing goes off air."
+      aria-label={localizeUi('Sign out')}
+      title={localizeUi('Sign out of this console. Playout continues; nothing goes off air.')}
       run={() => window.cg.auth.signOut().then(() => ({ accepted: true }))}
     >
       <Icon icon={LogOut} />
-      Sign out
+      {localizeUi('Sign out')}
     </AsyncButton>
   );
 }

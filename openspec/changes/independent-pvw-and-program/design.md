@@ -42,3 +42,8 @@ Clear All. Remove remains an individual row action, with the existing guards and
 The placement outline reads the exported stage dimensions and its channel position. Retained
 visual bounds identify each drag target and label so full-stage outlines remain independently
 operable when they coincide. No outline geometry enters the renderer or programme transport.
+
+## Reset a plate clip
+
+The PVW clip player pauses and seeks its own decoder to zero. The sampled fallback requests a
+single frame at zero. Reset does not restart the row rehearsal or change the show's playhead.

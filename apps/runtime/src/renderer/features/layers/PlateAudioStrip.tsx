@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState } from 'react';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Tag } from '../../ui/Tag.js';
@@ -80,6 +81,7 @@ export function PlateAudioStrip({
   refusal,
   onApply,
 }: PlateAudioStripProps): JSX.Element | null {
+  const localizeUi = useUiText();
   /**
    * What the operator is dragging RIGHT NOW, before it is committed.
    *
@@ -202,7 +204,7 @@ export function PlateAudioStrip({
           {...(why !== undefined ? { title: why } : { title: ON_TITLE })}
           aria-label={`Full volume for ${plateName} (100%, not the previous level)`}
         >
-          ON
+          {localizeUi('ON')}
         </AsyncButton>
         <AsyncButton
           variant="secondary"
@@ -212,7 +214,7 @@ export function PlateAudioStrip({
           {...(why !== undefined ? { title: why } : { title: OFF_TITLE })}
           aria-label={`Silence ${plateName}`}
         >
-          OFF
+          {localizeUi('OFF')}
         </AsyncButton>
         <AsyncButton
           variant="caution"
@@ -222,7 +224,7 @@ export function PlateAudioStrip({
           title={why ?? (siblings.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)}
           aria-label={`Solo ${plateName} — silences the other ${String(siblings.length - 1)} plate(s) on this row, with no restore`}
         >
-          SOLO
+          {localizeUi('SOLO')}
         </AsyncButton>
       </span>
     </div>

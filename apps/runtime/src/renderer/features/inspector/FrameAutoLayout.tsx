@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   framePlacementRects,
@@ -116,6 +117,7 @@ export function FrameAutoLayout({
   authoredMargins?: LiveSourceLayoutMargins | undefined;
   authoredFill?: boolean | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const gapId = useId();
   const [controlsByLook, setControlsByLook] = useState<
     ReadonlyMap<string | undefined, LayoutControls>
@@ -282,10 +284,10 @@ export function FrameAutoLayout({
 
   return (
     <details className="cg-frame-auto-layout">
-      <summary>Auto layout</summary>
+      <summary>{localizeUi('Auto layout')}</summary>
       <fieldset className="cg-frame-auto-layout__fields" disabled={!enabled}>
         <label>
-          Arrangement
+          {localizeUi('Arrangement')}
           <SelectInput
             value={custom ? 'custom' : frames.length === 2 ? twoPlateLayout : bias}
             onChange={({ currentTarget: { value } }) => {
@@ -298,8 +300,8 @@ export function FrameAutoLayout({
           >
             {frames.length === 2 ? (
               <>
-                <option value="horizontal">Side by side</option>
-                <option value="vertical">Top and bottom</option>
+                <option value="horizontal">{localizeUi('Side by side')}</option>
+                <option value="vertical">{localizeUi('Top and bottom')}</option>
               </>
             ) : (
               <>
@@ -310,18 +312,20 @@ export function FrameAutoLayout({
                       ? 'More frames on top'
                       : 'Grid'}
                 </option>
-                {canChooseFullerRow && <option value="more-bottom">More frames on bottom</option>}
+                {canChooseFullerRow && (
+                  <option value="more-bottom">{localizeUi('More frames on bottom')}</option>
+                )}
               </>
             )}
-            <option value="custom">Custom</option>
+            <option value="custom">{localizeUi('Custom')}</option>
           </SelectInput>
         </label>
         {custom ? (
-          <span>Move or resize the plates in PVW.</span>
+          <span>{localizeUi('Move or resize the plates in PVW.')}</span>
         ) : (
           <>
             <fieldset className="cg-frame-auto-layout__margins">
-              <legend>Margins (px)</legend>
+              <legend>{localizeUi('Margins (px)')}</legend>
               <div className="cg-frame-auto-layout__gaps">
                 {marginEdges.map(([edge, label]) => (
                   <label key={edge} htmlFor={gapId + '-margin-' + edge}>
@@ -357,7 +361,7 @@ export function FrameAutoLayout({
                   changeMargins(liveSourceLayoutMargins(live.resolution, undefined, 0))
                 }
               >
-                Zero margins
+                {localizeUi('Zero margins')}
               </Button>
             </fieldset>
             {canFill && (
@@ -374,13 +378,13 @@ export function FrameAutoLayout({
                     arrange(result);
                   }}
                 />
-                Fill available area
+                {localizeUi('Fill available area')}
               </label>
             )}
             <div className="cg-frame-auto-layout__gaps">
               {hasHorizontalGap && (
                 <label htmlFor={`${gapId}-horizontal`}>
-                  Horizontal gap (px)
+                  {localizeUi('Horizontal gap (px)')}
                   <NumericInput
                     id={`${gapId}-horizontal`}
                     className="cg-field"
@@ -395,7 +399,7 @@ export function FrameAutoLayout({
               )}
               {hasVerticalGap && (
                 <label htmlFor={`${gapId}-vertical`}>
-                  Vertical gap (px)
+                  {localizeUi('Vertical gap (px)')}
                   <NumericInput
                     id={`${gapId}-vertical`}
                     className="cg-field"
@@ -410,7 +414,7 @@ export function FrameAutoLayout({
               )}
             </div>
             {(hasInvalidGap || layout.length !== frames.length) && (
-              <span role="status">Enter gaps that fit the frames.</span>
+              <span role="status">{localizeUi('Enter gaps that fit the frames.')}</span>
             )}
             <div className="cg-frame-auto-layout__actions">
               <Button
@@ -418,19 +422,19 @@ export function FrameAutoLayout({
                 disabled={hasInvalidGap || layout.length !== frames.length}
                 onClick={() => arrange(layout)}
               >
-                Arrange frames
+                {localizeUi('Arrange frames')}
               </Button>
               {frames.length > 1 && (
                 <Button
                   variant="neutral"
                   disabled={hasInvalidGap || swapped.length !== frames.length}
-                  title="Exchange frame positions without changing layer order"
+                  title={localizeUi('Exchange frame positions without changing layer order')}
                   onClick={() => {
                     updateControls({ reverse: !reverse });
                     arrange(swapped);
                   }}
                 >
-                  Swap frame order
+                  {localizeUi('Swap frame order')}
                 </Button>
               )}
             </div>

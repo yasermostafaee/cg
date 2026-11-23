@@ -200,7 +200,8 @@
 .cg-layers-subbar__search > .cg-field {
   width: var(--r-subbar-search-w);
   height: var(--r-subbar-search-h);
-  padding: var(--r-subbar-search-pad);
+  padding-block: var(--r-subbar-search-pad-y);
+  padding-inline: var(--r-subbar-search-pad-start) var(--r-subbar-search-pad-end);
   font-size: var(--r-subbar-text);
 }
 .cg-layers-subbar__search > .cg-field::placeholder {
@@ -4558,7 +4559,7 @@ input[type='checkbox']:disabled:checked {
   padding: var(--r-space-2) var(--r-space-2);
   overflow-y: auto;
   background: var(--r-surface-sunken);
-  border-right: 1px solid var(--r-border);
+  border-inline-end: 1px solid var(--r-border);
 }
 
 /*
@@ -5156,7 +5157,7 @@ input[type='checkbox']:disabled:checked {
   width: var(--r-plate-readout-w);
   font-size: var(--r-plate-readout-text);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
   color: var(--r-text-secondary);
 }
 .cg-plate-verbs {
@@ -5209,7 +5210,7 @@ input[type='checkbox']:disabled:checked {
   font-size: var(--r-audio-context-text);
 }
 .cg-audio-hint {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: var(--r-audio-hint-text);
   color: var(--r-text-muted);
 }
@@ -5289,7 +5290,7 @@ input[type='checkbox']:disabled:checked {
 .cg-audio-readout {
   font-size: var(--r-audio-readout-text);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
 }
 .cg-audio-state {
   grid-column: 1 / -1;
@@ -5310,7 +5311,7 @@ input[type='checkbox']:disabled:checked {
   font-size: var(--r-audio-verb-text);
 }
 .cg-audio-foot-info {
-  margin-right: auto;
+  margin-inline-end: auto;
   font-size: var(--r-audio-foot-text);
   line-height: 1.5;
   color: var(--r-text-muted);
@@ -5368,7 +5369,7 @@ input[type='checkbox']:disabled:checked {
  */
 [data-modal-size='fixed'] .cg-rail {
   background: var(--r-setup-rail-bg);
-  border-right-color: var(--r-setup-card-line);
+  border-inline-end-color: var(--r-setup-card-line);
 }
 
 .cg-rail {
@@ -7842,7 +7843,7 @@ input[type='checkbox']:disabled:checked {
   .cg-tpl-import-progress__spinner {
     animation: none;
     border-color: var(--r-accent);
-    border-right-color: transparent;
+    border-inline-end-color: transparent;
   }
 }
 /* `.template-layout{grid-template-columns:776px 342px}` — the ASIDE is the fixed half. */
@@ -8064,7 +8065,8 @@ input[type='checkbox']:disabled:checked {
 .cg-tpl-search .cg-field {
   height: var(--r-tpl-search-h);
   min-height: var(--r-tpl-search-h);
-  padding: var(--r-tpl-search-pad);
+  padding-block: var(--r-tpl-search-pad-y);
+  padding-inline: var(--r-tpl-search-pad-start) var(--r-tpl-search-pad-end);
   border-radius: var(--r-tpl-search-radius);
   font-size: var(--r-tpl-search-text);
   line-height: 1.4;
@@ -8459,7 +8461,7 @@ input[type='checkbox']:disabled:checked {
   margin: 0 0 var(--r-space-3);
 }
 .cg-tpl-foot-info {
-  margin-right: auto;
+  margin-inline-end: auto;
   font-size: var(--r-tpl-foot-text);
   line-height: 1.5;
   color: var(--r-text-muted);
@@ -8485,7 +8487,8 @@ input[type='checkbox']:disabled:checked {
 .cg-audit-search .cg-field {
   height: var(--r-audit-search-h);
   min-height: var(--r-audit-search-h);
-  padding: var(--r-audit-search-pad);
+  padding-block: var(--r-audit-search-pad-y);
+  padding-inline: var(--r-audit-search-pad-start) var(--r-audit-search-pad-end);
   border-radius: var(--r-audit-search-radius);
   font-size: var(--r-audit-search-text);
   line-height: 1.4;
@@ -8598,7 +8601,7 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-audit-row[aria-pressed='true'] {
   background: var(--r-row-selected-fill);
-  box-shadow: inset 3px 0 0 var(--r-accent);
+  box-shadow: inset var(--r-row-accent-offset) 0 0 var(--r-accent);
 }
 .cg-audit-row > span {
   display: block;
@@ -8680,7 +8683,7 @@ input[type='checkbox']:disabled:checked {
 /* `B-210` — the date, once per day, as a band. */
 .cg-audit-date {
   padding: var(--r-space-1) var(--r-audit-th-pad);
-  padding-left: var(--r-space-4);
+  padding-inline-start: var(--r-space-4);
   background: var(--r-surface-raised);
   border-bottom: 1px solid var(--r-border);
   font-size: var(--r-audit-th-text);
@@ -8834,7 +8837,7 @@ input[type='checkbox']:disabled:checked {
     position: absolute;
     z-index: 2;
     top: -1px;
-    right: -1px;
+    inset-inline-end: -1px;
     bottom: -1px;
     width: min(420px, calc(100% - 48px));
     border-inline-start: 1px solid var(--r-border-strong);
@@ -9495,7 +9498,7 @@ input[type='checkbox']:disabled:checked {
   background: var(--r-menu-hover-fill);
 }
 .cg-picker .cg-vlist-action-row:has(.cg-vlist-option[aria-selected='true']) .cg-vlist-option {
-  box-shadow: inset 3px 0 0 var(--r-accent);
+  box-shadow: inset var(--r-row-accent-offset) 0 0 var(--r-accent);
 }
 .cg-picker-preview-button svg {
   flex: none;
@@ -10090,11 +10093,11 @@ input[type='checkbox']:disabled:checked {
 .cg-password > .cg-field {
   flex: 1;
   min-width: 0;
-  padding-right: 36px;
+  padding-inline-end: 36px;
 }
 .cg-password__toggle.cg-btn--icon {
   position: absolute;
-  right: 4px;
+  inset-inline-end: 4px;
   min-width: 0;
   width: 28px;
   height: 28px;
@@ -10270,4 +10273,22 @@ input[type='checkbox']:disabled:checked {
   white-space: normal;
   line-height: 1.15;
   text-align: center;
+}
+
+/* Anchor the reveal control to the form's direction, independently of password text. */
+:root[dir='rtl'] .cg-password > .cg-field {
+  padding-left: 36px;
+  padding-right: 0.5rem;
+}
+
+:root[dir='rtl']
+  :is(
+    .cg-audit-row[aria-pressed='true'],
+    .cg-picker .cg-vlist-action-row:has(.cg-vlist-option[aria-selected='true']) .cg-vlist-option
+  ) {
+  box-shadow: inset calc(0px - var(--r-row-accent-offset)) 0 0 var(--r-accent);
+}
+
+.cg-pill[data-server-health-stale] {
+  color: var(--r-text-muted);
 }

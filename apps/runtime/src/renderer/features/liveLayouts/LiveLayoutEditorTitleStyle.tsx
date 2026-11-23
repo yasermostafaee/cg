@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useRef, useState } from 'react';
 import { Plus, Type } from 'lucide-react';
 import {
@@ -139,6 +140,7 @@ function ShadowFields({
   box?: boolean;
   onChange: (value: Shadow | null) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const id = useId();
 
   function update(patch: Partial<Shadow>): void {
@@ -155,7 +157,7 @@ function ShadowFields({
           aria-label={'Enable ' + label.toLowerCase()}
           onChange={(next) => onChange(next ? DEFAULT_SHADOW : null)}
         />
-        Enabled
+        {localizeUi('Enabled')}
       </label>
       {value !== null && (
         <div className="cg-form-grid cg-live-layout-title-fields">
@@ -186,7 +188,7 @@ function ShadowFields({
           {box && (
             <>
               <LiveLayoutEditorNumber
-                label="Box shadow spread (px)"
+                label={localizeUi('Box shadow spread (px)')}
                 value={toTenths(value.spread ?? 0)}
                 min={-MAX_LENGTH}
                 max={MAX_LENGTH}
@@ -199,7 +201,7 @@ function ShadowFields({
                   checked={value.inset ?? false}
                   onChange={(inset) => update({ inset })}
                 />
-                Inset
+                {localizeUi('Inset')}
               </label>
             </>
           )}
@@ -243,6 +245,7 @@ export function LiveLayoutEditorTitleStyle({
   onResetOverride: () => void;
   onAddFont: (file: File, scope: StyleScope) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [scope, setScope] = useState<StyleScope>('shared');
   const id = useId();
   const fontInput = useRef<HTMLInputElement>(null);
@@ -283,25 +286,25 @@ export function LiveLayoutEditorTitleStyle({
             aria-pressed={sharedSelection}
             onClick={() => setScope('shared')}
           >
-            All plates
+            {localizeUi('All plates')}
           </Button>
           <Button
             active={!sharedSelection}
             aria-pressed={!sharedSelection}
             onClick={() => setScope('frame')}
           >
-            Plate {frameNumber}
+            {localizeUi('Plate')} {frameNumber}
           </Button>
           {!sharedSelection && override !== undefined && (
             <Button variant="neutral" onClick={onResetOverride}>
-              Use shared style
+              {localizeUi('Use shared style')}
             </Button>
           )}
         </div>
       )}
       {onSharedChange === undefined && override !== undefined && (
         <Button variant="neutral" onClick={onResetOverride}>
-          Use plate style
+          {localizeUi('Use plate style')}
         </Button>
       )}
       <div key={sharedSelection ? 'shared' : frameId}>
@@ -319,7 +322,7 @@ export function LiveLayoutEditorTitleStyle({
             />
           ))}
           <Choice
-            label="Title font"
+            label={localizeUi('Title font')}
             value={title.fontFamily}
             choices={fontChoices}
             onChange={(fontFamily) => onChange({ fontFamily })}
@@ -334,7 +337,7 @@ export function LiveLayoutEditorTitleStyle({
             </Button>
             <FileInput
               ref={fontInput}
-              aria-label="Add title font file"
+              aria-label={localizeUi('Add title font file')}
               accept={CONTROL_LIVE_LAYOUT_FONT_ACCEPT}
               hidden
               onChange={(event) => {
@@ -345,7 +348,7 @@ export function LiveLayoutEditorTitleStyle({
             />
           </div>
           <Choice
-            label="Title weight"
+            label={localizeUi('Title weight')}
             value={String(title.fontWeight)}
             choices={[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => ({
               value: String(weight),
@@ -359,27 +362,27 @@ export function LiveLayoutEditorTitleStyle({
               checked={title.fontStyle === 'italic'}
               onChange={(italic) => onChange({ fontStyle: italic ? 'italic' : 'normal' })}
             />
-            Italic
+            {localizeUi('Italic')}
           </label>
           <Choice
-            label="Horizontal alignment"
+            label={localizeUi('Horizontal alignment')}
             value={title.align}
             choices={ALIGNMENTS}
             onChange={(align) => onChange({ align })}
           />
           <Choice
-            label="Vertical alignment"
+            label={localizeUi('Vertical alignment')}
             value={title.verticalAlign}
             choices={VERTICAL_ALIGNMENTS}
             onChange={(verticalAlign) => onChange({ verticalAlign })}
           />
           <TitleColor
-            label="Title color"
+            label={localizeUi('Title color')}
             value={title.color}
             onChange={(color) => onChange({ color })}
           />
           <TitleColor
-            label="Title background"
+            label={localizeUi('Title background')}
             value={title.backgroundColor}
             onChange={(backgroundColor) => onChange({ backgroundColor })}
           />
@@ -389,38 +392,38 @@ export function LiveLayoutEditorTitleStyle({
               checked={title.wrap}
               onChange={(wrap) => onChange({ wrap })}
             />
-            Text wrap
+            {localizeUi('Text wrap')}
           </label>
         </div>
         <details className="cg-live-layout-title-subsection">
-          <summary>Advanced</summary>
+          <summary>{localizeUi('Advanced')}</summary>
           <div className="cg-form-grid cg-live-layout-title-fields">
             <Choice
-              label="Digits"
+              label={localizeUi('Digits')}
               value={title.digits}
               choices={DIGITS}
               onChange={(digits) => onChange({ digits })}
             />
           </div>
           <details className="cg-live-layout-title-subsection">
-            <summary>Path style</summary>
+            <summary>{localizeUi('Path style')}</summary>
             <label htmlFor={id + '-stroke'} className="cg-live-layout-title-toggle">
               <Checkbox
                 id={id + '-stroke'}
                 checked={stroke !== null}
-                aria-label="Enable title stroke"
+                aria-label={localizeUi('Enable title stroke')}
                 onChange={(next) =>
                   onChange({
                     stroke: next ? { width: 2, color: liveLayoutArtwork.titleText } : null,
                   })
                 }
               />
-              Stroke
+              {localizeUi('Stroke')}
             </label>
             {stroke !== null && (
               <div className="cg-form-grid cg-live-layout-title-fields">
                 <LiveLayoutEditorNumber
-                  label="Stroke width (px)"
+                  label={localizeUi('Stroke width (px)')}
                   value={toTenths(stroke.width)}
                   min={0}
                   max={MAX_LENGTH}
@@ -428,7 +431,7 @@ export function LiveLayoutEditorTitleStyle({
                   onChange={(width) => onChange({ stroke: { ...stroke, width } })}
                 />
                 <LiveLayoutEditorNumber
-                  label="Stroke dash (px)"
+                  label={localizeUi('Stroke dash (px)')}
                   value={toTenths(stroke.dash?.[0] ?? 0)}
                   min={0}
                   max={MAX_LENGTH}
@@ -436,7 +439,7 @@ export function LiveLayoutEditorTitleStyle({
                   onChange={(dash) => onChange({ stroke: { ...stroke, dash: dash ? [dash] : [] } })}
                 />
                 <TitleColor
-                  label="Stroke color"
+                  label={localizeUi('Stroke color')}
                   value={stroke.color}
                   onChange={(color) => onChange({ stroke: { ...stroke, color } })}
                 />
@@ -444,12 +447,12 @@ export function LiveLayoutEditorTitleStyle({
             )}
           </details>
           <ShadowFields
-            label="Text shadow"
+            label={localizeUi('Text shadow')}
             value={title.textShadow}
             onChange={(textShadow) => onChange({ textShadow })}
           />
           <ShadowFields
-            label="Box shadow"
+            label={localizeUi('Box shadow')}
             value={title.boxShadow}
             box
             onChange={(boxShadow) => onChange({ boxShadow })}

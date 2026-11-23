@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { Tag } from './Tag.js';
 
 /**
@@ -6,9 +7,10 @@ import { Tag } from './Tag.js';
  * to the shared `.cg-chip-draft` class.
  */
 export function DraftChip({ label }: { label: string }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <Tag className="cg-chip-draft" aria-label={label}>
-      ● draft
+      {localizeUi('● draft')}
     </Tag>
   );
 }

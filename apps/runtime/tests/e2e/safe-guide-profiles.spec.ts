@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createBridge } from '@cg/caspar-bridge';
 import { LayerProfileSchema } from '@cg/shared-ipc';
 import { expect, test } from '@playwright/test';
+import { closeLiveLayoutCatalogue, openNewLiveLayout } from './fixtures/live-layout-editor.js';
 
 test('PVW and New live layout share visibility and edits, and Profiles restores their display preferences', async ({
   page,
@@ -28,7 +29,7 @@ test('PVW and New live layout share visibility and edits, and Profiles restores 
     await expect(pvwToggle).toHaveAttribute('aria-pressed', 'false');
     const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
     const openEditor = async () => {
-      await page.getByRole('button', { name: 'New live layout', exact: true }).click();
+      await openNewLiveLayout(page);
       await expect(editor).toBeVisible();
     };
     await openEditor();
@@ -52,11 +53,13 @@ test('PVW and New live layout share visibility and edits, and Profiles restores 
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveAttribute('y1', '270');
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(34, 170, 238)');
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     await pvwToggle.click();
     await openEditor();
     await expect(editorToggle).toHaveAttribute('aria-pressed', 'false');
     await expect(editor.locator('[data-safe-area-guides]')).toHaveCount(0);
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
 
     // An edit in the other direction also enables both views immediately.
     await pvw.getByRole('button', { name: 'Safe area settings', exact: true }).click();
@@ -68,6 +71,7 @@ test('PVW and New live layout share visibility and edits, and Profiles restores 
       editor.locator('[data-safe-area-guides]').getByText('Saved title', { exact: true }),
     ).toHaveCount(1);
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
 
     const profilesButton = page.getByRole('button', { name: 'Layer profiles', exact: true });
     const profiles = page.getByRole('dialog', { name: 'Layer profiles', exact: true });
@@ -135,6 +139,7 @@ test('PVW and New live layout share visibility and edits, and Profiles restores 
       editor.locator('[data-safe-area-guides]').getByText('Saved title', { exact: true }),
     ).toHaveCount(1);
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
 
     await pvwToggle.click();
     // A refused layer-profile load must not change this browser's shared view state either.
@@ -173,6 +178,7 @@ test('PVW and New live layout share visibility and edits, and Profiles restores 
     );
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     await pvw.screenshot({ path: test.info().outputPath('shared-guide-profile-restored.png') });
   } finally {
     await bridge.close();
@@ -278,7 +284,7 @@ test('a full frame list remains keyboard-accessible and shared defaults require 
     const pvwToggle = pvw.getByRole('button', { name: 'Safe areas in Preview', exact: true });
     await pvwToggle.click();
     const layout = page.getByRole('dialog', { name: 'New live layout', exact: true });
-    await page.getByRole('button', { name: 'New live layout', exact: true }).click();
+    await openNewLiveLayout(page);
     await open(layout);
     await expect(panel.getByRole('radio')).toHaveCount(25);
     await restore.click();
@@ -293,6 +299,7 @@ test('a full frame list remains keyboard-accessible and shared defaults require 
       'false',
     );
     await layout.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
     await expect(pvwToggle).toHaveAttribute('aria-pressed', 'false');
     await page.reload();
     await page.getByRole('button', { name: 'Show monitors', exact: true }).click();

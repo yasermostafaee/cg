@@ -1,3 +1,4 @@
+import { feedback } from '../../i18n/locale.js';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
 import {
@@ -211,10 +212,14 @@ export function importSuccessMessage(imported: ImportedVcg): string {
     toast was never readable at this dwell; the count is what tells the operator to go and
     look, and the warnings themselves are on the template's own record.
   */
-  const warned =
-    imported.warnings.length > 0
-      ? ` · ${String(imported.warnings.length)} warning${imported.warnings.length === 1 ? '' : 's'}`
-      : '';
   // `B-352` — and which it was: a replacement says so (`Updated · telavat`).
-  return `${imported.outcome === 'updated' ? 'Updated' : 'Imported'} · ${imported.displayName}${warned}`;
+  const summary = feedback(
+    imported.outcome === 'updated' ? 'Updated · {name}' : 'Imported · {name}',
+    { name: imported.displayName },
+  );
+  const count = imported.warnings.length;
+  if (count === 0) return summary;
+  return (
+    summary + ' · ' + feedback(count === 1 ? '{count} warning' : '{count} warnings', { count })
+  );
 }

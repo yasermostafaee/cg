@@ -57,12 +57,12 @@ const LABELS: readonly { shown: string; text?: string | RegExp; file: string }[]
   },
   {
     shown: 'Host',
-    text: 'label="Host"',
+    text: "label={localizeUi('Host')}",
     file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
   },
   {
     shown: 'Port',
-    text: 'label="Port"',
+    text: "label={localizeUi('Port')}",
     file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
   },
   {
@@ -71,7 +71,7 @@ const LABELS: readonly { shown: string; text?: string | RegExp; file: string }[]
   },
   {
     shown: 'Sign in',
-    text: '>Sign in<',
+    text: "'Signing in…' : 'Sign in'",
     file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
   },
   {
@@ -95,17 +95,17 @@ const LABELS: readonly { shown: string; text?: string | RegExp; file: string }[]
   },
   {
     shown: 'Add backup',
-    text: 'aria-label="Add backup"',
+    text: "aria-label={localizeUi('Add backup')}",
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
     shown: 'Add to draft',
-    text: 'confirmLabel="Add to draft"',
+    text: "confirmLabel={localizeUi('Add to draft')}",
     file: 'apps/runtime/src/renderer/features/stationSetup/BackupServerDialog.tsx',
   },
   {
     shown: 'Apply servers',
-    text: /^[ \t]+Apply servers\r?$/m,
+    text: "{localizeUi('Apply servers')}",
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
@@ -160,7 +160,7 @@ const LABELS: readonly { shown: string; text?: string | RegExp; file: string }[]
   { shown: 'Download logs', file: 'apps/runtime/src/renderer/features/audit/AuditPanel.tsx' },
   {
     shown: 'Set up again',
-    text: '\n      Set up again\n',
+    text: "{localizeUi('Set up again')}",
     file: 'apps/runtime/src/renderer/features/shell/SetUpAgain.tsx',
   },
 ];

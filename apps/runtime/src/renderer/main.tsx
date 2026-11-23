@@ -15,6 +15,7 @@ import { stationBridgeAnswers } from '../platform/checkAt.js';
 import { PlayoutAddressGate } from './features/firstRun/PlayoutAddressGate.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
+import { localeDirection, useLanguages } from './i18n/locale.js';
 
 /**
  * Browser entry point. The Electron preload used to inject `window.cg`
@@ -75,6 +76,11 @@ const root = createRoot(rootEl);
  * effects in development, so this fires twice as a matter of course.
  */
 function BootComplete({ children }: { children: ReactNode }): JSX.Element {
+  const { interface: language } = useLanguages();
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = localeDirection(language);
+  }, [language]);
   useEffect(() => {
     window.__CG_SPLASH__?.done();
   }, []);

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import {
   LAYER_SHORTCUT_VERBS,
@@ -38,6 +39,7 @@ export function LayerShortcutsDialog({
   onClose: () => void;
   onApply: (shortcuts: LayerShortcutBindings) => Promise<string | null>;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const verbs = LAYER_SHORTCUT_VERBS.filter((verb) => verb !== 'next' || canAssignNext);
   const [draft, setDraft] = useState<ShortcutDraft>({});
   const [recording, setRecording] = useState<string | null>(null);
@@ -145,7 +147,7 @@ export function LayerShortcutsDialog({
 
   return (
     <Modal
-      title="Layer shortcuts"
+      title={localizeUi('Layer shortcuts')}
       layer="sub"
       size="wide"
       onClose={onClose}
@@ -154,19 +156,22 @@ export function LayerShortcutsDialog({
       footer={
         <>
           <ModalAction actionRole="cancel" disabled={busy || !dirty} onClick={revert}>
-            Revert
+            {localizeUi('Revert')}
           </ModalAction>
           <ModalAction actionRole="primary" disabled={busy || !dirty} onClick={() => void apply()}>
-            Apply
+            {localizeUi('Apply')}
           </ModalAction>
         </>
       }
     >
       <div className="cg-table-scroll cg-layer-shortcut-scroll">
-        <table className="cg-table cg-layer-shortcut-table" aria-label="Fixed layer shortcuts">
+        <table
+          className="cg-table cg-layer-shortcut-table"
+          aria-label={localizeUi('Fixed layer shortcuts')}
+        >
           <thead>
             <tr>
-              <th scope="col">Layer</th>
+              <th scope="col">{localizeUi('Layer')}</th>
               {verbs.map((verb) => (
                 <th key={verb} scope="col">
                   {labels[verb]}

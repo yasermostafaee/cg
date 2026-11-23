@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { isOnAirStatus } from '@cg/shared-schema';
@@ -215,6 +216,7 @@ export function PositionPicker({
   disclosure?: { open: boolean; toggle: () => void } | undefined;
   adjustments?: ReactNode;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [localOpen, setLocalOpen] = useState(true);
   const open = disclosure?.open ?? localOpen;
   const controlsId = useId();
@@ -281,7 +283,10 @@ export function PositionPicker({
     offsetNumber(dy) !== seed.offset.y;
 
   return (
-    <div className="cg-inspector-section cg-inspector-position" aria-label="On-air position">
+    <div
+      className="cg-inspector-section cg-inspector-position"
+      aria-label={localizeUi('On-air position')}
+    >
       <h2>
         <span className="cg-inspector-position__heading">
           <button
@@ -292,10 +297,13 @@ export function PositionPicker({
             onClick={disclosure?.toggle ?? (() => setLocalOpen((expanded) => !expanded))}
           >
             <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
-            Position
+            {localizeUi('Position')}
           </button>
           {dirty && (
-            <span className="cg-dirty-dot" aria-label="Position has unapplied changes">
+            <span
+              className="cg-dirty-dot"
+              aria-label={localizeUi('Position has unapplied changes')}
+            >
               ●
             </span>
           )}
@@ -322,7 +330,7 @@ export function PositionPicker({
             className="cg-anchor-grid"
             style={styles.anchorCell}
             role="group"
-            aria-label="Position anchor"
+            aria-label={localizeUi('Position anchor')}
           >
             {ANCHOR_GRID.flat().map((a) => (
               <Button
@@ -367,7 +375,7 @@ export function PositionPicker({
                 value={dx}
                 disabled={locked}
                 onValueChange={setDx}
-                aria-label="Position offset X"
+                aria-label={localizeUi('Position offset X')}
               />
               <span style={styles.offsetLabel}>dx</span>
             </div>
@@ -380,7 +388,7 @@ export function PositionPicker({
                 value={dy}
                 disabled={locked}
                 onValueChange={setDy}
-                aria-label="Position offset Y"
+                aria-label={localizeUi('Position offset Y')}
               />
               <span style={styles.offsetLabel}>dy</span>
             </div>
@@ -407,14 +415,18 @@ export function PositionPicker({
             disabled={resetDisabled}
             onClick={() => stagePosition(item.itemId, resetDraft)}
           >
-            Reset position
+            {localizeUi('Reset position')}
           </Button>
           {adjustments}
         </div>
         {/* BELOW the row, not inside it: it is a note about why the controls above are
           inert, and a note that sits in the control row changes the row's height as
           it appears and disappears. */}
-        {locked && <span style={styles.lock}>Position locked while on air for this layer</span>}
+        {locked && (
+          <span style={styles.lock}>
+            {localizeUi('Position locked while on air for this layer')}
+          </span>
+        )}
       </div>
     </div>
   );

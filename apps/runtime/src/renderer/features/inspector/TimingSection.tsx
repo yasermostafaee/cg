@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { templateAdmitsPassTiming, type TemplateInfo } from '@cg/shared-ipc';
@@ -57,6 +58,7 @@ export function TimingSection({
   info: TemplateInfo | null | undefined;
   disclosure?: { open: boolean; toggle: () => void } | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const [localOpen, setLocalOpen] = useState(true);
   const open = disclosure?.open ?? localOpen;
   const controlsId = useId();
@@ -109,18 +111,18 @@ export function TimingSection({
           onClick={disclosure?.toggle ?? (() => setLocalOpen((expanded) => !expanded))}
         >
           <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
-          Timing
+          {localizeUi('Timing')}
         </button>
       </h2>
       <div id={controlsId} hidden={!open}>
         {playout === undefined ? (
           <p style={styles.hint} data-testid="timing-needs-reimport">
-            Timing controls appear after this template is re-imported.
+            {localizeUi('Timing controls appear after this template is re-imported.')}
           </p>
         ) : (
           <>
             <div style={styles.row}>
-              <span style={styles.label}>Mode</span>
+              <span style={styles.label}>{localizeUi('Mode')}</span>
               <Tag
                 className="cg-meta-chip"
                 data-testid="timing-mode-fact"
@@ -131,7 +133,7 @@ export function TimingSection({
             </div>
             {playout.holdSource !== undefined && (
               <div style={styles.row}>
-                <span style={styles.label}>Hold</span>
+                <span style={styles.label}>{localizeUi('Hold')}</span>
                 <Tag
                   className="cg-meta-chip"
                   data-testid="timing-hold-fact"
@@ -202,6 +204,7 @@ function PassesControl({
   onAir: boolean;
   authored: number | 'infinite' | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const draft = timingDraftOf(item.itemId);
   const applied = item.timingOverride?.repeat;
   const inherited = authored ?? 'infinite';
@@ -248,7 +251,7 @@ function PassesControl({
             stageTiming(item.itemId, { passes: { kind: 'until-stop', text: typed } });
           }}
         >
-          Until stop
+          {localizeUi('Until stop')}
         </Button>
         <Button
           variant="neutral"
@@ -259,7 +262,7 @@ function PassesControl({
             stageTiming(item.itemId, { passes: { kind: 'count', text: typed } });
           }}
         >
-          Count
+          {localizeUi('Count')}
         </Button>
       </div>
       {chosen === 'count' && (
@@ -291,6 +294,7 @@ function DelayControl({
   item: StackItemState;
   authored: number | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const draft = timingDraftOf(item.itemId);
   const applied = item.timingOverride?.delayMs;
   const inheritedMs = authored ?? 0;
@@ -303,7 +307,7 @@ function DelayControl({
 
   return (
     <div style={styles.stack}>
-      <span style={styles.label}>Gap between passes</span>
+      <span style={styles.label}>{localizeUi('Gap between passes')}</span>
       {/*
         🔴 THE UNIT IS IN THE FIELD — owner, 2026-09-15, pointing at the Designer's own
         `speed [120] px/s`. The gap was a bare number that happened to be seconds, and the only
@@ -323,7 +327,7 @@ function DelayControl({
             stageTiming(item.itemId, { gapSeconds });
           }}
           decimal
-          aria-label="Gap between passes"
+          aria-label={localizeUi('Gap between passes')}
           placeholder={`Default (${secondsOf(inheritedMs)})`}
           onBlur={() => {
             const raw = typed.trim();
@@ -361,16 +365,17 @@ function SentLine({
   value: number | 'infinite' | undefined;
   at: string | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   if (value === undefined) {
     return (
       <p style={styles.hint} data-testid="timing-passes-sent">
-        Nothing sent
+        {localizeUi('Nothing sent')}
       </p>
     );
   }
   return (
     <p style={styles.hint} data-testid="timing-passes-sent">
-      {'Sent '}
+      {localizeUi('Sent')}{' '}
       <strong style={styles.sentValue}>
         {value === 'infinite' ? 'until stop' : `${String(value)} more`}
       </strong>

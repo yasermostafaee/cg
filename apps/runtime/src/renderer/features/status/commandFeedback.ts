@@ -1,3 +1,4 @@
+import { feedback } from '../../i18n/locale.js';
 /**
  * Tiny renderer-local feedback channel for operator actions (C-001). When a
  * command is rejected — most importantly while the bridge link is down — the
@@ -95,10 +96,13 @@ export function reportCommandSuccess(message: string): void {
 export function runCommand(label: string, promise: Promise<{ accepted: boolean }>): void {
   promise.then(
     (res) => {
-      if (!res.accepted) reportCommandError(`${label} was not accepted.`);
+      if (!res.accepted)
+        reportCommandError(feedback('{action} was not accepted.', { action: label }));
     },
     (err: unknown) => {
-      reportCommandError(err instanceof Error ? err.message : `${label} failed.`);
+      reportCommandError(
+        err instanceof Error ? err.message : feedback('{action} failed.', { action: label }),
+      );
     },
   );
 }

@@ -11,10 +11,22 @@
       "date": "2026-11-22",
       "status": "development",
       "summary": {
-        "fa": "بیلد آزمایشی شامل تغییرات بعد از تحویل ۱.۲.۱۲، بیلد c770cab9، با افکت مستقل Focus در Designer و بهبود گذار قاب‌ها.",
-        "en": "Test candidate with the changes after delivery of 1.2.12 build c770cab9, including independent Designer Focus effects and refined plate transitions."
+        "fa": "تغییرات پس از تحویل ۱.۲.۱۲، بیلد c770cab9، شامل زبان مستقل رابط و پیام‌های CG Control، پروفایل چیدمان، انتخاب مقصد گزارش و افکت Focus دیزاینر است.",
+        "en": "Changes after delivery of 1.2.12 build c770cab9 include independent CG Control languages, workspace profiles, audit archive Save As and Designer Focus effects."
       },
       "features": [
+        {
+          "fa": "در CG Control زبان رابط و پیام‌های عملیات جداگانه از بین انگلیسی، فارسی و عربی انتخاب می‌شوند. فارسی و عربی چیدمان راست‌به‌چپ دارند. فایل ترجمه از General قابل دریافت و وارد کردن است.",
+          "en": "CG Control offers independent English, Persian and Arabic choices for interface text and action feedback. Persian and Arabic use right-to-left layouts. General exports and imports language files."
+        },
+        {
+          "fa": "در General ترتیب PVW/PGM، جای لایه‌ها و سمت بازرس را تنظیم کنید و چیدمان را در پروفایل رابط ذخیره کنید.",
+          "en": "General lets you choose monitor order, move the layer table above or below, place the Inspector on either side, and save the arrangement in a UI profile."
+        },
+        {
+          "fa": "در New live layout دکمهٔ Play/Pause برای ویدئوی هر قاب اضافه شد. پس از شروع پخش در PVW و New live layout، Reset پیش‌نمایش همان ویدئو را متوقف می‌کند و به ابتدا برمی‌گرداند.",
+          "en": "New live layout offers per-plate Play/Pause. Once a video starts in PVW or New live layout, Reset pauses it and returns to the first frame."
+        },
         {
           "fa": "در Focus effects دیزاینر، نام ورودی کنار شمارهٔ Focus دیده می‌شود. وقتی مقصد تک‌قاب برای آن ورودی ندارید، Create solo preset… یک پریست قابل‌ویرایش می‌سازد و همان‌جا وصل می‌کند. Off میان‌بر آن ورودی را پنهان می‌کند.",
           "en": "Designer Focus effects identifies the source beside each Focus number. Create solo preset… builds and links an editable single-source preset when no match is available. Off hides that shortcut."
@@ -38,6 +50,14 @@
       ],
       "fixes": [
         {
+          "fa": "اصلاح تقویم قمری به General منتقل شد. بازنشانی جداکننده‌ها پس از هشدار و تأیید انجام می‌شود. ساخت چیدمان زنده از پنجرهٔ Templates در دسترس است.",
+          "en": "General contains the Lunar Hijri correction. Delimiter reset asks for confirmation. New live layout is available from the Templates dialog."
+        },
+        {
+          "fa": "Live plate audio نام قاب و منبع را نشان می‌دهد. برای قاب یا منبع نامشخص، برچسب قابل‌خواندن نمایش داده می‌شود.",
+          "en": "Live plate audio shows the frame and source names, with readable fallbacks when either is unavailable."
+        },
+        {
           "fa": "در PVW، صدای هر قاب مستقل کنترل می‌شود و نوار مانیتور وضعیت صدای فعال را نشان می‌دهد. فایل ویدئویی هر قاب دکمهٔ Play/Pause دارد و با Play کلی مانیتور خودکار آغاز نمی‌شود.",
           "en": "PVW allows independent audio monitoring per plate and reflects live audio in the monitor toolbar. Video clips have per-plate Play/Pause and do not start with monitor-wide Play."
         },
@@ -50,8 +70,8 @@
           "en": "When Playout rejects a standard graphics command on a channel managed by External CG v2, the Play error identifies the channel mode. The pre-load mute guard remains enforced."
         },
         {
-          "fa": "Download logs در CG Control ویندوز فایل ZIP را در Downloads ذخیره می‌کند و نام و مسیر فایل را در پنجرهٔ لاگ نشان می‌دهد. خطای ذخیره هم همان‌جا نمایش داده می‌شود.",
-          "en": "Download logs in Windows CG Control saves the ZIP to Downloads and reports its actual path in Audit. A failed write is shown in the same window."
+          "fa": "Download logs پنجرهٔ انتخاب مقصد ZIP را باز می‌کند. پس از ذخیره، مسیر در Audit دیده می‌شود. انصراف فایلی ایجاد نمی‌کند.",
+          "en": "Download logs opens a destination picker for the ZIP. Audit shows the selected path after saving. Cancelling creates no file."
         },
         {
           "fa": "تعویض پریست B پس از وقفهٔ موقت تأیید سرور دوباره همگام می‌شود. در Inspector کادر A/B منشأ تصویر یا ویومتر را مشخص می‌کند و تصویر معتبر NDI در PGM در وضعیت حضور منبع B لحاظ می‌شود.",

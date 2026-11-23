@@ -182,6 +182,7 @@ export function NumericInput({
           : ['cg-field', className].filter(Boolean).join(' ')
       }
       type="text"
+      dir={rest.dir ?? 'auto'}
       inputMode={decimal ? 'decimal' : 'numeric'}
       value={value}
       /*

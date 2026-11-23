@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import type { CSSProperties } from 'react';
 import { cssVars } from '../../theme.js';
@@ -146,6 +147,7 @@ const styles = {
 } as const satisfies Record<string, CSSProperties>;
 
 export function LayerTableHeader({ density }: { density: Density }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const spec = densitySpec(density);
   return (
@@ -178,24 +180,26 @@ export function LayerTableHeader({ density }: { density: Density }): JSX.Element
       */}
       <span
         style={styles.cell}
-        title="What is on this layer right now: on air, ready, empty, occupied by another system, or unknown."
+        title={localizeUi(
+          'What is on this layer right now: on air, ready, empty, occupied by another system, or unknown.',
+        )}
       >
-        State
+        {localizeUi('State')}
       </span>
       <span
         style={styles.cell}
-        title="The layer’s name — its alias, the name you configured for it."
+        title={localizeUi('The layer’s name — its alias, the name you configured for it.')}
       >
-        Name
+        {localizeUi('Name')}
       </span>
       {spec.showTemplate && (
         // Centred, matching the column's cells — a heading that sat left of a centred
         // column would read as belonging to the column before it.
         <span
           style={{ ...styles.cell, textAlign: 'center' }}
-          title="The template loaded onto this row."
+          title={localizeUi('The template loaded onto this row.')}
         >
-          Template
+          {localizeUi('Template')}
         </span>
       )}
       {/* No DESCRIPTION column — see `LayerRow`: the wire's report moved into the
@@ -208,8 +212,13 @@ export function LayerTableHeader({ density }: { density: Density }): JSX.Element
             order. A mismatch puts a word above the wrong glyph — and this
             product's STOP/CLEAR are inverted from the reference product's. */}
         {VERB_HEADS.map((verb) => (
-          <span key={verb.label} data-verb-head style={styles.verbHead} title={verb.title}>
-            {verb.label}
+          <span
+            key={verb.label}
+            data-verb-head
+            style={styles.verbHead}
+            title={localizeUi(verb.title)}
+          >
+            {localizeUi(verb.label)}
           </span>
         ))}
       </span>

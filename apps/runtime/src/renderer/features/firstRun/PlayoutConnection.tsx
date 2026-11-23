@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
@@ -198,6 +199,7 @@ export function PlayoutConnection({
   /** `B-327` — told each check's answer (`null` — none came), so the surface reads CG Bridge's verdicts. */
   onAnswer?: ((answer: SetupCheckAnswer | null) => void) | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
   const engines = useEngineSessions();
@@ -506,7 +508,7 @@ export function PlayoutConnection({
         />
       ) : (
         <div style={styles.row}>
-          <span style={styles.label}>Address</span>
+          <span style={styles.label}>{localizeUi('Address')}</span>
           <span style={{ ...styles.fact, ...styles.grow }} dir="ltr" data-playout-address>
             {origin === null ? '—' : playoutFact(origin)}
           </span>
@@ -529,7 +531,7 @@ export function PlayoutConnection({
                 setLines(null);
               }}
             >
-              <Icon icon={Pencil} size={14} /> Change
+              <Icon icon={Pencil} size={14} /> {localizeUi('Change')}
             </Button>
           )}
         </div>
@@ -570,7 +572,7 @@ export function PlayoutConnection({
                 setLines(null);
               }}
             >
-              <Icon icon={Pencil} size={14} /> Change
+              <Icon icon={Pencil} size={14} /> {localizeUi('Change')}
             </Button>
           )}
         </div>
@@ -617,7 +619,7 @@ export function PlayoutConnection({
           )}
           {changed && (
             <Tag className="cg-setup-card-tag" data-not-connected="">
-              Not connected yet
+              {localizeUi('Not connected yet')}
             </Tag>
           )}
         </div>

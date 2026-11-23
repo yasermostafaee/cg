@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownWideNarrow,
@@ -121,6 +122,7 @@ export function SharedTemplateFolder({
   onClose: () => void;
   onImport: (file: File, source?: SharedTemplateSource) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [folder, setFolder] = useState(recentFolder);
   const [revision, setRevision] = useState(0);
   const [listing, setListing] = useState<FolderListing | null>(null);
@@ -194,7 +196,7 @@ export function SharedTemplateFolder({
 
   return (
     <Modal
-      title="Shared template folder"
+      title={localizeUi('Shared template folder')}
       layer="sub"
       size="wide"
       frame="fixed"
@@ -205,7 +207,7 @@ export function SharedTemplateFolder({
       footer={
         <>
           <ModalAction actionRole="cancel" disabled={reading} onClick={onClose}>
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           <ModalAction
             actionRole="primary"
@@ -225,14 +227,14 @@ export function SharedTemplateFolder({
             title={trail.length === 0 ? 'At the Shared files root' : 'Open parent folder'}
             onClick={() => setFolder(parent)}
           >
-            <Icon icon={ArrowUp} size={14} /> Up
+            <Icon icon={ArrowUp} size={14} /> {localizeUi('Up')}
           </Button>
           <Button
             variant="neutral"
             disabled={loading || reading}
             onClick={() => setRevision((value) => value + 1)}
           >
-            <Icon icon={RotateCw} size={14} /> Refresh
+            <Icon icon={RotateCw} size={14} /> {localizeUi('Refresh')}
           </Button>
           <Button
             variant="neutral"
@@ -241,7 +243,7 @@ export function SharedTemplateFolder({
             aria-label={
               newestFirst ? 'Newest first. Show oldest first' : 'Oldest first. Show newest first'
             }
-            title="Sort templates by date modified"
+            title={localizeUi('Sort templates by date modified')}
             onClick={() => setNewestFirst((current) => !current)}
           >
             <Icon icon={newestFirst ? ArrowDownWideNarrow : ArrowUpNarrowWide} size={14} />
@@ -251,9 +253,11 @@ export function SharedTemplateFolder({
         <p
           className="cg-shared-template-location"
           role="status"
-          aria-label="Shared folder location"
+          aria-label={localizeUi('Shared folder location')}
         >
-          <IsolatedName title={listing?.root ?? 'Shared files'}>Shared files</IsolatedName>
+          <IsolatedName title={listing?.root ?? 'Shared files'}>
+            {localizeUi('Shared files')}
+          </IsolatedName>
           {trail.map((part, index) => (
             <span key={trail.slice(0, index + 1).join('/')}>
               <span aria-hidden="true"> / </span>
@@ -262,10 +266,12 @@ export function SharedTemplateFolder({
           ))}
         </p>
         <div className="cg-table-scroll cg-shared-template-list" data-shared-template-list="">
-          {loading && <p>Reading folder…</p>}
-          {listing?.entries.length === 0 && <p>No folders or .vcg packages here.</p>}
+          {loading && <p>{localizeUi('Reading folder…')}</p>}
+          {listing?.entries.length === 0 && (
+            <p>{localizeUi('No folders or .vcg packages here.')}</p>
+          )}
           {listing !== null && entries.length > 0 && (
-            <table className="cg-table" aria-label="Shared template packages">
+            <table className="cg-table" aria-label={localizeUi('Shared template packages')}>
               <tbody>
                 {entries.map(({ kind, name }) => {
                   const withPreview = kind === 'package' && listing.thumbnails === true;

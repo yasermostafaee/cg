@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { type CSSProperties } from 'react';
 import { Info, TriangleAlert } from 'lucide-react';
 import type { ConnectionConfig, ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
@@ -127,6 +128,7 @@ const styles = {
 } as const;
 
 export function FailoverBanner({ health }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   const link = useLink();
   const capabilities = useAuthCapabilities();
   const auth = useAuthSession();
@@ -180,8 +182,12 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
       <span style={styles.meta}>
         {!playoutManaged && (
           <>
-            <Tag style={styles.chip}>primary: {health.primary.label}</Tag>
-            <Tag style={styles.chip}>strategy: {health.strategy}</Tag>
+            <Tag style={styles.chip}>
+              {localizeUi('primary:')} {health.primary.label}
+            </Tag>
+            <Tag style={styles.chip}>
+              {localizeUi('strategy:')} {health.strategy}
+            </Tag>
           </>
         )}
         {/* A completed event can be acknowledged; a broken primary cannot be hidden. */}
@@ -190,9 +196,9 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
             variant="ghost"
             style={styles.dismiss}
             onClick={acknowledgement.dismiss}
-            aria-label="Dismiss failover banner"
+            aria-label={localizeUi('Dismiss failover banner')}
           >
-            Dismiss
+            {localizeUi('Dismiss')}
           </Button>
         )}
       </span>

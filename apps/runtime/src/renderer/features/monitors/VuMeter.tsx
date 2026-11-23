@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { METER_FLOOR_DBFS, type PgmEngine, type PgmLoudness } from '@cg/shared-ipc';
 import {
@@ -125,6 +126,7 @@ export function LoudnessBadge({
   channel: number | null;
   engine?: PgmEngine;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -148,7 +150,7 @@ export function LoudnessBadge({
       className="cg-loudness"
       data-loudness-badge=""
       data-loudness-engine={engine}
-      title="Short-term loudness, EBU R128 — target −23 LUFS"
+      title={localizeUi('Short-term loudness, EBU R128 — target −23 LUFS')}
     />
   );
 }

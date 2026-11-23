@@ -7,6 +7,7 @@ import type { ModalMessage } from '../../ui/Modal.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { useUiText, useFeedbackText } from '../../i18n/locale.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { parseDelimiter, splitContent } from './fromFileContent.js';
 import {
@@ -105,8 +106,11 @@ export function DelimitersSection({
 }: {
   report: (message: ModalMessage | null) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const delimiters = listDelimiters();
+  const resetText = useUiText();
+  const resetWarning = useFeedbackText();
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<DelimiterOption | null>(null);
   /** `SETTINGS-MATCH-02` §8d — the question asked before a delimiter is dropped. */
@@ -145,11 +149,13 @@ export function DelimitersSection({
       body: (
         <>
           <p className="cg-confirm-copy">
-            Remove <strong>{label}</strong> from the available delimiters?
+            {localizeUi('Remove')} <strong>{label}</strong>{' '}
+            {localizeUi('from the available delimiters?')}
           </p>
           <p className="cg-confirm-copy">
-            Fields already using it keep their current separator — the character is stored with the
-            field, not a reference to this record. It stops being offered in the picker.
+            {localizeUi(
+              'Fields already using it keep their current separator — the character is stored with the field, not a reference to this record. It stops being offered in the picker.',
+            )}
           </p>
         </>
       ),
@@ -158,6 +164,22 @@ export function DelimitersSection({
     });
     if (!ok) return;
     say(await removeDelimiter(id));
+  };
+
+  const reset = async (): Promise<void> => {
+    const ok = await confirm({
+      title: resetText('Reset delimiters to defaults?'),
+      body: (
+        <p className="cg-confirm-copy" dir="auto">
+          {resetWarning(
+            'Custom delimiters will be replaced. Graphics that use them may be affected when you reselect a separator. Saved split characters are preserved.',
+          )}
+        </p>
+      ),
+      confirmLabel: resetText('Reset to defaults'),
+      layer: 'sub',
+    });
+    if (ok) say(await resetDelimiters());
   };
 
   return (
@@ -170,32 +192,37 @@ export function DelimitersSection({
       */}
       <div className="cg-setup-list-head">
         <h3>
-          Delimiters <span className="cg-setup-count">{String(delimiters.length)}</span>
+          {localizeUi('Delimiters')}{' '}
+          <span className="cg-setup-count">{String(delimiters.length)}</span>
         </h3>
         {admin && (
-          <Button variant="primary" aria-label="Add delimiter" onClick={() => setAdding(true)}>
+          <Button
+            variant="primary"
+            aria-label={localizeUi('Add delimiter')}
+            onClick={() => setAdding(true)}
+          >
             <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
-            Add delimiter
+            {localizeUi('Add delimiter')}
           </Button>
         )}
       </div>
-      <section className="cg-card" aria-label="Delimiters">
+      <section className="cg-card" aria-label={localizeUi('Delimiters')}>
         <div className="cg-table-scroll">
           <table className="cg-table cg-delimiter-table">
             <thead>
               <tr>
                 <th scope="col" style={styles.nameCol}>
-                  Name
+                  {localizeUi('Name')}
                 </th>
                 {/*
                   ⭐ `Split character`, the reference's word, and it is more accurate than
                   `Splits on`: the cell holds ONE character (or one escape), and `Splits on`
                   read as the name of a rule rather than of a value.
                 */}
-                <th scope="col">Split character</th>
+                <th scope="col">{localizeUi('Split character')}</th>
                 {admin && (
                   <th scope="col" className="cg-table__actions">
-                    <span className="cg-visually-hidden">Actions</span>
+                    <span className="cg-visually-hidden">{localizeUi('Actions')}</span>
                   </th>
                 )}
               </tr>
@@ -219,7 +246,9 @@ export function DelimitersSection({
                     <bdi className="cg-delimiter-symbol" dir="ltr">
                       {d.value}
                     </bdi>
-                    <span className="cg-delimiter-meaning">{splitMeaning(d.value)}</span>
+                    <span className="cg-delimiter-meaning">
+                      {localizeUi(splitMeaning(d.value))}
+                    </span>
                   </td>
                   {admin && (
                     <td className="cg-table__actions">
@@ -227,7 +256,7 @@ export function DelimitersSection({
                         <Button
                           variant="quiet"
                           aria-label={`Rename delimiter ${d.label}`}
-                          title="Rename delimiter"
+                          title={localizeUi('Rename delimiter')}
                           onClick={() => setRenaming(d)}
                         >
                           <Icon icon={Pencil} size={15} />
@@ -238,7 +267,7 @@ export function DelimitersSection({
                           variant="quiet"
                           className="cg-list-remove"
                           aria-label={`Remove delimiter ${d.label}`}
-                          title="Remove this delimiter — asks first"
+                          title={localizeUi('Remove this delimiter — asks first')}
                           onClick={() => void removeOne(d.id, d.label)}
                         >
                           <Icon icon={Trash2} size={15} />
@@ -260,7 +289,7 @@ export function DelimitersSection({
       */}
       {admin && (
         <div className="cg-setup-list-bottom">
-          <p>Removing a delimiter does not change any field already using it.</p>
+          <p>{localizeUi('Removing a delimiter does not change any field already using it.')}</p>
           {/*
           ⚠ A `ghost` with the reset's own class, NOT a raw `<button>`: every control in the
           renderer comes from the shared primitive (the lint rule enforces it, and the states
@@ -271,11 +300,11 @@ export function DelimitersSection({
           <Button
             variant="ghost"
             className="cg-setup-reset"
-            aria-label="Reset delimiters to defaults"
-            title="Puts the shipped delimiters back"
-            onClick={() => void resetDelimiters().then(say)}
+            aria-label={localizeUi('Reset delimiters to defaults')}
+            title={localizeUi('Puts the shipped delimiters back')}
+            onClick={() => void reset()}
           >
-            Reset to defaults
+            {localizeUi('Reset to defaults')}
           </Button>
         </div>
       )}
@@ -303,14 +332,15 @@ function RenameDelimiterDialog({
   onClose: () => void;
   onSaved: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [label, setLabel] = useState(delimiter.label);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   return (
     <RecordDialog
-      title="Rename delimiter"
-      confirmLabel="Save name"
+      title={localizeUi('Rename delimiter')}
+      confirmLabel={localizeUi('Save name')}
       confirmDisabled={saving || label.trim() === delimiter.label}
       onCancel={() => {
         if (!saving) onClose();
@@ -333,7 +363,7 @@ function RenameDelimiterDialog({
         return null;
       }}
     >
-      <DialogField label="Name" id="rename-delimiter-name" error={error}>
+      <DialogField label={localizeUi('Name')} id="rename-delimiter-name" error={error}>
         <TextInput
           dir="auto"
           value={label}
@@ -372,13 +402,14 @@ function AddDelimiterDialog({
   onClose: () => void;
   onReport: (refusal: string | null) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
 
   return (
     <RecordDialog
-      title="Add delimiter"
-      confirmLabel="Add delimiter"
+      title={localizeUi('Add delimiter')}
+      confirmLabel={localizeUi('Add delimiter')}
       onCancel={onClose}
       onSubmit={() => {
         if (label.trim() === '')
@@ -389,24 +420,24 @@ function AddDelimiterDialog({
         return null;
       }}
     >
-      <DialogField label="Name" id="delimiter-name" focusFirst>
+      <DialogField label={localizeUi('Name')} id="delimiter-name" focusFirst>
         <TextInput
           dir="auto"
           value={label}
           onChange={setLabel}
-          aria-label="New delimiter name"
-          placeholder="e.g. tab"
+          aria-label={localizeUi('New delimiter name')}
+          placeholder={localizeUi('e.g. tab')}
           data={{ 'data-modal-autofocus': '' }}
         />
       </DialogField>
       <DialogField
-        label="Split on"
+        label={localizeUi('Split on')}
         id="delimiter-value"
         hint={
           <>
-            Use <code className="cg-code-chip">\n</code> for a new line or{' '}
-            <code className="cg-code-chip">\t</code> for a tab. Other characters are matched
-            exactly.
+            {localizeUi('Use')} <code className="cg-code-chip">\n</code>{' '}
+            {localizeUi('for a new line or')} <code className="cg-code-chip">\t</code>{' '}
+            {localizeUi('for a tab. Other characters are matched exactly.')}
           </>
         }
       >
@@ -415,7 +446,7 @@ function AddDelimiterDialog({
           dir="ltr"
           value={value}
           onChange={setValue}
-          aria-label="New delimiter character"
+          aria-label={localizeUi('New delimiter character')}
           placeholder="e.g. \t"
         />
       </DialogField>
@@ -445,6 +476,7 @@ function AddDelimiterDialog({
  * `String.split` — a preview that agreed with nothing would be worse than none.
  */
 export function SplitPreview({ value }: { value: string }): JSX.Element {
+  const localizeUi = useUiText();
   /*
     🔴 THE SAMPLE IS BUILT FROM THE OPERATOR'S OWN CHARACTER, and that is what makes the three
     states legible rather than one state and two accidents:
@@ -468,7 +500,7 @@ export function SplitPreview({ value }: { value: string }): JSX.Element {
   const items = splitContent(sample, resolved);
   return (
     <div className="cg-preview" data-split-preview="">
-      <span className="cg-preview__eyebrow">Preview</span>
+      <span className="cg-preview__eyebrow">{localizeUi('Preview')}</span>
       <p className="cg-preview__sample" data-split-sample="">
         {sample}
       </p>
@@ -492,11 +524,12 @@ const SPLIT_PARTS = ['Item 1', 'Item 2', 'Item 3'] as const;
 
 /** The gear beside the picker — opens Station setup at this section. */
 export function ManageDelimitersButton({ onOpen }: { onOpen: () => void }): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <Button
       variant="ghost"
-      aria-label="Manage delimiters"
-      title="Manage delimiters (Station setup)"
+      aria-label={localizeUi('Manage delimiters')}
+      title={localizeUi('Manage delimiters (Station setup)')}
       onClick={onOpen}
     >
       <Icon icon={Settings2} />

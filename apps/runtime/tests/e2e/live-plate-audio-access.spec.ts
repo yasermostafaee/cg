@@ -63,7 +63,7 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
   // The OWNER is named, in the operator's words — the template the row carries is one of them.
   await expect(dialog.locator('[data-audio-subtitle]')).toContainText('زیرنویس با ساعت');
   // Focus lands on the plate the operator pointed at — the HIDDEN frame, `guest-2`.
-  await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for guest-2');
+  await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for Plate 2');
   // 🔴 `PLATES-AUDIO-11` §3 — sentence case, superseding `design.md` §31.4's second half.
   await expect(dialog.locator('[data-audio-plate="guest-2"]')).toContainText('Hidden by look');
   await dialog.locator('button', { hasText: /^Close$/ }).click();
@@ -74,14 +74,14 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
   await shown.focus();
   await page.keyboard.press('Shift+F10');
   await expect(dialog).toBeVisible();
-  await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for guest-1');
+  await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for Plate 1');
   await dialog.locator('button', { hasText: /^Close$/ }).click();
   await expect(dialog).toHaveCount(0);
 
   await shown.focus();
   await page.keyboard.press('ContextMenu');
   await expect(dialog).toBeVisible();
-  await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for guest-1');
+  await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for Plate 1');
 });
 
 test('the ROW door — right-click → menu → AUDIO, and Shift+F10 → menu → Enter, both open the row’s dialog', async ({
@@ -98,7 +98,10 @@ test('the ROW door — right-click → menu → AUDIO, and Shift+F10 → menu �
   const dialog = audioDialog(page);
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-audio-plate]')).toHaveCount(4);
-  await expect(dialog.locator('[data-audio-plate="live-1"]')).toContainText('Not seated');
+  const unseated = dialog.locator('[data-audio-plate="live-1"]');
+  await expect(unseated).toContainText('Not seated');
+  await expect(unseated.getByRole('slider', { name: 'Volume for Plate 1' })).toBeVisible();
+  await expect(unseated).not.toContainText('live-1');
   await dialog.locator('button', { hasText: /^Close$/ }).click();
   await expect(dialog).toHaveCount(0);
 
@@ -156,7 +159,7 @@ test('the LIVE PLATES table and the audio dialog carry the reference’s rendere
   await shown.click({ button: 'right' });
   const dialog = audioDialog(page);
   await expect(dialog).toBeVisible();
-  const dialogOn = dialog.getByRole('button', { name: /^Full volume for guest-1/ });
+  const dialogOn = dialog.getByRole('button', { name: /^Full volume for Plate 1/ });
   expect((await box(dialogOn)).w).toBeCloseTo(await token(page, '--r-audio-verb-w'), 0);
   expect((await box(dialogOn)).h).toBeCloseTo(await token(page, '--r-audio-verb-h'), 0);
   const mixerRow = dialog.locator('[data-audio-plate="guest-1"]');

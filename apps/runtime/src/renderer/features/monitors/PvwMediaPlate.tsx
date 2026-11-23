@@ -115,31 +115,6 @@ export function PvwMediaPlate({
   fit: number;
   onPicture: (key: string, picture: PvwSourceFrame | undefined) => void;
 }): JSX.Element {
-  const key = pvwPlateMediaKey(plate);
-  const capture = useRef<ReturnType<typeof captureMediaPixels>>();
-  const showPicture = useCallback(
-    (element: MediaPixels | null, engine?: PreviewEngine) => {
-      if (element !== capture.current?.element) {
-        capture.current?.stop();
-        capture.current =
-          element === null
-            ? undefined
-            : captureMediaPixels(element, source.id, (picture) => onPicture(key, picture));
-      }
-      if (element === null) onPicture(key, undefined);
-      else capture.current?.refresh(engine);
-    },
-    [key, onPicture, source.id],
-  );
-  const control = useMemo(
-    () => ({
-      name: plate.plateLabel ?? source.name,
-      hasAudio: source.media?.hasAudio,
-      showPicture,
-    }),
-    [plate.plateLabel, source.name, source.media?.hasAudio, showPicture],
-  );
-
   return (
     <div
       className="cg-pvw-media-plate"
@@ -149,13 +124,61 @@ export function PvwMediaPlate({
         transform: 'scale(' + (1 / fit).toString() + ')',
       }}
     >
-      <SourceMediaPreview
-        id={source.id}
-        name={source.name}
+      <PlateMediaPlayer
+        pictureKey={pvwPlateMediaKey(plate)}
+        label={plate.plateLabel ?? source.name}
+        source={source}
         channel={channel}
-        durationMs={source.media?.durationMs}
-        plate={control}
+        onPicture={onPicture}
       />
     </div>
+  );
+}
+
+export function PlateMediaPlayer({
+  pictureKey,
+  label,
+  source,
+  channel,
+  onPicture,
+}: {
+  pictureKey: string;
+  label: string;
+  source: Pick<SourceDefinition, 'id' | 'name' | 'media'>;
+  channel: number;
+  onPicture: (key: string, picture: PvwSourceFrame | undefined) => void;
+}): JSX.Element {
+  const capture = useRef<ReturnType<typeof captureMediaPixels>>();
+  const showPicture = useCallback(
+    (element: MediaPixels | null, engine?: PreviewEngine) => {
+      if (element !== capture.current?.element) {
+        capture.current?.stop();
+        capture.current =
+          element === null
+            ? undefined
+            : captureMediaPixels(element, source.id, (picture) => onPicture(pictureKey, picture));
+      }
+      if (element === null) onPicture(pictureKey, undefined);
+      else capture.current?.refresh(engine);
+    },
+    [pictureKey, onPicture, source.id],
+  );
+  const control = useMemo(
+    () => ({
+      name: label,
+      hasAudio: source.media?.hasAudio,
+      showPicture,
+    }),
+    [label, source.media?.hasAudio, showPicture],
+  );
+
+  return (
+    <SourceMediaPreview
+      id={source.id}
+      name={source.name}
+      channel={channel}
+      durationMs={source.media?.durationMs}
+      plate={control}
+    />
   );
 }

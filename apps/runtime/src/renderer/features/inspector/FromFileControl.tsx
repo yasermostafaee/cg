@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   CircleCheck,
@@ -138,6 +139,7 @@ export function FromFileControl({
   fileOnly?: boolean;
   lockFile?: boolean;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const sourceVersion = useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const [previewOpen, setPreviewOpen] = useState(false);
   /*
@@ -304,7 +306,7 @@ export function FromFileControl({
           </Tag>
           <Button variant="secondary" disabled aria-label={`Reload ${fieldId} from file`}>
             <Icon icon={RefreshCw} />
-            Reload
+            {localizeUi('Reload')}
           </Button>
         </div>
       </div>
@@ -318,7 +320,7 @@ export function FromFileControl({
           <div style={styles.row}>
             <Tag className="cg-sequence-file-status">
               <Icon icon={Unplug} size={14} style={{ color: colors.textMuted }} />
-              Not connected
+              {localizeUi('Not connected')}
             </Tag>
             {!fileOnly && (
               <>
@@ -329,7 +331,7 @@ export function FromFileControl({
                   onClick={() => void saveExcel()}
                 >
                   <Icon icon={FilePlus2} />
-                  Save and connect Excel…
+                  {localizeUi('Save and connect Excel…')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -338,12 +340,14 @@ export function FromFileControl({
                   onClick={() => void choose()}
                 >
                   <Icon icon={FolderOpen} />
-                  Connect existing…
+                  {localizeUi('Connect existing…')}
                 </Button>
               </>
             )}
           </div>
-          {fileOnly && <p style={styles.hint}>Connect this workbook in Designer.</p>}
+          {fileOnly && (
+            <p style={styles.hint}>{localizeUi('Connect this workbook in Designer.')}</p>
+          )}
         </div>
       );
     }
@@ -366,7 +370,7 @@ export function FromFileControl({
             onClick={() => void choose()}
           >
             <Icon icon={FolderOpen} />
-            From file…
+            {localizeUi('From file…')}
           </Button>
           {!supported && <p style={styles.hint}>{FILE_SOURCE_UNSUPPORTED_MESSAGE}</p>}
         </div>
@@ -451,7 +455,7 @@ export function FromFileControl({
             onError={() => undefined}
           >
             <Icon icon={KeyRound} />
-            Grant access
+            {localizeUi('Grant access')}
           </AsyncButton>
         ) : (
           /* Reload RE-READS the file and STAGES it — it does not apply. It used to
@@ -470,7 +474,7 @@ export function FromFileControl({
             onError={() => undefined}
           >
             <Icon icon={RefreshCw} />
-            Reload
+            {localizeUi('Reload')}
           </AsyncButton>
         )}
         {!needsGrant && (
@@ -487,7 +491,7 @@ export function FromFileControl({
           <>
             <Button variant="secondary" onClick={() => void saveExcel()}>
               <Icon icon={FilePlus2} />
-              Save and connect another Excel…
+              {localizeUi('Save and connect another Excel…')}
             </Button>
             <Button
               variant="neutral"
@@ -495,7 +499,7 @@ export function FromFileControl({
               aria-label={`Detach ${fieldId} file source`}
             >
               <Icon icon={Unlink} />
-              Detach
+              {localizeUi('Detach')}
             </Button>
           </>
         )}
@@ -505,11 +509,11 @@ export function FromFileControl({
             one row up, doing something else entirely. Do not put it back. */}
       </div>
       <code style={styles.sourcePath} title={sharedFilePath}>
-        Share file · {sharedFilePath}
+        {localizeUi('Share file ·')} {sharedFilePath}
       </code>
       {resolvedSourcePath !== sharedFilePath && (
         <code style={styles.sourcePath} title={resolvedSourcePath}>
-          Read from · {resolvedSourcePath}
+          {localizeUi('Read from ·')} {resolvedSourcePath}
         </code>
       )}
       {needsGrant && <p style={styles.hint}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>}
@@ -520,8 +524,9 @@ export function FromFileControl({
       )}
       {schemaNeedsUpdate && (
         <p style={{ ...styles.hint, color: cssVars['--r-caution-text'] }} role="status">
-          Template fields changed after this workbook was generated. Reload still validates its
-          data;{' '}
+          {localizeUi(
+            'Template fields changed after this workbook was generated. Reload still validates its data;',
+          )}{' '}
           {fileOnly
             ? 'save and reconnect an updated Excel file in Designer.'
             : 'save and connect a new Excel file to refresh columns and choices.'}

@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import type { ReactNode, Ref } from 'react';
 import { APP_BUILD, APP_VERSION } from '../appVersion.js';
 import { ApasaiMark } from './ApasaiMark.js';
@@ -93,9 +94,10 @@ export function SignInBrand(): JSX.Element {
 
 /** This build's version, in small type — the exact build on its `title`. */
 export function AppVersionLine(): JSX.Element {
+  const localizeUi = useUiText();
   return (
     <div className="cg-signin-version" title={APP_BUILD} data-app-version="">
-      Version {APP_VERSION}
+      {localizeUi('Version')} {APP_VERSION}
     </div>
   );
 }

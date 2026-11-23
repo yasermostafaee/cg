@@ -183,6 +183,7 @@ export function plateDisplayName(
   plateId: string,
   plates: readonly { readonly sourceId: string }[] | undefined,
   layout?: Pick<ControlLiveLayout, 'frames'> | undefined,
+  fallbackIndex?: number,
 ): string {
   const index = layout?.frames.findIndex(({ id }) => id === plateId) ?? -1;
   const frame = layout?.frames[index];
@@ -190,7 +191,11 @@ export function plateDisplayName(
     displayName(frame?.focusAlias) ??
     displayName(frame?.title) ??
     plateLabel(plates, plateId) ??
-    (index < 0 ? 'Plate' : `Plate ${String(index + 1)}`)
+    (index >= 0
+      ? `Plate ${String(index + 1)}`
+      : fallbackIndex === undefined
+        ? 'Plate'
+        : `Plate ${String(fallbackIndex)}`)
   );
 }
 

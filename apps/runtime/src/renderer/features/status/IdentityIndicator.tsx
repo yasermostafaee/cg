@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import type { AuthSessionState } from '../../../shared/runtime-bridge.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { colors } from '../../theme.js';
@@ -44,6 +45,7 @@ const styles = {
 } as const;
 
 export function IdentityIndicator(): JSX.Element | null {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
 
   switch (auth.kind) {
@@ -52,15 +54,16 @@ export function IdentityIndicator(): JSX.Element | null {
       return null;
     case 'signed-out':
       return (
-        <Tag className="cg-pill" role="status" aria-label="Sign-in state">
-          <span style={styles.signedOut}>SIGNED OUT</span>
+        <Tag className="cg-pill" role="status" aria-label={localizeUi('Sign-in state')}>
+          <span style={styles.signedOut}>{localizeUi('SIGNED OUT')}</span>
         </Tag>
       );
     case 'expired':
       return (
-        <Tag className="cg-pill" role="status" aria-label="Sign-in state">
+        <Tag className="cg-pill" role="status" aria-label={localizeUi('Sign-in state')}>
           <span style={styles.expired}>
-            SESSION EXPIRED — <IsolatedName>{auth.name}</IsolatedName> — SIGN IN AGAIN
+            {localizeUi('SESSION EXPIRED —')} <IsolatedName>{auth.name}</IsolatedName>{' '}
+            {localizeUi('— SIGN IN AGAIN')}
           </span>
         </Tag>
       );
@@ -69,12 +72,12 @@ export function IdentityIndicator(): JSX.Element | null {
         <Tag
           className="cg-pill"
           role="status"
-          aria-label="Sign-in state"
+          aria-label={localizeUi('Sign-in state')}
           title={sessionTitle(auth)}
           {...(auth.renewalRefused !== undefined ? { 'data-renewal-refused': '' } : {})}
         >
           <span style={styles.signedIn}>
-            SIGNED IN AS <IsolatedName>{auth.principal.name}</IsolatedName>
+            {localizeUi('SIGNED IN AS')} <IsolatedName>{auth.principal.name}</IsolatedName>
           </span>
         </Tag>
       );

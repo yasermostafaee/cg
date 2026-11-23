@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
@@ -40,6 +41,7 @@ import { nothingToSilence, readPanicReport, silenceHasTarget } from './panicRepo
  * there.
  */
 export function EveryChannelPanic(): JSX.Element | null {
+  const localizeUi = useUiText();
   const { multiChannel } = useSelectedChannel();
   const holdsOperator = useHoldsOperatorRole();
   const linkDown = useLink() === 'disconnected';
@@ -82,9 +84,11 @@ export function EveryChannelPanic(): JSX.Element | null {
       }
       className="cg-plate-panic"
       data-every-channel-panic=""
-      aria-label="Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on"
+      aria-label={localizeUi(
+        'Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on',
+      )}
     >
-      SILENCE ALL PLATES · EVERY CHANNEL
+      {localizeUi('SILENCE ALL PLATES · EVERY CHANNEL')}
     </AsyncButton>
   );
 }

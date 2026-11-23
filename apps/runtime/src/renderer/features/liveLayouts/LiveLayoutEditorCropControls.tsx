@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { Crop, RotateCcw } from 'lucide-react';
 import { MAX_LIVE_CROP_ZOOM, type LiveCropFocus } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
@@ -26,6 +27,7 @@ export function LiveLayoutEditorCropControls({
   onEditChange?: ((editing: boolean) => void) | undefined;
   onReset: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const preset = scope === 'preset';
   const group = preset ? 'Crop defaults' : 'Plate crop';
   const prefix = preset ? 'Default crop' : 'Crop';
@@ -44,7 +46,7 @@ export function LiveLayoutEditorCropControls({
               onClick={() => onEditChange(!editing)}
             >
               <Icon icon={Crop} size={14} />
-              Edit crop in preview
+              {localizeUi('Edit crop in preview')}
             </Button>
           )}
           <Button

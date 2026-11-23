@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { Button } from '../../ui/Button.js';
 import { reloadOnPurpose } from './leavePrompt.js';
 
@@ -25,6 +26,7 @@ export function SetUpAgain({
   /** Start the console again (a test passes its own: jsdom's `location.reload` is fixed). */
   reload?: () => void;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   if (!window.cg.setup.canSetPlayoutAddress()) return null;
   return (
     <Button
@@ -34,7 +36,7 @@ export function SetUpAgain({
         if (window.cg.setup.forgetStation()) reload();
       }}
     >
-      Set up again
+      {localizeUi('Set up again')}
     </Button>
   );
 }

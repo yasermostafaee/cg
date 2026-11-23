@@ -53,3 +53,9 @@
       Focused Bridge cases verified missing media, an active commit refusal, a backup refusal with
       compensation and a stale same-kind producer without a matching backup PLAY acknowledgement.
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.
+
+## PVW plate Reset
+
+- [x] Add the local Reset action to the plate transport and cover it in Chromium.
+- [x] Windows Chromium verified that Reset pauses and rewinds only its plate and preserves the other clip.
+- [ ] Record the Linux E2E run.

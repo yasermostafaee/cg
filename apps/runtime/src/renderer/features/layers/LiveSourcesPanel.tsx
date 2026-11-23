@@ -1,3 +1,4 @@
+import { feedback, useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { useRef } from 'react';
 import { useCanOperate, useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
@@ -263,6 +264,7 @@ export function LiveSourcesPanel({
   panicChannel,
   playlistChannel,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   /*
     🔴 `C-038` — **THE ROLE, NOT THE CHANNEL**, and the distinction is load-bearing here.
 
@@ -470,7 +472,7 @@ export function LiveSourcesPanel({
       );
       return { accepted: false, cancelled: true };
     }
-    reportCommandSuccess(`Released · ${names}`);
+    reportCommandSuccess(feedback('Released · {names}', { names }));
     return { accepted: true, cancelled: true };
   };
 
@@ -544,10 +546,11 @@ export function LiveSourcesPanel({
             declared frame is NOT an occupied layer; it is counted by its own term below, so
             this word stays true as the rows beneath it grow.
           */}
-          {String(seated.length)} occupied {seated.length === 1 ? 'layer' : 'layers'}
+          {String(seated.length)} {localizeUi('occupied')}{' '}
+          {seated.length === 1 ? 'layer' : 'layers'}
         </strong>
         <span className="cg-plate-count">
-          {String(shownCount)} shown · {String(heldCount)} held
+          {String(shownCount)} {localizeUi('shown ·')} {String(heldCount)} {localizeUi('held')}
           {unknownCount > 0 && ` · ${String(unknownCount)} unknown`}
           {unseatedCount > 0 && ` · ${String(unseatedCount)} not seated`}
         </span>
@@ -633,17 +636,22 @@ export function LiveSourcesPanel({
           </AsyncButton>
         )}
       </div>
-      <div className="cg-plate-table" role="table" aria-label="Occupied live-plate layers">
+      <div
+        className="cg-plate-table"
+        role="table"
+        aria-label={localizeUi('Occupied live-plate layers')}
+      >
         <div className="cg-plate-head" role="row">
-          <span role="columnheader">Layer</span>
-          <span role="columnheader">Plate / source</span>
-          <span role="columnheader">Owner</span>
-          <span role="columnheader">Picture</span>
-          <span role="columnheader">Audio</span>
+          <span role="columnheader">{localizeUi('Layer')}</span>
+          <span role="columnheader">{localizeUi('Plate / source')}</span>
+          <span role="columnheader">{localizeUi('Owner')}</span>
+          <span role="columnheader">{localizeUi('Picture')}</span>
+          <span role="columnheader">{localizeUi('Audio')}</span>
           <span role="columnheader">
-            Gain <span className="cg-plate-head-note">· ON = 100%</span>
+            {localizeUi('Gain')}{' '}
+            <span className="cg-plate-head-note">{localizeUi('· ON = 100%')}</span>
           </span>
-          <span role="columnheader">Audio controls</span>
+          <span role="columnheader">{localizeUi('Audio controls')}</span>
         </div>
         {rows.map((row, index) => {
           // Every disposition but the ordinary one keeps its sentence visible (see below).
@@ -697,7 +705,10 @@ export function LiveSourcesPanel({
                   column carries only a coordinate or the absence of one.
                 */}
                 {row.coordinate ?? (
-                  <span className="cg-plate-unseated" title="No layer is seated for this frame">
+                  <span
+                    className="cg-plate-unseated"
+                    title={localizeUi('No layer is seated for this frame')}
+                  >
                     —
                   </span>
                 )}
@@ -728,7 +739,7 @@ export function LiveSourcesPanel({
                     {...(releaseRefusal !== undefined ? { title: releaseRefusal } : {})}
                     aria-label={releaseLabel(rows, row)}
                   >
-                    RELEASE
+                    {localizeUi('RELEASE')}
                   </AsyncButton>
                 ) : row.ownerLabel !== null ? (
                   <>

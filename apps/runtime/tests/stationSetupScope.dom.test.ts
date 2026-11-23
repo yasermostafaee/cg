@@ -175,8 +175,8 @@ describe('§3 — the six that did not move', () => {
   it('3. panel widths and the Inspector overlay stay with the shell — Station setup renders no layout control', async () => {
     // Where they live today: the shell's dividers and the Layers header's reset.
     const app = read('App.tsx');
-    expect(app).toContain('label="Resize the Inspector"');
-    expect(app).toContain('label="Resize the monitor strip"');
+    expect(app).toContain("localizeUi('Resize the Inspector')");
+    expect(app).toContain("localizeUi('Resize the monitor strip')");
     expect(read('features', 'layers', 'LayersPanel.tsx')).toContain('Reset the panel layout');
 
     stationSetupStub();
@@ -201,7 +201,7 @@ describe('§3 — the six that did not move', () => {
         section's own landmark takes its place — it is still the thing that must be in the
         Inspector and never in Station setup.
       */
-      'aria-label="On-air position"',
+      "localizeUi('On-air position')",
     );
 
     stationSetupStub();

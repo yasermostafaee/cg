@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useState } from 'react';
 import {
   PLAYLIST_GAIN_MAX_DB,
@@ -45,6 +46,7 @@ export function PlaylistGainControl({
   channel: number;
   linkDown: boolean;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [open, setOpen] = useState(false);
   const health = useConnections();
   const ownerEpoch = `${health?.currentPrimary ?? 'A'}:${health?.lastFailover?.at ?? ''}`;
@@ -57,7 +59,7 @@ export function PlaylistGainControl({
         onClick={() => setOpen(true)}
       >
         <Icon icon={SlidersHorizontal} size={14} />
-        Playlist gain
+        {localizeUi('Playlist gain')}
       </Button>
       {open && (
         <PlaylistGainDialog key={ownerEpoch} channel={channel} onClose={() => setOpen(false)} />
@@ -73,6 +75,7 @@ function PlaylistGainDialog({
   channel: number;
   onClose: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [reply, setReply] = useState<PlaylistGainReply>();
   const [draft, setDraft] = useState<string>();
   const [refresh, setRefresh] = useState(0);
@@ -143,7 +146,7 @@ function PlaylistGainDialog({
 
   return (
     <Modal
-      title="Playlist gain"
+      title={localizeUi('Playlist gain')}
       subtitle={`CH ${String(channel)} · Programme output`}
       emblem={SlidersHorizontal}
       onClose={onClose}
@@ -152,7 +155,7 @@ function PlaylistGainDialog({
       footer={
         <>
           <ModalAction actionRole="cancel" disabled={saving} onClick={onClose}>
-            Close
+            {localizeUi('Close')}
           </ModalAction>
           <Button
             variant="secondary"
@@ -162,16 +165,16 @@ function PlaylistGainDialog({
               setRefresh((value) => value + 1);
             }}
           >
-            Refresh
+            {localizeUi('Refresh')}
           </Button>
           <ModalAction actionRole="primary" disabled={!canApply} onClick={apply}>
-            Apply
+            {localizeUi('Apply')}
           </ModalAction>
         </>
       }
     >
       {state === undefined ? (
-        reading && <p role="status">Reading Playlist gain…</p>
+        reading && <p role="status">{localizeUi('Reading Playlist gain…')}</p>
       ) : (
         <>
           <p aria-live="polite">
@@ -179,7 +182,7 @@ function PlaylistGainDialog({
             <Tag>{usage[state.usage]}</Tag>
           </p>
           <label htmlFor={fieldId}>
-            Programme gain (dB)
+            {localizeUi('Programme gain (dB)')}
             <NumericInput
               id={fieldId}
               className="cg-field cg-field--mono"

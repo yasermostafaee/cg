@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
   LUNAR_ADJUST_MAX,
   LUNAR_ADJUST_MIN,
@@ -37,6 +38,7 @@ export function CalendarSection({
   /** Test seam — the clock the "today" fact reads. */
   now?: () => number;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const days = useLunarAdjustDays();
   const admin = useHoldsStationAdmin();
   const d = new Date(now());
@@ -53,17 +55,26 @@ export function CalendarSection({
   };
 
   return (
-    <section className="cg-card" aria-label="Lunar Hijri correction" data-calendar-section="">
+    <section
+      className="cg-card"
+      aria-label={localizeUi('Lunar Hijri correction')}
+      data-calendar-section=""
+    >
       <div className="cg-card__head">
-        <span className="cg-card__title">Lunar Hijri date correction</span>
+        <span className="cg-card__title">{localizeUi('Lunar Hijri date correction')}</span>
       </div>
       <div className="cg-card__body cg-calendar-body">
         <p className="cg-calendar-explainer">
-          Adjusts Lunar Hijri dates only when the officially announced day differs from the
-          calculated date. Leave it at As calculated when no correction is needed.
+          {localizeUi(
+            'Adjusts Lunar Hijri dates only when the officially announced day differs from the calculated date. Leave it at As calculated when no correction is needed.',
+          )}
         </p>
         {admin ? (
-          <div className="cg-lunar-adjust" role="group" aria-label="Lunar Hijri day adjustment">
+          <div
+            className="cg-lunar-adjust"
+            role="group"
+            aria-label={localizeUi('Lunar Hijri day adjustment')}
+          >
             {CHOICES.map((choice) => (
               <Button
                 key={choice}
@@ -72,25 +83,25 @@ export function CalendarSection({
                 data-lunar-adjust={String(choice)}
                 onClick={() => choose(choice)}
               >
-                {lunarAdjustWords(choice)}
+                {localizeUi(lunarAdjustWords(choice))}
               </Button>
             ))}
           </div>
         ) : (
           <Tag className="cg-meta-chip" data-testid="lunar-adjust-fact">
-            <span className="cg-meta-chip__label">Adjustment</span>
-            <span className="cg-meta-chip__value">{lunarAdjustWords(days)}</span>
+            <span className="cg-meta-chip__label">{localizeUi('Adjustment')}</span>
+            <span className="cg-meta-chip__value">{localizeUi(lunarAdjustWords(days))}</span>
           </Tag>
         )}
         <div className="cg-calendar-facts">
           <Tag className="cg-meta-chip" data-testid="lunar-calculation">
-            <span className="cg-meta-chip__label">Calculation</span>
+            <span className="cg-meta-chip__label">{localizeUi('Calculation')}</span>
             <span className="cg-meta-chip__value">
-              {lunarCalculationName(lunarHijriCalculation())}
+              {localizeUi(lunarCalculationName(lunarHijriCalculation()))}
             </span>
           </Tag>
           <Tag className="cg-meta-chip" data-testid="lunar-today">
-            <span className="cg-meta-chip__label">Today</span>
+            <span className="cg-meta-chip__label">{localizeUi('Today')}</span>
             <span className="cg-meta-chip__value">
               <bdi>{dayInWords(today, 'lunar-hijri', 'persian')}</bdi>
             </span>

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useId, useRef, useState } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
@@ -39,6 +40,7 @@ export function RowErrorsBadge({ items, nameOf }: RowErrorsBadgeProps): JSX.Elem
 }
 
 function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Element {
+  const localizeUi = useUiText();
   const engineName = useEngineName();
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -58,14 +60,14 @@ function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Elemen
         title={`${count} in error — rows whose last command was refused. Press to list them.`}
         onClick={() => setOpen((o) => !o)}
       >
-        {count} in error
+        {count} {localizeUi('in error')}
       </Button>
       {open && (
         <Popover
           anchor={anchor}
           onClose={() => setOpen(false)}
           id={id}
-          aria-label="Rows in error"
+          aria-label={localizeUi('Rows in error')}
           minWidth={380}
           maxHeight={360}
         >
@@ -88,7 +90,7 @@ function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Elemen
                     data-row-error-dismiss=""
                     run={() => window.cg.stack.dismissError({ itemId: item.itemId })}
                   >
-                    Dismiss
+                    {localizeUi('Dismiss')}
                   </AsyncButton>
                 </li>
               );

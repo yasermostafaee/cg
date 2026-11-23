@@ -1,3 +1,4 @@
+import { useFeedbackText, useUiText } from '../i18n/locale.js';
 import type { CSSProperties, ReactNode } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
@@ -196,6 +197,8 @@ export function Notice({
    */
   remedies?: ReactNode;
 }): JSX.Element {
+  const presentMessage = useFeedbackText();
+  const presentText = useUiText();
   const dismissable = onDismiss !== undefined;
   /*
     A mark or a title makes the box a ROW with a column inside it, exactly as a dismiss does —
@@ -238,10 +241,10 @@ export function Notice({
         >
           {title !== undefined && (
             <strong dir="auto" style={{ fontWeight: 600 }}>
-              {title}
+              {presentMessage(title)}
             </strong>
           )}
-          <span dir="auto">{text}</span>
+          <span dir="auto">{presentMessage(text)}</span>
           {detail !== undefined && detail !== '' && (
             <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
               {detail}
@@ -269,7 +272,7 @@ export function Notice({
         </span>
       ) : (
         <>
-          <span dir="auto">{text}</span>
+          <span dir="auto">{presentMessage(text)}</span>
           {detail !== undefined && detail !== '' && (
             <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
               {detail}
@@ -278,7 +281,10 @@ export function Notice({
         </>
       )}
       {dismissable && (
-        <NoticeDismiss onDismiss={onDismiss} label={dismissLabel ?? 'Dismiss this message'} />
+        <NoticeDismiss
+          onDismiss={onDismiss}
+          label={presentText(dismissLabel ?? 'Dismiss this message')}
+        />
       )}
     </div>
   );

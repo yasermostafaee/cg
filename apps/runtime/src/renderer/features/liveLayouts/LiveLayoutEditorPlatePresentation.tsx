@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useState } from 'react';
 import {
   CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MAX,
@@ -31,6 +32,7 @@ export function LiveLayoutEditorPlatePresentation({
   geometryControls?: boolean;
   onChange: (value: ControlLiveLayoutPlateOverride) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const id = useId();
   const [editingCustom, setEditingCustom] = useState(false);
   const aspect = value?.aspectRatio;
@@ -46,7 +48,7 @@ export function LiveLayoutEditorPlatePresentation({
     <div className="cg-live-layout-plate-presentation">
       {geometryControls && (
         <label className="cg-form-field" htmlFor={id + '-aspect'}>
-          Plate aspect ratio
+          {localizeUi('Plate aspect ratio')}
           <SelectInput
             id={id + '-aspect'}
             aria-label={preset ? 'Preset plate aspect ratio' : 'Plate aspect ratio'}
@@ -64,13 +66,13 @@ export function LiveLayoutEditorPlatePresentation({
                 {label}
               </option>
             ))}
-            <option value="custom">Custom</option>
+            <option value="custom">{localizeUi('Custom')}</option>
           </SelectInput>
         </label>
       )}
       {geometryControls && aspectChoice === 'custom' && (
         <LiveLayoutEditorNumber
-          label="Custom width ÷ height"
+          label={localizeUi('Custom width ÷ height')}
           value={Number((aspect ?? inheritedAspect).toFixed(3))}
           min={CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MIN}
           max={CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MAX}
@@ -80,7 +82,7 @@ export function LiveLayoutEditorPlatePresentation({
         />
       )}
       <label className="cg-form-field" htmlFor={id + '-fit'}>
-        Input fit
+        {localizeUi('Input fit')}
         <SelectInput
           id={id + '-fit'}
           aria-label={preset ? 'Preset input fit' : 'Plate input fit'}
@@ -91,8 +93,8 @@ export function LiveLayoutEditorPlatePresentation({
           }}
         >
           <option value="">{inheritedFit}</option>
-          <option value="contain">Fit whole picture</option>
-          <option value="cover">Crop edges</option>
+          <option value="contain">{localizeUi('Fit whole picture')}</option>
+          <option value="cover">{localizeUi('Crop edges')}</option>
         </SelectInput>
       </label>
     </div>

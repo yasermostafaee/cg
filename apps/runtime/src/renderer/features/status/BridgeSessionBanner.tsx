@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useState } from 'react';
 import { KeyRound, TriangleAlert } from 'lucide-react';
@@ -81,6 +82,7 @@ function backupNeedsAdmin(engines: EngineSessions | null): boolean {
 }
 
 export function BridgeSessionBanner(): JSX.Element | null {
+  const localizeUi = useUiText();
   const engineName = useEngineName();
   const auth = useAuthSession();
   const engines = useEngineSessions();
@@ -129,7 +131,8 @@ export function BridgeSessionBanner(): JSX.Element | null {
       <span style={styles.text}>
         {session?.state === 'refused' ? (
           <>
-            CG Bridge: <bdi>{playoutEngineWording(session.message ?? '', engineName)}</bdi>
+            {localizeUi('CG Bridge:')}{' '}
+            <bdi>{playoutEngineWording(session.message ?? '', engineName)}</bdi>
           </>
         ) : primaryNeeds ? (
           BRIDGE_NEEDS_ADMIN_LINE
@@ -139,7 +142,7 @@ export function BridgeSessionBanner(): JSX.Element | null {
       </span>
       {admin && (
         <Button variant="neutral" onClick={() => setDialogOpen(true)}>
-          Sign in CG Bridge…
+          {localizeUi('Sign in CG Bridge…')}
         </Button>
       )}
       {admin && dialogOpen && (
@@ -220,6 +223,7 @@ function BridgeSignInDialog({
   startOn: Engine;
   onClose: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engineName = useEngineName();
   const signInUrl = useAuthCapabilities()?.signInUrl ?? null;
   const lines: readonly EngineLine[] =
@@ -282,7 +286,7 @@ function BridgeSignInDialog({
 
   return (
     <Modal
-      title="Sign in CG Bridge"
+      title={localizeUi('Sign in CG Bridge')}
       emblem={KeyRound}
       onClose={onClose}
       {...(error !== null
@@ -296,7 +300,7 @@ function BridgeSignInDialog({
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onClose}>
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           <ModalAction
             actionRole="primary"
@@ -318,7 +322,7 @@ function BridgeSignInDialog({
       <SignInBrand />
       {lines.length > 0 && (
         // `RELEASE-0112-01` — each engine, its address and its state, in words (facts, not controls).
-        <div style={styles.engines} aria-label="Engines" data-engines="">
+        <div style={styles.engines} aria-label={localizeUi('Engines')} data-engines="">
           {lines.map((line) => {
             const address = engineDisplayAddress(line, signInUrl);
             return (
@@ -369,7 +373,7 @@ function BridgeSignInDialog({
           </p>
         )}
         <label htmlFor="cg-bridge-signin-user" style={styles.field}>
-          Account
+          {localizeUi('Account')}
           <TextInput
             id="cg-bridge-signin-user"
             value={username}
@@ -381,12 +385,12 @@ function BridgeSignInDialog({
             // A machine account name (`cg-admin`): LTR is a statement about the CONTENT.
             dir="ltr"
             disabled={busy}
-            aria-label="Account"
+            aria-label={localizeUi('Account')}
             onKeyDown={onEnter}
           />
         </label>
         <label htmlFor="cg-bridge-signin-pass" style={styles.field}>
-          Password
+          {localizeUi('Password')}
           <PasswordInput
             id="cg-bridge-signin-pass"
             value={password}
@@ -394,7 +398,7 @@ function BridgeSignInDialog({
             autoComplete="off"
             disabled={busy}
             invalid={error?.marksField === true}
-            aria-label="Password"
+            aria-label={localizeUi('Password')}
             onKeyDown={onEnter}
           />
         </label>

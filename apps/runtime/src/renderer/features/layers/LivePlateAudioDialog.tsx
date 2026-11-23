@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import { PLAYLIST_AUDIO_LOCKED_REASON, type TemplateInfo } from '@cg/shared-ipc';
@@ -5,7 +6,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Button } from '../../ui/Button.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
-import type { OperatorRowName } from '../../ui/operatorNaming.js';
+import { plateDisplayName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import { lookOptionsOf } from './LookPicker.js';
 // The ONE vocabulary, shared with the LIVE PLATES strip and the row's summary — so the
 // dialog's SOLO and the panel's SOLO cannot address different sets, and the dialog's state
@@ -101,6 +102,7 @@ export interface LivePlateAudioDialogProps {
    * SOLO are then disabled with the reason, and its state reads `Locked · 0`. Absent: no plate is.
    */
   audioLockedOf?: ((plateId: string) => boolean) | undefined;
+  sourceNameOf?: ((plateId: string) => string | null) | undefined;
   /** The plate whose fader takes focus when the dialog opens — the one the operator pointed at. */
   focusPlateId?: string | undefined;
   /**
@@ -121,6 +123,7 @@ interface DialogPlate {
   plateId: string;
   /** Position in the template's declaration, 1-based; seated-only plates count on after it. */
   index: number;
+  name: string;
   seated: RowPlateAudio | undefined;
 }
 
@@ -130,10 +133,12 @@ export function LivePlateAudioDialog({
   name,
   seatedPlates = [],
   audioLockedOf = () => false,
+  sourceNameOf,
   focusPlateId,
   onApplyVolumes,
   onClose,
 }: LivePlateAudioDialogProps): React.JSX.Element {
+  const localizeUi = useUiText();
   const [refusal, setRefusal] = useState<string | null>(null);
   /**
    * What the operator is dragging RIGHT NOW, before it is committed.
@@ -189,11 +194,12 @@ export function LivePlateAudioDialog({
    * Deduplicated by plate id: a fill+key pair puts one `sourceId` on two ledger records.
    */
   const seatedById = new Map(seatedPlates.map((p) => [p.plateId, p]));
-  const declared = template.liveSources?.sources.map((p) => p.sourceId) ?? [];
-  const ids = [...new Set([...declared, ...seatedById.keys()])];
+  const declared = template.liveSources?.sources;
+  const ids = [...new Set([...(declared?.map((p) => p.sourceId) ?? []), ...seatedById.keys()])];
   const plates: DialogPlate[] = ids.map((plateId, i) => ({
     plateId,
     index: i + 1,
+    name: plateDisplayName(plateId, declared, template.controlLiveLayout, i + 1),
     seated: seatedById.get(plateId),
   }));
   const plateIds = plates.map((p) => p.plateId);
@@ -231,9 +237,12 @@ export function LivePlateAudioDialog({
           for (const plateId of Object.keys(volumes)) delete next[plateId];
           return next;
         });
+        const names = plates
+          .filter(({ plateId }) => res.refused.includes(plateId))
+          .map((plate) => plate.name);
         setRefusal(
-          res.refused.length > 0
-            ? `The change was refused for ${res.refused.join(', ')} — those plates are unchanged.`
+          names.length > 0
+            ? `The change was refused for ${names.join(', ')} — those plates are unchanged.`
             : 'The volume change was refused.',
         );
       }
@@ -252,7 +261,7 @@ export function LivePlateAudioDialog({
 
   return (
     <Modal
-      title="Live plate audio"
+      title={localizeUi('Live plate audio')}
       /*
         🔴 `PLATES-AUDIO-11` §5 — **THE ROW'S NAME MOVED INTO THE HEAD BAND, and it moved
         BECAUSE the frame is now fixed.** It was the first line of the body, so with a scrolling
@@ -297,12 +306,12 @@ export function LivePlateAudioDialog({
             standing text under three rows of controls.
           */}
           <span className="cg-audio-foot-info" data-audio-foot-info="">
-            ON = 100% · OFF = 0%
+            {localizeUi('ON = 100% · OFF = 0%')}
             <br />
-            SOLO silences all other frames of this row, including hidden frames.
+            {localizeUi('SOLO silences all other frames of this row, including hidden frames.')}
           </span>
           <ModalAction actionRole="cancel" onClick={onClose}>
-            Close
+            {localizeUi('Close')}
           </ModalAction>
         </>
       }
@@ -317,7 +326,7 @@ export function LivePlateAudioDialog({
             </>
           )}
         </span>
-        <span className="cg-audio-hint">Changes apply on release</span>
+        <span className="cg-audio-hint">{localizeUi('Changes apply on release')}</span>
       </div>
       {/*
         🔴 `PLATES-AUDIO-11` §4 — **THE EXPLANATORY PARAGRAPH IS GONE, AND ITS SAFETY FACT IS
@@ -335,9 +344,9 @@ export function LivePlateAudioDialog({
         frame whose fader still moves — which is why they were the half that could go.
       */}
       <div className="cg-audio-head" aria-hidden="true">
-        <span>Frame / source</span>
-        <span>Requested gain</span>
-        <span>Audio controls</span>
+        <span>{localizeUi('Frame / source')}</span>
+        <span>{localizeUi('Requested gain')}</span>
+        <span>{localizeUi('Audio controls')}</span>
       </div>
       {plates.map((plate) => {
         // `PLAYOUT-FEATURES-01` C — the playlist output's box: every control disabled, the state locked.
@@ -354,7 +363,12 @@ export function LivePlateAudioDialog({
         // `R-028` — the real coordinate stays visible in the sentence. Said as the coordinate
         // (`on 1-10`), never a hand-built `Layer N`, which is a ROW's name (`cg/bank-shape`).
         const seatLine =
-          plate.seated?.coordinate !== undefined ? `on ${plate.seated.coordinate}` : 'not seated';
+          plate.seated?.coordinate !== undefined
+            ? `on ${plate.seated.coordinate}`
+            : localizeUi('not seated');
+        const sourceName =
+          sourceNameOf?.(plate.plateId) ??
+          localizeUi(plate.seated === undefined ? 'Unassigned' : 'Unknown source');
         return (
           <div
             key={plate.plateId}
@@ -368,10 +382,10 @@ export function LivePlateAudioDialog({
               </span>
               <div>
                 <label htmlFor={inputId} className="cg-audio-name">
-                  <bdi>{plate.plateId}</bdi>
+                  <bdi>{plate.name}</bdi>
                 </label>
                 <small className="cg-audio-seat">
-                  Frame {String(plate.index)} · {seatLine}
+                  <bdi>{sourceName}</bdi> · {seatLine}
                 </small>
               </div>
             </div>
@@ -386,7 +400,7 @@ export function LivePlateAudioDialog({
                 value={Math.round(value * 100)}
                 disabled={locked}
                 {...lockedTitle}
-                aria-label={`Volume for ${plate.plateId}`}
+                aria-label={localizeUi('Volume for {name}', { name: plate.name })}
                 aria-valuetext={pct(value)}
                 {...(plate.plateId === focusId ? { 'data-modal-autofocus': '' } : {})}
                 onChange={(e) => {
@@ -405,7 +419,11 @@ export function LivePlateAudioDialog({
               <output className="cg-audio-readout" htmlFor={inputId}>
                 {pct(value)}
               </output>
-              <small className="cg-audio-state" style={{ color: pill.tone }} title={pill.detail}>
+              <small
+                className="cg-audio-state"
+                style={{ color: pill.tone }}
+                title={localizeUi(pill.detail)}
+              >
                 {pill.label}
               </small>
             </div>
@@ -422,9 +440,9 @@ export function LivePlateAudioDialog({
                 }}
                 disabled={locked}
                 title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : ON_TITLE}
-                aria-label={`Full volume for ${plate.plateId} (100%, not the previous level)`}
+                aria-label={`Full volume for ${plate.name} (100%, not the previous level)`}
               >
-                ON
+                {localizeUi('ON')}
               </Button>
               <Button
                 variant="secondary"
@@ -433,9 +451,9 @@ export function LivePlateAudioDialog({
                 }}
                 disabled={locked}
                 title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : OFF_TITLE}
-                aria-label={`Silence ${plate.plateId}`}
+                aria-label={`Silence ${plate.name}`}
               >
-                OFF
+                {localizeUi('OFF')}
               </Button>
               <Button
                 variant="caution"
@@ -456,9 +474,9 @@ export function LivePlateAudioDialog({
                       ? SOLO_ALONE_TITLE
                       : SOLO_TITLE
                 }
-                aria-label={`Solo ${plate.plateId} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
+                aria-label={`Solo ${plate.name} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
               >
-                SOLO
+                {localizeUi('SOLO')}
               </Button>
             </span>
           </div>

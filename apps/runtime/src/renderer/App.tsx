@@ -1,3 +1,4 @@
+import { useUiText } from './i18n/locale.js';
 import { useCanOperate } from './hooks/useCanOperate.js';
 import { EngineNameContext, engineNameForMode } from './ui/engineWording.js';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -74,6 +75,7 @@ import { useStack } from './hooks/useStack.js';
 import { useRehearse } from './hooks/useRehearse.js';
 import { isRehearsalInterlocked, isRehearsing } from '@cg/shared-ipc';
 import { appShell } from './layout.js';
+import './workspace.css';
 
 declare global {
   interface Window {
@@ -123,6 +125,7 @@ function LayerShortcutsListener(): null {
 }
 
 export function App(): JSX.Element {
+  const localizeUi = useUiText();
   const items = useStack();
   /*
     `PASSES-CYCLE-ONLY-26` §A1.2 — the TEMPLATE facts an UPDATE press needs. What pass timing a
@@ -177,11 +180,7 @@ export function App(): JSX.Element {
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
   const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
-  const {
-    openTemplateLibrary,
-    openNewLiveLayout,
-    pickerDialog: templateLibraryDialog,
-  } = useTemplatePicker(
+  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker(
     engineName,
     capabilities?.sharedTemplateFolder === true,
     capabilities?.templateThumbnails === true,
@@ -374,10 +373,17 @@ export function App(): JSX.Element {
    * panel is closed when no layer is selected). The divider goes with it — a resize
    * handle for a column that is not there would be a control that does nothing.
    */
-  const shellColumns =
-    !layout.narrow && inspectorOpen && layout.focus === 'none'
-      ? `1fr 6px ${String(layout.inspectorPx)}px`
-      : '1fr';
+  const inspectorLeft = layout.positions.inspectorSide === 'left';
+  const layersAbove = layout.positions.layerPosition === 'above';
+  const splitInspector = !layout.narrow && inspectorOpen && layout.focus === 'none';
+  const inspectorWidth = String(layout.inspectorPx) + 'px';
+  const shellColumns = splitInspector
+    ? inspectorLeft
+      ? inspectorWidth + ' 6px minmax(0, 1fr)'
+      : 'minmax(0, 1fr) 6px ' + inspectorWidth
+    : '1fr';
+  const companionColumn = showMonitorInspectorCompanion && inspectorLeft ? '2' : '1';
+  const monitorRow = layersAbove ? '2' : '1';
 
   const renderLayersPanel = (view: 'layers' | 'companion' | 'shortcuts'): JSX.Element => (
     <LayersPanel
@@ -390,7 +396,6 @@ export function App(): JSX.Element {
       onSelectionChange={setSelectedId}
       selectedId={selectedId}
       independentPreview={capabilities?.independentPreview === true}
-      {...(capabilities?.controlLiveLayouts === true && { onNewLiveLayout: openNewLiveLayout })}
       layout={layout}
       selectedOnly={view === 'companion'}
       shortcutsOnly={view === 'shortcuts'}
@@ -513,21 +518,30 @@ export function App(): JSX.Element {
           <LayerShortcutsListener />
           {(!showWorkspace || (monitorFocused && !showMonitorLayerCompanion)) &&
             renderLayersPanel('shortcuts')}
-          <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
+          <div
+            data-shell-inspector={splitInspector ? layout.positions.inspectorSide : undefined}
+            style={{ ...styles.shell, gridTemplateColumns: shellColumns }}
+          >
             {/* R-028 — the Library panel is GONE, not hidden: a template is no
             longer a thing parked in a side panel, so there is no side panel.
             Load lives on the row and does import+load in one action. */}
             {showWorkspace && (
               <section
+                data-workspace-layer-position={layout.positions.layerPosition}
+                data-monitor-companion={showMonitorLayerCompanion ? '' : undefined}
                 style={
                   showMonitorLayerCompanion
                     ? {
                         ...styles.workspace,
                         display: 'grid',
                         gridTemplateColumns: showMonitorInspectorCompanion
-                          ? 'minmax(0, 1fr) min(42%, clamp(17rem, 25vw, 25rem))'
+                          ? inspectorLeft
+                            ? 'min(42%, clamp(17rem, 25vw, 25rem)) minmax(0, 1fr)'
+                            : 'minmax(0, 1fr) min(42%, clamp(17rem, 25vw, 25rem))'
                           : 'minmax(0, 1fr)',
-                        gridTemplateRows: 'minmax(0, 1fr) auto',
+                        gridTemplateRows: layersAbove
+                          ? 'auto minmax(0, 1fr)'
+                          : 'minmax(0, 1fr) auto',
                       }
                     : styles.workspace
                 }
@@ -572,7 +586,7 @@ export function App(): JSX.Element {
                                 minWidth: 0,
                                 overflow: 'hidden',
                                 ...(showMonitorLayerCompanion
-                                  ? { gridColumn: '1', gridRow: '1' }
+                                  ? { gridColumn: companionColumn, gridRow: monitorRow }
                                   : {}),
                               }
                             : {
@@ -605,9 +619,10 @@ export function App(): JSX.Element {
                     {monitorsVisible && !monitorFocused && (
                       <ShellDivider
                         orientation="horizontal"
+                        invert={layersAbove}
                         value={layout.monitorPx}
                         onResize={layout.setMonitorPx}
-                        label="Resize the monitor strip"
+                        label={localizeUi('Resize the monitor strip')}
                       />
                     )}
                   </>
@@ -640,8 +655,8 @@ export function App(): JSX.Element {
                       minWidth: 0,
                       minHeight: 0,
                       overflow: 'hidden',
-                      gridColumn: '1',
-                      gridRow: '2',
+                      gridColumn: companionColumn,
+                      gridRow: layersAbove ? '1' : '2',
                     }}
                   >
                     {renderLayersPanel('companion')}
@@ -655,7 +670,7 @@ export function App(): JSX.Element {
                       minWidth: 0,
                       minHeight: 0,
                       overflow: 'hidden',
-                      gridColumn: '2',
+                      gridColumn: inspectorLeft ? '1' : '2',
                       gridRow: '1 / -1',
                     }}
                   >
@@ -666,13 +681,13 @@ export function App(): JSX.Element {
             )}
             {/* The divider only exists where there are two columns to divide — so it
                 goes away with a CLOSED Inspector, not just with a fullscreen one. */}
-            {!layout.narrow && inspectorOpen && layout.focus === 'none' && (
+            {splitInspector && (
               <ShellDivider
                 orientation="vertical"
-                invert
+                invert={!inspectorLeft}
                 value={layout.inspectorPx}
                 onResize={layout.setInspectorPx}
-                label="Resize the Inspector"
+                label={localizeUi('Resize the Inspector')}
               />
             )}
             {showInspectorColumn && renderInspector(closeInspector)}
@@ -706,6 +721,7 @@ export function App(): JSX.Element {
               className="cg-inspector-overlay"
               style={{
                 ...styles.overlayPanel,
+                ...(inspectorLeft && { left: 0, right: 'auto' }),
                 /* FULLSCREEN on a narrow screen means the whole width. The default
                    right-pinned width deliberately leaves the Layers list visible so
                    the operator can see what is ON AIR while editing it — but when they

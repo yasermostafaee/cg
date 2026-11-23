@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useId, useState } from 'react';
 import {
   DEFAULT_INPUT_SLIDE_DIRECTION,
@@ -40,6 +41,7 @@ export function InputEffectControls({
   itemId: string;
   layout?: ControlLiveLayout | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const durationId = useId();
   const consoleDefault = useInputTransitionPreference();
   const override = useRowEffectOverrides(itemId)?.input;
@@ -53,11 +55,11 @@ export function InputEffectControls({
   const [typedDuration, setTypedDuration] = useState<string | null>(null);
   return (
     <fieldset className="cg-position-effect">
-      <legend>Input effect</legend>
+      <legend>{localizeUi('Input effect')}</legend>
       <label>
-        Transition
+        {localizeUi('Transition')}
         <select
-          aria-label="Input transition"
+          aria-label={localizeUi('Input transition')}
           className="cg-field"
           value={layout !== undefined && override === undefined ? 'default' : mode}
           onChange={(event) => {
@@ -72,7 +74,8 @@ export function InputEffectControls({
         >
           {layout !== undefined && (
             <option value="default">
-              Layout default ({MODE_LABELS[authoredInputTransition(layout).mode]})
+              {localizeUi('Layout default (')}
+              {MODE_LABELS[authoredInputTransition(layout).mode]})
             </option>
           )}
           {InputTransitionSchema.shape.mode.options.map((value) => (
@@ -84,9 +87,9 @@ export function InputEffectControls({
       </label>
       {isInputSlideMode(mode) && (
         <label>
-          Direction
+          {localizeUi('Direction')}
           <select
-            aria-label="Input direction"
+            aria-label={localizeUi('Input direction')}
             className="cg-field"
             value={direction}
             onChange={(event) => {
@@ -104,7 +107,7 @@ export function InputEffectControls({
       )}
       {mode !== 'cut' && (
         <label htmlFor={durationId}>
-          Duration (ms)
+          {localizeUi('Duration (ms)')}
           <NumericInput
             id={durationId}
             className="cg-field"

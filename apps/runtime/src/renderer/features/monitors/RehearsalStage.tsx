@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import {
@@ -361,25 +362,30 @@ function MissingPageLine({
   name: string | null;
   channel: number;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const who = name === null ? "this row's template" : <bdi>{name}</bdi>;
   const ch = `CH ${String(channel)}`;
   switch (reason) {
     case 'not-listed':
       return (
         <span data-pvw-missing="not-listed">
-          {who} is not on {ch}’s list.
+          {who} {localizeUi('is not on')} {ch}
+          {localizeUi('’s list.')}
         </span>
       );
     case 'no-file':
       return (
         <span data-pvw-missing="no-file">
-          The bridge holds no page for {who} on {ch}.
+          {localizeUi('The bridge holds no page for')} {who} {localizeUi('on')} {ch}.
         </span>
       );
     case 'unreachable':
       return (
         <span data-pvw-missing="unreachable">
-          {who}: the bridge cannot be reached, and this browser holds no copy of its page.
+          {who}
+          {localizeUi(
+            ': the bridge cannot be reached, and this browser holds no copy of its page.',
+          )}
         </span>
       );
   }
@@ -412,6 +418,7 @@ export function RehearsalStage({
   onTransport,
   onSelectItem,
 }: Props): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const fitRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState(1);
@@ -896,7 +903,7 @@ export function RehearsalStage({
         ref={fitRef}
         style={styles.fitBox}
         role="group"
-        aria-label="Local preview"
+        aria-label={localizeUi('Local preview')}
         aria-description={playoutEngineWording(REHEARSAL_CAVEATS, engine)}
       >
         {/*

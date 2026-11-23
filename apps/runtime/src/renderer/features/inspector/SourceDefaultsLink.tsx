@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState, useSyncExternalStore } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
@@ -35,6 +36,7 @@ export function SourceDefaultsLink({
   /** `CHANNEL-SOURCES-01` — the row's channel: the dialog edits that channel's defaults. */
   channel: number;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [open, setOpen] = useState(false);
   /*
     Re-read when the catalogue or the assignments move: a plate that gains a source must stop
@@ -103,7 +105,7 @@ export function SourceDefaultsLink({
           `getComputedStyle` read could not have answered this — a decoration is PAINT, and the
           descendant's own `text-decoration-line` computes to `none` either way (golden rule 12c).
         */}
-        <span style={styles.label}>Source defaults</span>
+        <span style={styles.label}>{localizeUi('Source defaults')}</span>
         {warning !== undefined && (
           /*
             ⚠ **NEVER COLOUR ALONE.** The dot is amber — this palette's ATTENTION role, the

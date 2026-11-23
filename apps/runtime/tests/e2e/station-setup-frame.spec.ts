@@ -31,7 +31,7 @@ const TABS = [
   'Connection',
   'Live sources',
   'Text file delimiters',
-  'Lunar Hijri correction',
+  'General',
   'Layers',
 ] as const;
 

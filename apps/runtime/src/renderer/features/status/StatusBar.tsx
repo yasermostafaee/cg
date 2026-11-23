@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
   PLAYOUT_ENGINE_NAME,
   playoutEngineWording,
@@ -374,6 +375,7 @@ export function StatusBar({
    */
   backupChannels?: BackupChannelsState | null;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const playoutLinked = engine === PLAYOUT_ENGINE_NAME;
   const playoutConnection = connectionMode === 'playout';
@@ -436,14 +438,14 @@ export function StatusBar({
 
   if (health === null) {
     return (
-      <footer style={styles.bar} aria-label="Status bar">
+      <footer style={styles.bar} aria-label={localizeUi('Status bar')}>
         <LinkIndicator reach={casparReach} />
         <IdentityIndicator />
         <ReadOnlyIndicator />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
-        <Tag className="cg-pill" style={stale ? styles.stale : undefined}>
-          {stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…'}
+        <Tag className="cg-pill" data-server-health-stale={stale ? '' : undefined}>
+          {localizeUi(stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…')}
         </Tag>
         {programmeRole}
       </footer>
@@ -552,7 +554,7 @@ export function StatusBar({
    * state colour and changes with it.
    */
   return (
-    <footer style={styles.bar} aria-label="Status bar">
+    <footer style={styles.bar} aria-label={localizeUi('Status bar')}>
       <LinkIndicator reach={casparReach} />
       <IdentityIndicator />
       <ReadOnlyIndicator />
@@ -560,9 +562,9 @@ export function StatusBar({
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
         // the claim that convinced the operator a graphic was on air. Say the true thing.
-        <Tag className="cg-pill" aria-label="Server status">
+        <Tag className="cg-pill" aria-label={localizeUi('Server status')}>
           <span style={styles.failedHard}>
-            <Icon icon={TriangleAlert} size={11} /> NO SERVER — SIMULATED
+            <Icon icon={TriangleAlert} size={11} /> {localizeUi('NO SERVER — SIMULATED')}
           </span>
         </Tag>
       ) : (
@@ -587,7 +589,7 @@ export function StatusBar({
                   (playoutConnection || active) && !stale && !deaf ? styles.primary : styles.backup
                 }
               >
-                Server {server.label}
+                {localizeUi('Server')} {server.label}
                 {playoutConnection || stale ? '' : active ? ' · CG active' : ' · CG standby'}
               </span>
               {' · '}
@@ -597,7 +599,7 @@ export function StatusBar({
           {programmeRole}
           {health.backup === undefined && (
             <Tag className="cg-pill">
-              <span style={styles.backup}>No CG backup</span>
+              <span style={styles.backup}>{localizeUi('No CG backup')}</span>
             </Tag>
           )}
           {/*
@@ -652,7 +654,8 @@ export function StatusBar({
               aria-label={`No OSC from server ${health.primary.label}`}
             >
               <span style={styles.noOsc}>
-                <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.primary.label}
+                <Icon icon={TriangleAlert} size={11} /> {localizeUi('NO OSC FROM')}{' '}
+                {health.primary.label}
               </span>
             </Tag>
           )}
@@ -663,7 +666,8 @@ export function StatusBar({
               aria-label={`No OSC from server ${health.backup.label}`}
             >
               <span style={styles.noOsc}>
-                <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.backup.label}
+                <Icon icon={TriangleAlert} size={11} /> {localizeUi('NO OSC FROM')}{' '}
+                {health.backup.label}
               </span>
             </Tag>
           )}
@@ -694,7 +698,7 @@ export function StatusBar({
               } ${primaryDead.join(', ')}`}
             >
               <span style={styles.noOsc}>
-                ⚠ {health.primary.label} NOT PRODUCING · CH {primaryDead.join(', ')}
+                ⚠ {health.primary.label} {localizeUi('NOT PRODUCING · CH')} {primaryDead.join(', ')}
               </span>
             </Tag>
           )}
@@ -710,12 +714,12 @@ export function StatusBar({
               } ${backupDead.join(', ')}`}
             >
               <span style={styles.noOsc}>
-                ⚠ {health.backup.label} NOT PRODUCING · CH {backupDead.join(', ')}
+                ⚠ {health.backup.label} {localizeUi('NOT PRODUCING · CH')} {backupDead.join(', ')}
               </span>
             </Tag>
           )}
           {!playoutLinked && health.backup !== undefined && (
-            <Tag className="cg-pill" title="CG Bridge command strategy">
+            <Tag className="cg-pill" title={localizeUi('CG Bridge command strategy')}>
               {STRATEGY_LABEL[health.strategy]}
             </Tag>
           )}
@@ -756,7 +760,7 @@ export function StatusBar({
           It keeps its disabled state and its `title`, which is where "why can I not
           press this" actually belongs.
         */
-          aria-label="Manual CG failover"
+          aria-label={localizeUi('Manual CG failover')}
           disabled={failoverBlock !== undefined}
           title={failoverTitle}
           run={() =>
@@ -764,7 +768,7 @@ export function StatusBar({
           }
         >
           <Icon icon={ArrowLeftRight} />
-          CG failover
+          {localizeUi('CG failover')}
         </AsyncButton>
       )}
       {/*
@@ -795,7 +799,7 @@ export function StatusBar({
       */}
       {lockCoverage === 'all' ? (
         <span style={styles.lock}>
-          <Icon icon={Lock} size={11} /> LOCKED
+          <Icon icon={Lock} size={11} /> {localizeUi('LOCKED')}
         </span>
       ) : lock.engaged ? /*
           🔴 `B-257` — A LOCK THAT DOES NOT COVER ALL OF THIS CONSOLE says nothing here, and the
@@ -833,7 +837,7 @@ export function StatusBar({
           {/* 🔴 NO ELLIPSIS. `MODAL-CHROME-10` A §A2: the dots belong ONLY to a control that
               opens a BROWSE WINDOW. This opens the in-app PIN dialog. Label only — the lock
               still refuses everything and still asks for the PIN twice. */}
-          Lock
+          {localizeUi('Lock')}
         </Button>
       )}
       {engaging && (

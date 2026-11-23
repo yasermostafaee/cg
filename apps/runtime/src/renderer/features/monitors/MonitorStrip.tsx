@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { backupChannelLineText, type PgmEngine } from '@cg/shared-ipc';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { useBackupChannels } from '../../hooks/useBackupChannels.js';
@@ -32,16 +33,9 @@ interface Props {
 /**
  * The monitor strip: PREVIEW beside PROGRAM, in their final positions.
  *
- * ORDER IS PREVIEW-THEN-PROGRAM, left to right, which is the vision-mixer
- * convention every gallery already reads: what is NEXT on the left, what is ON
- * AIR on the right. Getting this backwards in a broadcast UI is not a cosmetic
- * complaint — an operator who reaches for the wrong box under time pressure is
- * looking at the wrong output.
- *
- * DELIBERATELY NOT RTL-FLIPPED. Persian/RTL is a core requirement of this
- * product and text throughout reverses, but PGM/PVW placement is a hardware
- * convention shared with the mixer, the multiviewer and the rack — those do not
- * flip, so neither does this. Recorded under "Decisions taken fast".
+ * Preview starts on the left. A workstation can move Programme to that side
+ * without remounting either panel. The choice uses physical orientation in both
+ * interface languages because monitor placement is a hardware convention.
  *
  * When one of the two is taken FULLSCREEN the strip shows only that one. The
  * strip reads the focus itself rather than making the shell special-case a
@@ -58,7 +52,8 @@ export function MonitorStrip({
   canEditPreviewPosition = false,
   onSelectPreviewItem,
 }: Props): JSX.Element {
-  const { focus } = useShellLayoutContext();
+  const localizeUi = useUiText();
+  const { focus, positions } = useShellLayoutContext();
   /*
     🔴 `CONSOLE-MATCH-03` §1 — the two facts PGM's strip states, read HERE and passed down.
 
@@ -193,7 +188,11 @@ export function MonitorStrip({
   const effectiveCompanionMode = hasSelectedLayer ? companionMode : 'monitor';
   const companionActions =
     focus === 'pgm' || focus === 'pvw' ? (
-      <div role="group" aria-label="Maximized monitor layout" data-monitor-companion-controls="">
+      <div
+        role="group"
+        aria-label={localizeUi('Maximized monitor layout')}
+        data-monitor-companion-controls=""
+      >
         {(
           [
             ['monitor', Monitor, 'Monitor only'],
@@ -235,7 +234,16 @@ export function MonitorStrip({
       renders unscaled until some unrelated re-render happens to re-measure it
       against a settled box. One missing floor, both symptoms.
     */
-    <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0, minWidth: 0 }}>
+    <div
+      data-workspace-monitor-order={positions.monitorOrder}
+      style={{
+        display: 'flex',
+        gap: '0.75rem',
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+      }}
+    >
       {/*
         The copy says what each output IS, in the operator's terms, naming no
         internal item number — the visible surface is not where the roadmap gets
@@ -268,7 +276,7 @@ export function MonitorStrip({
       {showPgm && (
         <MonitorPanel
           id="pgm"
-          title="PROGRAM (PGM)"
+          title={localizeUi('PROGRAM (PGM)')}
           word="PROGRAM"
           channel={viewChannel}
           onAirRows={onAirRows}

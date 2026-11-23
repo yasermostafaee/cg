@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useRef, useState } from 'react';
 import { colors, cssVars } from '../../theme.js';
@@ -126,6 +127,7 @@ export function SignInOverlay({
   /** `B-320` — start the console again after `Set up again` (a test passes its own). */
   reload?: () => void;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
   const [username, setUsername] = useState('');
@@ -227,9 +229,9 @@ export function SignInOverlay({
   */
   return (
     <SignInCard
-      label="Playout sign-in"
+      label={localizeUi('Playout sign-in')}
       ground="gate"
-      title="Sign in"
+      title={localizeUi('Sign in')}
       cardRef={cardRef}
       footer={
         /*
@@ -252,7 +254,8 @@ export function SignInOverlay({
     >
       {auth.kind === 'expired' && (
         <p style={styles.sub} data-session-ended="">
-          The session of <IsolatedName>{auth.name}</IsolatedName> has ended.
+          {localizeUi('The session of')} <IsolatedName>{auth.name}</IsolatedName>{' '}
+          {localizeUi('has ended.')}
         </p>
       )}
 
@@ -270,7 +273,7 @@ export function SignInOverlay({
       </div>
 
       <label htmlFor="cg-signin-user" style={styles.label}>
-        Username
+        {localizeUi('Username')}
       </label>
       <div style={styles.field}>
         <TextInput
@@ -282,7 +285,7 @@ export function SignInOverlay({
           // statement about the CONTENT, which is what the primitive's header asks for.
           dir="ltr"
           disabled={locked}
-          aria-label="Username"
+          aria-label={localizeUi('Username')}
           onKeyDown={(e) => {
             if (e.key === 'Enter') void submit();
           }}
@@ -290,7 +293,7 @@ export function SignInOverlay({
       </div>
 
       <label htmlFor="cg-signin-pass" style={styles.label}>
-        Password
+        {localizeUi('Password')}
       </label>
       <div style={styles.field}>
         <PasswordInput
@@ -302,7 +305,7 @@ export function SignInOverlay({
           ref={passwordRef}
           // B2 — only a wrong username or password marks the field.
           invalid={message?.marksField === true}
-          aria-label="Password"
+          aria-label={localizeUi('Password')}
           aria-describedby="cg-signin-error"
           onKeyDown={(e) => {
             if (e.key === 'Enter') void submit();

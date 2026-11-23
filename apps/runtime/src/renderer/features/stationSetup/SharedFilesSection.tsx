@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -13,6 +14,7 @@ export function SharedFilesSection({
 }: {
   report: (message: ModalMessage | null) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const admin = useHoldsStationAdmin();
   const [stored, setStored] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -54,15 +56,21 @@ export function SharedFilesSection({
   };
 
   return (
-    <section className="cg-card" aria-label="Shared files folder" data-shared-files-section="">
+    <section
+      className="cg-card"
+      aria-label={localizeUi('Shared files folder')}
+      data-shared-files-section=""
+    >
       <div className="cg-card__head">
-        <span className="cg-card__title">Shared files folder</span>
+        <span className="cg-card__title">{localizeUi('Shared files folder')}</span>
       </div>
       <div className="cg-card__body">
         {admin ? (
           <div className="cg-setup-fields cg-shared-files-fields">
             <label className="cg-setup-field" htmlFor="shared-files-path">
-              <span className="cg-setup-field__label">Path on CG Bridge server</span>
+              <span className="cg-setup-field__label">
+                {localizeUi('Path on CG Bridge server')}
+              </span>
               <TextInput
                 id="shared-files-path"
                 className="cg-field--mono"

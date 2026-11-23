@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState, useSyncExternalStore } from 'react';
 import type { ControlLiveLayout, LiveSourceDeclaration } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -72,6 +73,7 @@ export function TemplateDefaultsDialog({
   channel: number;
   layout?: ControlLiveLayout | undefined;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   /*
     The edit is LOCAL to this dialog and committed by its own button — it does not ride the
@@ -170,7 +172,7 @@ export function TemplateDefaultsDialog({
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={close}>
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           {/*
             ORDINARY PRIMARY. Saving a default destroys nothing and reaches no output, so it
@@ -184,14 +186,14 @@ export function TemplateDefaultsDialog({
             run={commit}
             onError={() => undefined}
           >
-            Save defaults
+            {localizeUi('Save defaults')}
           </AsyncButton>
         </>
       }
     >
       <div data-defaults-body="">
         <p style={styles.intro} data-defaults-intro="">
-          Edit the starting source mappings for{' '}
+          {localizeUi('Edit the starting source mappings for')}{' '}
           <strong>
             <IsolatedName>{templateName}</IsolatedName>
           </strong>
@@ -205,7 +207,7 @@ export function TemplateDefaultsDialog({
             through a re-import, and a blank panel would read as broken rather than as empty.
           */
           <p style={styles.empty} data-defaults-empty="">
-            This template declares no live plates, so it has no sources to default.
+            {localizeUi('This template declares no live plates, so it has no sources to default.')}
           </p>
         ) : (
           <>

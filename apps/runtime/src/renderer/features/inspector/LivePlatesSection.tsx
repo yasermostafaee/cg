@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useSyncExternalStore } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -118,6 +119,7 @@ export function LivePlatesSection({
    */
   channel: number;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
   const plates = info?.liveSources?.sources ?? [];
@@ -224,7 +226,7 @@ export function LivePlatesSection({
   */
 
   return (
-    <div className="cg-inspector-section" aria-label="Live plates">
+    <div className="cg-inspector-section" aria-label={localizeUi('Live plates')}>
       {/*
         ⚠ **THE DOOR IS HERE ONLY WHEN `PLATE INPUTS` IS NOT.** The owner's call is that the
         link sits above the frames (gh2) and not in a section of its own — so for a template
@@ -237,7 +239,7 @@ export function LivePlatesSection({
         fell into and reverted. Exactly one of the two hosts draws it, never both.
       */}
       <div className="cg-section-caption">
-        <h2>Live plates</h2>
+        <h2>{localizeUi('Live plates')}</h2>
         {!hasLooks && (
           <SourceDefaultsLink
             templateId={item.templateId}
@@ -316,13 +318,9 @@ export function LivePlatesSection({
                 }
               >
                 {/* `PLAYOUT-SOURCES-01` §2.B — the source as `SourceLabel` names it everywhere. */}
-                on air:{' '}
-                <SourceLabel
-                  sourceId={onAir.sourceId}
-                  fallback="nothing"
-                  meterChannel={channel}
-                />{' '}
-                (patched on this row)
+                {localizeUi('on air:')}{' '}
+                <SourceLabel sourceId={onAir.sourceId} fallback="nothing" meterChannel={channel} />{' '}
+                {localizeUi('(patched on this row)')}
               </span>
             )}
             {/*
@@ -353,9 +351,9 @@ export function LivePlatesSection({
                   `again to adopt it, or set this look’s input below to change it now.`
                 }
               >
-                this row:{' '}
+                {localizeUi('this row:')}{' '}
                 <SourceLabel sourceId={frozen.sourceId} fallback="nothing" meterChannel={channel} />{' '}
-                (frozen at take)
+                {localizeUi('(frozen at take)')}
               </span>
             )}
           </div>

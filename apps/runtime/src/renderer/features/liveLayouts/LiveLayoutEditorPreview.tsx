@@ -1,13 +1,17 @@
+import { useUiText } from '../../i18n/locale.js';
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from 'react';
 import { Maximize2 } from 'lucide-react';
+import { playoutMediaIdOf } from '@cg/shared-ipc';
 import {
   DEFAULT_LIVE_CROP_FOCUS,
   DEFAULT_LIVE_FIT_MODE,
@@ -42,12 +46,14 @@ import type { BroadcastGuideProfile } from '@cg/ui';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { liveLayoutArtwork } from '../../theme.js';
-import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
+import { fullJpegRect, pvwPlateMediaKey } from '../monitors/pvwPlatePictures.js';
+import { PlateMediaPlayer } from '../monitors/PvwMediaPlate.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
 import { FittedSafeAreaGuides } from '../monitors/SafeAreaGuides.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
-import type { NdiReceiver } from '../sources/directNdiPreview.js';
+import { currentSourceCatalog, subscribeSources } from '../sources/sourceStore.js';
 import { focusSlideOcclusion } from './focusSlideClip.js';
 import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import {
@@ -139,6 +145,7 @@ function CropDragSurface({
   sourceAspect: number;
   label: string;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const drag = useRef<{
     x: number;
     y: number;
@@ -153,7 +160,7 @@ function CropDragSurface({
       type="button"
       className="cg-live-layout-crop-drag"
       aria-label={'Adjust crop for ' + label}
-      title="Drag the picture or use the arrow keys to adjust the crop"
+      title={localizeUi('Drag the picture or use the arrow keys to adjust the crop')}
       onPointerDown={(event) => {
         if (!event.isPrimary || event.button !== 0) return;
         const { width, height } = event.currentTarget.getBoundingClientRect();
@@ -245,11 +252,11 @@ function ShotFallback({
   );
 }
 
-function NdiShotPicture({
+function CanvasShotPicture({
   receiver,
   style,
 }: {
-  receiver: NdiReceiver;
+  receiver: { attach: (canvas: HTMLCanvasElement) => () => void };
   style?: CSSProperties | undefined;
 }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -285,7 +292,8 @@ function ShotInput({
     mask === undefined
       ? [seat]
       : livePlateMaskRegions(mask).map((rect) => liveRevealSceneRect(seat, rect));
-  const receiver = source?.signal === 'present' ? source.directNdi : undefined;
+  const receiver =
+    source?.signal === 'present' ? (source.mediaPicture ?? source.directNdi) : undefined;
   const jpeg = source?.jpegBase64;
   if (receiver === undefined && jpeg === undefined) {
     const label = largestLivePlateMaskRegion(mask);
@@ -317,7 +325,7 @@ function ShotInput({
     receiver === undefined ? (
       <img src={url} alt="" style={style} />
     ) : (
-      <NdiShotPicture receiver={receiver} style={style} />
+      <CanvasShotPicture receiver={receiver} style={style} />
     );
   if (mask === undefined && pictureBox === undefined && sourceAspect !== null) {
     const active = source?.geometry?.activeRect ?? { x: 0, y: 0, width: 1, height: 1 };
@@ -537,9 +545,23 @@ export function LiveLayoutEditorPreview({
   stagePlacementEditor?: ReactNode;
   cropEditor?: CropEditor | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const stage = useRef<HTMLDivElement>(null);
   const active = useRef<Animation[]>([]);
   const previous = useRef<View>();
+  const catalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
+  const [mediaPictures, setMediaPictures] = useState<ReadonlyMap<string, PvwSourceFrame>>(
+    new Map(),
+  );
+  const onMediaPicture = useCallback((key: string, picture: PvwSourceFrame | undefined): void => {
+    setMediaPictures((current) => {
+      if (current.get(key) === picture) return current;
+      const next = new Map(current);
+      if (picture === undefined) next.delete(key);
+      else next.set(key, picture);
+      return next;
+    });
+  }, []);
   const raster = layout.resolution;
   const full: LiveSourceRect = { x: 0, y: 0, width: raster.width, height: raster.height };
   const frameOrder = controlLiveLayoutPresetFrameIds(preset);
@@ -732,8 +754,29 @@ export function LiveLayoutEditorPreview({
           const { id, sourceId } = input;
           const activeShot = visible[id] !== undefined;
           const rect = visible[id] ?? geometry[id] ?? full;
-          const preview = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
+          const pictureKey = pvwPlateMediaKey({ elementId: id, sourceId: sourceId ?? null });
+          const preview =
+            sourceId === undefined
+              ? undefined
+              : (mediaPictures.get(pictureKey) ?? sourceFrames.get(sourceId));
           const source = labelledSource(sourceId);
+          const mediaEntry = catalog.sources.find((entry) => entry.id === sourceId)?.media;
+          const mediaSource =
+            sourceId !== undefined &&
+            playoutMediaIdOf(sourceId) !== null &&
+            source?.origin === 'media' &&
+            !source.unavailable &&
+            (source.durationMs ?? 0) > 1
+              ? {
+                  id: sourceId,
+                  name: source.name,
+                  media:
+                    mediaEntry ??
+                    (source.durationMs === undefined
+                      ? undefined
+                      : { durationMs: source.durationMs }),
+                }
+              : undefined;
           const titleHidden = controlLiveLayoutTitleHidden(preset, id, focused !== undefined);
           const borderHidden = controlLiveLayoutBorderHidden(preset, id, focused !== undefined);
           const graphics = controlLiveLayoutFrameAttachments(layout, preset, id);
@@ -853,6 +896,18 @@ export function LiveLayoutEditorPreview({
                   label={focusLabel}
                 />
               )}
+              {activeShot && mediaSource !== undefined && (
+                <div className="cg-live-layout-shot-transport">
+                  <PlateMediaPlayer
+                    key={JSON.stringify([channel, pictureKey, mediaEntry?.fingerprint])}
+                    pictureKey={pictureKey}
+                    label={plateDisplayName(id, undefined, layout)}
+                    source={mediaSource}
+                    channel={channel}
+                    onPicture={onMediaPicture}
+                  />
+                </div>
+              )}
               {activeSingle === undefined && activeShot && stagePlacementEditor === undefined && (
                 <Button
                   className="cg-live-layout-focus-action"
@@ -880,7 +935,11 @@ export function LiveLayoutEditorPreview({
         )}
       </div>
       {activeSingle !== undefined && layout.frames.length > 1 && (
-        <div className="cg-live-layout-switch" role="group" aria-label="Switch focused plate">
+        <div
+          className="cg-live-layout-switch"
+          role="group"
+          aria-label={localizeUi('Switch focused plate')}
+        >
           {[...editorFrames]
             .sort(
               (a, b) => (a.position || layout.frames.length) - (b.position || layout.frames.length),

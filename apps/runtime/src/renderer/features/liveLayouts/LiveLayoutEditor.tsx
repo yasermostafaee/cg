@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   AudioLines,
@@ -226,6 +227,7 @@ export function LiveLayoutEditor({
   onSave,
   onClose,
 }: LiveLayoutEditorProps): JSX.Element | null {
+  const localizeUi = useUiText();
   const [layout, setLayout] = useState<ControlLiveLayout>(() =>
     mode === 'create' ? { ...initial, frames: [], presets: [], defaultPresetId: '' } : initial,
   );
@@ -950,7 +952,7 @@ export function LiveLayoutEditor({
 
   return (
     <Modal
-      title={titles[mode]}
+      title={localizeUi(titles[mode])}
       subtitle={`Channel ${String(channel)}`}
       emblem={LayoutGrid}
       size="library"
@@ -960,7 +962,7 @@ export function LiveLayoutEditor({
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onClose} disabled={busy}>
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           <ModalAction
             actionRole="primary"
@@ -982,15 +984,19 @@ export function LiveLayoutEditor({
       <fieldset
         className="cg-form cg-live-layout-editor"
         disabled={busy}
-        aria-label="Live layout editor"
+        aria-label={localizeUi('Live layout editor')}
       >
-        <aside className="cg-live-layout-presets" aria-label="Layout presets">
+        <aside className="cg-live-layout-presets" aria-label={localizeUi('Layout presets')}>
           <div className="cg-live-layout-panel-head">
             <h3>
-              <Icon icon={Layers3} size={16} /> Presets
+              <Icon icon={Layers3} size={16} /> {localizeUi('Presets')}
             </h3>
           </div>
-          <div className="cg-live-layout-preset-buttons" role="group" aria-label="Presets">
+          <div
+            className="cg-live-layout-preset-buttons"
+            role="group"
+            aria-label={localizeUi('Presets')}
+          >
             {layout.presets.map((candidate, index) => {
               const name = candidate.name.trim() || `Preset ${String(index + 1)}`;
               return (
@@ -1011,7 +1017,10 @@ export function LiveLayoutEditor({
                   <span className="cg-live-layout-preset-caption">
                     <IsolatedName>{name}</IsolatedName>
                     {candidate.id === layout.defaultPresetId && (
-                      <span className="cg-live-layout-preset-start" title="Starting preset">
+                      <span
+                        className="cg-live-layout-preset-start"
+                        title={localizeUi('Starting preset')}
+                      >
                         <Icon icon={Flag} size={13} />
                       </span>
                     )}
@@ -1021,14 +1030,18 @@ export function LiveLayoutEditor({
             })}
           </div>
           <Button variant="neutral" className="cg-live-layout-add-preset" onClick={appendPreset}>
-            <Icon icon={Plus} size={15} /> Add preset
+            <Icon icon={Plus} size={15} /> {localizeUi('Add preset')}
           </Button>
         </aside>
 
-        <section ref={preview} className="cg-live-layout-preview" aria-label="Layout preview">
+        <section
+          ref={preview}
+          className="cg-live-layout-preview"
+          aria-label={localizeUi('Layout preview')}
+        >
           <div className="cg-live-layout-preview-names">
             <label className="cg-live-layout-name" htmlFor={`${fieldsId}-layout-name`}>
-              Layout name
+              {localizeUi('Layout name')}
               <TextInput
                 id={`${fieldsId}-layout-name`}
                 value={layout.name}
@@ -1038,7 +1051,7 @@ export function LiveLayoutEditor({
               />
             </label>
             <div className="cg-form-field cg-live-layout-preset-name">
-              <label htmlFor={`${fieldsId}-preset-name`}>Preset name</label>
+              <label htmlFor={`${fieldsId}-preset-name`}>{localizeUi('Preset name')}</label>
               <TextInput
                 id={`${fieldsId}-preset-name`}
                 ref={presetName}
@@ -1052,20 +1065,20 @@ export function LiveLayoutEditor({
           </div>
           <div className="cg-live-layout-panel-head">
             <h3>
-              <Icon icon={Monitor} size={16} /> Preview · PVW
+              <Icon icon={Monitor} size={16} /> {localizeUi('Preview · PVW')}
             </h3>
             <div className="cg-live-layout-preview-actions">
               <div
                 className="cg-live-layout-safe-guides"
                 role="group"
-                aria-label="Layout safe guides"
+                aria-label={localizeUi('Layout safe guides')}
               >
                 <Button
                   variant="icon"
                   className="cg-live-layout-preview-toggle"
-                  aria-label="Safe areas"
+                  aria-label={localizeUi('Safe areas')}
                   aria-pressed={showSafeGuides}
-                  title={showSafeGuides ? 'Hide safe guides' : 'Show safe guides'}
+                  title={localizeUi(showSafeGuides ? 'Hide safe guides' : 'Show safe guides')}
                   onClick={() => setShowSafeGuides(!showSafeGuides)}
                 >
                   <Icon icon={SquareDashed} size={15} />
@@ -1078,16 +1091,18 @@ export function LiveLayoutEditor({
               </div>
               {focusId !== undefined && preset !== undefined && (
                 <Button ref={returnButton} variant="neutral" onClick={returnToPreset}>
-                  <Icon icon={RotateCcw} size={15} /> Return to{' '}
+                  <Icon icon={RotateCcw} size={15} /> {localizeUi('Return to')}{' '}
                   <IsolatedName>{preset.name || 'preset'}</IsolatedName>
                 </Button>
               )}
               <Button
                 variant="icon"
                 className="cg-live-layout-preview-toggle"
-                aria-label="VU meters"
+                aria-label={localizeUi('VU meters')}
                 aria-pressed={showPreviewMeters}
-                title={showPreviewMeters ? 'Hide preview VU meters' : 'Show preview VU meters'}
+                title={localizeUi(
+                  showPreviewMeters ? 'Hide preview VU meters' : 'Show preview VU meters',
+                )}
                 onClick={() => setShowPreviewMeters((visible) => !visible)}
               >
                 <Icon icon={AudioLines} size={15} />
@@ -1202,7 +1217,7 @@ export function LiveLayoutEditor({
           </div>
         </section>
 
-        <aside className="cg-live-layout-settings" aria-label="Layout settings panel">
+        <aside className="cg-live-layout-settings" aria-label={localizeUi('Layout settings panel')}>
           <TabStrip
             tabs={settingsTabs}
             activeId={settingsScope}
@@ -1215,7 +1230,7 @@ export function LiveLayoutEditor({
             <TabPanel activeId="preset" idPrefix={fieldsId}>
               <div className="cg-live-layout-scope">
                 <div className="cg-live-layout-panel-head">
-                  <h3>Preset settings</h3>
+                  <h3>{localizeUi('Preset settings')}</h3>
                 </div>
                 <div className="cg-form-toolbar">
                   <Button
@@ -1227,7 +1242,7 @@ export function LiveLayoutEditor({
                         setLayout((current) => ({ ...current, defaultPresetId: preset.id }));
                     }}
                   >
-                    <Icon icon={Flag} size={13} /> Start with this preset
+                    <Icon icon={Flag} size={13} /> {localizeUi('Start with this preset')}
                   </Button>
                   <Button
                     className="cg-live-layout-delete"
@@ -1237,7 +1252,7 @@ export function LiveLayoutEditor({
                     }
                     onClick={deletePreset}
                   >
-                    <Icon icon={Trash2} size={15} /> Delete preset
+                    <Icon icon={Trash2} size={15} /> {localizeUi('Delete preset')}
                   </Button>
                 </div>
               </div>
@@ -1247,16 +1262,20 @@ export function LiveLayoutEditor({
             <TabPanel activeId="layout" idPrefix={fieldsId}>
               <div className="cg-live-layout-scope">
                 <div className="cg-live-layout-panel-head">
-                  <h3>Layout settings</h3>
+                  <h3>{localizeUi('Layout settings')}</h3>
                 </div>
-                <div className="cg-live-layout-background" role="group" aria-label="Background">
-                  <span>Background</span>
+                <div
+                  className="cg-live-layout-background"
+                  role="group"
+                  aria-label={localizeUi('Background')}
+                >
+                  <span>{localizeUi('Background')}</span>
                   <Button
                     variant="neutral"
                     aria-pressed={layout.background.kind === 'none'}
                     onClick={() => setNonMediaBackground({ kind: 'none' })}
                   >
-                    None
+                    {localizeUi('None')}
                   </Button>
                   <span className="cg-live-layout-solid-color">
                     <Button
@@ -1266,20 +1285,20 @@ export function LiveLayoutEditor({
                         setNonMediaBackground({ kind: 'color', color: lastSolidColor.current })
                       }
                     >
-                      Solid color
+                      {localizeUi('Solid color')}
                     </Button>
                     {layout.background.kind === 'color' && (
                       <ColorInput
                         appearance="swatch"
                         value={layout.background.color.slice(0, 7)}
                         onChange={(color) => setNonMediaBackground({ kind: 'color', color })}
-                        aria-label="Background color"
+                        aria-label={localizeUi('Background color')}
                       />
                     )}
                   </span>
                   <Button
                     variant="neutral"
-                    aria-label="Choose background image or video"
+                    aria-label={localizeUi('Choose background image or video')}
                     aria-pressed={backgroundMedia !== undefined}
                     title={backgroundMedia?.name}
                     onClick={() => mediaPick.current?.click()}
@@ -1294,7 +1313,7 @@ export function LiveLayoutEditor({
                   <FileInput
                     hidden
                     ref={mediaPick}
-                    aria-label="Background media file"
+                    aria-label={localizeUi('Background media file')}
                     accept={CONTROL_LIVE_LAYOUT_BACKGROUND_ACCEPT}
                     onChange={(event) => {
                       const file = event.currentTarget.files?.[0];
@@ -1312,17 +1331,17 @@ export function LiveLayoutEditor({
           </div>
           <div className="cg-live-layout-settings-panel" hidden={settingsScope !== 'plate'}>
             <TabPanel activeId="plate" idPrefix={fieldsId}>
-              <section className="cg-live-layout-frames" aria-label="Plates">
+              <section className="cg-live-layout-frames" aria-label={localizeUi('Plates')}>
                 <div className="cg-live-layout-panel-head">
                   <h3>
-                    <Icon icon={LayoutGrid} size={16} /> Plates
+                    <Icon icon={LayoutGrid} size={16} /> {localizeUi('Plates')}
                   </h3>
                   <Button
                     variant="neutral"
                     disabled={layout.frames.length >= CONTROL_LIVE_LAYOUT_MAX_FRAMES}
                     onClick={appendFrame}
                   >
-                    <Icon icon={Plus} size={15} /> Add plate
+                    <Icon icon={Plus} size={15} /> {localizeUi('Add plate')}
                   </Button>
                 </div>
                 {frame !== undefined && (
@@ -1331,8 +1350,8 @@ export function LiveLayoutEditor({
                       className="cg-live-layout-frame-row cg-live-layout-frame-header"
                       aria-hidden="true"
                     >
-                      <span>Plate</span>
-                      {preset !== undefined && <span>In preset</span>}
+                      <span>{localizeUi('Plate')}</span>
+                      {preset !== undefined && <span>{localizeUi('In preset')}</span>}
                     </div>
                     {layout.frames.map((candidate, index) => {
                       const name = candidate.title.trim() || `Plate ${String(index + 1)}`;
@@ -1405,7 +1424,7 @@ export function LiveLayoutEditor({
                                 id={positionId}
                                 title={`Position ${String(position)} in this preset`}
                               >
-                                Pos {position}
+                                {localizeUi('Pos')} {position}
                               </span>
                             )}
                             <span className="cg-live-layout-selection-mark" aria-hidden="true">
@@ -1430,21 +1449,23 @@ export function LiveLayoutEditor({
                 {frame !== undefined && (
                   <div className="cg-live-layout-fields">
                     <div className="cg-live-layout-panel-head">
-                      <h3>Plate {frameNumber}</h3>
+                      <h3>
+                        {localizeUi('Plate')} {frameNumber}
+                      </h3>
                       <Button
                         className="cg-live-layout-delete"
                         variant="danger"
                         disabled={mode !== 'create' && layout.frames.length <= 1}
                         onClick={deleteFrame}
                       >
-                        <Icon icon={Trash2} size={15} /> Delete plate
+                        <Icon icon={Trash2} size={15} /> {localizeUi('Delete plate')}
                       </Button>
                     </div>
                     <div className="cg-form-field cg-form-field--inline cg-live-layout-frame-field">
-                      <label htmlFor={`${fieldsId}-input`}>Input</label>
+                      <label htmlFor={`${fieldsId}-input`}>{localizeUi('Input')}</label>
                       <SourcePicker
                         id={`${fieldsId}-input`}
-                        aria-label="Plate input"
+                        aria-label={localizeUi('Plate input')}
                         channel={channel}
                         value={frame.sourceId ?? ''}
                         choices={[{ value: '', label: 'Unassigned' }]}
@@ -1459,7 +1480,7 @@ export function LiveLayoutEditor({
                       className="cg-form-field cg-form-field--inline cg-live-layout-frame-field"
                       htmlFor={`${fieldsId}-title`}
                     >
-                      Title
+                      {localizeUi('Title')}
                       <TextInput
                         id={`${fieldsId}-title`}
                         ref={titleInput}
@@ -1472,9 +1493,9 @@ export function LiveLayoutEditor({
                     <label
                       className="cg-form-field cg-form-field--inline cg-live-layout-frame-field cg-live-layout-focus-label"
                       htmlFor={`${fieldsId}-focus-label`}
-                      title="Label on Focus buttons"
+                      title={localizeUi('Label on Focus buttons')}
                     >
-                      Focus label
+                      {localizeUi('Focus label')}
                       <TextInput
                         id={`${fieldsId}-focus-label`}
                         value={frame.focusAlias ?? ''}
@@ -1488,7 +1509,9 @@ export function LiveLayoutEditor({
                     </label>
                     {preset !== undefined && framePosition >= 0 && presetFrameIds.length > 1 && (
                       <div className="cg-form-field cg-form-field--inline cg-live-layout-position-picker">
-                        <span id={`${fieldsId}-position-label`}>Position in preset</span>
+                        <span id={`${fieldsId}-position-label`}>
+                          {localizeUi('Position in preset')}
+                        </span>
                         <div
                           className="cg-live-layout-frame-position"
                           role="group"
@@ -1555,7 +1578,7 @@ export function LiveLayoutEditor({
                               })
                             }
                           />
-                          Show title in preset
+                          {localizeUi('Show title in preset')}
                         </label>
                         <label
                           className="cg-live-layout-toggle"
@@ -1574,7 +1597,7 @@ export function LiveLayoutEditor({
                               })
                             }
                           />
-                          Show title in Focus
+                          {localizeUi('Show title in Focus')}
                         </label>
                       </div>
                     )}

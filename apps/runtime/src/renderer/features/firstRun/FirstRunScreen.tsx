@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { PLAYOUT_ENGINE_NAME, playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CatalogueChannel, SetupPhase } from '@cg/shared-ipc';
@@ -109,6 +110,7 @@ export function FirstRunScreen({
   phase: SetupPhase;
   signInUrl: string | null;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const auth = useAuthSession();
   const cardRef = useRef<HTMLDivElement>(null);
   const [done, setDone] = useState(false);
@@ -132,9 +134,9 @@ export function FirstRunScreen({
   */
   return (
     <SignInCard
-      label="Set up CG Control"
+      label={localizeUi('Set up CG Control')}
       ground="first-run"
-      title="Set up"
+      title={localizeUi('Set up')}
       wide
       cardRef={cardRef}
       data={{ 'data-first-run': phase }}
@@ -225,6 +227,7 @@ function SignInStep({
   /** B2 — the Playout did not answer the sign-in: the check says so, under the address. */
   onPlayoutSilent: () => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<{
@@ -287,8 +290,8 @@ function SignInStep({
   const locked = busy || refused;
 
   return (
-    <section style={styles.step} aria-label="Sign in">
-      <h3 style={styles.stepHead}>Sign in</h3>
+    <section style={styles.step} aria-label={localizeUi('Sign in')}>
+      <h3 style={styles.stepHead}>{localizeUi('Sign in')}</h3>
       {blocker !== null && (
         <div data-sign-in-blocker="">
           <ConnectionCheckList lines={[blocker]} />
@@ -296,7 +299,7 @@ function SignInStep({
       )}
       <div style={styles.row}>
         <label htmlFor="cg-first-run-user" style={styles.label}>
-          Username
+          {localizeUi('Username')}
         </label>
         <div style={styles.grow}>
           <TextInput
@@ -314,7 +317,7 @@ function SignInStep({
       </div>
       <div style={styles.row}>
         <label htmlFor="cg-first-run-pass" style={styles.label}>
-          Password
+          {localizeUi('Password')}
         </label>
         <div style={styles.grow}>
           <PasswordInput
@@ -446,6 +449,7 @@ export function ChannelStep({
   /** `MULTI-CHANNEL-01` §2 M — the set the step opens on: the station's own, or none (a). */
   initial?: readonly ChannelCoordinate[];
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [catalogue, setCatalogue] = useState<Catalogue>({ state: 'reading' });
   const [picked, setPicked] = useState<readonly ChannelCoordinate[]>(initial);
   const [manualHost, setManualHost] = useState(playoutHost);
@@ -603,10 +607,10 @@ export function ChannelStep({
 
   return (
     <>
-      <section style={styles.step} aria-label="Channel">
-        <h3 style={styles.stepHead}>Channel</h3>
+      <section style={styles.step} aria-label={localizeUi('Channel')}>
+        <h3 style={styles.stepHead}>{localizeUi('Channel')}</h3>
         {catalogue.state === 'reading' && (
-          <div style={styles.note}>Reading the Playout's channels…</div>
+          <div style={styles.note}>{localizeUi("Reading the Playout's channels…")}</div>
         )}
         {catalogue.state === 'refused' && (
           <div style={styles.error} role="status">
@@ -614,7 +618,9 @@ export function ChannelStep({
           </div>
         )}
         {catalogue.state === 'rows' && catalogue.rows.length === 0 && (
-          <div style={styles.note}>The Playout lists no channel for this account.</div>
+          <div style={styles.note}>
+            {localizeUi('The Playout lists no channel for this account.')}
+          </div>
         )}
         {!manual &&
           groupByHost(rows).map((group, _i, all) => (
@@ -665,7 +671,7 @@ export function ChannelStep({
           <>
             <div style={styles.row}>
               <label htmlFor="cg-first-run-host" style={styles.label}>
-                {PLAYOUT_ENGINE_NAME} host
+                {PLAYOUT_ENGINE_NAME} {localizeUi('host')}
               </label>
               <div style={styles.grow}>
                 <TextInput
@@ -679,7 +685,7 @@ export function ChannelStep({
             </div>
             <div style={styles.row}>
               <label htmlFor="cg-first-run-channel" style={styles.label}>
-                Channel
+                {localizeUi('Channel')}
               </label>
               <div style={styles.grow}>
                 <NumericInput
@@ -695,11 +701,11 @@ export function ChannelStep({
       </section>
 
       {host !== '' && showServeAddress && (
-        <section style={styles.step} aria-label="Serve address">
-          <h3 style={styles.stepHead}>Serve address</h3>
+        <section style={styles.step} aria-label={localizeUi('Serve address')}>
+          <h3 style={styles.stepHead}>{localizeUi('Serve address')}</h3>
           <div style={styles.row}>
             <label htmlFor="cg-first-run-serve" style={styles.label}>
-              This machine
+              {localizeUi('This machine')}
             </label>
             <div style={styles.grow}>
               <TextInput

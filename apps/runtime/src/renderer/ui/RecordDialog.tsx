@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from 'react';
 import { Modal, ModalAction, type ModalMessage } from './Modal.js';
 
@@ -72,6 +73,7 @@ export function RecordDialog({
    */
   onSubmit: () => string | null;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const [refusal, setRefusal] = useState<string | null>(null);
   const message: ModalMessage[] =
     refusal === null ? [] : [{ role: 'refusal' as const, text: refusal }];
@@ -96,7 +98,7 @@ export function RecordDialog({
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onCancel}>
-            Cancel
+            {localizeUi('Cancel')}
           </ModalAction>
           {/* ⭐ §8 — ONE primary, and its label NAMES THE ACT: `Add to draft`, `Add delimiter`,
               `Lock`. Never `OK`, never a bare `Save` — the caller supplies the verb

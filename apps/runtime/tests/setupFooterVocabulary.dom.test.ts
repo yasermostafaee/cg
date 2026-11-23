@@ -76,7 +76,7 @@ describe('B-240 — one job, one control, one name', () => {
       'servers',
       'sources',
       'delimiters',
-      'calendar',
+      'general',
       'candidate-layers',
     ] as const) {
       await selectSetupTab(dialog, id);

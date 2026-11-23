@@ -239,7 +239,21 @@ export function rowNameFor(
  * NOT composited here (PGM is the surface for air), so the count and the caption
  * have to agree that this is the rehearsal set and nothing else.
  */
-export function rehearsalCaption(shown: number, rehearsing: number): string {
+export function rehearsalCaption(
+  shown: number,
+  rehearsing: number,
+  translate?: (key: string, values?: Readonly<Record<string, string | number>>) => string,
+): string {
+  if (translate !== undefined) {
+    const row = translate(rehearsing === 1 ? 'row' : 'rows');
+    return shown < rehearsing
+      ? translate('Rehearsing {count} {row} — showing {shown} of {count}', {
+          count: rehearsing,
+          row,
+          shown,
+        })
+      : translate('Rehearsing {count} {row}', { count: rehearsing, row });
+  }
   const noun = rehearsing === 1 ? 'row' : 'rows';
   if (shown < rehearsing) {
     return `Rehearsing ${String(rehearsing)} ${noun} — showing ${String(shown)} of ${String(rehearsing)}`;

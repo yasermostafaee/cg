@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { useMemo } from 'react';
 import {
@@ -162,6 +163,7 @@ export function OrphanLayersBanner({
   ownedOccupancy,
   clearedOutside,
 }: Props): JSX.Element | null {
+  const localizeUi = useUiText();
   // Above the idle-quiet early return: a hook cannot be called conditionally.
   const { confirm, confirmDialog } = useConfirm();
   /**
@@ -323,7 +325,7 @@ export function OrphanLayersBanner({
           clearOne(o);
         }}
       >
-        CLEAR
+        {localizeUi('CLEAR')}
       </Button>
     );
   };
@@ -336,7 +338,7 @@ export function OrphanLayersBanner({
       <div style={styles.allRow}>
         <Button
           variant="caution"
-          aria-label="Clear all listed layers"
+          aria-label={localizeUi('Clear all listed layers')}
           disabled={clearRefusal !== undefined}
           title={
             clearRefusal ??
@@ -346,7 +348,7 @@ export function OrphanLayersBanner({
             clearListed(targets);
           }}
         >
-          CLEAR ALL LISTED
+          {localizeUi('CLEAR ALL LISTED')}
         </Button>
       </div>
     );
@@ -358,7 +360,7 @@ export function OrphanLayersBanner({
         <div
           style={{ ...styles.strip, ...styles.dismissible }}
           role="alert"
-          aria-label="Layers cleared outside CG Control"
+          aria-label={localizeUi('Layers cleared outside CG Control')}
         >
           <div style={styles.lines}>
             {cleared.map((e) => {
@@ -376,7 +378,7 @@ export function OrphanLayersBanner({
             })}
           </div>
           <NoticeDismiss
-            label="Dismiss this notice"
+            label={localizeUi('Dismiss this notice')}
             onDismiss={() => {
               dismissClearedOutside(clearedOutside);
             }}
@@ -387,7 +389,7 @@ export function OrphanLayersBanner({
         <div
           style={{ ...styles.strip, ...styles.dismissible }}
           role="alert"
-          aria-label="HTML producers outside your stack"
+          aria-label={localizeUi('HTML producers outside your stack')}
         >
           <div style={styles.lines}>
             {htmlOrphans.map((o) => {
@@ -395,8 +397,11 @@ export function OrphanLayersBanner({
               return (
                 <div key={name} style={styles.row}>
                   <span>
-                    ⚠ Layer {name} has an HTML producer outside your stack.{' '}
-                    <span style={styles.detail}>Check Program before clearing.</span>
+                    {localizeUi('⚠ Layer')} {name}{' '}
+                    {localizeUi('has an HTML producer outside your stack.')}{' '}
+                    <span style={styles.detail}>
+                      {localizeUi('Check Program before clearing.')}
+                    </span>
                   </span>
                   {clearButton(o)}
                 </div>
@@ -405,7 +410,7 @@ export function OrphanLayersBanner({
             {clearAllRow(htmlOrphans)}
           </div>
           <NoticeDismiss
-            label="Dismiss this notice"
+            label={localizeUi('Dismiss this notice')}
             onDismiss={() => {
               dismissForeignStrip(orphans, 'graphic');
             }}
@@ -416,7 +421,7 @@ export function OrphanLayersBanner({
         <div
           style={{ ...styles.neutralStrip, ...styles.dismissible }}
           role="status"
-          aria-label="Video producers outside your stack"
+          aria-label={localizeUi('Video producers outside your stack')}
         >
           <div style={styles.lines}>
             {foreignLayers.map((o) => {
@@ -430,11 +435,12 @@ export function OrphanLayersBanner({
                     none, and says so.
                   */}
                   <span>
-                    Layer {name} is carrying video ({o.producer}).
+                    {localizeUi('Layer')} {name} {localizeUi('is carrying video (')}
+                    {o.producer}).
                     {!canClear && (
                       <>
                         {' '}
-                        <span style={styles.detail}>Not clearable from here.</span>
+                        <span style={styles.detail}>{localizeUi('Not clearable from here.')}</span>
                       </>
                     )}
                   </span>
@@ -445,7 +451,7 @@ export function OrphanLayersBanner({
             {clearAllRow(foreignLayers)}
           </div>
           <NoticeDismiss
-            label="Dismiss this notice"
+            label={localizeUi('Dismiss this notice')}
             onDismiss={() => {
               dismissForeignStrip(orphans, 'video');
             }}
@@ -453,7 +459,11 @@ export function OrphanLayersBanner({
         </div>
       )}
       {ownedOccupancy.length > 0 && (
-        <div style={styles.strip} role="alert" aria-label="Owned-layer occupancy warnings">
+        <div
+          style={styles.strip}
+          role="alert"
+          aria-label={localizeUi('Owned-layer occupancy warnings')}
+        >
           {ownedOccupancy.map((w) => {
             const name = `${String(w.channel)}-${String(w.layer)}`;
             const owner = ownerName(w);
@@ -481,11 +491,16 @@ export function OrphanLayersBanner({
                     Each name in its own `<bdi>`: the row name is Persian, the template name
                     is usually Latin, and the ` · ` between them is a neutral.
                   */}
-                  ⚠ Layer {name} may still show a previous session’s graphic on the primary, put
-                  there by <OperatorNames name={owner} />{' '}
+                  {localizeUi('⚠ Layer')} {name}{' '}
+                  {localizeUi(
+                    'may still show a previous session’s graphic on the primary, put there by',
+                  )}{' '}
+                  <OperatorNames name={owner} />{' '}
                   <span style={styles.detail}>
-                    ({w.producer} producer observed when the item loaded and the primary could not
-                    be cleared — Out or Remove the item to clear it)
+                    ({w.producer}{' '}
+                    {localizeUi(
+                      'producer observed when the item loaded and the primary could not be cleared — Out or Remove the item to clear it)',
+                    )}
                   </span>
                 </span>
               </div>

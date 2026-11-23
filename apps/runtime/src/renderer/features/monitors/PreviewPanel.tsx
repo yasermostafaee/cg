@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { isPositionLocked } from '../inspector/PositionPicker.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
@@ -170,6 +171,7 @@ export function PreviewPanel({
   selectedItemId?: string | null | undefined;
   hidden?: boolean;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const engine = useEngineName();
   const rehearsals = useRehearse();
   const items = useStack();
@@ -590,7 +592,7 @@ export function PreviewPanel({
   return (
     <Panel
       id="pvw"
-      title="PREVIEW (PVW)"
+      title={localizeUi('PREVIEW (PVW)')}
       compactHead
       heading={<MonitorHead word="PREVIEW" channel={viewChannel} tone="pvw" />}
       /*
@@ -614,13 +616,13 @@ export function PreviewPanel({
             {subjects.length}
             <span className="cg-pvw-count-label">
               {' '}
-              {subjects.length === 1 ? 'layer' : 'layers'} on PVW
+              {localizeUi(subjects.length === 1 ? 'layer on PVW' : 'layers on PVW')}
             </span>
           </MonitorHeadFact>
           <Button
             variant="ghost"
             active={moveOpen}
-            aria-label="Move template in Preview"
+            aria-label={localizeUi('Move template in Preview')}
             aria-pressed={moveOpen}
             data-monitor-move=""
             disabled={!moveAvailable}
@@ -632,18 +634,18 @@ export function PreviewPanel({
             onClick={() => toggleEditTool('move')}
           >
             <Icon icon={Hand} size={13} />
-            <span className="cg-pvw-tool-label">Move template</span>
+            <span className="cg-pvw-tool-label">{localizeUi('Move template')}</span>
           </Button>
           <Button
             variant={safeAreasVisible ? 'accent' : 'ghost'}
-            aria-label="Safe areas in Preview"
+            aria-label={localizeUi('Safe areas in Preview')}
             aria-pressed={safeAreasVisible}
             data-monitor-safe-areas=""
             title={BROADCAST_SAFE_AREA_TITLE}
             onClick={() => safeGuides.setVisible(!safeAreasVisible)}
           >
             <Icon icon={SquareDashed} size={13} />
-            <span className="cg-pvw-tool-label">Safe areas</span>
+            <span className="cg-pvw-tool-label">{localizeUi('Safe areas')}</span>
           </Button>
           <SafeGuideSettings
             profile={safeGuides.profile}
@@ -654,7 +656,7 @@ export function PreviewPanel({
             <Button
               variant="ghost"
               active={panOpen}
-              aria-label="Crop input in Preview"
+              aria-label={localizeUi('Crop input in Preview')}
               aria-pressed={panOpen}
               data-monitor-pan=""
               disabled={!panAvailable}
@@ -666,35 +668,35 @@ export function PreviewPanel({
               onClick={() => toggleEditTool('pan')}
             >
               <Icon icon={Crop} size={13} />
-              <span className="cg-pvw-tool-label">Crop input</span>
+              <span className="cg-pvw-tool-label">{localizeUi('Crop input')}</span>
             </Button>
           )}
           {frameEditAvailable && (
             <Button
               variant="ghost"
               active={frameEditOpen}
-              aria-label="Edit frames in Preview"
+              aria-label={localizeUi('Edit frames in Preview')}
               aria-pressed={frameEditOpen}
               data-monitor-frames=""
-              title="Move or resize an editable frame in Preview"
+              title={localizeUi('Move or resize an editable frame in Preview')}
               onClick={() => toggleEditTool('frames')}
             >
               <Icon icon={Frame} size={13} />
-              <span className="cg-pvw-tool-label">Edit frames</span>
+              <span className="cg-pvw-tool-label">{localizeUi('Edit frames')}</span>
             </Button>
           )}
           {maskEditAvailable && (
             <Button
               variant="ghost"
               active={maskEditOpen}
-              aria-label="Edit masks in Preview"
+              aria-label={localizeUi('Edit masks in Preview')}
               aria-pressed={maskEditOpen}
               data-monitor-masks=""
-              title="Move or resize an authored mask in Preview"
+              title={localizeUi('Move or resize an authored mask in Preview')}
               onClick={() => toggleEditTool('masks')}
             >
               <Icon icon={Scan} size={13} />
-              <span className="cg-pvw-tool-label">Edit masks</span>
+              <span className="cg-pvw-tool-label">{localizeUi('Edit masks')}</span>
             </Button>
           )}
           {companionActions}
@@ -736,24 +738,28 @@ export function PreviewPanel({
               disabled={transport === null || !transport.ready}
               aria-label={
                 transport === null || transport.count === 1
-                  ? verb.toUpperCase()
-                  : `${verb.toUpperCase()} ${verb === 'next' ? 'on all' : 'all'} ${String(transport.count)} rehearsing`
+                  ? localizeUi(verb.toUpperCase())
+                  : localizeUi('{verb} {scope} {count} rehearsing', {
+                      verb: localizeUi(verb.toUpperCase()),
+                      scope: localizeUi(verb === 'next' ? 'on all' : 'all'),
+                      count: transport.count,
+                    })
               }
-              title={playoutEngineWording(PVW_TRANSPORT_TITLE[verb], engine)}
+              title={playoutEngineWording(localizeUi(PVW_TRANSPORT_TITLE[verb]), engine)}
               onClick={() => {
                 transport?.drive(verb);
               }}
             >
               <Icon icon={PVW_TRANSPORT_ICON[verb]} size={12} />
-              {verb.toUpperCase()}
+              {localizeUi(verb.toUpperCase())}
             </Button>
           ))}
         </span>
         {(frameEffect.motion !== 'cut' || frameEffect.fade) && transport?.canReplayEffect && (
           <Button
             variant="secondary"
-            aria-label="Preview frame effect"
-            title="Preview frame effect"
+            aria-label={localizeUi('Preview frame effect')}
+            title={localizeUi('Preview frame effect')}
             onClick={transport.replayEffect}
           >
             <Icon icon={Sparkles} size={12} />
@@ -764,9 +770,9 @@ export function PreviewPanel({
           above drive EVERY rehearsing frame, never the selected one, and an operator who
           assumes otherwise presses PLAY expecting one graphic to move.
         */}
-        <span className="cg-pvw-scope">ALL LAYERS</span>
+        <span className="cg-pvw-scope">{localizeUi('ALL LAYERS')}</span>
         <span className="cg-monitor-fact" data-rehearsal-caption="">
-          {rehearsalCaption(renderableCount, subjects.length)}
+          {rehearsalCaption(renderableCount, subjects.length, localizeUi)}
         </span>
         {previewAudio.inputs.length > 0 && <PreviewInputAudio audio={previewAudio} />}
         {previewAudio.failure !== undefined && (
@@ -790,7 +796,9 @@ export function PreviewPanel({
           <div
             style={styles.screen}
             role="img"
-            aria-label="PREVIEW — No layers on preview. Use ON PVW on one or more loaded rows to render them here."
+            aria-label={localizeUi(
+              'PREVIEW — No layers on preview. Use ON PVW on one or more loaded rows to render them here.',
+            )}
           >
             <Icon icon={SquareDashed} size={22} />
             {/*
@@ -801,10 +809,12 @@ export function PreviewPanel({
             kept is the last sentence: `R-022` is explicit that nothing here is sent to
             CasparCG, and that is the fact an operator must not have to infer from a blank box.
           */}
-            <span style={styles.label}>No layers on preview</span>
+            <span style={styles.label}>{localizeUi('No layers on preview')}</span>
             <span style={styles.detail}>
-              Use ON PVW on one or more loaded rows and their graphics render here, in this browser,
-              with the field values you have typed. Nothing is sent to {engine}.
+              {localizeUi(
+                'Use ON PVW on one or more loaded rows and their graphics render here, in this browser, with the field values you have typed. Nothing is sent to',
+              )}{' '}
+              {engine}.
             </span>
           </div>
         ) : (
@@ -846,6 +856,7 @@ function PreviewInputAudio({
 }: {
   audio: ReturnType<typeof usePreviewAudioControls>;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const { inputs, activeId } = audio;
   const [selected, select] = useState<string>();
   const input =
@@ -859,7 +870,7 @@ function PreviewInputAudio({
       {inputs.length > 1 && (
         <select
           className="cg-pgm-audio-select"
-          aria-label="Preview live-input sound source"
+          aria-label={localizeUi('Preview live-input sound source')}
           value={input.id}
           onChange={(event) => {
             const id = event.currentTarget.value;
@@ -876,7 +887,7 @@ function PreviewInputAudio({
       )}
       <Button
         variant="ghost"
-        aria-label="Preview live-input sound"
+        aria-label={localizeUi('Preview live-input sound')}
         aria-pressed={state === 'audible'}
         title={
           (state === 'connecting'

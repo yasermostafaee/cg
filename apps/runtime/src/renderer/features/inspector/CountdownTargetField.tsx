@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useState } from 'react';
 import { masksOfValue } from '@cg/gesture';
 import { clockWords, machineClock, sameClock, type BridgeClock } from '@cg/shared-ipc';
@@ -107,6 +108,7 @@ export function CountdownTargetField({
   dirty: boolean;
   onStage: (next: FieldValue) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const lunarAdjust = useLunarAdjustDays();
   const caps = useAuthCapabilities();
   const [calendar] = useCalendarChoice();
@@ -155,24 +157,24 @@ export function CountdownTargetField({
         <Button
           variant="neutral"
           aria-haspopup="dialog"
-          aria-label="Edit countdown target"
+          aria-label={localizeUi('Edit countdown target')}
           onClick={() => {
             setReady(false);
             setDuration('');
             setDraft(text);
           }}
         >
-          Edit…
+          {localizeUi('Edit…')}
         </Button>
       </div>
       {draft !== null && (
         <Modal
-          title="Edit countdown target"
+          title={localizeUi('Edit countdown target')}
           onClose={() => setDraft(null)}
           footer={
             <>
               <ModalAction actionRole="cancel" onClick={() => setDraft(null)}>
-                Cancel
+                {localizeUi('Cancel')}
               </ModalAction>
               <ModalAction
                 actionRole="primary"
@@ -182,7 +184,7 @@ export function CountdownTargetField({
                   setDraft(null);
                 }}
               >
-                Done
+                {localizeUi('Done')}
               </ModalAction>
             </>
           }
@@ -199,9 +201,13 @@ export function CountdownTargetField({
               aria-label={fieldId}
               dirty={dirty || draft !== text}
             />
-            <div className="cg-datetime__row" role="group" aria-label="Custom duration from now">
+            <div
+              className="cg-datetime__row"
+              role="group"
+              aria-label={localizeUi('Custom duration from now')}
+            >
               <TextInput
-                aria-label="Custom duration"
+                aria-label={localizeUi('Custom duration')}
                 aria-describedby={durationHintId}
                 className="cg-datetime__mask"
                 dir="ltr"
@@ -215,11 +221,11 @@ export function CountdownTargetField({
                 disabled={duration.trim() === '' || durationInvalid}
                 onClick={addDuration}
               >
-                Add time
+                {localizeUi('Add time')}
               </Button>
             </div>
             <p className="cg-field-fact" id={durationHintId}>
-              h:mm:ss, m:ss or seconds
+              {localizeUi('h:mm:ss, m:ss or seconds')}
             </p>
             {durationInvalid && (
               <p className="cg-field-fact" role="status">
@@ -239,13 +245,13 @@ export function CountdownTargetField({
       {clocks !== null && (
         <div className="cg-datetime__facts" data-countdown-clocks="">
           <Tag className="cg-meta-chip" data-testid="playout-clock">
-            <span className="cg-meta-chip__label">Playout clock</span>
+            <span className="cg-meta-chip__label">{localizeUi('Playout clock')}</span>
             <span className="cg-meta-chip__value">
               <bdi>{clocks.playout}</bdi>
             </span>
           </Tag>
           <Tag className="cg-meta-chip" data-testid="console-clock">
-            <span className="cg-meta-chip__label">This console</span>
+            <span className="cg-meta-chip__label">{localizeUi('This console')}</span>
             <span className="cg-meta-chip__value">
               <bdi>{clocks.console}</bdi>
             </span>

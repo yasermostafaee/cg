@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { useState } from 'react';
 import type {
   BackupChannelEntry,
@@ -64,6 +65,7 @@ export function BackupChannelsCard({
   /** A Playout-connected station still uses the Bridge's independent graphics backup. */
   bridgeAutoFailover?: boolean;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   const [drafts, setDrafts] = useState<Readonly<Record<number, number | null>>>({});
   const [saving, setSaving] = useState(false);
   const backup = state?.backup ?? null;
@@ -90,12 +92,16 @@ export function BackupChannelsCard({
   const invalid = rows.some((row) => row.dirty && refusalFor(row.line, row.choice) !== null);
 
   return (
-    <section className="cg-card" aria-label="Backup engine" data-backup-channels-card="">
+    <section
+      className="cg-card"
+      aria-label={localizeUi('Backup engine')}
+      data-backup-channels-card=""
+    >
       <div className="cg-card__head">
         <Tag className="cg-setup-server-chip" aria-hidden="true">
           B
         </Tag>
-        <span className="cg-card__title">Backup engine</span>
+        <span className="cg-card__title">{localizeUi('Backup engine')}</span>
         <span className="cg-card__spacer" />
         {mayChange && (
           <AsyncButton
@@ -115,15 +121,16 @@ export function BackupChannelsCard({
               }
             }}
           >
-            Save backup channels
+            {localizeUi('Save backup channels')}
           </AsyncButton>
         )}
       </div>
       <div className="cg-card__body">
         {bridgeAutoFailover !== undefined && (
           <p className="cg-setup-field__hint">
-            CG Bridge manages the graphics backup. Automatic CG failover is{' '}
-            {bridgeAutoFailover ? 'on' : 'off'}. Playout switches programme separately.
+            {localizeUi('CG Bridge manages the graphics backup. Automatic CG failover is')}{' '}
+            {bridgeAutoFailover ? 'on' : 'off'}
+            {localizeUi('. Playout switches programme separately.')}
           </p>
         )}
         {rows.map(({ line, choice, dirty: rowDirty }) => {
