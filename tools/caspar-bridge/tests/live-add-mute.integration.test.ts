@@ -228,20 +228,55 @@ it('SITE 4 — take()’s B-039 pre-roll ADD is muted first, and the take still 
   expect(mock?.layerState(SLOT)?.volume).toBe(1);
 });
 
-it('🔴 a mute that FAILS does not proceed to the ADD — the load is refused instead', async () => {
-  // R-042's own acceptance. The mute is not a courtesy step around the load, it is
-  // the condition under which loading is safe: failing closed costs a load, failing
-  // open costs a station audio on air that no UI shows.
+it.each([{ code: 502 }, { code: 403 }, { code: 403, reason: 'EXTERNAL_CG_BATCH_FORBIDDEN' }])(
+  'refuses load without ADD when a mute fails with $code ($reason)',
+  async ({ code, reason }) => {
+    // R-042's own acceptance. The mute is not a courtesy step around the load, it is
+    // the condition under which loading is safe: failing closed costs a load, failing
+    // open costs a station audio on air that no UI shows.
+    const r = await boot();
+    // The mock has no 'fail the next command' hook, so the MIXER verb is replaced
+    // outright — a refusal that is unambiguous and cannot race.
+    mock?.setHandler('MIXER', () => ({
+      kind: 'err',
+      code,
+      verb: 'MIXER',
+      ...(reason !== undefined && { reason }),
+    }));
+    const before = (await recvLines()).length;
+
+    const verdict = await r.load('item1', 'lower-third', {});
+
+    expect(verdict.accepted).toBe(false);
+    expect(verdict.errorCode).toBe('add-mute-failed');
+    const lines = (await recvLines()).slice(before);
+    expect(lines.some((l) => l.startsWith('CG 1-'))).toBe(false);
+  },
+);
+
+it('Play on a migrated channel reports the native fence refusal and sends no ADD', async () => {
   const r = await boot();
-  // The mock has no 'fail the next command' hook, so the MIXER verb is replaced
-  // outright — a refusal that is unambiguous and cannot race.
-  mock?.setHandler('MIXER', () => ({ kind: 'err', code: 502, verb: 'MIXER' }));
+  expect(
+    r.setFixedLayers({ channel: 1, low: { start: 50, count: 9 }, start: 96, count: 4 }).ok,
+  ).toBe(true);
+  expect((await r.loadFixed({ channel: 1, layer: 99 }, 'item1', 'lower-third', {})).accepted).toBe(
+    true,
+  );
+  mock?.setHandler('MIXER', () => ({
+    kind: 'err',
+    code: 403,
+    verb: 'MIXER',
+    reason: 'EXTERNAL_CG_FENCE_REQUIRED',
+  }));
   const before = (await recvLines()).length;
 
-  const verdict = await r.load('item1', 'lower-third', {});
-
-  expect(verdict.accepted).toBe(false);
-  expect(verdict.errorCode).toBe('add-mute-failed');
+  expect(await r.take('item1')).toMatchObject({
+    accepted: false,
+    errorCode: 'external-cg-v2-required',
+    command: 'MIXER 1-99 VOLUME 0',
+    refusalOnRow: true,
+  });
   const lines = (await recvLines()).slice(before);
-  expect(lines.some((l) => l.startsWith('CG 1-'))).toBe(false);
+  expect(lines).toContain('MIXER 1-99 VOLUME 0');
+  expect(lines.some((line) => line.startsWith('CG 1-99 '))).toBe(false);
 });

@@ -34,6 +34,22 @@
       ],
       "fixes": [
         {
+          "fa": "در PVW، صدای هر قاب مستقل کنترل می‌شود و نوار مانیتور وضعیت صدای فعال را نشان می‌دهد. فایل ویدئویی هر قاب دکمهٔ Play/Pause دارد و با Play کلی مانیتور خودکار آغاز نمی‌شود.",
+          "en": "PVW allows independent audio monitoring per plate and reflects live audio in the monitor toolbar. Video clips have per-plate Play/Pause and do not start with monitor-wide Play."
+        },
+        {
+          "fa": "تصویر NDI در مودال انتخاب ورودی با هاور باقی می‌ماند. قاب‌های پریست در New live layout تصویر ورودی‌های قابل پیش‌نمایش مانند NDI و DeckLink را نشان می‌دهند.",
+          "en": "NDI stays visible on hover in the source chooser. New live layout presets show previewable sources such as NDI and DeckLink in their own plates."
+        },
+        {
+          "fa": "اگر Playout اجرای فرمان گرافیک عادی را به‌دلیل فعال بودن External CG v2 روی کانال رد کند، پیام Play دلیل واقعی را نشان می‌دهد. محافظ بارگذاری بی‌صدا فعال باقی می‌ماند.",
+          "en": "When Playout rejects a standard graphics command on a channel managed by External CG v2, the Play error identifies the channel mode. The pre-load mute guard remains enforced."
+        },
+        {
+          "fa": "Download logs در CG Control ویندوز فایل ZIP را در Downloads ذخیره می‌کند و نام و مسیر فایل را در پنجرهٔ لاگ نشان می‌دهد. خطای ذخیره هم همان‌جا نمایش داده می‌شود.",
+          "en": "Download logs in Windows CG Control saves the ZIP to Downloads and reports its actual path in Audit. A failed write is shown in the same window."
+        },
+        {
           "fa": "تعویض پریست B پس از وقفهٔ موقت تأیید سرور دوباره همگام می‌شود. در Inspector کادر A/B منشأ تصویر یا ویومتر را مشخص می‌کند و تصویر معتبر NDI در PGM در وضعیت حضور منبع B لحاظ می‌شود.",
           "en": "Server B resumes preset updates after a temporary confirmation gap. In Inspector, the outline identifies the server providing the picture or audio meter. Verified NDI video in PGM is reflected in B source availability."
         },

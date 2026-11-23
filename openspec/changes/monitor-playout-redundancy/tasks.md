@@ -95,6 +95,24 @@
 - [ ] Verify the managed export adapter with additional real graphics and collect acceptance
       for masked multi-plate presets, authored outros and physical programme output.
 
+## Installed Bridge recovery
+
+- [x] Record the 1.2.13 incident on the licensed .34 pair. Both members report migrated and
+      applied revision 24 with empty graphics layouts. B alone can send managed commands.
+      Ordinary programme keys differ. CG Control is connected to the installed Bridge on A.
+- [x] Verify that the exact Core migration refusal is identified during legacy preparation
+      and that seats stay muted. Cover other 403 reasons independently.
+      On 2026-11-23, nine pre-ADD tests, the focused Live seating case and 15 operator-message tests passed.
+- [x] Preserve and compare the current settings on both members before any authorized
+      restoration. Verify both migration states after restart and exercise legacy Play on the
+      installed Bridge.
+      On 2026-11-23 the .34 pair returned to legacy, and the installed console showed the
+      Logo and Live layout on A. Stop returned both rows to Ready.
+- [ ] Independently verify Programme mappings, playlist and runtime keys, and actual A/B
+      returns after recovery. Compare assigned inputs and media separately when keys match.
+- [ ] Verify supported managed graphics through an installed Bridge service using approved
+      template delivery and separate Engine sessions before station adoption.
+
 ## Backup input status
 
 - [x] Observe the long media warning replacing the template name on the target station.

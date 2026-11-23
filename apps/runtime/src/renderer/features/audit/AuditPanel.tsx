@@ -114,6 +114,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [cursors, setCursors] = useState<readonly (AuditCursor | undefined)[]>([undefined]);
   const [busy, setBusy] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [savedLogPath, setSavedLogPath] = useState<string>();
   const [followNew, setFollowNew] = useState(true);
   const [pendingEvents, setPendingEvents] = useState(0);
   const [templates, setTemplates] = useState<ReadonlyMap<string, TemplateInfo>>(new Map());
@@ -253,6 +254,13 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     // `filterKey` is the serialised request; `loadPage` is intentionally not a dependency.
   }, [open, filterKey, rangeError]);
 
+  const downloadLogs = async (): ReturnType<typeof window.cg.audit.downloadLogs> => {
+    setSavedLogPath(undefined);
+    const result = await window.cg.audit.downloadLogs();
+    if (result.accepted) setSavedLogPath(result.savedPath);
+    return result;
+  };
+
   const refresh = (): Promise<{ accepted: boolean; message?: string }> => {
     if (rangeError)
       return Promise.resolve({ accepted: false, message: 'From must not be after To.' });
@@ -301,6 +309,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   useEffect(() => {
     if (open) return;
+    setSavedLogPath(undefined);
     opened.current = false;
     openingFilterKey.current = null;
     initialSelectionPending.current = false;
@@ -322,6 +331,10 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   if (!open) return null;
 
+  const canDownload =
+    window.cg.audit.canDownloadLogs() &&
+    (auth.kind === 'off' ||
+      (auth.kind === 'signed-in' && holdsPermissionClass(auth.principal.roles, 'station-admin')));
   const selected = entries.find((entry) => rowIdentity(entry) === selectedKey) ?? null;
   const filtered = Object.keys(filter).length > 0 || query.trim() !== '';
   const resetFilters = (): void => {
@@ -483,20 +496,20 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         <AsyncButton variant="neutral" icon={RefreshCw} run={refresh}>
           Refresh
         </AsyncButton>
-        {window.cg.audit.canDownloadLogs() &&
-          (auth.kind === 'off' ||
-            (auth.kind === 'signed-in' &&
-              holdsPermissionClass(auth.principal.roles, 'station-admin'))) && (
-            <AsyncButton
-              variant="neutral"
-              icon={Download}
-              run={() => window.cg.audit.downloadLogs()}
-              data-audit-download-logs=""
-            >
-              Download logs
-            </AsyncButton>
-          )}
+        {canDownload && (
+          <AsyncButton
+            variant="neutral"
+            icon={Download}
+            run={downloadLogs}
+            data-audit-download-logs=""
+          >
+            Download logs
+          </AsyncButton>
+        )}
       </div>
+      {canDownload && savedLogPath !== undefined && (
+        <Notice noticeRole="notice" aria="status" text="Audit logs saved" detail={savedLogPath} />
+      )}
       {rangeError && (
         <p className="cg-audit-range-error" role="status" data-audit-range-error="">
           From must not be after To.

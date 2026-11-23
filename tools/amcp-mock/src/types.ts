@@ -16,7 +16,7 @@ export type AmcpResponse =
   | { kind: 'ok'; code: 202; verb: string }
   | { kind: 'ok-line'; code: 201; verb: string; data: string }
   | { kind: 'ok-multi'; code: 200; verb: string; lines: readonly string[] }
-  | { kind: 'err'; code: number; verb: string; detail?: string };
+  | { kind: 'err'; code: number; verb: string; reason?: string; detail?: string };
 
 /**
  * Identifies a layer slot. Channels are 1-based per CasparCG convention.

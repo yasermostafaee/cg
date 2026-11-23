@@ -18,6 +18,7 @@ fn main() {
             "keyboard_language",
             "set_layer_alt_f4",
             "open_company_site",
+            "save_bridge_archive",
             "local_bridge_state",
             "local_bridge_act",
             "close_guard",

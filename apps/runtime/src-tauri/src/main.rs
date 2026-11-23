@@ -18,6 +18,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod audit_archive;
 mod layer_shortcuts;
 mod local_bridge;
 mod ndi_preview;
@@ -96,6 +97,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             company_site::open_company_site,
+            audit_archive::save_bridge_archive,
             playout::playout_post,
             keyboard_language::keyboard_language,
             layer_shortcuts::set_layer_alt_f4,

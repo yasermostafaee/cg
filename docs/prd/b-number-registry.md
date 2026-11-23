@@ -4396,3 +4396,14 @@ B-433 through B-437 are already present in the tracked bug headings. The next fr
 ### 2026-11-22 — Dynamic field rules take B-446
 
 - B-446 — Apply authored dynamic field rules and expose descriptions in CG Control, `docs/prd/bugs-runtime.md`.
+
+### 2026-11-23 — Migrated-channel Play and Audit download feedback take B-449 and B-450
+
+- B-449 — Explain blocked Play on a channel migrated to External CG v2, `docs/prd/bugs-runtime.md`.
+- B-450 — Report the completed Windows Audit archive save, `docs/prd/bugs-runtime.md`.
+
+### 2026-11-23 — Focus destination creation takes B-451
+
+- B-451 — Help authors create the missing Focus destinations for a multi-plate preset, `docs/prd/bugs-designer.md`.
+
+The next unassigned bug number is B-452.

@@ -7,7 +7,7 @@ import type { AmcpResponse } from './types.js';
  *  - 202 OK, no data:           `<code> <verb>\r\n`
  *  - 201 OK, one data line:     `<code> <verb> OK\r\n<data>\r\n`
  *  - 200 OK, multi-line data:   `<code> <verb> OK\r\n<line>\r\n…\r\n\r\n`
- *  - 4xx/5xx errors:            `<code> ERROR\r\n` (with optional detail line)
+ *  - 4xx/5xx errors:            `<code> <reason>\r\n` (defaults to ERROR, with optional detail line)
  */
 export function serializeAmcpResponse(resp: AmcpResponse): string {
   switch (resp.kind) {
@@ -21,7 +21,7 @@ export function serializeAmcpResponse(resp: AmcpResponse): string {
     }
     case 'err': {
       const tail = resp.detail ? `\r\n${resp.detail}` : '';
-      return `${String(resp.code)} ERROR${tail}\r\n`;
+      return `${String(resp.code)} ${resp.reason ?? 'ERROR'}${tail}\r\n`;
     }
   }
 }

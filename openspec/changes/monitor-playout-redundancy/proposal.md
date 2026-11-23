@@ -18,6 +18,9 @@ return of each of those engines and identify the control owner when the status c
   applied layout and keep field edits independent of page turns.
 - Verify that Playout prepares the reserve and transfers the graphic on a real isolated
   Engine/Core pair before station use.
+- Explain a positively identified External CG v2 refusal on the installed legacy Bridge
+  and keep failed preparation muted. Verify the station's command route and programme
+  mapping separately after authorized recovery.
 
 ## Capabilities
 

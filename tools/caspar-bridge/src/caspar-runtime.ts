@@ -327,6 +327,7 @@ import {
 } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import {
+  EXTERNAL_CG_V2_REQUIRED,
   foregroundUnchanged,
   mayClearAfterRefusal,
   outcomeOf,
@@ -28366,7 +28367,15 @@ export class CasparRuntime {
       // B-070 — surface the REAL AMCP code so a refusal can explain itself
       // (`stack.update` used to answer a bare `{ accepted: false }`, which the
       // Inspector could only render as the generic "Not accepted.").
-      const errorCode = ok ? undefined : `amcp-${String(result.response.code)}`;
+      let errorCode: string | undefined;
+      if (!ok) {
+        // This exact native reply identifies a channel managed by External CG v2.
+        errorCode =
+          result.response.header === '403 EXTERNAL_CG_FENCE_REQUIRED'
+            ? EXTERNAL_CG_V2_REQUIRED
+            : `amcp-${String(result.response.code)}`;
+      }
+
       this.#reconciler.applyAck(seq, ok, errorCode);
       return {
         ok,
@@ -28663,12 +28672,14 @@ export class CasparRuntime {
       repairOptions,
     );
     if (!muted.ok) {
-      this.#reconciler.applyAck(seq, false, ADD_MUTE_FAILED);
+      const errorCode =
+        muted.errorCode === EXTERNAL_CG_V2_REQUIRED ? EXTERNAL_CG_V2_REQUIRED : ADD_MUTE_FAILED;
+      this.#reconciler.applyAck(seq, false, errorCode);
       // `B-209` — the MIXER line that was refused, not the ADD that never went.
       return {
         ok: false,
         onPrimary: false,
-        errorCode: ADD_MUTE_FAILED,
+        errorCode,
         ...(muted.command !== undefined && { command: muted.command }),
       };
     }

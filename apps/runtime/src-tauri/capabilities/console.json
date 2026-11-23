@@ -7,6 +7,7 @@
     "allow-keyboard-language",
     "allow-set-layer-alt-f4",
     "allow-open-company-site",
+    "allow-save-bridge-archive",
     "allow-local-bridge-state",
     "allow-local-bridge-act",
     "allow-close-guard",

@@ -63,6 +63,35 @@ for the pilot.
 - **AND** the exported HTML can apply the same complete state on a fresh renderer without
   replaying the entrance
 
+### Requirement: Legacy preparation identifies an External CG migration refusal
+
+Bridge SHALL recognize the vendor's exact migrated-channel AMCP 403 refusal during
+legacy Play preparation. An unfinished preparation SHALL keep its seats muted and SHALL
+leave the existing picture in force. Bridge SHALL preserve other authorization failures
+as their own errors.
+
+#### Scenario: Legacy Play reaches a migrated channel
+
+- **WHEN** Core rejects legacy preparation with its External CG v2 migration refusal
+- **THEN** Bridge reports that the channel requires External CG v2
+- **AND** it keeps the preparation muted and sends no legacy fallback writes
+
+#### Scenario: Core sends another authorization denial
+
+- **WHEN** Core sends a 403 with a different reason
+- **THEN** Bridge preserves that reason without claiming the channel is migrated
+
+### Requirement: Programme and managed-graphics readiness are evaluated independently
+
+Bridge SHALL use the selected channel's separate, verified Programme mapping. Agreement
+on the applied External CG layout alone SHALL carry no claim of Programme parity.
+
+#### Scenario: Applied graphics agree while Programme differs
+
+- **WHEN** two members report the same managed revision and different ordinary
+  programme keys
+- **THEN** Control continues to show each actual return with its own verified identity
+
 ### Requirement: Managed manual sequences use an absolute page
 
 The Bridge SHALL validate the authored page count before advancing a supported finite manual

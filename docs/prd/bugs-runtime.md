@@ -14200,3 +14200,37 @@ help in CG Control, with its purpose stated in Designer.
 **Reproduction.** Assign a discovered NDI input to a plate in New live layout. The assigned frame can show a placeholder even while the workstation's direct NDI receiver is available.
 
 **Expected.** The selected preset previews its visible assigned inputs with their own framing. Direct NDI and routed picture providers use the same availability and fallback rules as PVW. Switching presets displays the inputs assigned to the visible frames and leaves programme output untouched.
+
+## [~] B-449 — Explain blocked Play on a channel migrated to External CG v2 ⟨priority: urgent — owner, 2026-11-23⟩ — `openspec/changes/monitor-playout-redundancy/`
+
+**Reported.** After installing CG 1.2.13 build `3f5c9162`, Play in CG Control does not start
+the graphic and the A and B programme pictures differ. The test station previously enabled
+External CG v2 on native channel 1 of both members. The normal Bridge service still uses
+legacy command delivery. The opt-in managed transport was verified with an isolated Bridge,
+separate Engine sessions and its own approved template address.
+
+**Observed on the test pair.** Both Engine .34 installations report the migration active with no pending restart.
+Both applied an empty graphics layout at revision 24. Only B can send managed commands.
+Ordinary programme control reports phase `external-cg`, and the two Engines' `playlistKey`
+and `runtimeKey` differ. The 1.2.13 Bridge on A has one connected console and the Bridge on B
+has none. Stored PGM captures also show differing backgrounds with the test layer cleared
+before `3f5c9162` was built.
+
+**Expected.** Classify a legacy preparation failure as External CG migration only when Core
+returns the vendor's exact migrated-channel AMCP 403 refusal. Keep unfinished preparation
+muted and prevent new graphics writes through a legacy fallback. Keep ordinary permission
+errors actionable. Verify both Engines after any approved restoration of their local
+pre-migration settings, then prove legacy Play and confirm the programme mapping separately.
+
+## [~] B-450 — Report the completed Windows Audit archive save ⟨priority: high — owner, 2026-11-23⟩ — `openspec/changes/download-logs-without-navigation/`
+
+**Reported.** Download logs in installed CG Control needs a reliable local save. The ticketed
+archive is already fetched by Control before the web download path. Three archives from
+the reported attempts were in Windows Downloads with no visible confirmation in Control.
+
+**Expected.** In the Windows desktop app, save the fetched ZIP to the Windows Downloads
+folder and show the actual file path after the write completes. A duplicate filename
+gets a distinct name. A write failure is shown in the Audit log.
+The connected station-admin or auth-off grant and the Bridge's one-use archive ticket
+continue to authorize the download. The browser can save the fetched archive through its
+local Blob download path.

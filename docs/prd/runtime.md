@@ -4492,6 +4492,9 @@ bound by date, or revisit page by page. **Acceptance:**
   the 25 rows on the current page
 - WHEN a matching row is written while page 1 is open THEN it appears at the top; on an older page the
   operator is told a new event exists without that page shifting
+- WHEN a connected station admin downloads the archive in Windows CG Control THEN the already
+  authorized ZIP is saved to Windows Downloads. Audit reports the actual filename and path
+  after the complete write and shows any write failure.
 
 ## [~] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3; BUILT 2026-10-04 by `RELEASE-0111-01-A` A1 (change `console-polish`, tasks §11)
 
@@ -5230,6 +5233,10 @@ applied template state after a Bridge restart. The static HTML pilot passed on a
 - WHEN ownership is unknown THEN show no active designation and keep Follow silent.
 - WHEN the operator selects a verified B return or Follow resolves to it THEN the PGM meter shows that return's levels. A return without Playout meter telemetry uses its own stereo PCM peaks. The operator can show or hide the meter independently of listening. While shown, missing data leaves an empty meter scale.
 - WHEN an opt-in channel is served by External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
+- WHEN Core returns the exact External CG v2 migration refusal during legacy Play
+  preparation THEN Bridge explains the refusal and keeps the unfinished preparation muted.
+- WHEN both members report the same managed graphics revision but different programme keys
+  THEN each PGM tile still reflects its own verified return.
 - WHEN the Bridge restarts with an applied static graphic THEN Control restores its confirmed
   data and on-air state. A freshly prepared renderer shows the applied data without playing the entrance.
 - WHEN an eligible finite manual cut sequence shows a page THEN Next uses the absolute

@@ -8701,6 +8701,30 @@ it('🔴 a failed seating rolls back EVERY layer it touched, and the graphic nev
   expect(r.liveLayers().has('item-1')).toBe(false);
 });
 
+it('reports a protected live layer without sending CLEAR for the refused producer', async () => {
+  const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });
+  expect(await r.load('item-1', 'lower-third', {})).toMatchObject({ accepted: true });
+  mock?.setHandler('PLAY', () => ({
+    kind: 'err',
+    code: 403,
+    verb: 'PLAY',
+    reason: 'EXTERNAL_CG_FENCE_REQUIRED',
+  }));
+  const before = (await recvLines()).length;
+
+  expect(await r.take('item-1')).toMatchObject({
+    accepted: false,
+    errorCode: 'external-cg-v2-required',
+    refusalOnRow: true,
+  });
+
+  const layer = `1-${String(BAND.start)}`;
+  const lines = (await recvLines()).slice(before);
+  expect(lines.some((line) => line.startsWith(`PLAY ${layer} `))).toBe(true);
+  expect(lines).not.toContain(`CLEAR ${layer}`);
+  expect(lines.some((line) => /^CG 1-\d+ PLAY/.test(line))).toBe(false);
+});
+
 it('the live layers come down BEFORE the graphic on out()', async () => {
   const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });
   await loadAndTake(r);

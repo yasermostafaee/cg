@@ -2735,15 +2735,15 @@ export class WebSocketRuntime implements RuntimeBridge {
     /*
       🔴 `CENTRAL-BRIDGE-01` §1 A — **CG BRIDGE'S LOGS, DOWNLOADED.** They live on the Playout
       machine now (`%ProgramData%\CG Bridge\logs\`), so "Open log folder" became a download: a
-      station admin asks the bridge for a one-use link and the browser saves `logs.zip`. Offered
+      station admin asks the bridge for a one-use link and saves its archive. Offered
       whenever this console is connected; the bridge refuses anyone but a station admin.
     */
     canDownloadLogs: (): boolean => this.#status === 'live',
-    downloadLogs: async (): Promise<{ accepted: boolean; message?: string }> => {
+    downloadLogs: async (): ReturnType<RuntimeBridge['audit']['downloadLogs']> => {
       try {
         const { path } = await this.#invoke(ipcChannels.BridgeLogsTicketChannel, undefined);
-        await downloadBridgeArchive(this.#bridgeHttpUrl(path));
-        return { accepted: true };
+        const savedPath = await downloadBridgeArchive(this.#bridgeHttpUrl(path));
+        return { accepted: true, ...(savedPath !== undefined && { savedPath }) };
       } catch (err) {
         return { accepted: false, message: err instanceof Error ? err.message : String(err) };
       }

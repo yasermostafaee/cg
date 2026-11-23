@@ -196,6 +196,70 @@ variable to that member's operator session before launch. The profile uses the b
 Choose a visible row within the lab group's permitted HTML layers. Use a template server
 address each Engine can reach and a fresh static export from Designer.
 
+## Installed Bridge incident, 2026-11-23
+
+The test migration enabled `cg-lab-recurring26` for `apasai` on A and `apasai-r1` on B.
+Both members use native channel 1 and programme layer 5. Their only approved template
+origin is the isolated lab's `http://192.168.21.93:41560`. The lab stopped both programmes
+before staging and restarted the two Engines to apply the setting. This remained active
+when the owner tried CG 1.2.13 build `3f5c9162` through the installed Bridge service.
+The running service does not opt in to the isolated command-line pilot.
+
+At incident inspection, both Engines reported migrated with no pending restart and an empty
+managed layout at applied revision 24. B alone confirmed managed write ownership. Ordinary
+programme control on both members reported phase `external-cg` with differing `playlistKey`
+and `runtimeKey`. Bridge A counted one connected console and B counted none. The earlier
+book proof had matching managed book pictures and different underlying PGM pictures after
+Clear. Compare actual PGM inputs and ordinary programme state alongside managed revisions.
+
+The operator's downloaded `amcp.log` independently recorded Core's exact
+`403 EXTERNAL_CG_FENCE_REQUIRED` response to `MIXER 1-59 VOLUME 0` at
+11:05:07 UTC and to `MIXER 1-99 VOLUME 0` at 12:36:08 UTC on November 23.
+The second time matches the reported Logo Take.
+
+For legacy preparation, the migration-specific message requires Core's exact vendor 403
+reply. Other denials retain their existing reasons. A preparation failure keeps allocated
+sound muted and prevents fallback writes. The isolated pilot has confirmed replay-free
+recovery for static HTML and the supported bundled books. Installed-service activation,
+additional animated layouts, live and media replication, and operation with a missing
+voter remain open.
+
+The vendor setup contract stages initial migration and has no published reversal operation.
+Each test Engine has a local settings backup from before migration. Preserve the current
+settings on each member before an authorized restoration and compare the change locally.
+After restoring the original settings and restarting the Engine services, read back both
+members' migration status and verify legacy Play and both Programme returns. Programme
+state also needs its own readback because the lab sent ordinary Stop before migration.
+
+Both channels must return to the ordinary topology before comparing owner, readiness,
+playlist and runtime keys. Restart the Windows `ApasaiEngine` service on each member
+to reload Engine configuration. The two Playout restart API routes in .26 restart the
+local Core only. Keep a copy of each current settings file and remove the one pilot
+group. The before-pilot backup on B differs in Cache settings as well.
+
+With A confirmed as Programme owner, inspection of B's playlist mirror reconciliation
+can identify a different playlist. A same-clip seek through Sync Engines requires the
+same ready playback item on both. If B has a different playlist, use the supported
+playlist mirror reconciliation on B after safeguarding its local playlist and checking
+both revisions, then verify the current playing item and both PGM returns.
+
+After the coordinated Windows service restart on both .34 Engines, both setup
+responses reported `migrated:false`, no pending restart, and the managed owner
+endpoint returned 404. With the installed Control, the Logo on layer 99 and the
+Live layout on layer 59 played on A and returned to Ready with Stop. The second
+Live preset also appeared on A. The installed console reported a backup input
+limitation and B's programme return sometimes went black or disappeared.
+
+A remained the configured Master and B became the ordinary Programme controller
+during failover. A had 10 playlist items and B had 9. The supported
+mirror-reconciliation POST on halted B returned HTTP 409 with
+`Only the active shared-playlist lease holder may change this playlist.`
+Both local-playlist endpoints report `usesSharedStorage:false`. B was resumed,
+both state endpoints reported the same current and next item IDs, and the start
+times still differed by about 17 minutes. The two original playlist revisions
+were preserved. The two engines require a supported authority recovery before a
+synchronized return to A can be verified.
+
 ## Legacy reserve observations after the D11 fix
 
 The operator confirmed both files now render on B with CG 1.2.10. Their A/B programme

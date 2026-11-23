@@ -81,6 +81,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   // `CG ADD` puts the template's audio on air on 2.5.0 — R-029).
   'add-mute-failed':
     'CasparCG refused to mute the layer, so the graphic was NOT loaded — loading it would have put its audio on air. Try again; if it keeps failing, check the channel on the playout server.',
+  'external-cg-v2-required':
+    'This Playout channel requires External CG v2. Ask the station administrator to use a Bridge connection that supports this graphic through External CG v2 or restore the previous channel configuration.',
   rehearsing:
     'That row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.',
   /*

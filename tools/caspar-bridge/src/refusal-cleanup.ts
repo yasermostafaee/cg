@@ -42,6 +42,8 @@
  */
 export type SeatOutcome = 'landed' | 'refused' | 'unknown' | 'loaded';
 
+export const EXTERNAL_CG_V2_REQUIRED = 'external-cg-v2-required';
+
 /**
  * Is the layer's FOREGROUND exactly as it was before the operation? True for `refused` and for
  * `loaded` (only the background changed), so the ledger keeps the producer it named and a muted
@@ -65,14 +67,15 @@ export function mayClearAfterRefusal(seat: RefusalSeat): boolean {
 }
 
 /**
- * The outcome one `#send` result describes. `amcp-4NN` is a reply that ARRIVED and refused
- * (`AMCPCommandQueue.cpp` answers `4NN <COMMAND> FAILED` before anything is changed); every other
- * failure — `amcp-timeout`, `amcp-send-failed`, `amcp-5NN` — leaves the layer's state unknown.
+ * A 4xx reply, including a native External CG fence denial, refuses the operation before it
+ * changes the layer. A timeout, failed send or 5xx leaves the layer's state unknown.
  */
 export function outcomeOf(sent: {
   readonly ok: boolean;
   readonly errorCode?: string;
 }): SeatOutcome {
   if (sent.ok) return 'landed';
-  return /^amcp-4\d\d$/.test(sent.errorCode ?? '') ? 'refused' : 'unknown';
+  return sent.errorCode === EXTERNAL_CG_V2_REQUIRED || /^amcp-4\d\d$/.test(sent.errorCode ?? '')
+    ? 'refused'
+    : 'unknown';
 }

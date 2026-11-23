@@ -1,3 +1,5 @@
+import { nativeBridgeArchiveSaver } from './desktop.js';
+
 const FALLBACK_ARCHIVE_NAME = 'cg-bridge-logs.zip';
 
 function safeArchiveName(disposition: string | null): string {
@@ -15,7 +17,7 @@ function safeArchiveName(disposition: string | null): string {
  * ticket is one-use, so that interception can consume it without saving anything. Reading the
  * archive here first and downloading a local Blob keeps the ticket exchange inside CG Control.
  */
-export async function downloadBridgeArchive(url: string): Promise<void> {
+export async function downloadBridgeArchive(url: string): Promise<string | undefined> {
   let response: Response;
   try {
     response = await fetch(url, { cache: 'no-store' });
@@ -32,17 +34,22 @@ export async function downloadBridgeArchive(url: string): Promise<void> {
   }
 
   const blob = await response.blob();
+  const filename = safeArchiveName(response.headers.get('content-disposition'));
+  const nativeSave = nativeBridgeArchiveSaver();
+  if (nativeSave !== null) return nativeSave(blob, filename);
+
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = objectUrl;
-  link.download = safeArchiveName(response.headers.get('content-disposition'));
+  link.download = filename;
   link.rel = 'noopener';
   document.body.append(link);
   try {
     link.click();
   } finally {
     link.remove();
-    // Keep the local URL alive long enough for WebView/browser download handling to open it.
+    // The browser opens the object URL asynchronously.
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
   }
+  return undefined;
 }

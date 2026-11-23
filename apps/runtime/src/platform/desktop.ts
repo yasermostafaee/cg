@@ -24,7 +24,11 @@ import type {
  */
 
 interface TauriInternals {
-  invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
+  invoke(
+    command: string,
+    args?: Record<string, unknown> | ArrayBuffer,
+    options?: { headers: Record<string, string> },
+  ): Promise<unknown>;
 }
 
 function tauri(): TauriInternals | null {
@@ -59,6 +63,25 @@ export function shellSetLayerAltF4Armed(armed: boolean): void {
   const door = tauri();
   if (door === null) return;
   void door.invoke('set_layer_alt_f4', { armed }).catch((error: unknown) => console.warn(error));
+}
+
+export function nativeBridgeArchiveSaver():
+  | ((archive: Blob, filename: string) => Promise<string>)
+  | null {
+  const door = tauri();
+  if (door === null) return null;
+  return async (archive, filename) => {
+    try {
+      const saved = await door.invoke('save_bridge_archive', await archive.arrayBuffer(), {
+        headers: { 'x-cg-archive-name': encodeURIComponent(filename) },
+      });
+      if (typeof saved === 'string' && saved !== '') return saved;
+      throw new Error('The desktop shell did not confirm the save.');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error('CG Control could not save the log archive. ' + detail, { cause: error });
+    }
+  };
 }
 
 export function shellOpenCompanySite(): boolean {

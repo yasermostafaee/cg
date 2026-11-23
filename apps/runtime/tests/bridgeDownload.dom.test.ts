@@ -50,6 +50,47 @@ describe('B-389 — CG Bridge logs stay inside CG Control until the local downlo
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:cg-control-logs');
   });
 
+  it('waits for the native save confirmation and passes ZIP bytes without a download navigation', async () => {
+    const archive = Uint8Array.of(0x50, 0x4b, 0x05, 0x06);
+    const savedPath = 'C:\\Users\\operator\\Downloads\\cg-bridge logs.zip';
+    const invoke = vi.fn(async () => savedPath);
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(archive, {
+            headers: { 'content-disposition': 'attachment; filename="cg-bridge logs.zip"' },
+          }),
+      ),
+    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
+
+    await expect(
+      downloadBridgeArchive('http://bridge.local/logs.zip?ticket=one-use'),
+    ).resolves.toBe(savedPath);
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith('save_bridge_archive', archive.buffer, {
+      headers: { 'x-cg-archive-name': 'cg-bridge%20logs.zip' },
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed native save without switching to a browser download', async () => {
+    const invoke = vi.fn().mockRejectedValueOnce('Disk full.');
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(Uint8Array.of(0x50, 0x4b))),
+    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
+
+    await expect(
+      downloadBridgeArchive('http://bridge.local/logs.zip?ticket=error'),
+    ).rejects.toThrow('CG Control could not save the log archive. Disk full.');
+    expect(click).not.toHaveBeenCalled();
+  });
+
   it('returns a useful failure when the ticketed archive is refused', async () => {
     vi.stubGlobal(
       'fetch',

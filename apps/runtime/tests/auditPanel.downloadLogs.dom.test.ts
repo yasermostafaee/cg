@@ -37,14 +37,15 @@ afterEach(async () => {
 function stubBridge(
   auth: AuthSessionState,
   connected: boolean,
-  downloads: { count: number },
+  downloads: { count: number; savedPath?: string },
 ): void {
   const stub = {
     audit: {
       canDownloadLogs: () => connected,
       downloadLogs: () => {
         downloads.count += 1;
-        return Promise.resolve({ accepted: true });
+        const { savedPath } = downloads;
+        return Promise.resolve({ accepted: true, ...(savedPath !== undefined && { savedPath }) });
       },
       // `R-083` — the Log reads pages.
       page: () => Promise.resolve({ entries: [], next: null }),
@@ -100,6 +101,20 @@ describe('CG Bridge’s logs, from the audit log', () => {
       await Promise.resolve();
     });
     expect(downloads.count).toBe(1);
+  });
+
+  it('shows the verified desktop archive location after saving', async () => {
+    const savedPath = 'C:\\Users\\operator\\Downloads\\cg-bridge-logs.zip';
+    stubBridge(ADMIN, true, { count: 0, savedPath });
+    await render();
+    await act(async () => {
+      button()?.click();
+      await Promise.resolve();
+    });
+    const notice = Array.from(document.querySelectorAll('[role="status"]')).find((element) =>
+      element.textContent?.includes('Audit logs saved'),
+    );
+    expect(notice?.textContent).toContain(savedPath);
   });
 
   it('an operator is not offered it — absent, not disabled', async () => {

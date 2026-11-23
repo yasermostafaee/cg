@@ -10,3 +10,16 @@
       gate passed before the feature's follow-up push. The browser-facing path downloads only the
       fetched local Blob, so the one-use Bridge URL is never exposed as a navigation for IDM to
       intercept.
+
+## 2. Native Windows archive save (B-450)
+
+- [x] Save the fetched ZIP to the Windows Downloads folder and show the actual file path in
+      Audit. Keep the Bridge's authorization and ticket checks and the browser Blob path.
+- [x] Verify the safe filename, duplicate name, completed write and write failure using
+      the desktop shell and retained files.
+- [x] Exercise a real Windows desktop save and open the archive. Verify the browser fallback
+      and unauthorized or expired ticket handling separately.
+
+      On 2026-11-23 the packaged Windows WebView fetched both archives directly. Audit showed
+      the actual paths, a second archive got a numbered filename, and both ZIPs opened with
+      the expected contents. The write-error UI, browser path and ticket checks passed separately.

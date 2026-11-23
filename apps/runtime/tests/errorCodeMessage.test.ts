@@ -137,6 +137,13 @@ describe('errorCodeMessage — the two mute failures are not one', () => {
     expect(msg).toContain('audio on air');
   });
 
+  it('gives the administrator a channel-specific remedy for a protected External CG channel', () => {
+    const message = errorCodeMessage('external-cg-v2-required');
+    expect(message).toContain('This Playout channel requires External CG v2');
+    expect(message).toContain('station administrator');
+    expect(errorCodeMessage('amcp-403')).not.toBe(message);
+  });
+
   it('mute-failed still says PVW was not started — the two do not share a sentence', () => {
     const pvw = errorCodeMessage('mute-failed') ?? '';
     expect(pvw).toContain('PVW');
