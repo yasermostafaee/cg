@@ -10,6 +10,13 @@ Designer SHALL let an author choose a single-plate preset with the same source i
 - **THEN** Designer SHALL preserve the choices in the project and in the exported VCG
 - **AND** the regular entry effect SHALL keep its own values
 
+#### Scenario: A source has no matching one-plate preset
+
+- **WHEN** an author inspects a multi-plate preset with a source that has no eligible destination
+- **THEN** Designer SHALL identify the source and offer creation of a matching, editable one-plate preset
+- **AND** the created preset and Focus link SHALL be one undoable edit
+- **AND** other existing presets and Focus selections SHALL retain their authored values
+
 #### Scenario: Operate Focus from a Designer preset
 
 - **WHEN** the operator selects a numbered Focus or switches to another Focus from the same preset

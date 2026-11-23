@@ -7029,4 +7029,6 @@ Rehearse. Keep the elapsed readout available while stopped.
 - WHEN the operator selects Focus, switches solo frames or returns THEN the applicable Designer-authored effect runs and Return restores the original preset with its input, title, crop and mask geometry.
 - WHEN a graphic belongs to a frame in the authored destination THEN it follows the frame and its per-preset visibility throughout the supported Focus workflow.
 
-**Change:** `openspec/changes/author-designer-focus-effects/`. The author associates each numbered Focus shortcut with an existing single-plate preset carrying the same source key.
+- WHEN a source has no matching solo preset THEN the Inspector still offers creation and links the new editable solo to that source. Undo removes the preset and its link together.
+
+**Change:** `openspec/changes/author-designer-focus-effects/`. Each numbered Focus shortcut can use an existing or freshly created single-plate preset carrying the same source key.

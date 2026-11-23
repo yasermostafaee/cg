@@ -1,7 +1,9 @@
 import {
+  CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   CUT_LOOK_TRANSITION,
   compositionClosure,
   compositionInstancesOf,
+  flattenElements,
   lookGroupOf,
   uniqueInstanceName,
   type Composition,
@@ -12,13 +14,17 @@ import {
   type LookGroup,
   type LookTransition,
   type Scene,
+  type VideoPlaceholderElement,
 } from '@cg/shared-schema';
-import { current, set } from '../store-core.js';
+import { buildTemplateLiveSources } from '@cg/vcg-format';
+import { current, runAsSingleHistoryEntry, set } from '../store-core.js';
 import {
   activeDocOf,
   deleteCompositionAndLinkedLooks,
+  freshCompositionId,
   freshElementId,
   renameCompositionAndLinkedLooks,
+  scopeSceneToComposition,
   withActiveDoc,
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
@@ -254,18 +260,13 @@ export function detachedLookCompositions(scene: Scene | null): Composition[] {
  * the ONE registration path `addLook` (a fresh composition) and `addLookFromComposition`
  * (an existing one) share, so the two cannot come to register differently.
  */
-function registerLook(compId: string, lookId: string, name: string): string | null {
-  if (current.scene === null) return null;
-  const homeId = projectLookGroupHomeId(current.scene);
-  const withLook = projectLookGroup(current.scene);
-  const composition = (current.scene.compositions ?? []).find(
-    (candidate) => candidate.id === compId,
-  );
+function appendLook(scene: Scene, compId: string, lookId: string, name: string): Scene | null {
+  const homeId = projectLookGroupHomeId(scene);
+  const withLook = projectLookGroup(scene);
+  const composition = (scene.compositions ?? []).find((candidate) => candidate.id === compId);
   if (homeId === undefined || withLook === undefined || composition === undefined) return null;
   const home =
-    homeId === null
-      ? current.scene
-      : current.scene.compositions?.find((candidate) => candidate.id === homeId);
+    homeId === null ? scene : scene.compositions?.find((candidate) => candidate.id === homeId);
   if (home === undefined) return null;
   const instanceId = freshElementId();
   const instance: Element = {
@@ -318,18 +319,23 @@ function registerLook(compId: string, lookId: string, name: string): string | nu
   };
   const sceneWithInstance: Scene =
     homeId === null
-      ? { ...current.scene, layers: addToHome(current.scene.layers) }
+      ? { ...scene, layers: addToHome(scene.layers) }
       : {
-          ...current.scene,
-          compositions: (current.scene.compositions ?? []).map((candidate) =>
+          ...scene,
+          compositions: (scene.compositions ?? []).map((candidate) =>
             candidate.id === homeId
               ? { ...candidate, layers: addToHome(candidate.layers) }
               : candidate,
           ),
         };
-  const scene = writeProjectGroup(sceneWithInstance, nextGroup);
-  set({ scene, activeLookId: look.id, selection: new Set<string>() });
-  return look.id;
+  return writeProjectGroup(sceneWithInstance, nextGroup);
+}
+
+function registerLook(compId: string, lookId: string, name: string): string | null {
+  const scene = current.scene === null ? null : appendLook(current.scene, compId, lookId, name);
+  if (scene === null) return null;
+  set({ scene, activeLookId: lookId, selection: new Set<string>() });
+  return lookId;
 }
 
 export const looksSlice = {
@@ -537,6 +543,88 @@ export const looksSlice = {
         looks: group.looks.map((look) => (look.id === id ? { ...look, presetFocus } : look)),
       }),
     });
+  },
+
+  createPresetFocusDestination(originId: string, plateId: string): void {
+    const project = current.scene;
+    const group = projectLookGroup(project);
+    const origin = group?.looks.find(({ id }) => id === originId);
+    if (project === null || group === undefined || origin === undefined) return;
+    const homeId = projectLookGroupHomeId(project);
+    const scene = homeId === null ? project : scopeSceneToComposition(project, homeId ?? null);
+    if (scene === null) return;
+    const live = buildTemplateLiveSources(scene);
+    const sourceLook = live.looks?.find(({ id }) => id === originId);
+    if (sourceLook === undefined || Object.keys(sourceLook.rects).length < 2) return;
+    const frameKey = sourceLook.transitionFrames?.[plateId]?.frameKey;
+    const sourcePlate = flattenElements(scene).find(({ key }) => key === frameKey)?.element;
+    if (sourcePlate?.type !== 'video-placeholder' || sourcePlate.routeKey !== plateId) return;
+
+    const compositions = project.compositions ?? [];
+    const name = uniqueInstanceName(
+      'Focus ' + plateId,
+      compositions.map(({ name }) => name),
+    );
+    const lookId = freshLookId(group, compositions);
+    const compId = freshCompositionId();
+    const plate: VideoPlaceholderElement = {
+      id: freshElementId(),
+      name: sourcePlate.name,
+      type: 'video-placeholder',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      zIndex: 0,
+      routeKey: plateId,
+      expectedAspect: sourcePlate.expectedAspect,
+      fitMode: sourceLook.fits[plateId],
+      cropFocus: sourceLook.focuses[plateId],
+      fallbackKind: sourcePlate.fallbackKind,
+      fallbackColor: sourcePlate.fallbackColor,
+      posterAssetId: sourcePlate.posterAssetId,
+      showFallback: sourcePlate.showFallback,
+      stroke: sourcePlate.stroke,
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: scene.resolution.width, h: scene.resolution.height },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+    };
+    const composition: Composition = {
+      id: compId,
+      name,
+      resolution: { ...scene.resolution },
+      frameRange: { ...scene.frameRange },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: freshElementId(),
+          name: 'Layer 1',
+          visible: true,
+          locked: false,
+          children: [plate],
+          blendMode: 'normal',
+        },
+      ],
+    };
+    const presetFocus: DesignerPresetFocus = {
+      effects: origin.presetFocus?.effects ?? CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+      targets: { ...origin.presetFocus?.targets, [plateId]: lookId },
+    };
+    const withOrigin = writeProjectGroup(project, {
+      ...group,
+      looks: group.looks.map((look) => (look === origin ? { ...origin, presetFocus } : look)),
+    });
+    const updated = appendLook(
+      { ...withOrigin, compositions: [...(withOrigin.compositions ?? []), composition] },
+      compId,
+      lookId,
+      name,
+    );
+    if (updated === null) return;
+    runAsSingleHistoryEntry(() => set({ scene: updated }));
   },
 
   /** Set one registered preset's permission, including an explicit legacy opt-out. */

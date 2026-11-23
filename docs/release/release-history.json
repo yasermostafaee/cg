@@ -16,6 +16,10 @@
       },
       "features": [
         {
+          "fa": "در Focus effects دیزاینر، نام ورودی کنار شمارهٔ Focus دیده می‌شود. وقتی مقصد تک‌قاب برای آن ورودی ندارید، Create solo preset… یک پریست قابل‌ویرایش می‌سازد و همان‌جا وصل می‌کند. Off میان‌بر آن ورودی را پنهان می‌کند.",
+          "en": "Designer Focus effects identifies the source beside each Focus number. Create solo preset… builds and links an editable single-source preset when no match is available. Off hides that shortcut."
+        },
+        {
           "fa": "در Arrange دیزاینر، اینسپکتور و New live layout، حاشیهٔ هر ضلع جدا از فاصلهٔ بین قاب‌ها تنظیم می‌شود. چهار قاب ۱۶:۹ می‌توانند تمام تصویر ۱۶:۹ را بپوشانند. برای جای‌گذاری و اندازهٔ دلخواه از Custom استفاده کنید. New live layout برای Focus حاشیهٔ جدا دارد.",
           "en": "In Designer, Inspector and New live layout, Arrange separates the four output margins from the gaps between plates. Four 16:9 plates can tile a 16:9 output. Custom allows independent positioning and sizing. New live layout has separate Focus margins."
         },

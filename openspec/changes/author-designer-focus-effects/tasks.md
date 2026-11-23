@@ -13,3 +13,14 @@
 - [x] Local Bridge integration (2 cases) passed on mapped mock engines A/B. Designer-authored Focus
       and Return use the 240 ms motion. Direct Focus uses the authored 320 ms Fade or Push. Both
       engines retain their video seats. Return restores the originating geometry and input bindings.
+
+## Inspector follow-up (B-451)
+
+- [x] Identify each Focus source and explain what Off and the shortcut do in CG Control.
+- [x] Add a same-source solo preset and its Focus link in one undoable Inspector action.
+- [x] Exercise a four-plate preset with one existing destination, create the missing
+      destinations, and verify the exported VCG.
+
+      Verified 2026-11-23 in Windows Edge. The host kept its existing destination. The three
+      guest solos each exported one matching full-raster source. Undo removed the new preset
+      and matching link in one step.

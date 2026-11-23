@@ -4,7 +4,7 @@ Designer authors need to choose how Focus operations look when an operator uses 
 
 ## What Changes
 
-- Let authors designate matching single-plate presets as the Focus destinations of a multi-plate preset.
+- Let authors choose or create matching single-plate presets as Focus destinations in the multi-plate Inspector. Identify each source next to its Focus number.
 - Author Focus and Return motion and the effect used between Focus destinations in the composition Inspector.
 - Carry these settings into the exported VCG and use them in the existing independent PVW and PGM workflows.
 

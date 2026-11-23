@@ -4974,3 +4974,15 @@ The valid mask from Plate 1 to Plate 2 in the reported project survives.
 **Repro / Actual:** Duplicate a composition containing a Data-key-bound text element, then enter another key on the copied text. In `3ghab.cgproj`, copies `plate2` and `plate3` retain the `p1-t1` binding to an element ID found only in `plate1`. Both phantom fields appear in the exported template's operator form.
 
 **Expected / regression:** Duplicating remaps bindings to the copied elements. Editing the copy's key renames its field and preserves the original. Opening or exporting the affected project and importing its existing VCG recover the valid titles and preserve authored fields without a binding.
+
+## [~] B-451 — Help authors create the missing Focus destinations for a multi-plate preset ⟨priority: high — owner, 2026-11-23⟩ — `openspec/changes/author-designer-focus-effects/`
+
+**Reported.** In a four-plate preset with host and three guests, the host can use an
+existing one-plate preset. The other three Focus lists offer only No destination.
+The Inspector does not identify the source each number refers to or show how to create
+its matching one-plate destination.
+
+**Expected.** Show the plate name beside each Focus number and explain the effect of
+enabling it in CG Control. An author can select a matching existing destination or
+create and link an editable one-plate preset for the same source. Creation and linking
+are undone together. Existing destinations and presets retain their authored settings.
