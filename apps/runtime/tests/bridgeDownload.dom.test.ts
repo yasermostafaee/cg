@@ -33,7 +33,9 @@ describe('B-389 — CG Bridge logs stay inside CG Control until the local downlo
       clicked = { href: this.href, download: this.download, connected: this.isConnected };
     });
 
-    await downloadBridgeArchive('http://bridge.local/logs.zip?ticket=one-use');
+    await downloadBridgeArchive(() =>
+      Promise.resolve('http://bridge.local/logs.zip?ticket=one-use'),
+    );
 
     expect(fetcher).toHaveBeenCalledWith('http://bridge.local/logs.zip?ticket=one-use', {
       cache: 'no-store',
@@ -67,8 +69,8 @@ describe('B-389 — CG Bridge logs stay inside CG Control until the local downlo
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
 
     await expect(
-      downloadBridgeArchive('http://bridge.local/logs.zip?ticket=one-use'),
-    ).resolves.toBe(savedPath);
+      downloadBridgeArchive(() => Promise.resolve('http://bridge.local/logs.zip?ticket=one-use')),
+    ).resolves.toEqual({ kind: 'saved', location: savedPath });
     expect(invoke).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith('save_bridge_archive', archive.buffer, {
       headers: { 'x-cg-archive-name': 'cg-bridge%20logs.zip' },
@@ -86,9 +88,70 @@ describe('B-389 — CG Bridge logs stay inside CG Control until the local downlo
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
 
     await expect(
-      downloadBridgeArchive('http://bridge.local/logs.zip?ticket=error'),
+      downloadBridgeArchive(() => Promise.resolve('http://bridge.local/logs.zip?ticket=error')),
     ).rejects.toThrow('CG Control could not save the log archive. Disk full.');
     expect(click).not.toHaveBeenCalled();
+  });
+
+  it('reports a native cancel without issuing a browser download', async () => {
+    const invoke = vi.fn().mockResolvedValueOnce(null);
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(Uint8Array.of(0x50, 0x4b))),
+    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
+
+    await expect(
+      downloadBridgeArchive(() => Promise.resolve('http://bridge.local/logs.zip?ticket=cancel')),
+    ).resolves.toEqual({ kind: 'cancelled' });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('opens the browser picker before obtaining a ticket and aborts on cancel', async () => {
+    const ticketUrl = vi.fn(async () => 'http://bridge.local/logs.zip?ticket=not-created');
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const choose = vi.fn().mockRejectedValueOnce(new DOMException('Cancelled', 'AbortError'));
+    vi.stubGlobal('showSaveFilePicker', choose);
+
+    await expect(downloadBridgeArchive(ticketUrl)).resolves.toEqual({ kind: 'cancelled' });
+    expect(choose).toHaveBeenCalledOnce();
+    expect(ticketUrl).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('reports the browser filename after the chosen handle closes the write', async () => {
+    const events: string[] = [];
+    const archive = Uint8Array.of(0x50, 0x4b, 0x05, 0x06);
+    const choose = vi.fn(async () => {
+      events.push('picker');
+      return {
+        name: 'chosen browser logs.zip',
+        createWritable: async () => ({
+          write: async (body: Blob) => {
+            expect(new Uint8Array(await body.arrayBuffer())).toEqual(archive);
+            events.push('write');
+          },
+          close: async () => {
+            events.push('close');
+          },
+        }),
+      };
+    });
+    vi.stubGlobal('showSaveFilePicker', choose);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(archive)),
+    );
+
+    await expect(
+      downloadBridgeArchive(async () => {
+        events.push('ticket');
+        return 'http://bridge.local/logs.zip?ticket=one-use';
+      }),
+    ).resolves.toEqual({ kind: 'saved', location: 'chosen browser logs.zip' });
+    expect(events).toEqual(['picker', 'ticket', 'write', 'close']);
   });
 
   it('returns a useful failure when the ticketed archive is refused', async () => {
@@ -104,7 +167,7 @@ describe('B-389 — CG Bridge logs stay inside CG Control until the local downlo
     );
 
     await expect(
-      downloadBridgeArchive('http://bridge.local/logs.zip?ticket=spent'),
+      downloadBridgeArchive(() => Promise.resolve('http://bridge.local/logs.zip?ticket=spent')),
     ).rejects.toThrow(
       'CG Bridge did not provide the log archive (HTTP 403: forbidden). Try Download logs again.',
     );
@@ -116,7 +179,9 @@ describe('B-389 — CG Bridge logs stay inside CG Control until the local downlo
       vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
     );
 
-    await expect(downloadBridgeArchive('http://bridge.local/logs.zip?ticket=old')).rejects.toThrow(
+    await expect(
+      downloadBridgeArchive(() => Promise.resolve('http://bridge.local/logs.zip?ticket=old')),
+    ).rejects.toThrow(
       'CG Control could not reach the log archive. Restart CG Bridge with the matching build, then try Download logs again.',
     );
   });

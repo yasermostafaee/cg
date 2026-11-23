@@ -2741,9 +2741,15 @@ export class WebSocketRuntime implements RuntimeBridge {
     canDownloadLogs: (): boolean => this.#status === 'live',
     downloadLogs: async (): ReturnType<RuntimeBridge['audit']['downloadLogs']> => {
       try {
-        const { path } = await this.#invoke(ipcChannels.BridgeLogsTicketChannel, undefined);
-        const savedPath = await downloadBridgeArchive(this.#bridgeHttpUrl(path));
-        return { accepted: true, ...(savedPath !== undefined && { savedPath }) };
+        const outcome = await downloadBridgeArchive(async () => {
+          const { path } = await this.#invoke(ipcChannels.BridgeLogsTicketChannel, undefined);
+          return this.#bridgeHttpUrl(path);
+        });
+        if (outcome.kind === 'cancelled') return { accepted: false, cancelled: true };
+        return {
+          accepted: true,
+          ...(outcome.kind === 'saved' && { savedPath: outcome.location }),
+        };
       } catch (err) {
         return { accepted: false, message: err instanceof Error ? err.message : String(err) };
       }

@@ -66,7 +66,7 @@ export function shellSetLayerAltF4Armed(armed: boolean): void {
 }
 
 export function nativeBridgeArchiveSaver():
-  | ((archive: Blob, filename: string) => Promise<string>)
+  | ((archive: Blob, filename: string) => Promise<string | null>)
   | null {
   const door = tauri();
   if (door === null) return null;
@@ -75,7 +75,7 @@ export function nativeBridgeArchiveSaver():
       const saved = await door.invoke('save_bridge_archive', await archive.arrayBuffer(), {
         headers: { 'x-cg-archive-name': encodeURIComponent(filename) },
       });
-      if (typeof saved === 'string' && saved !== '') return saved;
+      if (saved === null || (typeof saved === 'string' && saved !== '')) return saved;
       throw new Error('The desktop shell did not confirm the save.');
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

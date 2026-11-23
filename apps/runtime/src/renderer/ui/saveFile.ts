@@ -1,3 +1,5 @@
+import { chooseBrowserSaveTarget, writeBrowserSaveTarget } from '../../shared/browserSaveFile.js';
+
 type SaveFileOutcome =
   | { kind: 'saved'; handle: FileSystemFileHandle }
   | { kind: 'download' }
@@ -10,34 +12,11 @@ export async function saveFile(
   description: string,
   extension: string,
 ): Promise<SaveFileOutcome> {
-  const fileWindow = window as typeof window & {
-    showSaveFilePicker?: (options: {
-      suggestedName: string;
-      types: { description: string; accept: Record<string, string[]> }[];
-    }) => Promise<FileSystemFileHandle>;
-  };
-  // Fetching an archive before saving may outlast the original click's activation.
-  if (fileWindow.showSaveFilePicker !== undefined && navigator.userActivation?.isActive !== false) {
-    let handle: FileSystemFileHandle;
-    try {
-      handle = await fileWindow.showSaveFilePicker({
-        suggestedName,
-        types: [{ description, accept: { [blob.type]: [extension] } }],
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError')
-        return { kind: 'cancelled' };
-      throw error;
-    }
-    const writable = await handle.createWritable();
-    try {
-      await writable.write(blob);
-      await writable.close();
-    } catch (error) {
-      await writable.abort().catch(() => undefined);
-      throw error;
-    }
-    return { kind: 'saved', handle };
+  const target = await chooseBrowserSaveTarget(suggestedName, description, blob.type, extension);
+  if (target.kind === 'cancelled') return target;
+  if (target.kind === 'picked') {
+    await writeBrowserSaveTarget(target.handle, blob);
+    return { kind: 'saved', handle: target.handle };
   }
 
   const url = URL.createObjectURL(blob);

@@ -24,7 +24,17 @@ test('the audit log downloads the ticketed Bridge ZIP without leaving the consol
     templatesDir: path.join(directory, 'templates'),
   });
   try {
+    const archiveTickets: string[] = [];
+    page.on('websocket', (socket) => {
+      socket.on('framesent', ({ payload }) => {
+        if (typeof payload === 'string' && payload.includes('bridge.logs-ticket')) {
+          archiveTickets.push(payload);
+        }
+      });
+    });
     await page.addInitScript((url) => {
+      // Exercise the browser fallback first, then install a picker for the supported path.
+      Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined });
       Object.assign(window, { __CG_BRIDGE_URL__: url, __CG_SPLASH_DISABLED__: true });
     }, bridge.url);
     const bridgeOrigin = new URL(bridge.url.replace(/^ws/, 'http')).origin;
@@ -71,6 +81,54 @@ test('the audit log downloads the ticketed Bridge ZIP without leaving the consol
     await expect(audit.getByRole('alert')).toContainText(
       'CG Bridge did not provide the log archive (HTTP 403: forbidden).',
     );
+
+    await page.unroute('**/logs.zip?*');
+    await page.evaluate(() => {
+      document.body.dataset['testAuditPickerChoice'] = 'cancel';
+      Object.defineProperty(window, 'showSaveFilePicker', {
+        configurable: true,
+        value: async () => {
+          document.body.dataset['testAuditPickerActivation'] = String(
+            navigator.userActivation?.isActive,
+          );
+          if (document.body.dataset['testAuditPickerChoice'] === 'cancel') {
+            throw new DOMException('Cancelled', 'AbortError');
+          }
+          return {
+            name: 'operator-selected.zip',
+            createWritable: async () => ({
+              write: async (blob: Blob) => {
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                document.body.dataset['testAuditPickerZip'] = Array.from(bytes.slice(0, 4)).join(
+                  ',',
+                );
+              },
+              close: async () => {
+                document.body.dataset['testAuditPickerClosed'] = 'yes';
+              },
+            }),
+          };
+        },
+      });
+    });
+    const beforeCancel = archiveTickets.length;
+    await button.click();
+    await expect(button).toBeEnabled();
+    await expect(page.locator('body')).toHaveAttribute('data-test-audit-picker-activation', 'true');
+    await expect(audit.getByText('Audit logs saved', { exact: true })).toHaveCount(0);
+    await expect(audit.getByRole('alert')).toHaveCount(0);
+    expect(archiveTickets).toHaveLength(beforeCancel);
+
+    await page.evaluate(() => {
+      document.body.dataset['testAuditPickerChoice'] = 'save';
+    });
+    await button.click();
+    await expect(audit.getByRole('status').filter({ hasText: 'Audit logs saved' })).toContainText(
+      'operator-selected.zip',
+    );
+    await expect(page.locator('body')).toHaveAttribute('data-test-audit-picker-zip', '80,75,3,4');
+    await expect(page.locator('body')).toHaveAttribute('data-test-audit-picker-closed', 'yes');
+    expect(archiveTickets).toHaveLength(beforeCancel + 1);
   } finally {
     await bridge.close();
   }

@@ -2,29 +2,41 @@
 
 ### Requirement: Log download SHALL not depend on external browser download interception
 
-CG Control SHALL read CG Bridge's one-use ticketed log archive itself before starting a local
-file save. The connected station-admin or auth-off authorization and the one-use ticket
-SHALL remain the resource boundary. Windows CG Control SHALL save the fetched ZIP in the
-Windows Downloads folder and report its actual path after the completed write. A browser
-SHALL use the local Blob download path. A download manager SHALL NOT receive the ticket URL
-as a normal page navigation.
+CG Control SHALL read CG Bridge's one-use ticketed log archive itself. The connected
+station-admin or auth-off authorization and the one-use ticket SHALL remain the resource
+boundary. Windows CG Control SHALL open a visible Save As picker for the operator to choose
+the destination and SHALL report the path after a completed write. A browser supporting a
+save picker SHALL open that picker during the activating click and SHALL report the chosen
+filename after a completed write. Other browser contexts SHALL offer a local Blob
+download. A download manager SHALL NOT receive the ticket URL as a normal page navigation.
 
 #### Scenario: Download manager is installed
 
 - **WHEN** a station admin presses Download logs
-- **THEN** CG Control fetches the archive without navigating to the ticket URL
-- **AND** Windows CG Control saves through the desktop shell and the browser downloads a local Blob
+- **THEN** CG Control obtains the authorized archive without navigating to the ticket URL
 
-#### Scenario: The Windows file is saved
+#### Scenario: The operator picks a Windows destination
 
-- **WHEN** the native shell completes a ZIP write
-- **THEN** Audit displays where that archive was written
-- **AND** an already existing name is kept and the new archive receives a distinct filename
+- **WHEN** the native Save As opens and the operator selects a location and filename
+- **THEN** the completed archive is stored in that folder and Audit displays the actual saved path
+- **AND** an existing filename is kept and the new archive receives a distinct filename in the selected folder
+
+#### Scenario: The browser offers a save picker
+
+- **WHEN** the operator starts Download logs in a browser that exposes the save picker
+- **THEN** CG Control opens it before starting the ticket request and archive fetch
+- **AND** Audit displays the browser's selected filename after the handle closes the completed write
+
+#### Scenario: The operator cancels a picker
+
+- **WHEN** the operator closes the Windows or browser picker without choosing a destination
+- **THEN** CG Control writes no ZIP and shows no success or failure
+- **AND** canceling the browser picker issues no archive ticket
 
 #### Scenario: The desktop cannot write the archive
 
-- **WHEN** the received archive is malformed or Windows cannot write the file
-- **THEN** CG Control reports the save failure and leaves any existing file intact
+- **WHEN** the received archive is malformed or Windows cannot write the selected file
+- **THEN** CG Control reports the save failure and preserves existing files
 
 #### Scenario: Archive request fails
 

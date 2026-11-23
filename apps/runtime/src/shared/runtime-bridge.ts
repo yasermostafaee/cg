@@ -1210,7 +1210,12 @@ export interface RuntimeBridge {
      */
     canDownloadLogs(): boolean;
     /** Save CG Bridge's logs as one zip. A refusal is answered, never thrown. */
-    downloadLogs(): Promise<{ accepted: boolean; savedPath?: string; message?: string }>;
+    downloadLogs(): Promise<{
+      accepted: boolean;
+      cancelled?: boolean;
+      savedPath?: string;
+      message?: string;
+    }>;
     /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **THE TWO AUDIT MEMBERS THAT READ AND WROTE THE CONSOLE
       LABEL ARE GONE FROM THIS CONTRACT, and the removal is the point rather than a tidy-up.**

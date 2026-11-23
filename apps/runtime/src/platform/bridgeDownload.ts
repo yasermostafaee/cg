@@ -1,6 +1,12 @@
+import { chooseBrowserSaveTarget, writeBrowserSaveTarget } from '../shared/browserSaveFile.js';
 import { nativeBridgeArchiveSaver } from './desktop.js';
 
 const FALLBACK_ARCHIVE_NAME = 'cg-bridge-logs.zip';
+
+type ArchiveDownloadOutcome =
+  | { kind: 'saved'; location: string }
+  | { kind: 'download' }
+  | { kind: 'cancelled' };
 
 function safeArchiveName(disposition: string | null): string {
   const matched = disposition?.match(/filename="([^"]+)"/i)?.[1]?.trim();
@@ -17,7 +23,23 @@ function safeArchiveName(disposition: string | null): string {
  * ticket is one-use, so that interception can consume it without saving anything. Reading the
  * archive here first and downloading a local Blob keeps the ticket exchange inside CG Control.
  */
-export async function downloadBridgeArchive(url: string): Promise<string | undefined> {
+export async function downloadBridgeArchive(
+  ticketUrl: () => Promise<string>,
+): Promise<ArchiveDownloadOutcome> {
+  const nativeSave = nativeBridgeArchiveSaver();
+  // A browser picker needs the click's activation, which a slow archive fetch can outlast.
+  const target =
+    nativeSave === null
+      ? await chooseBrowserSaveTarget(
+          FALLBACK_ARCHIVE_NAME,
+          'CG Bridge log archive',
+          'application/zip',
+          '.zip',
+        )
+      : undefined;
+  if (target?.kind === 'cancelled') return target;
+
+  const url = await ticketUrl();
   let response: Response;
   try {
     response = await fetch(url, { cache: 'no-store' });
@@ -35,8 +57,15 @@ export async function downloadBridgeArchive(url: string): Promise<string | undef
 
   const blob = await response.blob();
   const filename = safeArchiveName(response.headers.get('content-disposition'));
-  const nativeSave = nativeBridgeArchiveSaver();
-  if (nativeSave !== null) return nativeSave(blob, filename);
+  if (nativeSave !== null) {
+    const location = await nativeSave(blob, filename);
+    return location === null ? { kind: 'cancelled' } : { kind: 'saved', location };
+  }
+
+  if (target?.kind === 'picked') {
+    await writeBrowserSaveTarget(target.handle, blob);
+    return { kind: 'saved', location: target.handle.name };
+  }
 
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -51,5 +80,5 @@ export async function downloadBridgeArchive(url: string): Promise<string | undef
     // The browser opens the object URL asynchronously.
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
   }
-  return undefined;
+  return { kind: 'download' };
 }
