@@ -3,8 +3,9 @@
 ### Requirement: Release history SHALL be a versioned website-ready artifact
 
 The repository SHALL keep one structured release-history source and generate a standalone HTML page with a
-clickable section for each recorded version. The page SHALL offer Persian RTL and English LTR, embed a
-Persian font and separate features and fixes. Each page SHALL contain at most fifteen numbered releases.
+clickable section for each recorded version. The page SHALL initially show Persian in RTL and offer manual
+English LTR and Arabic RTL views. It SHALL embed Vazirmatn and separate features and fixes in each language.
+Each page SHALL contain at most fifteen numbered releases.
 The public page SHALL omit the `next` draft and the per-version download sections.
 
 #### Scenario: Changes are retained before hosting exists
@@ -28,9 +29,19 @@ The public page SHALL omit the `next` draft and the per-version download section
 #### Scenario: Version history opens inside both apps
 
 - **WHEN** the user opens Version history from Designer Home, Designer Help or CG Control Station setup
-  **THEN** the app shows the same packaged bilingual page
+  **THEN** the app shows the same packaged three-language page
 - **AND** Designer history fills the viewport and CG Control history uses its near-full-window layout
 - **AND** each dialog has a Close footer action that returns to the surface that opened it
+
+#### Scenario: Arabic release history
+
+- **WHEN** the reader selects Arabic **THEN** release text, status labels, page counts and navigation use Arabic
+- **AND** the history document reads right to left and the visible section follows the selected language
+- **AND** version numbers, build identifiers and technical values keep their recorded text
+
+#### Scenario: Older history source files
+
+- **WHEN** the generator reads a schema version 1 or 2 source **THEN** the page retains its Persian and English views
 
 #### Scenario: Installer build requires recorded changes
 
@@ -53,4 +64,4 @@ The public page SHALL omit the `next` draft and the per-version download section
 #### Scenario: Confirmed customer delivery is reflected in history
 
 - **WHEN** the owner confirms that a version has been delivered **THEN** its recorded status and
-  visible descriptions reflect publication in Persian and English
+  visible descriptions reflect publication in Persian, English and Arabic

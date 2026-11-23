@@ -12,7 +12,7 @@ export function LiveLayoutEditorSectionHeading({
     <summary className="cg-live-layout-section-heading">
       <Icon icon={icon} size={15} />
       {label}
-      <Icon icon={ChevronRight} size={14} />
+      <Icon icon={ChevronRight} size={14} flipRtl />
     </summary>
   );
 }

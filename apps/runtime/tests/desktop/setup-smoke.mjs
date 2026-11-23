@@ -6,13 +6,13 @@
  *
  *   0. the SILENT paths first: the engine alone and the installer, same `/S`, same exit code; then
  *      Tauri's own silent uninstall;
- *   1. a FRESH interactive install: Welcome → Location (the folder, changeable; the space) →
+ *   1. a FRESH interactive install: Persian language selection for CG Control, then Welcome → Location →
  *      Installing (a real bar) → Done — and Installed apps lists the release;
  *   2. "Launch when ready" (CG Designer: ticked, Finish) STARTS the app; unticked (CG Control), it
  *      does not;
  *   3. an UPDATE: Installed apps names an older release — Welcome says "Update from … to …", the
  *      folder is the installed one (a fact, not a control), the update keeps the app's settings
- *      folder, and Installed apps names the release again;
+ *      folder, and Installed apps names the release again. CG Control updates in Arabic;
  *   4. a DAMAGED download (one byte of the engine flipped): the Error page says so, offers its log,
  *      and Close exits 2.
  *
@@ -60,6 +60,7 @@ const APPS = [
     launch: false,
   },
 ];
+const INSTALL_LANGUAGE = 'cg-control-install-language';
 const title = (a) => `${a.name} Setup`;
 
 function run(file, argv) {
@@ -73,6 +74,98 @@ function displayVersion(a) {
   const text = run('reg', ['query', `${UNINSTALL}\\${a.name}`, '/v', 'DisplayVersion']);
   return /DisplayVersion\s+REG_SZ\s+(\S+)/.exec(text ?? '')?.[1] ?? null;
 }
+function registeredInstallDir(a) {
+  const text = run('reg', ['query', UNINSTALL + '\\' + a.name, '/v', 'InstallLocation']);
+  const directory = /InstallLocation\s+REG_(?:EXPAND_)?SZ[ \t]+([^\r\n]+)/.exec(text ?? '')?.[1];
+  return directory === undefined ? null : directory.trim().replace(/^"|"$/g, '');
+}
+
+function installLanguagePath(a) {
+  const directory = registeredInstallDir(a);
+  return directory === null ? null : path.join(directory, INSTALL_LANGUAGE);
+}
+
+function readInstallLanguage(file) {
+  return file !== null && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+}
+
+// Directional controls preserve the version and folder ordering when drawn.
+const visible = (value) => value.replace(/[\u202a-\u202e\u2066-\u2069]/g, '');
+
+function wizardWords(a, language) {
+  if (language === 'fa') {
+    return {
+      language,
+      publisher: 'ناشر:',
+      version: 'نسخهٔ ' + VERSION,
+      perUser: 'فقط برای این کاربر',
+      welcome: 'CG Control نصب شود؟',
+      folder: 'پوشهٔ نصب',
+      needed: 'مورد نیاز',
+      free: 'آزاد در ',
+      done: 'CG Control نصب شد',
+      stepDone: 'انجام شد',
+      launch: 'اجرای CG Control پس از نصب',
+      finish: 'پایان',
+    };
+  }
+  if (language === 'ar') {
+    return {
+      language,
+      publisher: 'الناشر:',
+      welcome: 'هل تريد تحديث CG Control؟',
+      updateLine: 'التحديث من ' + OLDER + ' إلى ' + VERSION + '. ستُحفظ إعداداتك.',
+      folder: 'مجلد التثبيت',
+      update: 'تحديث',
+      updated: 'تم تحديث CG Control',
+      stepDone: 'مكتمل',
+      launch: 'تشغيل CG Control بعد التثبيت',
+      finish: 'إنهاء',
+    };
+  }
+  return {
+    language,
+    publisher: 'Publisher:',
+    version: 'Version ' + VERSION,
+    perUser: 'This user only',
+    welcome: 'Install ' + a.name + '?',
+    folder: 'FOLDER',
+    needed: 'Needed',
+    free: 'Free on ',
+    done: a.name + ' is installed',
+    stepDone: 'done',
+    launch: 'Launch when ready',
+    finish: 'Finish',
+    update: 'Update',
+    updated: a.name + ' is updated',
+    updateLine: 'Update from ' + OLDER + ' to ' + VERSION + '. Your settings are kept.',
+  };
+}
+
+function enterWelcome(a, words) {
+  if (a.key !== 'control') return page(title(a));
+  const first = page(title(a));
+  check(
+    a.name + ': starts with the language chooser and English selected',
+    first.byId.title?.name === 'Choose a language' &&
+      first.byId['step-1']?.status === 'current' &&
+      first.byId['language-en']?.selected === true,
+    first.names.join(' | '),
+  );
+  if (words.language !== 'en') {
+    const selected = uia(title(a), 'select', 'language-' + words.language, 20);
+    check(
+      a.name + ': selects ' + words.language,
+      selected.ok && selected.selected === true,
+      selected.error,
+    );
+  }
+  uia(title(a), 'invoke', 'next');
+  const welcome = until(title(a), words.publisher, 20);
+  check(a.name + ': advances to language-specific Welcome', welcome.ok, welcome.error);
+  return welcome;
+}
+
 function running(image) {
   return (run('tasklist', ['/FI', `IMAGENAME eq ${image}`, '/FO', 'CSV', '/NH']) ?? '')
     .toLowerCase()
@@ -107,8 +200,26 @@ async function uninstall(a) {
  * (the upgrade path) — and Tauri's own uninstaller, which CG Setup does not touch, removes it.
  */
 async function silent(a) {
+  const before = a.key === 'control' ? readInstallLanguage(installLanguagePath(a)) : null;
   const engine = spawnSync(a.engine, ['/S'], { windowsHide: true }).status;
+  const seed = a.key === 'control' ? installLanguagePath(a) : null;
+  if (a.key === 'control') {
+    check(
+      'CG Control: the silent engine preserves the previous language state',
+      seed !== null && readInstallLanguage(seed) === before,
+      seed,
+    );
+    // Model an earlier interactive install, then exercise quiet upgrade and uninstall.
+    if (seed !== null && before === null) fs.writeFileSync(seed, 'ar', 'utf8');
+  }
   const setup = spawnSync(a.installer, ['/S'], { windowsHide: true }).status;
+  if (a.key === 'control') {
+    check(
+      'CG Control: silent setup keeps the existing seed',
+      seed !== null && readInstallLanguage(seed) === (before ?? 'ar'),
+      seed,
+    );
+  }
   check(
     `${a.name}: a silent upgrade (/S) — the engine alone exits 0`,
     engine === 0,
@@ -121,92 +232,128 @@ async function silent(a) {
     String(displayVersion(a)),
   );
   check(`${a.name}: the silent uninstall (uninstall.exe /S) removes it`, await uninstall(a));
+  if (a.key === 'control') {
+    check(
+      'CG Control: uninstall removes the seed next to the installed executable',
+      seed !== null &&
+        (await waitFor('installer language seed removed', () => !fs.existsSync(seed), 10_000)),
+      seed,
+    );
+  }
 }
 
 async function fresh(a) {
-  check(`${a.name}: removed first, for a fresh install`, await uninstall(a));
+  const words = wizardWords(a, a.key === 'control' ? 'fa' : 'en');
+  check(a.name + ': removed first, for a fresh install', await uninstall(a));
   const r = launch(a.installer);
-  check(`${a.name}: the setup window opens`, uia(title(a), 'wait', '', 90).ok);
-  await sleep(700);
-  let pg = page(title(a));
+  check(a.name + ': the setup window opens', uia(title(a), 'wait', '', 90).ok);
+  let pg = enterWelcome(a, words);
   check(
-    `${a.name}: Welcome asks "Install ${a.name}?"`,
-    pg.byId.title?.name === `Install ${a.name}?`,
+    a.name + ': localized Welcome names the product',
+    pg.byId.title?.name === words.welcome,
     pg.byId.title?.name,
   );
+  const names = pg.names.map(visible);
   check(
-    `${a.name}: …with the publisher, this release and what it installs`,
-    pg.names.includes('Publisher: APASAI') &&
-      pg.names.includes(`Version ${VERSION}`) &&
-      pg.names.some((n) => n.includes('This user only')),
-    pg.names.join(' | '),
+    a.name + ': Welcome names the publisher, release and install scope',
+    names.includes(words.publisher + ' APASAI') &&
+      names.includes(words.version) &&
+      names.some((n) => n.includes(words.perUser)),
+    names.join(' | '),
   );
-  shot(title(a), path.join(OUT, `${a.key}-welcome.png`));
+  shot(title(a), path.join(OUT, a.key + '-welcome.png'));
+
   uia(title(a), 'invoke', 'next');
-  pg = until(title(a), 'FOLDER', 20);
+  pg = until(title(a), words.folder, 20);
   const folder = path.join(LOCALAPPDATA, a.name);
   check(
-    `${a.name}: Location shows the folder (${folder}) and offers to change it`,
-    pg.names.includes(folder) && pg.byId.change?.enabled === true,
+    a.name + ': Location shows the folder and offers to change it',
+    pg.names.map(visible).includes(folder) && pg.byId.change?.enabled === true,
     pg.names.join(' | '),
   );
   check(
-    `${a.name}: …and the space it needs and has`,
-    pg.names.includes('Needed') && pg.names.some((n) => n.startsWith('Free on ')),
+    a.name + ': Location shows the space it needs and has',
+    pg.names.includes(words.needed) && pg.names.some((n) => n.startsWith(words.free)),
     pg.names.join(' | '),
   );
-  shot(title(a), path.join(OUT, `${a.key}-location.png`));
-  const progress = uia(title(a), 'shot-progress', path.join(OUT, `${a.key}-installing.png`), 120);
+  shot(title(a), path.join(OUT, a.key + '-location.png'));
+
+  const progress = uia(title(a), 'shot-progress', path.join(OUT, a.key + '-installing.png'), 120);
   check(
-    `${a.name}: Installing shows a progress bar with a status, captured`,
+    a.name + ': Installing shows a progress bar with a status, captured',
     progress.ok,
     progress.status ?? progress.error,
   );
-  pg = until(title(a), 'is installed', 300);
+  if (a.key === 'control') {
+    check(
+      'CG Control: the progress status is Persian',
+      /[\u0600-\u06ff]/.test(progress.status ?? ''),
+      progress.status,
+    );
+  }
+  pg = until(title(a), words.done, 300);
   check(
-    `${a.name}: Done — "${a.name} is installed"`,
-    pg.byId.title?.name === `${a.name} is installed`,
+    a.name + ': the install completes in the chosen language',
+    pg.byId.title?.name === words.done,
     pg.byId.title?.name ?? pg.error,
   );
+  const steps = a.key === 'control' ? 5 : 4;
   check(
-    `${a.name}: …the rail ticks every step`,
-    ['step-1', 'step-2', 'step-3', 'step-4'].every((s) => pg.byId[s]?.status === 'done'),
+    a.name + ': Done marks every rail step complete',
+    Array.from({ length: steps }, (_, i) => pg.byId['step-' + (i + 1)]?.status).every(
+      (status) => status === words.stepDone,
+    ),
   );
   check(
-    `${a.name}: …one option, "Launch when ready", and one primary, Finish`,
-    pg.byId.launch?.name === 'Launch when ready' && pg.byId.finish?.name === 'Finish',
+    a.name + ': Done offers the localized launch choice and Finish',
+    pg.byId.launch?.name === words.launch && pg.byId.finish?.name === words.finish,
   );
-  shot(title(a), path.join(OUT, `${a.key}-done.png`));
+  shot(title(a), path.join(OUT, a.key + '-done.png'));
   check(
-    `${a.name}: Installed apps lists ${VERSION}`,
+    a.name + ': Installed apps lists ' + VERSION,
     displayVersion(a) === VERSION,
     String(displayVersion(a)),
   );
   check(
-    `${a.name}: the program is installed where Location said`,
+    a.name + ': the program is installed where Location said',
     fs.existsSync(installedExe(a)),
     installedExe(a),
   );
-  if (!a.launch) uia(title(a), 'toggle', 'launch');
+
+  if (!a.launch) {
+    const toggle = uia(title(a), 'toggle', 'launch');
+    check(
+      a.name + ': unchecks the launch choice',
+      toggle.ok && toggle.state === 'Off',
+      toggle.error ?? toggle.state,
+    );
+  }
   uia(title(a), 'invoke', 'finish');
   const code = await exitCode(r, 30_000);
-  check(`${a.name}: Finish exits 0`, code === 0, String(code));
+  check(a.name + ': Finish exits 0', code === 0, String(code));
   if (a.launch) {
-    const started = await waitFor(`${a.exe} running`, () => running(a.exe), 45_000);
-    check(`${a.name}: "Launch when ready" starts the app`, started);
+    const started = await waitFor(a.exe + ' running', () => running(a.exe), 45_000);
+    check(a.name + ': Finish launches the app when selected', started);
     run('taskkill', ['/IM', a.exe, '/F']);
-    await waitFor(`${a.exe} closed`, () => !running(a.exe), 20_000);
+    await waitFor(a.exe + ' closed', () => !running(a.exe), 20_000);
   } else {
     await sleep(5000);
-    check(`${a.name}: unticked, Finish starts nothing`, !running(a.exe));
+    check(a.name + ': unticked, Finish starts nothing', !running(a.exe));
+    const seed = installLanguagePath(a);
+    check(
+      a.name + ': saves the Persian choice next to the installed executable anyway',
+      readInstallLanguage(seed) === 'fa',
+      seed,
+    );
   }
 }
 
 async function update(a) {
-  // An older release, as Installed apps would name it; and a file in the app's own settings folder.
+  const words = wizardWords(a, a.key === 'control' ? 'ar' : 'en');
+  // An older release, as Installed apps would name it, and a marker in the user's settings.
   run('reg', [
     'add',
-    `${UNINSTALL}\\${a.name}`,
+    UNINSTALL + '\\' + a.name,
     '/v',
     'DisplayVersion',
     '/t',
@@ -220,47 +367,81 @@ async function update(a) {
   const marker = path.join(settings, 'cg-setup-smoke.marker');
   fs.writeFileSync(marker, 'kept');
   const r = launch(a.installer);
-  check(`${a.name} (update): the setup window opens`, uia(title(a), 'wait', '', 90).ok);
-  await sleep(700);
-  let pg = page(title(a));
+  check(a.name + ' (update): the setup window opens', uia(title(a), 'wait', '', 90).ok);
+  let pg = enterWelcome(a, words);
+  const prompt = a.key === 'control' ? words.welcome : 'Update ' + a.name + '?';
   check(
-    `${a.name} (update): Welcome asks "Update ${a.name}?"`,
-    pg.byId.title?.name === `Update ${a.name}?`,
+    a.name + ' (update): Welcome asks to update',
+    pg.byId.title?.name === prompt,
     pg.byId.title?.name,
   );
-  const line = `Update from ${OLDER} to ${VERSION}. Your settings are kept.`;
-  check(`${a.name} (update): "${line}"`, pg.names.includes(line), pg.names.join(' | '));
-  shot(title(a), path.join(OUT, `${a.key}-update.png`));
-  uia(title(a), 'invoke', 'next');
-  pg = until(title(a), 'FOLDER', 20);
   check(
-    `${a.name} (update): the folder is the installed one, and not a control`,
-    pg.byId.change === undefined && pg.names.includes(path.join(LOCALAPPDATA, a.name)),
+    a.name + ' (update): shows the previous and new versions',
+    pg.names.map(visible).includes(words.updateLine),
+    pg.names.join(' | '),
+  );
+  shot(title(a), path.join(OUT, a.key + '-update.png'));
+
+  uia(title(a), 'invoke', 'next');
+  pg = until(title(a), words.folder, 20);
+  check(
+    a.name + ' (update): Location shows the installed folder without Change',
+    pg.byId.change === undefined && pg.names.map(visible).includes(path.join(LOCALAPPDATA, a.name)),
     pg.names.join(' | '),
   );
   check(
-    `${a.name} (update): the primary says Update`,
-    pg.byId.install?.name === 'Update',
+    a.name + ' (update): the primary says Update in the selected language',
+    pg.byId.install?.name === words.update,
     pg.byId.install?.name,
   );
-  shot(title(a), path.join(OUT, `${a.key}-update-location.png`));
-  uia(title(a), 'shot-progress', path.join(OUT, `${a.key}-update-installing.png`), 120);
-  pg = until(title(a), 'is updated', 300);
+  shot(title(a), path.join(OUT, a.key + '-update-location.png'));
+  const progress = uia(
+    title(a),
+    'shot-progress',
+    path.join(OUT, a.key + '-update-installing.png'),
+    120,
+  );
+  if (a.key === 'control') {
+    check(
+      'CG Control (update): the progress status is Arabic',
+      progress.ok && /[\u0600-\u06ff]/.test(progress.status ?? ''),
+      progress.status ?? progress.error,
+    );
+  }
+  pg = until(title(a), words.updated, 300);
   check(
-    `${a.name} (update): Done — "${a.name} is updated"`,
-    pg.byId.title?.name === `${a.name} is updated`,
+    a.name + ' (update): Done uses the selected language',
+    pg.byId.title?.name === words.updated,
     pg.byId.title?.name ?? pg.error,
   );
-  shot(title(a), path.join(OUT, `${a.key}-update-done.png`));
+  if (a.key === 'control') {
+    check(
+      'CG Control (update): the Language step is marked complete',
+      pg.byId['step-1']?.status === words.stepDone,
+    );
+  }
+  shot(title(a), path.join(OUT, a.key + '-update-done.png'));
   uia(title(a), 'toggle', 'launch');
   uia(title(a), 'invoke', 'finish');
-  check(`${a.name} (update): Finish exits 0`, (await exitCode(r, 30_000)) === 0);
+  check(a.name + ' (update): Finish exits 0', (await exitCode(r, 30_000)) === 0);
   check(
-    `${a.name} (update): Installed apps names ${VERSION} again`,
+    a.name + ' (update): Installed apps lists ' + VERSION + ' again',
     displayVersion(a) === VERSION,
     String(displayVersion(a)),
   );
-  check(`${a.name} (update): its settings folder is kept`, fs.existsSync(marker), marker);
+  check(
+    a.name + ' (update): preserves existing settings',
+    fs.existsSync(marker) && fs.readFileSync(marker, 'utf8') === 'kept',
+    marker,
+  );
+  if (a.key === 'control') {
+    const seed = installLanguagePath(a);
+    check(
+      a.name + ' (update): saves the explicitly chosen Arabic default',
+      readInstallLanguage(seed) === 'ar',
+      seed,
+    );
+  }
 }
 
 /** A copy of the installer with one byte of its engine flipped: what a broken download is. */
@@ -281,6 +462,8 @@ function damaged(a) {
 async function broken(a) {
   const r = launch(damaged(a));
   check(`${a.name} (damaged): the setup window opens`, uia(title(a), 'wait', '', 90).ok);
+  const seed = a.key === 'control' ? installLanguagePath(a) : null;
+  enterWelcome(a, wizardWords(a, 'en'));
   uia(title(a), 'invoke', 'next');
   until(title(a), 'FOLDER', 20);
   uia(title(a), 'invoke', 'install');
@@ -292,12 +475,19 @@ async function broken(a) {
   );
   check(
     `${a.name} (damaged): …the Installing step is marked failed`,
-    pg.byId['step-3']?.status === 'failed',
+    pg.byId[a.key === 'control' ? 'step-4' : 'step-3']?.status === 'failed',
   );
   check(
     `${a.name} (damaged): …with Open log and Close`,
     pg.byId['open-log'] !== undefined && pg.byId.close?.name === 'Close',
   );
+  if (a.key === 'control') {
+    check(
+      'CG Control: failed English setup keeps the previous Arabic seed',
+      readInstallLanguage(seed) === 'ar',
+      seed,
+    );
+  }
   shot(title(a), path.join(OUT, `${a.key}-error.png`));
   uia(title(a), 'invoke', 'close');
   check(`${a.name} (damaged): Close exits 2`, (await exitCode(r, 30_000)) === 2);

@@ -13,12 +13,18 @@ export function InputCatalogueServer({ server }: { server: string | undefined })
   const origin = host === undefined ? null : playoutOriginForLoopback(host, signInUrl);
   const displayed = origin === null ? server : new URL(origin).host;
   return (
-    <span className="cg-input-catalogue-server" data-inputs-server="">
+    <span
+      className="cg-input-catalogue-server"
+      data-inputs-server=""
+      title={localizeUi(
+        'Playout server that supplied the last successful input list. The A/B badges show source availability and preview origin. The Program monitor shows the active PGM server.',
+      )}
+    >
       {displayed === undefined ? (
-        'Input server unavailable'
+        localizeUi('Input catalog server unavailable')
       ) : (
         <>
-          {localizeUi('Input server ·')} <bdi dir="ltr">{displayed}</bdi>
+          {localizeUi('Input catalog server ·')} <bdi dir="ltr">{displayed}</bdi>
         </>
       )}
     </span>

@@ -35,7 +35,11 @@ interface TestProgrammeAudioState {
   meterSubscriptions: number;
 }
 
-async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
+async function open(
+  page: Page,
+  seed: ProgramMonitorSeed,
+  showLabel = 'Show monitors',
+): Promise<void> {
   const pcm = Buffer.alloc(2400 * 4);
   for (let offset = 0; offset < pcm.byteLength; offset += 4) {
     pcm.writeInt16LE(8192, offset);
@@ -188,8 +192,148 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
     },
   );
   await page.goto('/');
-  const show = page.getByRole('button', { name: 'Show monitors' });
+  const show = page.getByRole('button', { name: showLabel });
   await show.click();
+}
+
+const layoutLocale = {
+  fa: {
+    show: 'نمایش مانیتورها',
+    expand: 'نمایش تمام‌صفحهٔ \u2068برنامه (PGM)\u2069',
+    restore: 'خروج \u2068برنامه (PGM)\u2069 از تمام‌صفحه',
+    horizontal: 'چیدمان \u2068افقی\u2069 برنامه',
+    vertical: 'چیدمان \u2068عمودی\u2069 برنامه',
+    horizontalTitle: 'چیدمان \u2068افقی\u2069 \u2068A+B\u2069',
+    verticalTitle: 'چیدمان \u2068عمودی\u2069 \u2068A+B\u2069',
+  },
+  ar: {
+    show: 'إظهار الشاشات',
+    expand: 'إظهار \u2068البرنامج (PGM)\u2069 بملء الشاشة',
+    restore: 'خروج \u2068البرنامج (PGM)\u2069 من ملء الشاشة',
+    horizontal: 'ترتيب البرنامج \u2068أفقي\u2069',
+    vertical: 'ترتيب البرنامج \u2068عمودي\u2069',
+    horizontalTitle: 'ترتيب البرنامج \u2068أفقي\u2069',
+    verticalTitle: 'ترتيب البرنامج \u2068عمودي\u2069',
+  },
+} as const;
+
+for (const language of ['fa', 'ar'] as const) {
+  test(`the workspace honours both PGM picture layouts with ${language} tooltips`, async ({
+    page,
+  }) => {
+    const copy = layoutLocale[language];
+    await page.setViewportSize({ width: 920, height: 800 });
+    await page.addInitScript((locale) => {
+      localStorage.setItem(
+        'cg.runtime.language.v1',
+        JSON.stringify({ interface: locale, feedback: 'en' }),
+      );
+    }, language);
+    const topology: PgmTopology = {
+      channel: 1,
+      active: 'A',
+      members: [
+        {
+          engine: 'A',
+          name: 'Programme server (Main)',
+          physicalChannel: 1,
+          resourceKey: 'a',
+          meterEngine: 'A',
+        },
+        {
+          engine: 'B',
+          name: 'Programme server (Backup)',
+          physicalChannel: 2,
+          resourceKey: 'b',
+          meterEngine: 'B',
+        },
+      ],
+    };
+    await open(page, { backupChannel: 2, ...(language === 'ar' && { topology }) }, copy.show);
+    await page.locator('[data-pgm-display-mode="both"]').click();
+    const stage = page.locator('[data-pgm-stage]');
+    const pgm = stage.locator('..');
+    const strip = pgm.locator('[data-monitor-pgm-strip]');
+    const aTile = stage.locator('[data-pgm-tile="A"]');
+    const bTile = stage.locator('[data-pgm-tile="B"]');
+    const horizontal = page.locator('[data-pgm-layout-choice="horizontal"]');
+    const vertical = page.locator('[data-pgm-layout-choice="vertical"]');
+    const width = () => stage.evaluate((element) => element.getBoundingClientRect().width);
+    const boxes = async () => {
+      const [a, b] = await Promise.all([aTile.boundingBox(), bTile.boundingBox()]);
+      if (a === null || b === null) throw new Error('Expected both programme tiles');
+      return { a, b };
+    };
+    const expectSideBySide = async () => {
+      const { a, b } = await boxes();
+      expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+      expect(Math.abs(a.width - b.width)).toBeLessThan(1);
+      expect(Math.max(a.x, b.x)).toBeGreaterThan(Math.min(a.x + a.width, b.x + b.width));
+    };
+    await expect.poll(width).toBeGreaterThan(400);
+    await expect.poll(width).toBeLessThan(500);
+
+    await vertical.click();
+    const { a, b } = await boxes();
+    expect(Math.abs(a.x - b.x)).toBeLessThan(1);
+    expect(b.y).toBeGreaterThan(a.y + a.height);
+    await horizontal.click();
+    await expect(horizontal).toHaveAttribute('aria-pressed', 'true');
+    await expectSideBySide();
+
+    await expect(horizontal).toHaveAccessibleName(copy.horizontal);
+    await expect(vertical).toHaveAccessibleName(copy.vertical);
+    await expect(horizontal).toHaveAttribute('title', copy.horizontalTitle);
+    await expect(vertical).toHaveAttribute('title', copy.verticalTitle);
+
+    const checkChrome = async () => {
+      const clipped = await pgm.evaluate((panel) => {
+        const bounds = panel.getBoundingClientRect();
+        const controls = panel.querySelectorAll(
+          '.cg-panel-header button, [data-monitor-pgm-strip] :is(select, button), .cg-monitor-strip__status > span',
+        );
+        return Array.from(controls).flatMap((control) => {
+          const box = control.getBoundingClientRect();
+          return box.left >= bounds.left &&
+            box.right <= bounds.right &&
+            box.width > 0 &&
+            box.height > 0
+            ? []
+            : [control.getAttribute('aria-label') ?? control.textContent];
+        });
+      });
+      expect(clipped).toEqual([]);
+      await expect(strip.getByRole('combobox')).toBeVisible();
+      await expect(strip.getByRole('button')).toHaveCount(4);
+      // Preserve enough height for a 16:9 picture to use most of each tile's width.
+      await expect
+        .poll(async () => {
+          const { a, b } = await boxes();
+          return Math.min((a.height * 16) / (9 * a.width), (b.height * 16) / (9 * b.width));
+        })
+        .toBeGreaterThanOrEqual(0.8);
+    };
+    await checkChrome();
+    await page.setViewportSize({ width: 690, height: 800 });
+    await expect.poll(width).toBeLessThan(370);
+    await expectSideBySide();
+    await checkChrome();
+    await strip.getByRole('combobox').selectOption('B');
+    await expect(strip.getByRole('combobox')).toHaveValue('B');
+    const volume = strip.locator('[aria-haspopup="dialog"]');
+    await volume.click();
+    await expect(page.getByRole('slider')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(volume).toBeFocused();
+    await page.setViewportSize({ width: 920, height: 800 });
+
+    await page.getByRole('button', { name: copy.expand, exact: true }).click();
+    await expect.poll(width).toBeGreaterThan(520);
+    await expectSideBySide();
+    await page.getByRole('button', { name: copy.restore, exact: true }).click();
+    await expect.poll(width).toBeLessThan(520);
+    await expectSideBySide();
+  });
 }
 
 for (const display of ['B', 'both'] as const) {

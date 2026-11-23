@@ -123,7 +123,7 @@ async function decode(field: HTMLElement): Promise<void> {
 }
 
 it.each([false, true])(
-  'does not fetch a closed media binding picture (inherited: %s)',
+  'keeps the decoded provider without fetching a closed media binding picture (inherited: %s)',
   async (inherited) => {
     const field = await render('md-clip-a', inherited);
     expect(field.querySelector('img, video, [data-source-audio-meter]')).toBeNull();
@@ -138,7 +138,12 @@ it.each([false, true])(
     expect(providers(choice)).toEqual(['B']);
     expect(mediaThumbnail).toHaveBeenCalledTimes(1);
     await closePicker();
-    expect(providers(field)).toEqual([]);
+    expect(field.querySelector('img, video, [data-source-audio-meter]')).toBeNull();
+    expect(providers(field)).toEqual(['B']);
+    expect(field.querySelector('[data-source-preview-provider]')?.getAttribute('title')).toBe(
+      'Server B: available. Last picture from server B',
+    );
+    expect(mediaThumbnail).toHaveBeenCalledTimes(1);
     expect(mediaOpen).not.toHaveBeenCalled();
   },
 );

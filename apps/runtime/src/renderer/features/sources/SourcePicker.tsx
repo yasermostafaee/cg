@@ -16,7 +16,6 @@ import {
   canCheckLiveInput,
   INPUT_GONE_REASON,
   isPlaylistOutput,
-  ownOutputTitle,
   sourceBindable,
   sourceLoopsOn,
   sourceShowableOn,
@@ -46,7 +45,11 @@ import {
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useLastPictureOrigin, usePictureOriginPublisher } from './observedPictureOrigins.js';
-import { useSourcePreviewRoute } from '../../hooks/useProgramTopology.js';
+import {
+  activeProgrammeMember,
+  sourcePreviewRoute,
+  useProgramTopology,
+} from '../../hooks/useProgramTopology.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
 import {
@@ -292,7 +295,9 @@ export function SourcePicker({
     onChange(draft);
   };
   const thumbnailChannel = previewChannel ?? channel;
-  const previewRoute = useSourcePreviewRoute(thumbnailChannel);
+  const topology = useProgramTopology(thumbnailChannel ?? null);
+  const previewRoute = sourcePreviewRoute(topology);
+  const activePgm = activeProgrammeMember(topology)?.engine;
   const showingChoice = choice !== undefined && (value === '' || boundSource === null);
   const selectedSource = showingChoice ? choice.names : value;
   const pictureOrigin = useLastPictureOrigin(thumbnailChannel, selectedSource);
@@ -359,6 +364,7 @@ export function SourcePicker({
     selectedSource,
     originDescription,
     localizeUi,
+    activePgm,
   );
   const presenceDescriptionId = `${base}-source-presence`;
 
@@ -382,31 +388,33 @@ export function SourcePicker({
         // The bound value as a finder reads it — a catalogue id, never shown.
         data={{ ...data, 'data-picker-value': value }}
       >
-        {showingChoice ? (
-          <span className="cg-source-label" data-source-label="choice">
-            <ChoiceLabel
-              choice={choice}
+        <span className="cg-source-picker__face">
+          {showingChoice ? (
+            <span className="cg-source-label" data-source-label="choice">
+              <ChoiceLabel
+                choice={choice}
+                meterChannel={thumbnailChannel}
+                showPicture={false}
+                onMeterEngineChange={onMeterEngineChange}
+              />
+            </span>
+          ) : (
+            <SourceLabel
+              sourceId={value}
               meterChannel={thumbnailChannel}
-              showPicture={false}
-              presence={selectedPresence}
-              presenceAccessible={false}
-              previewEngine={previewEngine}
-              originDescription={originDescription}
               onMeterEngineChange={onMeterEngineChange}
+              fallback={fallback}
             />
-          </span>
-        ) : (
-          <SourceLabel
-            sourceId={value}
-            meterChannel={thumbnailChannel}
+          )}
+          <SourcePresenceBadges
             presence={selectedPresence}
-            presenceAccessible={false}
+            sourceId={selectedSource}
+            accessible={false}
             previewEngine={previewEngine}
             originDescription={originDescription}
-            onMeterEngineChange={onMeterEngineChange}
-            fallback={fallback}
+            activePgm={activePgm}
           />
-        )}
+        </span>
       </ComboField>
       {presenceDescription !== undefined && (
         <span id={presenceDescriptionId} hidden>
@@ -419,6 +427,7 @@ export function SourcePicker({
           title={localizeUi('Choose a source')}
           subtitle={ariaLabel}
           emblem={Cable}
+          centerHeading
           size="library"
           layer="sub"
           onClose={close}
@@ -729,31 +738,48 @@ function InputsTab({
     const name = sourceDisplayName(source.name, 'input');
     const checkable = canCheckLiveInput(source, inputCheck?.channel ?? channel ?? 0);
     const disabled = !bindable || offChannel || loops || playlistDown;
+    const badges = (
+      <SourcePresenceBadges
+        presence={presence}
+        sourceId={source.id}
+        accessible={false}
+        previewEngine={origins.get(source.id)}
+      />
+    );
+    const thumbnail = (
+      <InputThumbnail
+        source={source}
+        onPreviewEngineChange={(engine) => publish(source.id, engine)}
+        channel={previewChannel}
+        meterChannel={offChannel ? undefined : previewChannel}
+        inputCheck={checkable ? inputCheck : undefined}
+        onCheck={checkable && !disabled ? () => onPick(source.id) : undefined}
+      />
+    );
     return {
       kind: 'option',
       key: source.id,
-      ariaLabel: source.status === 'unavailable' ? `${name} Unavailable` : name,
+      ariaLabel:
+        source.status === 'unavailable' ? localizeUi('{name} Unavailable', { name }) : name,
       ariaDescription: sourcePresenceDescription(presence, source.id, undefined, localizeUi),
       disabled,
       selected,
       ...(loops
-        ? { title: ownOutputTitle(channel) }
+        ? { title: localizeUi('Own output of CH {channel} (would loop)', { channel }) }
         : offChannel
-          ? { title: `Not available on CH ${String(channel)}` }
+          ? { title: localizeUi('Not available on CH {channel}', { channel }) }
           : disabled && source.reason !== undefined
-            ? { title: source.reason }
+            ? { title: localizeUi(source.reason) }
             : {}),
       data: { 'data-picker-input': source.id },
       trailingAccessible: true,
-      trailing: (
-        <InputThumbnail
-          source={source}
-          onPreviewEngineChange={(engine) => publish(source.id, engine)}
-          channel={previewChannel}
-          meterChannel={offChannel ? undefined : previewChannel}
-          inputCheck={checkable ? inputCheck : undefined}
-          onCheck={checkable && !disabled ? () => onPick(source.id) : undefined}
-        />
+      trailing: tiled ? (
+        thumbnail
+      ) : (
+        <span className="cg-picker-picture-presence">
+          {badges}
+          {thumbnail}
+        </span>
       ),
       content: (
         <span className="cg-picker-row">
@@ -762,12 +788,7 @@ function InputsTab({
           <bdi className="cg-picker-row__name" dir={directionOf(name)}>
             {name}
           </bdi>
-          <SourcePresenceBadges
-            presence={presence}
-            sourceId={source.id}
-            accessible={false}
-            previewEngine={origins.get(source.id)}
-          />
+          {tiled && badges}
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">
               {localizeUi('Unavailable')}
@@ -960,6 +981,14 @@ function mediaRow(
       ? `${String(item.width)}×${String(item.height)}`
       : null,
   ].filter((f): f is string => f !== null);
+  const badges = (
+    <SourcePresenceBadges
+      presence={presence}
+      sourceId={item.id}
+      accessible={false}
+      previewEngine={previewEngine}
+    />
+  );
   const previewing = preview?.key === key;
   const canPreview = item.unavailable !== true || presence?.sources[item.id]?.B === 'present';
   const poster = (
@@ -1016,19 +1045,19 @@ function mediaRow(
     ),
     content: (
       <span className="cg-picker-media">
-        {!grid && poster}
+        {!grid && (
+          <span className="cg-picker-picture-presence">
+            {badges}
+            {poster}
+          </span>
+        )}
         <span className="cg-picker-media__text">
           <span className="cg-picker-row">
             <Icon icon={Film} size={14} />
             <bdi className="cg-picker-row__name" dir={directionOf(name)}>
               {name}
             </bdi>
-            <SourcePresenceBadges
-              presence={presence}
-              sourceId={item.id}
-              accessible={false}
-              previewEngine={previewEngine}
-            />
+            {grid && badges}
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">
                 {localizeUi('Unavailable')}

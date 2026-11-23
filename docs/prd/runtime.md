@@ -4934,7 +4934,10 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN a programme picture belongs to the engine reported as active THEN a visible outline identifies that
   picture and follows an active-engine change without resizing the tiles.
 - WHEN A + B is selected THEN the operator can arrange the two pictures horizontally or vertically and the
-  selected layout is remembered on that console without reconnecting either feed
+  selected layout applies in the workspace and fullscreen, even when the workspace panel is narrow, without
+  reconnecting either feed. The console remembers the layout and shows both controls in the interface language.
+- WHEN the workspace narrows the PROGRAM panel THEN the toolbar wraps to keep status, picture controls and
+  audio controls visible and operable.
 - WHEN monitor sound is enabled THEN exactly one chosen engine is heard; changing the source moves the sound,
   loudness and the default selected-source VU without changing any on-air audio
 - WHEN All meters is enabled THEN each visible picture has its own compact, labelled scale, including an empty
@@ -5360,7 +5363,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 ## [~] R-123 — Choose separate interface and feedback languages in CG Control ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/control-languages/`
 
-**What:** In General, the operator can set English, Persian or Arabic independently for interface text and command feedback. Both default to English.
+**What:** In General, the operator can set English, Persian or Arabic independently for interface text and command feedback. The installer can set both initial languages (P-079). Without a setup choice or saved preferences, they are English.
 
 **Acceptance:**
 
@@ -5369,6 +5372,12 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN Persian or Arabic is the interface language THEN modal tabs, Inspector fields, option labels, tooltips, confirmations and statuses use that language, while action messages use the selected feedback language.
 - WHEN Station setup shows an assigned graphic THEN the template name is aligned with the table direction, and the tooltip uses its display name. The visibility switch knob stays on its track in both RTL positions.
 - WHEN the operator reads the first action column in Layers THEN the localized heading names both Load and Remove and the button names its available action.
+- WHEN the operator opens Layers, Station setup, the Inspector or a removal confirmation THEN generated layer names agree across views in the current language and custom names stay as entered.
+- WHEN the operator opens the source picker THEN its title is centered and A/B indicators stay beside each thumbnail in the Inputs and Media lists.
+- WHEN the operator hovers a source preview THEN its status and tooltip are localized. The source lists label the catalogue server independently of the picture or audio provider, and the A/B indicators stay beside the picker chevron in Inspector and source defaults.
+- WHEN the operator reads the Channel tab in Persian or Arabic THEN the dimensions and frame-rate units keep their technical order, and the video and output explanations are localized.
+- WHEN Advanced or an Inspector section is collapsed THEN its chevron points left in RTL and right in English. When expanded it points down.
+- WHEN a Persian operator views an inherited preset input THEN the generated label uses «پیشفرض» and keeps the source name as authored.
 - WHEN a developer edits a translation value before building THEN CG Control bundles the updated catalog. The root README links to the catalog source files.
 
 ## [~] R-124 — Arrange CG Control panels and save UI profiles ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/configure-control-workspace/`

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/locale.js';
 import { designerFocusPreset, designerFocusTarget, type TemplateLiveSources } from '@cg/shared-ipc';
 import { CornerUpLeft } from 'lucide-react';
 import {
@@ -27,6 +28,7 @@ export function ControlLayoutFocus({
   rowName?: string | undefined;
   onSelect(lookId: string): void;
 }): JSX.Element | null {
+  const localizeUi = useUiText();
   if (layout === undefined) {
     const preset = designerFocusPreset(liveSources, current);
     if (preset === undefined) return null;
@@ -71,7 +73,7 @@ export function ControlLayoutFocus({
     if (option === undefined) return [];
     const { frame, number } = option;
     const alias = frame.focusAlias?.trim() || undefined;
-    const label = frame.title.trim() || `Plate ${number}`;
+    const label = frame.title.trim() || localizeUi('Plate {number}', { number });
     return [{ id, lookId: controlLiveLayoutFocusLookId(preset.id, id), number, alias, label }];
   });
   return (
@@ -110,28 +112,41 @@ function FocusStrip({
   rowName: string | undefined;
   onSelect: (lookId: string) => void;
 }): JSX.Element {
+  const localizeUi = useUiText();
+  const preview = target === 'Preview';
+  const returnLabel =
+    origin === undefined ? undefined : localizeUi('Return to {name}', { name: origin.name });
   return (
     <div
       className="cg-control-layout-focus"
       role="group"
-      aria-label={target + ' Focus'}
+      aria-label={localizeUi(preview ? 'Preview Focus' : 'Programme Focus')}
       data-control-layout-focus={target.toLowerCase()}
     >
       <span className="cg-control-layout-focus__label cg-monitor-fact">
-        {target === 'Preview' ? 'Focus · PVW' : 'Focus · PGM'}
+        {localizeUi(preview ? 'Focus · PVW' : 'Focus · PGM')}
       </span>
       <span className="cg-control-layout-focus__buttons">
         {options.map(({ id, lookId, number, label, alias }) => {
           const selected = id === active;
           const caption =
-            alias === undefined ? label : alias === label ? alias : `${alias} · ${label}`;
-          const accessibleName = `Focus plate ${number} in ${target}`;
+            alias === undefined || alias === label
+              ? label
+              : localizeUi('{label} · {alias}', { label: alias, alias: label });
+          const accessibleName = localizeUi(
+            preview ? 'Focus plate {number} in Preview' : 'Focus plate {number} in Programme',
+            { number },
+          );
           return (
             <Button
               key={id}
               variant="icon"
               className={alias === undefined ? undefined : 'cg-control-layout-focus__named'}
-              aria-label={alias === undefined ? accessibleName : `${accessibleName} · ${alias}`}
+              aria-label={
+                alias === undefined
+                  ? accessibleName
+                  : localizeUi('{label} · {alias}', { label: accessibleName, alias })
+              }
               aria-pressed={selected}
               active={selected}
               {...(selected && target === 'Programme' ? { 'data-focus-onair': '' } : {})}
@@ -146,8 +161,8 @@ function FocusStrip({
         {origin !== undefined && (
           <Button
             variant="icon"
-            aria-label={`Return to ${origin.name}`}
-            title={`Return to ${origin.name}`}
+            aria-label={returnLabel}
+            title={returnLabel}
             disabled={disabled}
             onClick={() => onSelect(origin.id)}
           >

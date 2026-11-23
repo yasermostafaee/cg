@@ -2007,7 +2007,11 @@ export function StationSetupDialog({
                 data-setup-advanced=""
               >
                 <summary className="cg-card__head cg-setup-advanced__head">
-                  <Icon icon={advancedShown ? ChevronDown : ChevronRight} size={16} flipRtl />
+                  <Icon
+                    icon={advancedShown ? ChevronDown : ChevronRight}
+                    size={16}
+                    flipRtl={!advancedShown}
+                  />
                   <span className="cg-card__title">{localizeUi('Advanced')}</span>
                 </summary>
                 <div className="cg-card__body">

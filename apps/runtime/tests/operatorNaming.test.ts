@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
 import {
+  defaultLayerDisplayName,
   operatorRowName,
   plateDisplayName,
   sourceDisplayName,
@@ -109,6 +110,28 @@ describe('operatorRowName', () => {
     );
     expect(name.names).toEqual(['Live layer 58', '3ghab']);
     expect(name.layer).toBe('1-58');
+  });
+
+  it('localizes generated names by channel and preserves persisted names verbatim', () => {
+    const labels: Readonly<Record<string, string>> = {
+      'Layer {layer}': 'لایهٔ {layer}',
+      'Live layer {layer}': 'لایهٔ زنده {layer}',
+    };
+    const translate: Parameters<typeof defaultLayerDisplayName>[2] = (source, values) =>
+      (labels[source] ?? source).replace('{layer}', '\u2068' + String(values?.layer) + '\u2069');
+    const second = { ...BANK, channel: 2, aliases: { '99': 'Layer 99' } };
+
+    expect(defaultLayerDisplayName(BANK, 96, translate)).toBe('لایهٔ 96');
+    expect(defaultLayerDisplayName(BANK, 58, translate)).toBe('لایهٔ زنده 58');
+    expect(
+      operatorRowName({ slot: { channel: 2, layer: 99 } }, [BANK, second], TEMPLATES, translate),
+    ).toMatchObject({ names: ['Layer 99'], layer: '2-99' });
+    expect(
+      operatorRowName({ slot: { channel: 2, layer: 98 } }, [BANK, second], TEMPLATES, translate),
+    ).toMatchObject({ names: ['لایهٔ 98'], layer: '2-98' });
+    expect(
+      operatorRowName({ slot: { channel: 1, layer: 98 } }, [BANK, second], TEMPLATES, translate),
+    ).toMatchObject({ names: ['زیرنویس اصلی'], layer: '1-98' });
   });
 
   it('keeps the real coordinate beside a named row', () => {

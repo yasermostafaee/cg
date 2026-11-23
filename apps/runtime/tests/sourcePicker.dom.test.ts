@@ -566,7 +566,7 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     const panel = await openPicker(await render({}));
     const provenance = panel.querySelector('[data-inputs-server]');
     expect(provenance?.textContent).toBe(
-      shown === undefined ? 'Input server unavailable' : `Input server · ${shown}`,
+      shown === undefined ? 'Input catalog server unavailable' : `Input catalog server · ${shown}`,
     );
   });
 

@@ -5,6 +5,7 @@
 //! product, at 100 %, 150 % and 200 %, the way the window paints them. Release-guide captures pass
 //! their real version; an ad-hoc developer preview keeps the historical sample default.
 
+use crate::language::SetupLanguage;
 use crate::layout::{build, WidgetId};
 use crate::model::{Facts, Model, Outcome, Page, Space};
 use crate::observe;
@@ -73,6 +74,7 @@ pub fn preview(args: &[String]) -> u32 {
         let mut shots: Vec<(String, Model, Option<WidgetId>)> = Vec::new();
         let mk = |facts: &Facts| {
             let mut m = Model::new(p, config(id, version, build_id), facts.clone(), None, true);
+            m.page = Page::Welcome;
             m.space = Space {
                 drive: "C:".into(),
                 free: Some(126_000_000_000),
@@ -195,6 +197,41 @@ pub fn preview(args: &[String]) -> u32 {
                 ..Outcome::default()
             };
             shots.push(("done-warning".into(), warn, None));
+        }
+        if id == ProductId::Control {
+            let mut chooser = mk(&fresh);
+            chooser.page = Page::Language;
+            shots.push(("language".into(), chooser, None));
+            for language in [SetupLanguage::Persian, SetupLanguage::Arabic] {
+                for key in [
+                    "language",
+                    "welcome",
+                    "location",
+                    "installing",
+                    "done",
+                    "error",
+                ] {
+                    let (_, source, _) = shots.iter().find(|(name, _, _)| name == key).unwrap();
+                    let mut localized = mk(&source.facts);
+                    localized.language = language;
+                    localized.page = source.page;
+                    localized.progress = source.progress.clone();
+                    localized.shown = source.shown;
+                    localized.outcome = source.outcome.clone();
+                    if localized.page == Page::Failed {
+                        localized.outcome.reason = Some(
+                            language
+                                .text(
+                                    "The WebView2 runtime could not be installed.",
+                                    "محیط اجرای WebView2 نصب نشد.",
+                                    "تعذّر تثبيت بيئة تشغيل WebView2.",
+                                )
+                                .into(),
+                        );
+                    }
+                    shots.push((format!("{}-{key}", language.code()), localized, None));
+                }
+            }
         }
         for (name, model, focus) in &shots {
             let scene = build(model, &g);

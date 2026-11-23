@@ -275,14 +275,15 @@ export function InputThumbnail({
     );
   }
 
-  const description =
+  const description = localizeUi(
     picture !== null
       ? 'Input picture.'
       : frame?.signal === 'absent'
         ? 'No current input signal.'
         : awaitingPicture
           ? 'Loading preview…'
-          : PLACEHOLDER_DESCRIPTION;
+          : PLACEHOLDER_DESCRIPTION,
+  );
   const className =
     picture === null ? 'cg-input-thumbnail' : 'cg-input-thumbnail cg-media-thumbnail';
   const content =
@@ -322,8 +323,8 @@ export function InputThumbnail({
         data-input-thumbnail="passive"
         data-input-thumbnail-compact={compact ? '' : undefined}
         role="img"
-        aria-label={localizeUi(description)}
-        title={localizeUi(description)}
+        aria-label={description}
+        title={description}
       >
         {content}
       </span>
@@ -337,7 +338,7 @@ export function InputThumbnail({
           name: sourceDisplayName(source.name, 'input'),
         })}
         title={localizeUi('{description} Select to check this input.', {
-          description: localizeUi(description),
+          description,
         })}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
@@ -392,19 +393,21 @@ function DirectNdiInputTile({
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = receiver !== undefined && picture.state === 'live';
   const audible = receiver !== undefined && receiver === listening;
-  const caption = live
-    ? 'Direct NDI'
-    : resolvingTarget
-      ? 'Checking source…'
-      : !visible
-        ? 'Preview paused'
-        : connecting || (receiver !== undefined && picture.state === 'connecting')
-          ? 'Waiting for NDI'
-          : picture.state === 'no-signal'
-            ? 'No NDI signal'
-            : picture.state === 'error'
-              ? (picture.message ?? 'Direct NDI unavailable')
-              : 'Direct NDI unavailable';
+  const caption = localizeUi(
+    live
+      ? 'Direct NDI'
+      : resolvingTarget
+        ? 'Checking source…'
+        : !visible
+          ? 'Preview paused'
+          : connecting || (receiver !== undefined && picture.state === 'connecting')
+            ? 'Waiting for NDI'
+            : picture.state === 'no-signal'
+              ? 'No NDI signal'
+              : picture.state === 'error'
+                ? (picture.message ?? 'Direct NDI unavailable')
+                : 'Direct NDI unavailable',
+  );
   useEffect(() => {
     const part = canvas.current;
     if (receiver === undefined || part === null) return;
@@ -431,7 +434,7 @@ function DirectNdiInputTile({
         data-input-thumbnail="direct"
         role="region"
         aria-label={localizeUi('Direct NDI preview · {name}', { name: sourceName })}
-        title={picture.state === 'error' ? localizeUi(caption) : undefined}
+        title={picture.state === 'error' ? caption : undefined}
       >
         <canvas
           ref={canvas}
@@ -439,7 +442,7 @@ function DirectNdiInputTile({
           className="cg-input-check-tile__picture"
           aria-hidden="true"
         />
-        {!live && <span className="cg-input-check-tile__placeholder">{localizeUi(caption)}</span>}
+        {!live && <span className="cg-input-check-tile__placeholder">{caption}</span>}
         {onPick !== undefined && (
           <Button
             variant="ghost"
@@ -452,7 +455,7 @@ function DirectNdiInputTile({
           </Button>
         )}
         <span className="cg-input-check-tile__top">
-          {live && <span className="cg-input-check-tile__status">{localizeUi(caption)}</span>}
+          {live && <span className="cg-input-check-tile__status">{caption}</span>}
           <span className="cg-input-check-tile__actions">
             <Button
               variant="icon"

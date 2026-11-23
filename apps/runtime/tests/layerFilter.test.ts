@@ -44,6 +44,17 @@ describe('the query matches what the operator can see on the row', () => {
     );
   });
 
+  it('finds a localized default by either spelling and any supported digits', () => {
+    const persian = row({ rowName: 'لایهٔ 84', englishDefaultAlias: 'Layer 84' });
+    const arabic = row({ rowName: 'الطبقة 84', englishDefaultAlias: 'Layer 84' });
+    expect(rowIsShown(persian, { query: 'لایهٔ ۸۴', hideEmpty: false })).toBe(true);
+    expect(rowIsShown(arabic, { query: 'الطبقة ٨٤', hideEmpty: false })).toBe(true);
+    expect(rowIsShown(persian, { query: 'Layer 84', hideEmpty: false })).toBe(true);
+    expect(rowIsShown(row({ rowName: 'Studio 84' }), { query: 'Layer 84', hideEmpty: false })).toBe(
+      false,
+    );
+  });
+
   it('matches the TEMPLATE name', () => {
     const r = row({ rowName: 'Layer 5', templateName: 'News Composite' });
     expect(rowIsShown(r, { query: 'composite', hideEmpty: false })).toBe(true);

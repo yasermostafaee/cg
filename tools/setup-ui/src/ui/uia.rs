@@ -11,7 +11,8 @@
 #![allow(non_upper_case_globals)] // the `windows` crate's UIA constants, matched as patterns
 
 use super::window::{widget_code, with_app, App, WM_APP_FOCUS, WM_APP_INVOKE, WM_APP_SETVALUE};
-use crate::layout::{Item, Rect, Role, WidgetId, WidgetKind};
+use crate::language::SetupLanguage;
+use crate::layout::{progress_message, Item, Rect, Role, WidgetId, WidgetKind};
 use crate::model::StepState;
 use crate::win::{var_bool, var_bstr, var_i4, Variant};
 use std::cell::RefCell;
@@ -110,6 +111,9 @@ fn automation_id(id: WidgetId) -> String {
         WidgetId::StandaloneHostField => "standalone-amcp-host",
         WidgetId::AmcpPortField => "amcp-port",
         WidgetId::OscPortField => "osc-port",
+        WidgetId::LanguageEnglish => "language-en",
+        WidgetId::LanguagePersian => "language-fa",
+        WidgetId::LanguageArabic => "language-ar",
     }
     .to_string()
 }
@@ -125,12 +129,12 @@ pub fn take_value(code: usize) -> Option<String> {
     VALUES.with(|v| v.borrow_mut().remove(&code))
 }
 
-fn step_state(s: StepState) -> &'static str {
+fn step_state(s: StepState, language: SetupLanguage) -> &'static str {
     match s {
-        StepState::Pending => "pending",
-        StepState::Current => "current",
-        StepState::Done => "done",
-        StepState::Failed => "failed",
+        StepState::Pending => language.text("pending", "در انتظار", "قيد الانتظار"),
+        StepState::Current => language.text("current", "فعلی", "حالي"),
+        StepState::Done => language.text("done", "انجام شد", "مكتمل"),
+        StepState::Failed => language.text("failed", "ناموفق", "فشل"),
     }
 }
 
@@ -433,7 +437,7 @@ impl IRawElementProviderSimple_Impl for Element_Impl {
                         format!("step-{}", i + 1),
                         true,
                         false,
-                        Some(step_state(s.state)),
+                        Some(step_state(s.state, a.model.language)),
                     )
                 }
                 Key::Text(n) => {
@@ -453,12 +457,15 @@ impl IRawElementProviderSimple_Impl for Element_Impl {
                     )
                 }
                 Key::Bar => (
-                    "Progress".to_string(),
+                    a.model
+                        .language
+                        .text("Progress", "پیشرفت", "التقدّم")
+                        .to_string(),
                     UIA_ProgressBarControlTypeId,
                     "progress".to_string(),
                     true,
                     false,
-                    Some(a.model.progress.words),
+                    Some(progress_message(a.model.language, a.model.progress.words)),
                 ),
                 Key::Widget(wid) => {
                     let w = a.scene.widget(wid)?;

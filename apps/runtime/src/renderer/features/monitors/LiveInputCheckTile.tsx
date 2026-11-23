@@ -177,15 +177,19 @@ export function LiveInputCheckTile({
 
   const audible = audio === 'connecting' || audio === 'playing';
   const state = view.state === 'ready' && !pictureLive ? 'connecting' : view.state;
-  const peer = view.engine === undefined ? undefined : `Server ${view.engine}`;
-  const caption = [CAPTIONS[state], peer].filter(Boolean).join(' · ');
+  const status = localizeUi(CAPTIONS[state]);
+  const caption =
+    view.engine === undefined
+      ? status
+      : localizeUi('{status} · Server {server}', { status, server: view.engine });
+  const detail = view.message ? localizeUi(view.message) : undefined;
   const handleButtonKey = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
   };
   const message = [
     caption,
-    view.message,
-    audio === 'unavailable' ? 'Input sound unavailable' : undefined,
+    detail,
+    audio === 'unavailable' ? localizeUi('Input sound unavailable') : undefined,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -209,7 +213,7 @@ export function LiveInputCheckTile({
         {!pictureLive && (
           <span className="cg-input-check-tile__placeholder">
             {state === 'forbidden' ? (
-              <span data-input-check-detail="">{view.message || localizeUi('Access denied')}</span>
+              <span data-input-check-detail="">{detail ?? status}</span>
             ) : state === 'connecting' ? (
               localizeUi('Waiting for picture')
             ) : (

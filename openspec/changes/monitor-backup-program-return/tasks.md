@@ -30,3 +30,5 @@
 - [ ] 4.4 Push the exact commit to `dev`, record the completed green Linux `ci` and `e2e` run URL here, and complete the 0.12.6 installer candidate only afterward.
 - [x] 4.5 Re-run the focused Runtime DOM/E2E coverage for the always-visible reserve controls and no-signal placeholder.
 - [x] 4.6 Run focused DOM/E2E coverage for both A+B arrangements and persistence.
+- [x] Verify real tile positions below the former 520 px breakpoint, continued selection after fullscreen, and both layout controls' Persian and Arabic text in Windows Edge Playwright.
+- [x] Verify the programme header, signal status and all audio controls fit at two width settings in the normal workspace. The two RTL scenarios and three existing paired, grid and standard-width strip regressions passed.

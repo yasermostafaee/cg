@@ -184,7 +184,9 @@ test.describe('a Playout that has shared nothing', () => {
     await expect(dialog.locator('[data-source-input]')).toHaveCount(0);
     // …and it has never been read, which is said too, rather than a time nobody read at.
     await expect(dialog.locator('[data-sources-read]')).toHaveText('Not read yet');
-    await expect(dialog.locator('[data-inputs-server]')).toHaveText('Input server unavailable');
+    await expect(dialog.locator('[data-inputs-server]')).toHaveText(
+      'Input catalog server unavailable',
+    );
     await app.closeStationSetup();
   });
 });

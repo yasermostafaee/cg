@@ -48,9 +48,9 @@ export function Icon({
       size={size}
       aria-hidden="true"
       focusable="false"
+      className={flipRtl ? 'cg-icon--flip-rtl' : undefined}
       style={{
         flexShrink: 0,
-        ...(flipRtl ? { transform: 'scaleX(var(--cg-icon-flip, 1))' } : {}),
         ...style,
       }}
     />

@@ -1,6 +1,28 @@
+import type { Locator } from '@playwright/test';
 import { expect, test, E2E_PLAYOUT } from './fixtures/runtime.js';
 
 test.use({ playoutSources: E2E_PLAYOUT });
+
+async function expectAdvancedChevron(dialog: Locator, direction: 'ltr' | 'rtl'): Promise<void> {
+  const advanced = dialog.locator('[data-setup-advanced]');
+  const summary = advanced.locator('summary');
+  if ((await advanced.getAttribute('open')) === null) await summary.click();
+  await expect(advanced).toHaveAttribute('open', '');
+  await expect(summary.locator('.lucide-chevron-down')).toHaveCSS('transform', 'none');
+  await summary.click();
+  await expect(advanced).not.toHaveAttribute('open');
+  await expect(summary.locator('.lucide-chevron-right')).toHaveCSS(
+    'transform',
+    direction === 'rtl' ? 'matrix(-1, 0, 0, 1, 0, 0)' : 'none',
+  );
+}
+
+test('Station Settings keeps the English Advanced chevron pointing right when closed', async ({
+  app,
+}) => {
+  await app.openStationSetupAt('Connection');
+  await expectAdvancedChevron(app.page.getByRole('dialog'), 'ltr');
+});
 
 const detail = {
   fa: {
@@ -113,6 +135,57 @@ for (const locale of ['fa', 'ar'] as const) {
     await dialog.locator('#cg-interface-language').selectOption(locale);
     await expect(dialog).toHaveCSS('direction', 'rtl');
 
+    const channelTab = locale === 'fa' ? 'کانال' : 'القناة';
+    await dialog.getByRole('tab', { name: channelTab, exact: true }).click();
+    const video = dialog.locator('[data-raster-channel="1"]');
+    await expect(video.locator('.cg-video-mode__scan')).toHaveText(
+      locale === 'fa' ? 'درهم‌بافته (Interlaced)' : 'مسح متداخل (Interlaced)',
+    );
+    const raster = video.locator('[data-channel-raster]');
+    await expect(raster).toHaveText('1920 × 1080');
+    await expect(raster).toHaveCSS('direction', 'ltr');
+    const rate = video.locator('[data-channel-rate]');
+    await expect(rate).toHaveText('25 fps · 50 fields/s');
+    await expect(rate).toHaveCSS('direction', 'ltr');
+    await expect(video.locator('[data-raster-verdict="match"]')).toHaveText(
+      locale === 'fa' ? 'با سرور هم‌خوان است' : 'مطابق لإعدادات الخادم',
+    );
+    await expect(video).not.toContainText('the engine configuration');
+    const outputHelp = dialog.locator('details').filter({
+      hasText: locale === 'fa' ? 'شناسایی خروجی‌ها' : 'طريقة تحديد المخارج',
+    });
+    await outputHelp.locator('summary').click();
+    await expect(outputHelp).toContainText('INFO CONFIG');
+    await expect(outputHelp).toContainText(
+      locale === 'fa' ? 'خروجی‌های تعریف‌شده' : 'تقارن وحدة التحكم المخارج',
+    );
+
+    for (const [mode, width, height, scan, expectedRate] of [
+      ['1080p5000', 1920, 1080, '1080p', '50 fps'],
+      ['720p5994', 1280, 720, '720p', '59.94 fps'],
+      ['2160p2500', 3840, 2160, '2160p', '25 fps'],
+    ] as const) {
+      await dialog.getByRole('tab', { name: words.sources, exact: true }).click();
+      await page.evaluate(
+        ({ mode, width, height }) => {
+          window.cg.channelSettings.get = async () => ({
+            settings: [{ channel: 1, raster: { width, height } }],
+            observed: [{ channel: 1, mode, raster: { width, height } }],
+          });
+        },
+        { mode, width, height },
+      );
+      await dialog.getByRole('tab', { name: channelTab, exact: true }).click();
+      await expect(video.locator('[data-video-mode-word]')).toHaveText(scan);
+      await expect(video.locator('.cg-video-mode__scan')).toHaveText(
+        locale === 'fa' ? 'پیش‌رونده (Progressive)' : 'تقدّمي (Progressive)',
+      );
+      await expect(raster).toHaveText(String(width) + ' × ' + String(height));
+      await expect(raster).toHaveCSS('direction', 'ltr');
+      await expect(rate).toHaveText(expectedRate);
+      await expect(rate).toHaveCSS('direction', 'ltr');
+    }
+
     await dialog.getByRole('tab', { name: words.sources, exact: true }).click();
     const sourceSection = dialog.locator('[data-station-section="sources"]');
     const view = sourceSection.locator('.cg-picker-input-view button');
@@ -137,6 +210,7 @@ for (const locale of ['fa', 'ar'] as const) {
 
     const connection = locale === 'fa' ? /^اتصال/ : /^الاتصال/;
     await dialog.getByRole('tab', { name: connection }).click();
+    await expectAdvancedChevron(dialog, 'rtl');
     const editHost = dialog.locator('#cg-playout-address');
     if (await editHost.isVisible()) await editHost.fill('127.0.0.1');
     await dialog.getByRole('button', { name: words.check, exact: true }).click();
@@ -157,6 +231,27 @@ for (const locale of ['fa', 'ar'] as const) {
 
     await dialog.getByRole('tab', { name: new RegExp('^' + words.layers) }).click();
     const occupied = dialog.locator('[data-candidate-layer="84"]');
+    const layerName = locale === 'fa' ? 'لایهٔ 84' : 'الطبقة 84';
+    const lowName = locale === 'fa' ? 'لایهٔ زنده 59' : 'الطبقة الحية 59';
+    const layerNameInput = occupied.getByRole('textbox');
+    await expect(layerNameInput).toHaveAttribute('placeholder', layerName);
+    await expect(layerNameInput).toHaveValue('');
+    await expect(
+      dialog.locator('[data-candidate-layer="59"]').getByRole('textbox'),
+    ).toHaveAttribute('placeholder', lowName);
+    await expect(dialog.locator('[data-candidate-layer="80"]').getByRole('textbox')).toHaveValue(
+      'CLOCK',
+    );
+
+    const filter = dialog.getByRole('searchbox');
+    const query = locale === 'fa' ? 'لایهٔ ۸۴' : 'الطبقة ٨٤';
+    for (const text of [query, 'Layer 84']) {
+      await filter.fill(text);
+      await expect(dialog.locator('[data-candidate-layer]')).toHaveCount(1);
+      await expect(occupied).toBeVisible();
+    }
+    await filter.fill('');
+
     const name = occupied.locator('.cg-layer-template bdi');
     await expect(name).toHaveText('ghabb');
     await expect(name).toHaveAttribute('dir', 'ltr');
@@ -174,5 +269,36 @@ for (const locale of ['fa', 'ar'] as const) {
     if (nameBox !== null && lockBox !== null) {
       expect(Math.abs(nameBox.x + nameBox.width - lockBox.x - lockBox.width)).toBeLessThan(2);
     }
+    await occupied.getByRole('button').click();
+    const confirmation = page.getByRole('dialog').last();
+    await expect(confirmation.getByRole('heading')).toContainText(layerName);
+    await expect(confirmation.getByRole('heading')).toContainText('ghabb');
+    await confirmation
+      .getByRole('button', { name: locale === 'fa' ? 'انصراف' : 'إلغاء', exact: true })
+      .click();
+    await expect(occupied.locator('.cg-layer-template')).toHaveText('ghabb');
+
+    const close = locale === 'fa' ? 'بستن' : 'إغلاق';
+    await dialog.getByRole('button', { name: close, exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    const mainList = page.locator('[data-layer-list]');
+    const mainRow = mainList.locator('[data-layer="84"]');
+    await expect(mainRow.locator('[data-row-body] bdi')).toHaveText(layerName);
+    await expect(mainList.locator('[data-layer="59"]').locator('[data-row-body] bdi')).toHaveText(
+      lowName,
+    );
+    await expect(mainList.locator('[data-layer="80"]').locator('[data-row-body] bdi')).toHaveText(
+      'CLOCK',
+    );
+    await mainRow.locator('[data-verb-tone="remove"]').click();
+    const remove = page.getByRole('dialog');
+    await expect(remove.getByRole('heading')).toContainText(layerName);
+    await expect(remove.getByRole('heading')).toContainText('ghabb');
+    await expect(remove).toContainText(locale === 'fa' ? 'برای بارگذاری دوباره' : 'لإعادة التحميل');
+    await expect(remove).toContainText('1-84');
+    await remove
+      .getByRole('button', { name: locale === 'fa' ? 'انصراف' : 'إلغاء', exact: true })
+      .click();
+    await expect(mainRow.locator('[data-verb-tone="remove"]')).toBeVisible();
   });
 }

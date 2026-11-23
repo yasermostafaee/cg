@@ -1505,6 +1505,7 @@ export function LayerRow({
               { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
               null,
               new Map([[template.templateId, template]]),
+              localizeUi,
             )
           }
           seatedPlates={seatedPlates}

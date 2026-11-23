@@ -296,7 +296,7 @@ export function PositionPicker({
             aria-expanded={open}
             onClick={disclosure?.toggle ?? (() => setLocalOpen((expanded) => !expanded))}
           >
-            <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
+            <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl={!open} />
             {localizeUi('Position')}
           </button>
           {dirty && (
@@ -309,7 +309,11 @@ export function PositionPicker({
           )}
         </span>
         <span className="cg-inspector-position__summary">
-          {anchor.replace('-', ' ')} · {offsetNumber(dx)}, {offsetNumber(dy)}
+          {localizeUi('{anchor} · {x}, {y}', {
+            anchor: localizeUi(anchor.replace('-', ' ')),
+            x: offsetNumber(dx),
+            y: offsetNumber(dy),
+          })}
         </span>
       </h2>
       <div id={controlsId} className="cg-inspector-position__controls" hidden={!open}>
@@ -337,10 +341,10 @@ export function PositionPicker({
                 key={a}
                 variant="default"
                 className="cg-anchor-cell"
-                aria-label={localizeUi('Anchor {anchor}', { anchor: a })}
+                aria-label={localizeUi('Anchor {anchor}', { anchor: localizeUi(a) })}
                 aria-pressed={a === anchor}
                 disabled={locked}
-                title={a}
+                title={localizeUi(a)}
                 onClick={() => setAnchor(a)}
               >
                 {/* The anchor POINT inside its cell. The cell's border draws the

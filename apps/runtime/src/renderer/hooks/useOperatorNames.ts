@@ -1,3 +1,4 @@
+import { useUiText } from '../i18n/locale.js';
 import type { FixedLayerBank } from '@cg/shared-ipc';
 import { operatorRowName, type NameableRef, type OperatorRowName } from '../ui/operatorNaming.js';
 import { useFixedBanks } from './useFixedLayers.js';
@@ -24,6 +25,7 @@ import { useTemplateIndex, type TemplateIndex } from './useTemplateIndex.js';
 export function useOperatorNames(
   refs: readonly NameableRef[],
 ): (ref: NameableRef) => OperatorRowName {
+  const localizeUi = useUiText();
   const banks: readonly FixedLayerBank[] = useFixedBanks();
   // `CHANNEL-TEMPLATES-01` — each ref's template as the channel of its slot lists it.
   const templates: TemplateIndex = useTemplateIndex(
@@ -33,5 +35,5 @@ export function useOperatorNames(
         : [{ templateId: r.templateId, channel: r.slot?.channel }],
     ),
   );
-  return (ref) => operatorRowName(ref, banks, templates);
+  return (ref) => operatorRowName(ref, banks, templates, localizeUi);
 }

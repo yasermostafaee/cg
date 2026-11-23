@@ -356,11 +356,7 @@ export function MonitorPanel({
     returns.find(({ engine }) => engine === selectedAudio)?.engine ?? returns[0]?.engine;
   const grid = returns.length > 2;
   const displayControls = (
-    <div
-      style={styles.controls}
-      className="cg-pgm-source-controls"
-      data-pgm-topology-controls={legacy ? undefined : ''}
-    >
+    <div className="cg-pgm-source-controls" data-pgm-topology-controls={legacy ? undefined : ''}>
       <div style={styles.controls} role="group" aria-label={localizeUi('Programme picture source')}>
         {[...pictureModes].map((mode) => (
           <Button
@@ -388,31 +384,34 @@ export function MonitorPanel({
           role="group"
           aria-label={localizeUi('Programme picture layout')}
         >
-          {(['horizontal', 'vertical'] as const).map((layout) => (
-            <Button
-              key={layout}
-              variant="ghost"
-              aria-label={localizeUi('{direction} programme layout', {
-                direction: layout === 'horizontal' ? 'Horizontal' : 'Vertical',
-              })}
-              aria-pressed={monitorPreferences.layout === layout}
-              data-toggle-on={monitorPreferences.layout === layout ? '' : undefined}
-              data-pgm-layout-choice={layout}
-              title={localizeUi('{direction} {source} layout', {
-                direction: layout === 'horizontal' ? 'Horizontal' : 'Vertical',
-                source: legacy ? 'A+B' : 'programme',
-              })}
-              onClick={() => monitorPreferences.setLayout(layout)}
-            >
-              <Icon icon={layout === 'horizontal' ? Columns2 : Rows2} size={13} />
-            </Button>
-          ))}
+          {(['horizontal', 'vertical'] as const).map((layout) => {
+            const direction = localizeUi(layout === 'horizontal' ? 'Horizontal' : 'Vertical');
+            const label = localizeUi('{direction} programme layout', { direction });
+            return (
+              <Button
+                key={layout}
+                variant="ghost"
+                aria-label={label}
+                aria-pressed={monitorPreferences.layout === layout}
+                data-toggle-on={monitorPreferences.layout === layout ? '' : undefined}
+                data-pgm-layout-choice={layout}
+                title={
+                  legacy
+                    ? localizeUi('{direction} {source} layout', { direction, source: 'A+B' })
+                    : label
+                }
+                onClick={() => monitorPreferences.setLayout(layout)}
+              >
+                <Icon icon={layout === 'horizontal' ? Columns2 : Rows2} size={13} />
+              </Button>
+            );
+          })}
         </div>
       )}
     </div>
   );
   const audioControls = (
-    <div style={styles.controls} className="cg-pgm-source-controls">
+    <div className="cg-pgm-source-controls">
       <select
         className="cg-pgm-audio-select"
         aria-label={localizeUi('Programme sound source')}

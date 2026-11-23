@@ -4314,25 +4314,24 @@ and both app assertions now follow this contract; verification evidence belongs 
 **2026-11-07 owner supersession:** for the `1.0.0` installers, the visible Revision segment is removed.
 The revision remains in the shared structured build identity for diagnostics only.
 
-## [~] P-077 — Keep a website-ready version history with per-release downloads ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/add-versioned-release-history/`
+## [~] P-077 — Keep a website-ready version history ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/add-versioned-release-history/`
 
-**What:** Keep release changes in one tracked data file and generate a self-contained Persian and English
-HTML page with one clickable section per version. Each released version owns the exact install-guide, Bridge, Control,
-Designer and checksum filenames; a later host base URL activates those five download links without editing
-the generated markup.
+**What:** Keep release changes in one tracked data file and generate a self-contained Persian, English and Arabic
+HTML page with one clickable section per version. The release tooling still delivers the exact install-guide,
+Bridge, Control, Designer and checksum filenames.
 
 **Why:** Product changes must not be lost between installer builds, and the company website needs a stable
 per-version surface that can receive hosted files later.
 
 **Acceptance:**
 
-- WHEN the history is generated THEN the standalone HTML page separates features and fixes by version in
-  both languages, embeds a Persian font and lists the version's guide/installer/checksum cards
+- WHEN the history is generated THEN the standalone HTML page separates features and fixes in all three
+  languages and uses embedded Vazirmatn. The page opens in Persian with manual English and Arabic options.
 - WHEN the user opens Version history in Designer Home, Designer Help or CG Control Station setup THEN
   the app shows the same packaged page
-- WHEN a version has no host base URL THEN its file cards remain visibly disabled while preserving the exact
-  future filenames
-- WHEN a host base URL is supplied THEN all five cards bind to that version's files
+- WHEN the reader chooses Arabic THEN the page uses right-to-left Arabic release descriptions, publication labels
+  and pagination. Each page shows at most fifteen numbered releases.
+- WHEN rendering public history THEN only numbered release notes appear, with the draft and download sections hidden.
 - WHEN installers are built THEN their version must already have a tracked history entry, otherwise the
   build stops before packaging
 - WHEN the next installer build is requested THEN confirm whether the preceding version reached a
@@ -4353,3 +4352,16 @@ The absolute 20-second backstop and reduced-motion preference remain in force.
 - WHEN progress stalls THEN the percentage stays on the completed phase
 - WHEN the bootstrap is stuck for 20 seconds THEN the splash yields to the app's error surface
 - WHEN reduced motion is requested THEN the complete splash composition is still
+
+## [~] P-079 — Choose the initial CG Control language in setup ⟨priority: medium — owner, 2026-11-24⟩ — `openspec/changes/choose-control-install-language/`
+
+**What:** Choose English, Persian or Arabic as the first step in interactive CG Control setup.
+The selected language drives the wizard and becomes the initial language for both interface and
+operation messages in the installed console.
+
+**Acceptance:**
+
+- WHEN the user chooses a language THEN setup continues in that language and uses right-to-left text for Persian and Arabic.
+- WHEN installation succeeds THEN the choice is available on the first application launch, including a later launch from the desktop.
+- WHEN an existing console has saved language choices THEN upgrading retains those independent choices.
+- WHEN setup runs silently or for another product THEN the existing flow is preserved.

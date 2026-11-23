@@ -1,6 +1,7 @@
 interface ReleaseHistoryTranslation {
   fa: string;
   en: string;
+  ar?: string;
 }
 
 interface ReleaseHistoryEntry {
@@ -18,6 +19,7 @@ interface ReleaseHistoryEntry {
 interface ReleaseHistory {
   product: string;
   releases: ReleaseHistoryEntry[];
+  languages?: readonly ('fa' | 'en' | 'ar')[];
 }
 
 declare module '*build-release-history.mjs' {

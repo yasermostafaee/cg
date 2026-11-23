@@ -494,8 +494,8 @@ export function LiveSourcesPanel({
     const empty = liveLayerEmptyView(blind, ledgerReady);
     return (
       <div style={styles.empty} data-live-layers-known={empty.known ? 'true' : 'false'}>
-        <div style={styles.emptyHeadline}>{empty.headline}</div>
-        {empty.detail !== null && <div>{empty.detail}</div>}
+        <div style={styles.emptyHeadline}>{localizeUi(empty.headline)}</div>
+        {empty.detail !== null && <div>{localizeUi(empty.detail)}</div>}
       </div>
     );
   }
@@ -524,6 +524,7 @@ export function LiveSourcesPanel({
     alarm conditional on a control the operator set minutes ago and has forgotten is not an
     alarm.
   */
+  const scopeNote = localizeUi(SCOPE_NOTE);
   const seated = rows.filter((r) => r.coordinate !== null);
   const shownCount = seated.filter((r) => r.audio !== null && !r.audio.held).length;
   const heldCount = seated.filter((r) => r.audio?.held === true).length;
@@ -568,7 +569,7 @@ export function LiveSourcesPanel({
           The scope note behind the reference's info glyph, through the delegated Tooltip; the
           same sentence is this tab's own doc-comment, and the toolbar's counts say the rest.
         */}
-        <span className="cg-plate-help" title={SCOPE_NOTE} aria-label={SCOPE_NOTE} role="img">
+        <span className="cg-plate-help" title={scopeNote} aria-label={scopeNote} role="img">
           <Icon icon={Info} size={16} />
         </span>
         {playlistChannel !== undefined && canOperateChannel && (
@@ -667,6 +668,8 @@ export function LiveSourcesPanel({
           const attention = !row.plain;
           const name = plateName(row);
           const source = plateSourceName(row);
+          const headline = localizeUi(row.headline);
+          const detail = localizeUi(row.detail);
           return (
             <div
               /*
@@ -691,11 +694,11 @@ export function LiveSourcesPanel({
                     ? '{name} on {layer} · {status}'
                     : '{name} not seated · {status}',
                   row.coordinate !== null
-                    ? { name, layer: row.coordinate, status: localizeUi(row.headline) }
-                    : { name, status: localizeUi(row.headline) },
+                    ? { name, layer: row.coordinate, status: headline }
+                    : { name, status: headline },
                 ) + (row.audio !== null ? localizeUi(' · right-click for audio') : '')
               }
-              title={row.detail}
+              title={detail}
               onContextMenu={(e) => {
                 if (openAudioFor(row)) {
                   e.preventDefault();
@@ -845,7 +848,7 @@ export function LiveSourcesPanel({
                 )}
               </span>
               <span role="cell" className="cg-plate-picture" style={{ color: row.tone }}>
-                {row.headline}
+                {headline}
               </span>
               {/*
                 The audio strip renders itself away when the console cannot honestly state
@@ -871,7 +874,7 @@ export function LiveSourcesPanel({
               */}
               {attention && (
                 <span role="cell" className="cg-plate-detail">
-                  {row.detail}
+                  {detail}
                 </span>
               )}
             </div>

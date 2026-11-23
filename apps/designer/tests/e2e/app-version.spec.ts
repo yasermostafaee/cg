@@ -14,8 +14,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = (
   JSON.parse(readFileSync(path.resolve(here, '../../package.json'), 'utf8')) as { version: string }
 ).version;
+const { releases } = JSON.parse(
+  readFileSync(path.resolve(here, '../../../../docs/release/release-history.json'), 'utf8'),
+) as { releases: { version: string }[] };
+const numbered = releases.filter(({ version }) => version !== 'next').length;
+const pageCount = Math.ceil(numbered / 15);
 
-test('P-077 — open the bilingual release history from Home and the editor Help menu', async ({
+test('P-077 — open the three-language release history from Home and the editor Help menu', async ({
   app,
 }) => {
   const page = app.page;
@@ -28,8 +33,10 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   await expect(persianPages).toBeVisible();
   await expect(persianPages.getByRole('button')).toHaveCount(2);
   await expect(persianPages.getByRole('button').nth(0)).toBeDisabled();
-  await expect(persianPages.getByRole('button').nth(1)).toBeDisabled();
-  await expect(history.locator('[id="version-next"], [id="en-version-next"]')).toHaveCount(0);
+  await expect(persianPages.getByRole('button').nth(1)).toBeEnabled();
+  await expect(
+    history.locator('[id="version-next"], [id="en-version-next"], [id="ar-version-next"]'),
+  ).toHaveCount(0);
   await expect(history.locator('.download-grid, .download')).toHaveCount(0);
   await expect(
     history.getByRole('heading', { name: 'دانلودهای این نسخه', exact: true }),
@@ -61,7 +68,7 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   await expect(englishPages).toBeVisible();
   await expect(englishPages.getByRole('button')).toHaveCount(2);
   await expect(englishPages.getByRole('button').nth(0)).toBeDisabled();
-  await expect(englishPages.getByRole('button').nth(1)).toBeDisabled();
+  await expect(englishPages.getByRole('button').nth(1)).toBeEnabled();
   await expect(history.locator('[id="en-version-1.1.0"] [data-status]')).toHaveAttribute(
     'data-status',
     'published',
@@ -72,7 +79,35 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   await expect(
     history.getByRole('heading', { name: 'Downloads for this version', exact: true }),
   ).toHaveCount(0);
-  const historicalRelease = history.locator('[id="en-version-1.0.0"]');
+  const arabic = history.getByRole('button', { name: 'العربية', exact: true });
+  await arabic.click();
+  await expect(arabic).toHaveAttribute('aria-pressed', 'true');
+  await expect(history.locator('html')).toHaveAttribute('lang', 'ar');
+  await expect(history.locator('html')).toHaveAttribute('dir', 'rtl');
+  await expect(history.getByRole('heading', { name: 'سجل الإصدارات والتغييرات' })).toBeVisible();
+  await expect(history.locator('#history-fa')).toBeHidden();
+  await expect(history.locator('#history-en')).toBeHidden();
+  const arabicPanel = history.locator('#history-ar');
+  const arabicPages = arabicPanel.getByRole('navigation', { name: 'صفحات سجل الإصدارات' });
+  const arabicPrevious = arabicPages.getByRole('button', { name: 'الصفحة السابقة' });
+  const arabicNext = arabicPages.getByRole('button', { name: 'الصفحة التالية' });
+  const visibleArabicVersions = arabicPanel.locator('.release:visible');
+  await expect(visibleArabicVersions).toHaveCount(15);
+  await expect(arabicPrevious).toBeDisabled();
+  await expect(
+    arabicPanel.locator('[id="ar-version-1.2.12"] [data-status="published"]'),
+  ).toHaveText('منشور');
+  await expect(arabicPanel.locator('[id="ar-version-1.2.12"]')).toContainText('c770cab9');
+  await arabicNext.click();
+  await expect(visibleArabicVersions).toHaveCount(Math.min(15, numbered - 15));
+  await expect(arabicPrevious).toBeEnabled();
+  if (pageCount === 2) await expect(arabicNext).toBeDisabled();
+  const arabicPageLabel = await arabicPanel.evaluate((_, pages) => {
+    const number = new Intl.NumberFormat('ar');
+    return 'الصفحة ' + number.format(2) + ' من ' + number.format(pages);
+  }, pageCount);
+  await expect(arabicPages.locator('[data-page-status]')).toHaveText(arabicPageLabel);
+  const historicalRelease = visibleArabicVersions.first();
   await historicalRelease.locator('summary').click();
   await expect(historicalRelease).toHaveAttribute('open', '');
   await close.last().click();

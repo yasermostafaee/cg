@@ -1,7 +1,9 @@
 import { useUiText } from '../../i18n/locale.js';
-import type { SourcePresenceView } from '@cg/shared-ipc';
+import type { PgmTopology, SourcePresenceView } from '@cg/shared-ipc';
 import './source-presence-badges.css';
 import type { PreviewEngine } from './usePreviewOrigins.js';
+
+type ProgrammeEngine = NonNullable<PgmTopology['active']>;
 
 const SERVERS = ['A', 'B'] as const;
 const AVAILABILITY = {
@@ -33,11 +35,15 @@ export function sourcePresenceDescription(
   sourceId: string | null | undefined,
   originDescription?: string,
   localize?: ReturnType<typeof useUiText>,
+  activePgm?: ProgrammeEngine,
 ): string | undefined {
   const servers = forSource(presence, sourceId, localize);
   if (servers === null) return undefined;
   const availability = servers.map(({ label }) => label);
   if (originDescription !== undefined) availability.push(originDescription);
+  if (activePgm !== undefined && localize !== undefined) {
+    availability.push(localize('Active PGM server: {server}', { server: activePgm }));
+  }
   return availability.join('. ');
 }
 
@@ -47,12 +53,14 @@ export function SourcePresenceBadges({
   accessible = true,
   previewEngine,
   originDescription: suppliedOrigin,
+  activePgm,
 }: {
   presence: SourcePresenceView | null;
   sourceId: string | null | undefined;
   accessible?: boolean;
   previewEngine?: PreviewEngine | undefined;
   originDescription?: string | undefined;
+  activePgm?: ProgrammeEngine | undefined;
 }): JSX.Element | null {
   const localizeUi = useUiText();
   const originDescription =
@@ -62,7 +70,17 @@ export function SourcePresenceBadges({
       : localizeUi('Preview from server {server}', { server: previewEngine }));
   const servers = forSource(presence, sourceId, localizeUi);
   if (servers === null) return null;
-  const label = sourcePresenceDescription(presence, sourceId, originDescription, localizeUi);
+  const label = sourcePresenceDescription(
+    presence,
+    sourceId,
+    originDescription,
+    localizeUi,
+    activePgm,
+  );
+  const programmeDescription =
+    activePgm === undefined
+      ? undefined
+      : localizeUi('Active PGM server: {server}', { server: activePgm });
   return (
     <span
       className="cg-source-presence"
@@ -78,11 +96,13 @@ export function SourcePresenceBadges({
           data-source-presence-server={server}
           data-source-presence-state={state}
           data-source-preview-provider={previewEngine === server ? '' : undefined}
-          title={
-            previewEngine === server && originDescription !== undefined
-              ? `${title}. ${originDescription}`
-              : title
-          }
+          title={[
+            title,
+            previewEngine === server ? originDescription : undefined,
+            programmeDescription,
+          ]
+            .filter(Boolean)
+            .join('. ')}
         >
           {server}
         </span>

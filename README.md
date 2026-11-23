@@ -127,6 +127,8 @@ Edit the CG Control language catalogs in the source checkout before building ins
 - [Persian](apps/runtime/src/renderer/i18n/catalogs/fa.json)
 - [Arabic](apps/runtime/src/renderer/i18n/catalogs/ar.json)
 
+Native CG Control setup strings are in [tools/setup-ui/src](tools/setup-ui/src), including the wizard captions in [layout.rs](tools/setup-ui/src/layout.rs).
+
 The `interface` section covers labels, tooltips, descriptions and standing status. The
 `feedback` section covers action results, warnings and toasts. Change the translated values
 and preserve the keys and placeholders such as `{row}`. Check the catalogs with

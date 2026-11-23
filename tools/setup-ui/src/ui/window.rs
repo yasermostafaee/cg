@@ -15,6 +15,7 @@ use super::uia;
 use crate::cmdline::{self, Parsed};
 use crate::engine::{self, Child, Payload};
 use crate::field::Field;
+use crate::language::{write_install_language, SetupLanguage};
 use crate::layout::{
     build, help_target, HelpTarget, Scene, WidgetId, WidgetKind, RAIL_W, TITLE_H, WIN_H, WIN_W,
 };
@@ -28,7 +29,7 @@ use crate::server::{
 use crate::win;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -112,7 +113,7 @@ pub fn widget_from_code(code: usize) -> Option<WidgetId> {
     ALL_WIDGETS.get(code).copied()
 }
 const ADDRESS_CODE: usize = 100;
-const ALL_WIDGETS: [WidgetId; 22] = [
+const ALL_WIDGETS: [WidgetId; 25] = [
     WidgetId::Next,
     WidgetId::Back,
     WidgetId::Cancel,
@@ -135,6 +136,9 @@ const ALL_WIDGETS: [WidgetId; 22] = [
     WidgetId::StandaloneHostField,
     WidgetId::AmcpPortField,
     WidgetId::OscPortField,
+    WidgetId::LanguageEnglish,
+    WidgetId::LanguagePersian,
+    WidgetId::LanguageArabic,
 ];
 
 /// What must run after the window's state is released (each may re-enter the window procedure).
@@ -596,8 +600,9 @@ fn run_effect(hwnd: HWND, e: Effect) {
             }
             Effect::PickFolder => {
                 let start =
-                    with_app(|a| (a.model.dir.clone(), a.model.product.name)).unwrap_or_default();
-                if let Some(chosen) = pick_folder(hwnd, &start.0, start.1) {
+                    with_app(|a| (a.model.dir.clone(), a.model.product.name, a.model.language))
+                        .unwrap_or_default();
+                if let Some(chosen) = pick_folder(hwnd, &start.0, start.1, start.2) {
                     APP.with(|a| {
                         if let Ok(mut g) = a.try_borrow_mut() {
                             if let Some(app) = g.as_mut() {
@@ -653,8 +658,15 @@ fn run_effect(hwnd: HWND, e: Effect) {
 
 /// The system folder picker. The product's own folder name is added to a folder that is not it, as
 /// NSIS's directory page always did.
-fn pick_folder(hwnd: HWND, current: &str, name: &str) -> Option<String> {
-    let chosen = pick_exact_folder(hwnd, current, &format!("Choose a folder for {name}"))?;
+fn pick_folder(hwnd: HWND, current: &str, name: &str, language: SetupLanguage) -> Option<String> {
+    let title = language
+        .text(
+            "Choose a folder for {name}",
+            "پوشهٔ نصب {name} را انتخاب کنید",
+            "اختر مجلد تثبيت {name}",
+        )
+        .replace("{name}", name);
+    let chosen = pick_exact_folder(hwnd, current, &title)?;
     let last = Path::new(&chosen)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -1333,7 +1345,7 @@ impl App {
 
     fn close_request(&mut self, fx: &mut Vec<Effect>) {
         match self.model.page {
-            Page::Welcome | Page::Location | Page::Server => self.quit(1, fx),
+            Page::Language | Page::Welcome | Page::Location | Page::Server => self.quit(1, fx),
             Page::Installing => {
                 if !self.model.progress.engine_started && !self.model.cancelling {
                     self.cancel_install(fx);
@@ -1364,15 +1376,31 @@ impl App {
             &format!("pressed {id:?} on {:?}", self.model.page),
         );
         match id {
-            WidgetId::Next => match self.model.page {
-                // CG Bridge's Location leads to its Playout page (`RELEASE-0111-01` Part A).
-                Page::Location if self.model.has_server_page() => self.set_page(Page::Server),
-                _ => self.set_page(Page::Location),
-            },
-            WidgetId::Back => match self.model.page {
-                Page::Server => self.set_page(Page::Location),
-                _ => self.set_page(Page::Welcome),
-            },
+            WidgetId::Next => {
+                if let Some(page) = self.model.next_page() {
+                    self.set_page(page);
+                }
+            }
+            WidgetId::Back => {
+                if let Some(page) = self.model.previous_page() {
+                    self.set_page(page);
+                }
+            }
+            WidgetId::LanguageEnglish | WidgetId::LanguagePersian | WidgetId::LanguageArabic => {
+                let language = match id {
+                    WidgetId::LanguageEnglish => SetupLanguage::English,
+                    WidgetId::LanguagePersian => SetupLanguage::Persian,
+                    _ => SetupLanguage::Arabic,
+                };
+                if self.model.choose_language(language) {
+                    // The widgets keep their IDs; notify assistive clients that their labels changed.
+                    self.generation += 1;
+                    self.rebuild();
+                    uia::structure_changed(self.hwnd);
+                }
+                self.focus = Some(id);
+                uia::focus_changed(self.hwnd, id);
+            }
             WidgetId::Cancel => match self.model.page {
                 Page::Installing => self.cancel_install(fx),
                 _ => self.quit(1, fx),
@@ -1594,6 +1622,7 @@ impl App {
         log_line(&self.log, &format!("installing: engine {args}"));
         let job = Job {
             product: m.product.id,
+            language: m.language,
             name: m.product.name,
             version: m.config.version.clone(),
             dir: PathBuf::from(&m.dir),
@@ -1643,7 +1672,16 @@ impl App {
             if let Some(e) = error.filter(|_| !self.model.cancelling) {
                 self.finish(Outcome {
                     ok: false,
-                    reason: Some(e),
+                    reason: Some(
+                        self.model
+                            .language
+                            .text(
+                                &e,
+                                "آماده‌سازی فایل‌های نصب انجام نشد.",
+                                "تعذّر تجهيز ملفات التثبيت.",
+                            )
+                            .into(),
+                    ),
                     ..Outcome::default()
                 });
                 return;
@@ -1676,6 +1714,7 @@ impl App {
 /// its real steps, report how it ended.
 struct Job {
     product: ProductId,
+    language: SetupLanguage,
     name: &'static str,
     version: String,
     dir: PathBuf,
@@ -1686,6 +1725,41 @@ struct Job {
 }
 
 impl Job {
+    fn save_control_language(&self) -> io::Result<PathBuf> {
+        let key = self.uninstall_key;
+        let read = |value| win::reg_string(win::hkcu(), key, value, win::View::Native64);
+        if read("DisplayVersion").as_deref() != Some(self.version.as_str()) {
+            return Err(io::Error::other(
+                "CG Control did not register the installed version",
+            ));
+        }
+        let registered = read("InstallLocation").ok_or_else(|| {
+            io::Error::other("CG Control did not register its installation folder")
+        })?;
+        let directory = Path::new(registered.trim().trim_matches('"'));
+        if !directory.is_absolute() {
+            return Err(io::Error::other(
+                "CG Control registered a non-absolute installation folder",
+            ));
+        }
+
+        let main_exe = product(ProductId::Control).main_exe;
+        let executable = directory.join(main_exe);
+        let installed = executable.metadata()?;
+        let expected = self
+            .main_files
+            .iter()
+            .find(|(path, _)| path.eq_ignore_ascii_case(main_exe));
+        if !installed.is_file() || expected.is_some_and(|(_, bytes)| installed.len() != *bytes) {
+            return Err(io::Error::other(
+                "The registered installation does not contain this CG Control executable",
+            ));
+        }
+
+        write_install_language(&executable, self.language)?;
+        Ok(executable)
+    }
+
     fn run(self, shared: &Arc<Mutex<Shared>>, cancel: &Arc<AtomicBool>, hwnd: Hwnd, log: &Path) {
         let post = || hwnd.post_update();
         // 1 — the engine, unpacked by the time the user pressed Install (or soon after).
@@ -1729,7 +1803,11 @@ impl Job {
                 log_line(log, &e);
                 shared.lock().unwrap().finished = Some(Outcome {
                     ok: false,
-                    reason: Some(e),
+                    reason: Some(
+                        self.language
+                            .text(&e, "نصب‌کننده اجرا نشد.", "تعذّر بدء برنامج التثبيت.")
+                            .into(),
+                    ),
                     ..Outcome::default()
                 });
                 post();
@@ -1813,8 +1891,33 @@ impl Job {
                     ..Outcome::default()
                 }
             } else {
+                let warning = if self.product == ProductId::Control {
+                    match self.save_control_language() {
+                        Ok(executable) => {
+                            log_line(
+                                log,
+                                &format!(
+                                    "saved Control language {} beside {}",
+                                    self.language.code(),
+                                    executable.display(),
+                                ),
+                            );
+                            None
+                        }
+                        Err(error) => {
+                            log_line(
+                                log,
+                                &format!("could not save Control installation language: {error}"),
+                            );
+                            Some(self.language.save_warning().into())
+                        }
+                    }
+                } else {
+                    None
+                };
                 Outcome {
                     ok: true,
+                    warning,
                     exit_code: Some(0),
                     ..Outcome::default()
                 }
@@ -1832,7 +1935,45 @@ impl Job {
                         ..AppSignals::default()
                     })
                 });
-                observe::app_failure(&at, self.name)
+                let reason = observe::app_failure(&at, self.name);
+                match at.words {
+                    "Installing the WebView2 runtime" => self
+                        .language
+                        .text(
+                            &reason,
+                            "نصب WebView2 انجام نشد.",
+                            "تعذّر تثبيت وقت تشغيل WebView2.",
+                        )
+                        .into(),
+                    "Preparing files" => self
+                        .language
+                        .text(
+                            &reason,
+                            "آماده‌سازی فایل‌های CG Control انجام نشد.",
+                            "تعذّر تجهيز ملفات CG Control.",
+                        )
+                        .into(),
+                    "Copying files" => self
+                        .language
+                        .text(
+                            &reason,
+                            "نوشتن فایل‌های CG Control انجام نشد.",
+                            "تعذّرت كتابة ملفات CG Control.",
+                        )
+                        .into(),
+                    "Preparing" => self
+                        .language
+                        .text(&reason, "نصب‌کننده اجرا نشد.", "تعذّر بدء برنامج التثبيت.")
+                        .into(),
+                    _ => self
+                        .language
+                        .text(
+                            &reason,
+                            "ثبت نصب CG Control در ویندوز انجام نشد.",
+                            "تعذّر تسجيل تثبيت CG Control في Windows.",
+                        )
+                        .into(),
+                }
             };
             Outcome {
                 ok: false,

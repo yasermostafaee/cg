@@ -19,6 +19,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audit_archive;
+mod install_language;
 mod layer_shortcuts;
 mod local_bridge;
 mod ndi_preview;
@@ -40,7 +41,7 @@ mod close_window;
 mod company_site;
 
 use tauri::webview::PageLoadEvent;
-use tauri::Manager;
+use tauri::{Manager, WebviewWindowBuilder};
 
 /// `R-091` — the page's read of CG Bridge on `host` (here or elsewhere). Blocking, off the main thread.
 #[tauri::command]
@@ -87,6 +88,20 @@ fn main() {
         .manage(layer_shortcuts::LayerAltF4::default())
         .manage(ndi_preview::NdiPreviews::default())
         .setup(|app| {
+            let main = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .ok_or("CG Control main window is not configured")?;
+            let builder = WebviewWindowBuilder::from_config(app, main)?;
+            // The main window is created here so the seed is available at document start.
+            let builder = match install_language::initialization_script() {
+                Some(script) => builder.initialization_script(script),
+                None => builder,
+            };
+            builder.build()?;
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
                 if let Err(error) = layer_shortcuts::install(&window) {

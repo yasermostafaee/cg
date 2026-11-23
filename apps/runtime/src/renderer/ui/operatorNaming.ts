@@ -1,12 +1,16 @@
 import {
   bankInSet,
   isFixedBankLayer,
+  isLowBankLayer,
+  layerAlias,
   placeName,
   plateLabel,
   type BankSet,
+  type FixedLayerBank,
   type NameableSlot,
   type TemplateInfo,
 } from '@cg/shared-ipc';
+import type { useUiText } from '../i18n/locale.js';
 import type { ControlLiveLayout } from '@cg/shared-schema';
 import { templateDisplayName } from '../features/library/templateName.js';
 
@@ -90,6 +94,17 @@ export function templateName(
   return info === undefined ? null : templateDisplayName(info);
 }
 
+/** Render only a generated alias; persisted operator aliases belong to the author. */
+export function defaultLayerDisplayName(
+  bank: FixedLayerBank,
+  layer: number,
+  localizeUi: ReturnType<typeof useUiText>,
+): string {
+  const key = isLowBankLayer(bank, layer) ? 'Live layer {layer}' : 'Layer {layer}';
+  // The number is already surrounded by the row's bidi isolate when embedded in a sentence.
+  return localizeUi(key, { layer }).replace(/[\u2068\u2069]/gu, '');
+}
+
 /** Whatever a surface knows about the thing it is about to name. Every field optional. */
 export interface NameableRef {
   itemId?: string | undefined;
@@ -144,27 +159,25 @@ export function operatorRowName(
   /** `MULTI-CHANNEL-01` — one bank, the station's list, or none (see {@link placeName}). */
   bank: BankSet,
   templates: TemplateLookup,
+  localizeUi?: ReturnType<typeof useUiText>,
 ): OperatorRowName {
-  const place = placeName(ref.slot, bank);
-  // `CHANNEL-TEMPLATES-01` — the name the row's own channel lists the template under.
-  const template = templateName(ref.templateId, templates, ref.slot?.channel);
-  const names = [place, template].filter((n): n is string => n !== null);
-
   /*
     The coordinate is a SECOND statement of the place, so it is suppressed exactly when
     `placeName` already made it — asked through `isFixedBankLayer`, the predicate
     `placeName` itself branches on, rather than by sniffing its output for the word
     "layer". A second derivation of that answer is how the two would drift apart.
   */
-  const own = ref.slot !== undefined ? bankInSet(bank, ref.slot.channel) : null;
+  const slot = ref.slot;
+  const own = slot === undefined ? null : bankInSet(bank, slot.channel);
   const inBank =
-    ref.slot !== undefined &&
-    own !== null &&
-    isFixedBankLayer(own, ref.slot.channel, ref.slot.layer);
-  const layer =
-    inBank && ref.slot !== undefined
-      ? `${String(ref.slot.channel)}-${String(ref.slot.layer)}`
-      : null;
+    slot !== undefined && own !== null && isFixedBankLayer(own, slot.channel, slot.layer);
+  const layer = inBank ? `${String(slot.channel)}-${String(slot.layer)}` : null;
+  const place =
+    inBank && localizeUi !== undefined
+      ? (layerAlias(own, slot.layer) ?? defaultLayerDisplayName(own, slot.layer, localizeUi))
+      : placeName(slot, bank);
+  const template = templateName(ref.templateId, templates, slot?.channel);
+  const names = [place, template].filter((name): name is string => name !== null);
 
   const ids = [
     ref.templateId !== undefined ? `template ${ref.templateId}` : null,

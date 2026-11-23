@@ -45,6 +45,7 @@ import {
 } from './layerFilter.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import {
+  defaultLayerDisplayName,
   operatorRowName,
   placeName,
   plateDisplayName,
@@ -572,6 +573,7 @@ export function LayersPanel({
       },
       bank,
       templates,
+      localizeUi,
     );
 
   /**
@@ -596,6 +598,7 @@ export function LayersPanel({
       },
       bank,
       templates,
+      localizeUi,
     );
 
   // Live draft chips (staged-but-unapplied edits). Subscribe only — this panel
@@ -686,10 +689,15 @@ export function LayersPanel({
         },
         bank,
         templates,
+        localizeUi,
       );
       return {
         // `names` is [place, template] in reading order — exactly the two visible columns.
         rowName: name.names[0] ?? '',
+        englishDefaultAlias:
+          entry.slot.alias === undefined && bank !== null
+            ? defaultLayerAlias(bank, entry.slot.layer)
+            : undefined,
         templateName: name.names[1] ?? null,
         // The OBSERVATION, never a status — see `layerFilter.ts`'s override.
         occupied: entry.slot.observed.kind === 'producer',
@@ -707,7 +715,7 @@ export function LayersPanel({
         loaded: entry.binding.kind === 'bound',
       };
     },
-    [bank, templates],
+    [bank, templates, localizeUi],
   );
 
   const shownRowBindings = useMemo(() => {
@@ -1266,7 +1274,7 @@ export function LayersPanel({
             // a filter can never renumber it, because it is not a position at all.
             displayPosition={slot.layer}
             // …and so is the default name's number (`Layer 99`, `Bed 59`).
-            defaultAlias={defaultLayerAlias(layerBank, slot.layer)}
+            defaultAlias={defaultLayerDisplayName(layerBank, slot.layer, localizeUi)}
             // The SAME predicate the group break above is drawn from, and the
             // same one the bridge refuses on — one derivation, three readers.
             acceptsBank={isLowBankLayer(layerBank, slot.layer) ? 'low' : 'high'}
@@ -1352,6 +1360,7 @@ export function LayersPanel({
                     { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
                     layerBank,
                     templates,
+                    localizeUi,
                   )
             }
             onSelect={selectRow}
@@ -1411,6 +1420,7 @@ export function LayersPanel({
           },
           bank,
           templates,
+          localizeUi,
         )}
         seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
         audioLockedOf={(plateId) => liveSourceLocked(audioItem.itemId, plateId)}
@@ -1952,6 +1962,7 @@ export function LayersPanel({
                         },
                         bank,
                         templates,
+                        localizeUi,
                       )
                     }
                   />

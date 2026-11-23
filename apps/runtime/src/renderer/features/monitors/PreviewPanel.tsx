@@ -641,7 +641,7 @@ export function PreviewPanel({
             aria-label={localizeUi('Safe areas in Preview')}
             aria-pressed={safeAreasVisible}
             data-monitor-safe-areas=""
-            title={BROADCAST_SAFE_AREA_TITLE}
+            title={localizeUi(BROADCAST_SAFE_AREA_TITLE)}
             onClick={() => safeGuides.setVisible(!safeAreasVisible)}
           >
             <Icon icon={SquareDashed} size={13} />

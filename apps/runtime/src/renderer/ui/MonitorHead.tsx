@@ -103,8 +103,8 @@ export function MonitorHeadFact({
  * rows this console believes are on air.
  *
  * The reference's `.pgm-strip` is the same 31 px `monitor-controls` row the PVW transport
- * sits in, carrying a signal dot, its state in words, a spacer, and the air count. The two
- * facts are DELIBERATELY on one line and DELIBERATELY not merged: the left is about the
+ * sits in, carrying a signal dot, its state in words, and the air count. The two
+ * facts stay distinct when the strip wraps: the signal is about the
  * RETURN FEED (`C-016`'s relay of the Playout's `pgm` feed) and the right is about AIR, and
  * an operator who reads "no signal" must not conclude "nothing is on air". That is exactly
  * what the reference's own `Playout may still be active.` says on the stage below it.
@@ -129,22 +129,23 @@ export function MonitorSignalStrip({
 }): JSX.Element {
   return (
     <div className="cg-monitor-strip" data-monitor-pgm-strip="" data-pgm-signal={tone}>
-      <span className="cg-monitor-signal">
-        {/*
+      <div className="cg-monitor-strip__status">
+        <span className="cg-monitor-signal">
+          {/*
           🔴 A LAMP, NOT AN ICON — see `.cg-monitor-signal__lamp`. A 7 px lucide `Circle` is an
           outline, which at that size is a ring of hairlines rather than a light. The reference
           draws a filled 6 px disc, and a filled disc is a SHAPE with no glyph behind it, so
           there is nothing here for `Icon` to route.
         */}
-        <span
-          className={`cg-monitor-signal__lamp${tone === 'none' ? '' : ` cg-monitor-signal__lamp--${tone}`}`}
-          aria-hidden="true"
-        />
-        {signal}
-      </span>
-      <span className="cg-monitor-strip__spacer" />
-      {reading}
-      {fact}
+          <span
+            className={`cg-monitor-signal__lamp${tone === 'none' ? '' : ` cg-monitor-signal__lamp--${tone}`}`}
+            aria-hidden="true"
+          />
+          {signal}
+        </span>
+        {reading}
+        {fact}
+      </div>
       {action}
     </div>
   );

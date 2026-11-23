@@ -6,7 +6,7 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 
 #### Scenario: First launch
 
-- **WHEN** no language preference has been saved **THEN** the interface and action feedback both use English
+- **WHEN** neither a saved language preference nor a setup language exists **THEN** the interface and action feedback both use English
 
 #### Scenario: English interface with Persian feedback
 
@@ -47,3 +47,52 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **WHEN** the operator reads the Layers header in English, Persian or Arabic
 - **THEN** the first action column names both Load and Remove in that interface language, without truncation or a shift of the other action columns
 - **AND** each row’s button states the action available for that row.
+
+#### Scenario: Read the same layer name across the console
+
+- **WHEN** an operator opens Layers and Station setup in Persian or Arabic
+- **THEN** both views show the same localized default name for each regular and live layer, including in the remove confirmation and Inspector
+- **AND** configured names remain as entered and searches recognize the displayed name and the layer number.
+
+#### Scenario: Read Inspector facts and live-plate states
+
+- **WHEN** an operator opens the Inspector, the Live plates tab, or its audio dialog
+- **THEN** state, anchor labels, timing facts, built-in plate title labels, empty states, audio controls and tooltips follow the interface language
+- **AND** the volume slider, value, controls and Close label align in right-to-left languages.
+
+#### Scenario: Select a source in a mirrored list
+
+- **WHEN** the operator opens Choose a source in a left-to-right or right-to-left interface
+- **THEN** the title is centered and the A/B indicators align beside the thumbnail for list rows in Inputs and Media.
+
+#### Scenario: Read channel details in either direction
+
+- **WHEN** the operator reads the Channel tab in Persian or Arabic
+- **THEN** width, height, and frame-rate units retain their technical left-to-right order, and video and output explanations use the interface language. Localized interlaced and progressive scan labels include their respective English terms in parentheses.
+
+#### Scenario: Follow collapsible settings and Inspector sections
+
+- **WHEN** the operator closes Advanced in Station setup, a section in Inspector, or a section in Edit live layout
+- **THEN** its chevron points toward the inline end of the interface, left in Persian and Arabic and right in English
+- **AND** the expanded chevron points down in all three languages.
+
+#### Scenario: Identify the preset selected in Inspector
+
+- **WHEN** the operator selects a preset
+- **THEN** preset choices have a shape distinct from the input fields, and the selected button has an accent and a check mark, and the separate preview and on-air status labels use the interface language.
+
+#### Scenario: Read a default preset input in Persian
+
+- **WHEN** a Persian operator views a preset input that inherits its template source
+- **THEN** the generated label uses «پیشفرض», and the assigned source name retains its original text.
+
+#### Scenario: Interpret a source badge and the catalogue address
+
+- **WHEN** CG Bridge last read the input catalogue from A but the selected source preview or meter is supplied by B
+- **THEN** the catalogue address names its own server, and the B badge identifies the source of the preview or meter independently of the active PGM member
+- **AND** A/B badges in Inspector and template source defaults stay beside the picker chevron for input and media selections.
+
+#### Scenario: Read input preview states in the current interface language
+
+- **WHEN** an operator points at an available, unknown, connecting or unavailable input preview
+- **THEN** the tooltip and any displayed preview status use the interface language.

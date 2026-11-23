@@ -4,6 +4,10 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { createBuildStamp } from '@cg/splash-kit/build-stamp';
+import ar from './src/renderer/i18n/catalogs/ar.json';
+import en from './src/renderer/i18n/catalogs/en.json';
+import fa from './src/renderer/i18n/catalogs/fa.json';
+import { CONTROL_LANGUAGE_KEY, CONTROL_LOCALES } from './src/renderer/i18n/localePreferences.js';
 
 /**
  * Runtime browser SPA. The renderer lives under `src/renderer`; the
@@ -25,6 +29,36 @@ import { createBuildStamp } from '@cg/splash-kit/build-stamp';
 const { plugin: buildStampPlugin, stamp: buildStamp } = createBuildStamp(
   fileURLToPath(new URL('.', import.meta.url)),
 );
+
+const splashKeys = [
+  'CG CONTROL is starting',
+  'Broadcast graphics playout controller',
+  'INITIALIZING',
+  'CONNECTING',
+  'STARTING INTERFACE',
+  'Version {version}',
+  'Build date {date}',
+];
+
+export function injectSplashLanguage(html: string): string {
+  const catalogs = { en, fa, ar };
+  const messages = Object.fromEntries(
+    CONTROL_LOCALES.map((locale) => {
+      const catalog: Readonly<Record<string, string>> = catalogs[locale].interface;
+      return [locale, Object.fromEntries(splashKeys.map((key) => [key, catalog[key] ?? key]))];
+    }),
+  );
+  const data = JSON.stringify({ key: CONTROL_LANGUAGE_KEY, buildStamp, messages }).replace(
+    /</g,
+    '\\u003c',
+  );
+  return html.replace('/* CG_SPLASH_LOCALE */ null', () => data);
+}
+
+const splashLanguagePlugin: Plugin = {
+  name: 'cg-splash-language',
+  transformIndexHtml: { order: 'pre', handler: injectSplashLanguage },
+};
 
 /**
  * `DEV-STATION-01` — the one route only the BRIDGE's console listener answers, relayed when
@@ -83,7 +117,13 @@ const consoleHostPlugins: Plugin[] =
     : [];
 
 export default defineConfig({
-  plugins: [vanillaExtractPlugin(), react(), buildStampPlugin, ...consoleHostPlugins],
+  plugins: [
+    vanillaExtractPlugin(),
+    react(),
+    buildStampPlugin,
+    splashLanguagePlugin,
+    ...consoleHostPlugins,
+  ],
   define: {
     __CG_BUILD__: JSON.stringify(buildStamp),
   },

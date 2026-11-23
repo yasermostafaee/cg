@@ -92,14 +92,6 @@ const VERDICT_TEXT = {
   unconfigured: 'not configured',
 } as const;
 
-/** The channel's video mode, as the server reported it. */
-function modeLine(state: ChannelSettingsState, channel: number): string {
-  const observed = state.observed.find((o) => o.channel === channel);
-  if (observed === undefined) return 'not read yet';
-  if (observed.raster === null) return `${observed.mode} — a mode this build cannot map`;
-  return observed.mode;
-}
-
 /**
  * Where the value in force came from — the honest half of "reported, not set".
  *
@@ -141,6 +133,7 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
   const observed = state.observed.find((o) => o.channel === channel);
   const verdict = rasterVerdict(state, channel);
   const words = videoModeWords(observed?.mode);
+  const rate = localizeUi(words.rate);
 
   return (
     <>
@@ -201,7 +194,7 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         </div>
         <div className="cg-video-mode">
           <strong className="cg-video-mode__word" data-video-mode-word="">
-            {localizeUi(words.word)}
+            <bdi dir="ltr">{localizeUi(words.word)}</bdi>
           </strong>
           <span className="cg-video-mode__scan">{localizeUi(words.scan)}</span>
         </div>
@@ -209,30 +202,46 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
           <div className="cg-video-metric">
             <dt>{localizeUi('Resolution')}</dt>
             <dd>
-              {configured === undefined
-                ? localizeUi('not configured')
-                : `${String(configured.raster.width)} × ${String(configured.raster.height)}`}
+              {configured === undefined ? (
+                localizeUi('not configured')
+              ) : (
+                <bdi dir="ltr" data-channel-raster="">
+                  {configured.raster.width} × {configured.raster.height}
+                </bdi>
+              )}
             </dd>
           </div>
           <div className="cg-video-metric">
             <dt>{localizeUi('Frame rate')}</dt>
-            <dd>{words.rate}</dd>
+            <dd>
+              <bdi dir={rate === words.rate ? 'ltr' : 'auto'} data-channel-rate="">
+                {rate}
+              </bdi>
+            </dd>
           </div>
           <div className="cg-video-metric">
             <dt>{localizeUi('Server mode')}</dt>
-            <dd className="cg-video-metric__mono">{localizeUi(modeLine(state, channel))}</dd>
+            <dd className="cg-video-metric__mono">
+              {observed === undefined ? (
+                localizeUi('not read yet')
+              ) : observed.raster === null ? (
+                localizeUi('{mode} — a mode this build cannot map', { mode: observed.mode })
+              ) : (
+                <bdi dir="ltr">{observed.mode}</bdi>
+              )}
+            </dd>
           </div>
         </dl>
         {/* The app's own two facts (`B-236`) — the reference draws neither; the guard keeps both. */}
         <dl className="cg-video-metrics">
           <div className="cg-video-metric">
             <dt>{localizeUi('Declared by')}</dt>
-            <dd>{playoutEngineWording(localizeUi(declaredBy(state, channel)), engine)}</dd>
+            <dd>{localizeUi(playoutEngineWording(declaredBy(state, channel), engine))}</dd>
           </div>
           <div className="cg-video-metric">
             <dt>{localizeUi('Check')}</dt>
             <dd style={styles.verdict[verdict]}>
-              <span data-raster-verdict={verdict}>{VERDICT_TEXT[verdict]}</span>
+              <span data-raster-verdict={verdict}>{localizeUi(VERDICT_TEXT[verdict])}</span>
             </dd>
           </div>
         </dl>

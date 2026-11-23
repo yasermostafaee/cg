@@ -11,6 +11,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "APASAI CG CONTROL",
         "url": "index.html",
         "dragDropEnabled": false,

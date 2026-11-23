@@ -150,3 +150,107 @@ test('the playlist output leads Inputs under the Playout’s name; bound to a pl
   await expect(other.locator('input[type="range"]')).toBeEnabled();
   await expect(other.locator('.cg-plate-pill-label')).not.toHaveText('Locked · 0');
 });
+
+const audioLocales = [
+  {
+    language: 'fa',
+    title: 'صدای قاب‌های زنده',
+    close: 'بستن',
+    volume: 'سطح صدا',
+    locked: 'قفل · 0',
+    unseated: 'تخصیص داده نشده',
+    lockedReason: 'صدای برنامه از قبل روی آنتن است',
+    unseatedReason: 'هنوز لایه‌ای به این قاب اختصاص داده نشده است.',
+  },
+  {
+    language: 'ar',
+    title: 'صوت الإطارات الحية',
+    close: 'إغلاق',
+    volume: 'مستوى الصوت',
+    locked: 'مقفل · 0',
+    unseated: 'بلا طبقة مخصَّصة',
+    lockedReason: 'يُبثّ صوت البرنامج بالفعل',
+    unseatedReason: 'لم تُخصّص طبقة لهذا الإطار بعد.',
+  },
+] as const;
+
+for (const locale of audioLocales) {
+  test(
+    'audio dialog aligns the fader, value and actions in ' + locale.language,
+    async ({ app }) => {
+      const { page } = app;
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const bound = await page.evaluate(async () => {
+        const row = (await window.cg.stack.snapshot()).find(
+          ({ itemId }) => itemId === 'item-looks',
+        );
+        if (row === undefined) throw new Error('The source fixture is missing its preset row');
+        return window.cg.sources.setAssignments({
+          assignments: [
+            { templateId: row.templateId, plateId: 'live-1', sourceId: 'in-pl-apasai' },
+          ],
+        });
+      });
+      expect(bound).toMatchObject({ ok: true });
+
+      await app.openStationSetupAt('General');
+      await page.locator('#cg-interface-language').selectOption(locale.language);
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: locale.close, exact: true })
+        .click();
+      await page.locator('[data-layer-list] [data-layer="99"] [data-row-audio]').click();
+
+      const dialog = page.getByRole('dialog', { name: locale.title });
+      await expect(dialog).toHaveCSS('direction', 'rtl');
+      await expect(dialog.locator('.cg-audio-head')).toContainText(locale.volume);
+      const locked = dialog.locator('[data-audio-plate="live-1"]');
+      const unlocked = dialog.locator('[data-audio-plate="live-2"]');
+      await expect(locked.locator('.cg-audio-state')).toHaveText(locale.locked);
+      await expect(locked.getByRole('slider')).toBeDisabled();
+      await expect(locked.getByRole('slider')).toHaveAttribute('title', locale.lockedReason);
+      await expect(locked.getByRole('button').first()).toHaveAttribute(
+        'title',
+        locale.lockedReason,
+      );
+      await expect(unlocked.locator('.cg-audio-state')).toHaveText(locale.unseated);
+      await expect(unlocked.locator('.cg-audio-state')).toHaveAttribute(
+        'title',
+        new RegExp('^' + locale.unseatedReason.replace(/\.$/, '\\.')),
+      );
+      await expect(unlocked.getByRole('slider')).toBeEnabled();
+
+      const measures = await unlocked.evaluate((row) => {
+        const centerY = (selector: string): number => {
+          const element = row.querySelector(selector);
+          if (element === null) throw new Error('Missing mixer control: ' + selector);
+          const rect = element.getBoundingClientRect();
+          return rect.y + rect.height / 2;
+        };
+        return {
+          slider: centerY('input[type="range"]'),
+          percent: centerY('.cg-audio-readout'),
+          actions: centerY('.cg-audio-verbs'),
+          source: centerY('.cg-audio-source'),
+          status: centerY('.cg-audio-state'),
+        };
+      });
+      expect(Math.abs(measures.slider - measures.percent)).toBeLessThan(1);
+      expect(Math.abs(measures.slider - measures.actions)).toBeLessThan(1);
+      expect(Math.abs(measures.slider - measures.source)).toBeLessThan(1);
+      expect(measures.status).toBeGreaterThan(measures.slider);
+
+      const close = dialog.locator('.cg-audio-close');
+      const closeOffset = await close.evaluate((button) => {
+        const label = button.querySelector('span');
+        if (label === null) throw new Error('Missing audio close label');
+        const frame = button.getBoundingClientRect();
+        const text = label.getBoundingClientRect();
+        return Math.abs(frame.y + frame.height / 2 - (text.y + text.height / 2));
+      });
+      expect(closeOffset).toBeLessThan(1);
+      await close.click();
+      await expect(dialog).toHaveCount(0);
+    },
+  );
+}

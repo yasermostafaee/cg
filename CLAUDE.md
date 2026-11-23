@@ -736,7 +736,8 @@ specs; engine docs cover "how it's built".
   apps/runtime/src/renderer/i18n/catalogs and keep keys and named placeholders in sync.
 - Use the interface language for headings, labels, options, tooltips, accessibility labels,
   confirmations, diagnostics and standing status. Use the feedback language for action
-  outcomes, warnings and toasts. Preserve authored names and technical values.
+  outcomes, warnings and toasts. Preserve authored names and technical values. Review Persian
+  and Arabic independently for natural broadcast language and consistent terms.
 - Verify the catalogs and check any affected layout in Persian and Arabic RTL before
   building installers. The developer workflow is documented in README.md.
 

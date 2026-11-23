@@ -1,3 +1,5 @@
+import { latinDigits } from '@cg/text-shaping';
+
 /**
  * 🔴 `AUDIT-CLOSE-01` B2 — THE LAYERS SUB-BAR'S FILTER, AND THE ONE RULE IT MAY NOT BREAK.
  *
@@ -67,6 +69,8 @@
 export interface FilterableRow {
   /** The operator's name for the row, exactly as `operatorRowName` composed it. */
   readonly rowName: string;
+  /** The familiar English spelling of an unaliased row, for existing search habits. */
+  readonly englishDefaultAlias?: string | undefined;
   /** The template's display name, or `null` where the row carries none. */
   readonly templateName: string | null;
   /**
@@ -110,7 +114,9 @@ export function isNarrowing(filter: LayerFilter): boolean {
  * beside it — which is the point of using the locale-aware one for both rather than branching.
  */
 function contains(haystack: string, needle: string): boolean {
-  return haystack.toLocaleLowerCase().includes(needle.toLocaleLowerCase());
+  return latinDigits(haystack)
+    .toLocaleLowerCase()
+    .includes(latinDigits(needle).toLocaleLowerCase());
 }
 
 /**
@@ -142,7 +148,9 @@ export function rowIsShown(row: FilterableRow, filter: LayerFilter): boolean {
   const query = filter.query.trim();
   if (query.length === 0) return true;
   return (
-    contains(row.rowName, query) || (row.templateName !== null && contains(row.templateName, query))
+    contains(row.rowName, query) ||
+    (row.englishDefaultAlias !== undefined && contains(row.englishDefaultAlias, query)) ||
+    (row.templateName !== null && contains(row.templateName, query))
   );
 }
 

@@ -14,6 +14,7 @@ import {
 } from '@cg/shared-ipc';
 import { meterPercent } from '../monitors/meterScale.js';
 import { subscribeInputAudio } from './inputAudioDemand.js';
+import { useUiText } from '../../i18n/locale.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from './sourceStore.js';
 import './input-audio-meter.css';
@@ -152,15 +153,16 @@ export function InputAudioRails({
   preview?: boolean;
   style?: CSSProperties | undefined;
 }): JSX.Element {
+  const localizeUi = useUiText();
   const peak = levels.length === 0 ? null : Math.max(...levels);
   const label =
     state === 'no-audio'
-      ? 'No audio stream'
+      ? localizeUi('No audio stream')
       : state === 'has-audio'
-        ? 'Audio stream present, level unavailable'
+        ? localizeUi('Audio stream present, level unavailable')
         : peak === null
-          ? 'Audio level unavailable'
-          : `Audio peak ${peak.toFixed(0)} dBFS`;
+          ? localizeUi('Audio level unavailable')
+          : localizeUi('Audio peak {level}', { level: `${peak.toFixed(0)} dBFS` });
   return (
     <span
       ref={elementRef}
@@ -170,7 +172,7 @@ export function InputAudioRails({
       data-input-meter-orientation="vertical"
       data-input-meter-edge={edge ? '' : undefined}
       role="img"
-      aria-label={`${name} · ${label}`}
+      aria-label={localizeUi('{name} · {label}', { name, label })}
       title={label}
       dir="ltr"
       style={{ ...style, '--cg-input-meter-channel-count': count } as CSSProperties}

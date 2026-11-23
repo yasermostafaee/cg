@@ -9,15 +9,15 @@ import {
 import { REPO } from '../src/build-guide.mjs';
 
 describe('versioned release history', () => {
-  it('records confirmed customer releases as published in both languages', () => {
+  it('records confirmed customer releases as published in all three languages', () => {
     const data = parseReleaseHistory(
       fs.readFileSync(path.join(REPO, 'docs', 'release', 'release-history.json'), 'utf8'),
     );
-    for (const version of ['1.0.0', '1.1.0', '1.2.4', '1.2.5', '1.2.11']) {
+    for (const version of ['1.0.0', '1.1.0', '1.2.4', '1.2.5', '1.2.11', '1.2.12']) {
       expect(data.releases.find((release) => release.version === version)?.status).toBe('published');
     }
     const html = releaseHistoryHtml(data, { currentVersion: '1.2.12' });
-    for (const [prefix, label] of [['version-', 'منتشرشده'], ['en-version-', 'Published']]) {
+    for (const [prefix, label] of [['version-', 'منتشرشده'], ['en-version-', 'Published'], ['ar-version-', 'منشور']]) {
       const card = html.slice(html.indexOf('id="' + prefix + '1.1.0"'));
       const summary = card.slice(0, card.indexOf('</summary>'));
       expect(summary).toContain('data-status="published">' + label);
@@ -25,22 +25,30 @@ describe('versioned release history', () => {
     }
   });
 
-  it('renders both locales with distinct feature and fix sections and an embedded Persian font', () => {
+  it('renders all locales with distinct feature and fix sections and embedded Vazirmatn', () => {
     const data = parseReleaseHistory(
       fs.readFileSync(path.join(REPO, 'docs', 'release', 'release-history.json'), 'utf8'),
     );
     const html = releaseHistoryHtml(data, { currentVersion: '1.0.0' });
 
+    expect(data.languages).toEqual(['fa', 'en', 'ar']);
     expect(html).toContain('lang="fa" dir="rtl"');
+    expect(html).toContain('lang="ar" dir="rtl"');
+    expect(html).toContain('data-language="ar" lang="ar" aria-controls="history-ar" aria-pressed="false">العربية');
     expect(html).not.toContain('id="version-next"');
     expect(html).not.toContain('id="en-version-next"');
+    expect(html).not.toContain('id="ar-version-next"');
     expect(html).toContain('id="version-1.0.0"');
     expect(html).toContain('id="en-version-1.0.0"');
+    expect(html).toContain('id="ar-version-1.0.0"');
     expect(html).toContain('lang="en" dir="ltr"');
     expect(html).toContain('Features and improvements');
     expect(html).toContain('Bug fixes');
     expect(html).toContain('قابلیت‌ها و بهبودها');
     expect(html).toContain('رفع باگ‌ها');
+    expect(html).toContain('الميزات والتحسينات');
+    expect(html).toContain('إصلاحات الأخطاء');
+    expect(html).toContain('c770cab9');
     expect(html).toContain('data:font/woff2;base64,');
     expect(html).toContain('لایه‌های متنی مخفی');
     expect(html).not.toContain('data-download-file=');
@@ -49,9 +57,10 @@ describe('versioned release history', () => {
     expect(html).not.toContain('Downloads for this version');
     expect(html).toContain('aria-label="صفحه‌بندی نسخه‌ها"');
     expect(html).toContain('aria-label="Release history pages"');
+    expect(html).toContain('aria-label="صفحات سجل الإصدارات"');
   });
 
-  it('requires both locales for new history entries', () => {
+  it('requires both legacy schema v2 locales', () => {
     expect(() =>
       parseReleaseHistory(JSON.stringify({
         schemaVersion: 2,
@@ -67,6 +76,18 @@ describe('versioned release history', () => {
         }],
       })),
     ).toThrow(/fixes\[0\]\.en/);
+  });
+
+  it.each(['fa', 'en', 'ar'])('requires %s text in schema v3', (language) => {
+    const names = { fa: 'نسخه', en: 'Release', ar: 'الإصدار' };
+    const fixes: Record<string, string> = { fa: 'رفع باگ', en: 'Bug fix', ar: 'إصلاح' };
+    delete fixes[language];
+    expect(() => parseReleaseHistory(JSON.stringify({
+      schemaVersion: 3, product: 'APASAI CG', releases: [{
+        version: '1.2.3', title: names, date: '2026-11-08', status: 'published',
+        summary: names, features: [], fixes: [fixes],
+      }],
+    }))).toThrow('fixes[0].' + language);
   });
 
   it('keeps download sections hidden when a historical host URL is supplied', () => {
@@ -91,40 +112,51 @@ describe('versioned release history', () => {
     const html = releaseHistoryHtml(data, { currentVersion: '1.2.3' });
     expect(releaseAssetNames('1.2.3').control).toBe('CG-Control_1.2.3_x64-setup.exe');
     expect(html).not.toContain('https://downloads.example.test');
+    expect(html).toContain('id="history-fa"');
+    expect(html).toContain('id="history-en"');
+    expect(html).not.toContain('data-language="ar"');
     expect(html).not.toContain('class="downloads"');
     expect(html).not.toContain('data-download-file=');
   });
 
-  it('shows the first fifteen recorded versions per language and excludes the next-release draft', () => {
+  it.each([2, 3])('paginates history and excludes the next-release draft with schema v%i', (schemaVersion) => {
+    const languageCount = schemaVersion === 3 ? 3 : 2;
     const data = parseReleaseHistory(JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion,
       product: 'APASAI CG',
       releases: [
         {
           version: 'next',
-          title: { fa: 'بعدی', en: 'Next' },
+          title: { fa: 'بعدی', en: 'Next', ar: 'التالي' },
           date: '2026-11-17',
           status: 'development',
-          summary: { fa: 'آینده', en: 'Future' },
+          summary: { fa: 'آینده', en: 'Future', ar: 'القادم' },
           features: [],
           fixes: [],
         },
         ...Array.from({ length: 32 }, (_, index) => ({
           version: '2.0.' + String(index),
-          title: { fa: 'نسخه', en: 'Release' },
+          title: { fa: 'نسخه', en: 'Release', ar: 'الإصدار' },
           date: '2026-11-17',
           status: 'published',
-          summary: { fa: 'تغییرات', en: 'Changes' },
+          summary: { fa: 'تغییرات', en: 'Changes', ar: 'التغييرات' },
           features: [],
           fixes: [],
         })),
       ],
     }));
     const html = releaseHistoryHtml(data);
-    expect(html.match(/<details class="release"/g)).toHaveLength(64);
-    expect(html.match(/<details class="release"[^>]* hidden/g)).toHaveLength(34);
+    expect(html.match(/<details class="release"/g)).toHaveLength(32 * languageCount);
+    expect(html.match(/<details class="release"[^>]* hidden/g)).toHaveLength(17 * languageCount);
     expect(html).toContain('Page 1 of 3');
     expect(html).toContain('صفحه ۱ از ۳');
+    expect(html.includes('data-language="ar"')).toBe(schemaVersion === 3);
+    if (schemaVersion === 3) {
+      const number = new Intl.NumberFormat('ar');
+      const pageStatus = /data-page-label="الصفحة"[^>]*>([^<]+)<\/span>/.exec(html)?.[1];
+      expect(pageStatus).toBe('الصفحة ' + number.format(1) + ' من ' + number.format(3));
+    }
+    expect(html).not.toContain('id="ar-version-next"');
     expect(html).not.toContain('id="version-next"');
     expect(html).not.toContain('id="en-version-next"');
   });

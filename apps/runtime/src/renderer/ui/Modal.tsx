@@ -238,6 +238,16 @@ const styles = {
     boxSizing: 'border-box' as const,
     flexShrink: 0,
   },
+  titleRowCentered: {
+    display: 'grid',
+    gridTemplateColumns:
+      'minmax(var(--r-modal-emblem-box), 1fr) minmax(0, 8fr) minmax(var(--r-modal-emblem-box), 1fr)',
+  },
+  titleCentered: {
+    gridColumn: 2,
+    textAlign: 'center' as const,
+    overflowWrap: 'anywhere' as const,
+  },
   /**
    * `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113), a 42 px box holding one
    * glyph. Optional: the reference draws it on the picker, the import wizard, the audit log,
@@ -677,6 +687,8 @@ interface ModalProps {
    * dialog that ASKS gets no emblem; a dialog that is a PLACE gets one.
    */
   emblem?: LucideIcon;
+  /** Center the heading within the full frame width. */
+  centerHeading?: boolean;
   /**
    * The action buttons, built from {@link ModalAction} so the role decides the
    * treatment. CANCEL first in DOM order — the row is right-aligned, so first in
@@ -837,6 +849,7 @@ export function Modal({
   title,
   subtitle,
   emblem,
+  centerHeading = false,
   footer,
   message,
   onClose,
@@ -869,6 +882,7 @@ export function Modal({
    * at the two `<h2>` sites so the subtitle and no-subtitle branches cannot drift apart.
    */
   const titleStyle = fixed ? { ...styles.title, ...styles.titleFixed } : styles.title;
+  const headingPosition = centerHeading ? styles.titleCentered : undefined;
   // One shape downstream, so the region never has to ask which form it was given.
   const messages: readonly ModalMessage[] =
     message === undefined ? [] : Array.isArray(message) ? message : [message as ModalMessage];
@@ -971,9 +985,14 @@ export function Modal({
         }}
       >
         <div
-          style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}
+          style={{
+            ...styles.titleRow,
+            ...(fixed ? styles.titleRowFixed : undefined),
+            ...(centerHeading ? styles.titleRowCentered : undefined),
+          }}
           className="cg-modal-head"
           data-modal-head=""
+          data-modal-centered-heading={centerHeading ? '' : undefined}
         >
           {/*
             🔴 `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113).
@@ -997,11 +1016,11 @@ export function Modal({
             </span>
           )}
           {subtitle === undefined ? (
-            <h2 dir="auto" style={titleStyle}>
+            <h2 dir="auto" style={{ ...titleStyle, ...headingPosition }}>
               {title}
             </h2>
           ) : (
-            <div style={styles.titleStack}>
+            <div style={{ ...styles.titleStack, ...headingPosition }}>
               <h2 dir="auto" style={titleStyle}>
                 {title}
               </h2>

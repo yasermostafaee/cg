@@ -711,7 +711,8 @@ export function Inspector({
   // correlation key, not a label: tooltip only, never text.
   const rawTitle = item.fields['title'];
   const contentTitle = typeof rawTitle === 'string' ? rawTitle.trim() : '';
-  const label = resolvedInfo !== null ? templateDisplayName(resolvedInfo) : 'Unnamed template';
+  const label =
+    resolvedInfo !== null ? templateDisplayName(resolvedInfo) : localizeUi('Unnamed template');
   // See `templateIdStub`: shown only when another template answers to the same
   // name, so the ordinary heading stays a name and nothing else.
   const ambiguous =
@@ -762,7 +763,11 @@ export function Inspector({
               aria-expanded={layerDetailsOpen}
               onClick={disclosures?.layerDetails.toggle ?? (() => setDetailsOpen((open) => !open))}
             >
-              <Icon icon={layerDetailsOpen ? ChevronDown : ChevronRight} size={14} flipRtl />
+              <Icon
+                icon={layerDetailsOpen ? ChevronDown : ChevronRight}
+                size={14}
+                flipRtl={!layerDetailsOpen}
+              />
             </button>
             <div className="cg-inspector-identity__names">
               <h3 title={rowName.title} data-inspector-heading="">
@@ -792,7 +797,7 @@ export function Inspector({
                 </div>
               )}
             </div>
-            <MetaChip value={stateWord} dotColor={stateColor} />
+            <MetaChip value={localizeUi(stateWord)} dotColor={stateColor} />
           </div>
           <div
             id={layerDetailsId}
@@ -806,12 +811,12 @@ export function Inspector({
             )}
             <div className="cg-meta-chips">
               {item.slot === undefined ? (
-                <MetaChip value={layerDetail(undefined)} />
+                <MetaChip value={localizeUi(layerDetail(undefined))} />
               ) : (
                 <>
                   <MetaChip label={localizeUi('layer')} value={String(item.slot.layer)} />
                   <MetaChip label={localizeUi('channel')} value={String(item.slot.channel)} />
-                  <MetaChip value={item.slot.server} />
+                  <MetaChip value={localizeUi(item.slot.server)} />
                 </>
               )}
             </div>
@@ -916,6 +921,7 @@ export function Inspector({
                   applied={item.fields}
                   inheritedFields={inheritedFields}
                   frameTitles={frameTitles}
+                  controlLayout={resolvedInfo?.controlLiveLayout !== undefined}
                 />
               ))}
             </>
@@ -1135,6 +1141,7 @@ function FieldGroup({
   applied,
   inheritedFields,
   frameTitles,
+  controlLayout,
 }: {
   group: CompositionFieldGroup;
   path: FieldPath;
@@ -1142,6 +1149,7 @@ function FieldGroup({
   applied: FieldValues;
   inheritedFields: FieldValues | undefined;
   frameTitles: SharedFrameTitleIndex;
+  controlLayout: boolean;
 }): JSX.Element {
   const localizeUi = useUiText();
   const itemId = item.itemId;
@@ -1154,17 +1162,28 @@ function FieldGroup({
       <h3 style={styles.groupHeading}>
         <GroupHeadingText group={group} />
       </h3>
-      {group.aggregate.fields.map((f) => (
-        <FieldEditor
-          key={`${itemId}-${[...path, f.id].join('/')}`}
-          field={f}
-          path={[...path, f.id]}
-          item={item}
-          applied={valueAt(applied, [...path, f.id])}
-          inheritedFields={inheritedFields}
-          titlePaths={frameTitles.get(JSON.stringify([...path, f.id]))}
-        />
-      ))}
+      {group.aggregate.fields.map((field) => {
+        const fieldPath = [...path, field.id];
+        const titlePaths = frameTitles.get(JSON.stringify(fieldPath));
+        const isPlateTitle =
+          field.label === 'Title' &&
+          (titlePaths !== undefined ||
+            (controlLayout &&
+              group.compositionId.startsWith('layout-frame-') &&
+              field.id === 'title'));
+        return (
+          <FieldEditor
+            key={`${itemId}-${fieldPath.join('/')}`}
+            field={field}
+            path={fieldPath}
+            item={item}
+            applied={valueAt(applied, fieldPath)}
+            inheritedFields={inheritedFields}
+            titlePaths={titlePaths}
+            displayLabel={isPlateTitle ? localizeUi('Title') : undefined}
+          />
+        );
+      })}
       {/* Same field-less filter as the root: a noise heading is noise at every depth. */}
       {group.aggregate.groups
         .filter((child) => aggregateHasFields(child.aggregate))
@@ -1177,6 +1196,7 @@ function FieldGroup({
             applied={applied}
             inheritedFields={inheritedFields}
             frameTitles={frameTitles}
+            controlLayout={controlLayout}
           />
         ))}
     </section>
@@ -1193,6 +1213,7 @@ function FieldEditor({
   bookFit,
   inheritedFields,
   titlePaths,
+  displayLabel,
 }: {
   field: DynamicField | null;
   path: FieldPath;
@@ -1206,6 +1227,7 @@ function FieldEditor({
   bookFit?: ImageFit | undefined;
   inheritedFields?: FieldValues | undefined;
   titlePaths?: readonly FieldPath[] | undefined;
+  displayLabel?: string | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
@@ -1216,7 +1238,9 @@ function FieldEditor({
   // `RUN-NEXT-VERSION-03` 1.4 — a BOOK is headed by its name (the field's Title, else its sequence's
   // name), never by its field id.
   const isBook = field?.type === 'list' && field.pages === true;
-  const label = isBook && field !== null ? bookTitle(field, bookName) : (field?.label ?? fieldId);
+  const label =
+    displayLabel ??
+    (isBook && field !== null ? bookTitle(field, bookName) : (field?.label ?? fieldId));
   const inherited = valueAt(inheritedFields, path);
   const baseline = applied === undefined ? inherited : applied;
   const value = effectiveValue(itemId, path, baseline);

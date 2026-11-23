@@ -13,6 +13,9 @@
       delivered and later installer snapshots and retain the post-delivery changes under `next`,
       targeting `1.2.13`. Regenerate the public history from the delivered entry.
 
+- [x] 1.7 Add valid Arabic versions of every release and draft entry in schema version 3. Preserve the
+      translations and the exact release and build identifiers in the existing languages.
+
 ## 2. Generator and delivery
 
 - [x] 2.1 Generate a standalone responsive bilingual page with features and fixes grouped per version
@@ -22,6 +25,9 @@
 - [x] 2.4 Embed Vazirmatn and open the packaged page from Designer Home, Designer Help and CG Control Station setup
 - [x] 2.5 Fill the Designer viewport for history, retain CG Control's near-full-window history layout,
       and label both footer actions Close.
+
+- [x] 2.6 Offer manual Arabic RTL alongside the initial Persian and selectable English views. Preserve
+      the two-language output when rebuilding a schema version 1 or 2 source.
 
 ## 3. Verification
 
@@ -47,7 +53,7 @@
       Both `app-version` suites passed with 3 tests each. The exact carrying `317580f7` also passed
       the full Linux gate and actual [Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/44139741353/job/134239075832).
 - [x] 3.9 Windows Edge verified pagination with 32 releases, including 15/15/2 entries and navigation
-      boundaries. The current one-page history has disabled navigation in both languages and apps.
+      boundaries. The then-current one-page history has disabled navigation in both languages and apps.
 - [x] 3.10 The local `1.2.11/317580f7` Bridge, Control and Designer installers passed checksum,
       version, embedded-engine, guide, product-tile and executable-icon verification.
 
@@ -55,3 +61,9 @@
       passed. Edge verified the delivered build in public history, the hidden draft and the local task board.
 
 - [x] 3.12 The operator confirmed synchronized caption and picture fades in `1.2.12/baf7c69a`. The build request moves accepted changes into `1.2.13` while pending station and Linux checks stay under `next`.
+
+- [x] 3.13 Ten generator tests verified all three locales, v1/v2 compatibility, published status, hidden
+      drafts and downloads, and required Arabic source fields.
+- [x] 3.14 Windows Edge passed both app-version suites. Designer and Control switched to Arabic RTL,
+      displayed the published release and delivered build, and navigated to page two.
+- [ ] 3.15 Record the carrying Linux Playwright result.

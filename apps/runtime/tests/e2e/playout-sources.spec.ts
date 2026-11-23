@@ -4,6 +4,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { promisify } from 'node:util';
 import { FRAME_A, FRAME_B } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
+import { CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS } from '@cg/shared-schema';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -31,13 +32,20 @@ test('closed media bindings request no pictures and the modal still shows their 
   app,
 }, testInfo) => {
   const page = app.page;
-  const defaults = await openDefaults(app);
   await page.evaluate(
     (dataUrl) => {
       const capabilities = window.cg.auth.capabilities();
       if (capabilities === null) throw new Error('Expected station capabilities');
       window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
       window.cg.link.status = () => 'live';
+      window.cg.pgmReturn.topology = async (channel) => ({
+        channel,
+        active: 'A',
+        members: [
+          { engine: 'A', name: 'A', physicalChannel: channel, resourceKey: 'fixture-a' },
+          { engine: 'B', name: 'B', physicalChannel: channel, resourceKey: 'fixture-b' },
+        ],
+      });
       window.cg.sources.presence = async ({ sourceIds }) => ({
         engines: ['A', 'B'],
         sources: Object.fromEntries(sourceIds.map((id) => [id, { A: 'present', B: 'present' }])),
@@ -60,6 +68,7 @@ test('closed media bindings request no pictures and the modal still shows their 
     },
     `data:image/jpeg;base64,${FRAME_A.toString('base64')}`,
   );
+  const defaults = await openDefaults(app);
   const field = defaults.locator('[data-defaults-select="l-1"]');
   await app.chooseSource(field, { media: 'Clip 001', search: 'Clip 001' });
   const checkField = async (binding: Locator): Promise<void> => {
@@ -100,7 +109,10 @@ test('closed media bindings request no pictures and the modal still shows their 
     );
     await expect(inherited.locator('[data-source-preview-provider]')).toHaveAttribute(
       'title',
-      /Last picture from server B/,
+      'Server B: available. Last picture from server B. Active PGM server: A',
+    );
+    await expect(inherited).toHaveAccessibleDescription(
+      'Server A: available. Server B: available. Last picture from server B. Active PGM server: A',
     );
   }
   const proof = await readProof();
@@ -364,51 +376,86 @@ test('only the decoded picture provider is outlined through an identical-image A
 const TPL = 'tpl-e2e-picker';
 
 /** Two plates, one look placing both — the shape Plate inputs exists for. */
-async function registerTemplate(page: Page): Promise<void> {
-  await page.evaluate(async (templateId) => {
-    const w = window as unknown as {
-      cg: { templates: { import: (req: { template: unknown; html: string }) => Promise<unknown> } };
-    };
-    const left = { x: 0, y: 0, width: 960, height: 540 };
-    const right = { x: 960, y: 0, width: 960, height: 540 };
-    await w.cg.templates.import({
-      template: {
-        templateId,
-        name: 'picker',
-        sourceFileName: 'picker.vcg',
-        templateType: 'lower-third',
-        fields: [],
-        liveSources: {
-          resolution: { width: 1920, height: 1080 },
-          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
-          sources: [
-            { elementId: 'el-1', sourceId: 'l-1', rect: left, dynamic: false },
-            { elementId: 'el-2', sourceId: 'l-2', rect: right, dynamic: false },
-          ],
-          looks: [
-            {
-              id: 'two',
-              name: '2-box',
-              entered: { mode: 'cut' },
-              rects: { 'l-1': left, 'l-2': right },
-            },
-          ],
-          defaultLookId: 'two',
+async function registerTemplate(page: Page, authored = false): Promise<void> {
+  await page.evaluate(
+    async ({ templateId, effects }) => {
+      const w = window as unknown as {
+        cg: {
+          templates: { import: (req: { template: unknown; html: string }) => Promise<unknown> };
+        };
+      };
+      const left = { x: 0, y: 0, width: 960, height: 540 };
+      const right = { x: 960, y: 0, width: 960, height: 540 };
+      await w.cg.templates.import({
+        template: {
+          templateId,
+          name: 'picker',
+          sourceFileName: 'picker.vcg',
+          templateType: 'lower-third',
+          fields: [],
+          ...(effects === undefined
+            ? {}
+            : {
+                controlLiveLayout: {
+                  id: templateId,
+                  name: 'Picker fixture',
+                  resolution: { width: 1920, height: 1080 },
+                  frameRate: 25,
+                  frames: [{ id: 'l-1', sourceId: 'in-studio-2' }, { id: 'l-2' }],
+                  presets: [
+                    {
+                      id: 'two',
+                      name: '2-box',
+                      frameIds: ['l-1', 'l-2'],
+                      arrangement: 'side-by-side',
+                      horizontalGap: 0,
+                      verticalGap: 0,
+                      reverse: false,
+                      hiddenTitles: [],
+                      hiddenFocusTitles: [],
+                    },
+                  ],
+                  defaultPresetId: 'two',
+                  background: { kind: 'none' },
+                  effects,
+                },
+              }),
+          liveSources: {
+            resolution: { width: 1920, height: 1080 },
+            defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+            sources: [
+              { elementId: 'el-1', sourceId: 'l-1', rect: left, dynamic: false },
+              { elementId: 'el-2', sourceId: 'l-2', rect: right, dynamic: false },
+            ],
+            looks: [
+              {
+                id: 'two',
+                name: '2-box',
+                entered: { mode: 'cut' },
+                rects: { 'l-1': left, 'l-2': right },
+              },
+            ],
+            defaultLookId: 'two',
+          },
         },
-      },
-      html: '<!doctype html><html><body>picker</body></html>',
-    });
-  }, TPL);
+        html: '<!doctype html><html><body>picker</body></html>',
+      });
+    },
+    { templateId: TPL, effects: authored ? CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS : undefined },
+  );
 }
 
 /** Load the template onto a row, select it, and open its source defaults. */
-async function openDefaults(app: {
-  page: Page;
-  inspector: Locator;
-  loadTemplate: (id: string) => Promise<number>;
-  selectLayerRow: (layer: number) => Promise<void>;
-}): Promise<Locator> {
-  await registerTemplate(app.page);
+async function openDefaults(
+  app: {
+    page: Page;
+    inspector: Locator;
+    loadTemplate: (id: string) => Promise<number>;
+    selectLayerRow: (layer: number) => Promise<void>;
+  },
+  authored = false,
+): Promise<Locator> {
+  await registerTemplate(app.page, authored);
   const row = await app.loadTemplate(TPL);
   await app.selectLayerRow(row);
   await app.inspector.locator('[data-open-template-defaults]').click();
@@ -418,6 +465,288 @@ async function openDefaults(app: {
 }
 
 const picker = (page: Page): Locator => page.getByRole('dialog', { name: 'Choose a source' });
+
+test('centers the source picker header and anchors both lists’ A/B indicators beside pictures', async ({
+  app,
+}) => {
+  const { page } = app;
+  await page.setViewportSize({ width: 1400, height: 960 });
+  const englishDefaults = await openDefaults(app);
+  await page.evaluate(() => {
+    const capabilities = window.cg.auth.capabilities();
+    if (capabilities === null) throw new Error('Expected station capabilities');
+    window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+    window.cg.link.status = () => 'live';
+    window.cg.sources.presence = async ({ sourceIds }) => ({
+      engines: ['A', 'B'],
+      sources: Object.fromEntries(
+        sourceIds.map((sourceId) => [sourceId, { A: 'present', B: 'missing' }]),
+      ),
+    });
+  });
+
+  async function checkPictures(rows: Locator, thumbnail: string, rtl: boolean): Promise<void> {
+    const positions: number[] = [];
+    for (const row of [rows.nth(0), rows.nth(1), rows.nth(2)]) {
+      await expect(row.locator('[data-source-presence-server="A"]')).toBeVisible();
+      const geometry = await row.evaluate((element, selector) => {
+        const rect = (query: string): DOMRect => {
+          const node = element.querySelector(query);
+          if (node === null) throw new Error('Missing row component ' + query);
+          return node.getBoundingClientRect();
+        };
+        const picture = rect(selector);
+        const badges = rect('[data-source-presence]');
+        return {
+          pictureLeft: picture.left,
+          pictureRight: picture.right,
+          badgeLeft: badges.left,
+          badgeRight: badges.right,
+          verticalOffset: Math.abs((picture.top + picture.bottom - badges.top - badges.bottom) / 2),
+          a: rect('[data-source-presence-server="A"]').left,
+          b: rect('[data-source-presence-server="B"]').left,
+        };
+      }, thumbnail);
+      const gap = rtl
+        ? geometry.badgeLeft - geometry.pictureRight
+        : geometry.pictureLeft - geometry.badgeRight;
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThanOrEqual(12);
+      expect(geometry.verticalOffset).toBeLessThan(1);
+      expect(geometry.a).toBeLessThan(geometry.b);
+      positions.push(geometry.badgeLeft);
+    }
+    expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(1);
+  }
+
+  async function checkPicker(defaults: Locator, rtl: boolean): Promise<void> {
+    await defaults.locator('[data-defaults-select="l-2"]').click();
+    const dialog = page.getByRole('dialog', {
+      name: rtl ? 'انتخاب منبع' : 'Choose a source',
+      exact: true,
+    });
+    await expect(dialog).toBeVisible();
+    const offsets = await dialog.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const midpoint = (box.left + box.right) / 2;
+      return ['[data-modal-head] h2', '[data-modal-subtitle]'].map((query) => {
+        const node = element.querySelector(query);
+        if (node === null) throw new Error('Missing picker heading ' + query);
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const text = range.getBoundingClientRect();
+        return Math.abs((text.left + text.right) / 2 - midpoint);
+      });
+    });
+    for (const offset of offsets) expect(offset).toBeLessThan(1);
+    const listView = rtl ? 'تغییر به نمای فهرست' : 'Switch to list view';
+    const inputs = dialog.locator('[data-picker-tab="inputs"]');
+    await inputs.getByRole('button', { name: listView, exact: true }).click();
+    await checkPictures(inputs.locator('.cg-vlist-action-row'), '[data-input-thumbnail]', rtl);
+
+    await dialog.getByRole('tab', { name: rtl ? /^رسانه/ : /^Media/ }).click();
+    const media = dialog.locator('[data-picker-tab="media"]');
+    await media.getByRole('button', { name: listView, exact: true }).click();
+    await checkPictures(media.locator('[data-picker-media]'), '.cg-media-thumbnail', rtl);
+    await dialog.getByRole('button', { name: rtl ? 'انصراف' : 'Cancel', exact: true }).click();
+  }
+
+  async function checkTrailingPresence(field: Locator, rtl: boolean): Promise<void> {
+    const indicators = field.locator('[data-source-presence]');
+    await expect(indicators).toBeVisible();
+    const geometry = await field.evaluate((element) => {
+      const rect = (selector: string): DOMRect => {
+        const child = element.querySelector(selector);
+        if (child === null) throw new Error('Missing source field part ' + selector);
+        return child.getBoundingClientRect();
+      };
+      const indicators = rect('[data-source-presence]');
+      const chevron = rect(':scope > svg');
+      const sourceName = rect('[data-choice-name], .cg-source-label__name');
+      return {
+        startGap: indicators.left - chevron.right,
+        endGap: chevron.left - indicators.right,
+        toNameLeft: sourceName.left - indicators.right,
+        toNameRight: indicators.left - sourceName.right,
+        a: rect('[data-source-presence-server="A"]').left,
+        b: rect('[data-source-presence-server="B"]').left,
+      };
+    });
+    expect(rtl ? geometry.startGap : geometry.endGap).toBeGreaterThanOrEqual(0);
+    expect(rtl ? geometry.startGap : geometry.endGap).toBeLessThanOrEqual(12);
+    expect(rtl ? geometry.toNameLeft : geometry.toNameRight).toBeGreaterThan(20);
+    expect(geometry.a).toBeLessThan(geometry.b);
+  }
+
+  async function checkPresetInputFaces(rtl: boolean): Promise<void> {
+    for (const [plate, name] of [
+      ['l-1', 'Clip 001'],
+      ['l-2', 'Studio 1'],
+    ] as const) {
+      const field = page.locator(`[data-look-binding="two:${plate}"]`);
+      await expect(field.locator('[data-source-label="choice"]')).toContainText(name);
+      await checkTrailingPresence(field, rtl);
+    }
+  }
+
+  await checkPicker(englishDefaults, false);
+  await app.chooseSource(englishDefaults.locator('[data-defaults-select="l-1"]'), {
+    media: 'Clip 001',
+    search: 'Clip 001',
+  });
+  await app.chooseSource(englishDefaults.locator('[data-defaults-select="l-2"]'), {
+    input: 'Studio 1',
+  });
+  await checkTrailingPresence(englishDefaults.locator('[data-defaults-select="l-1"]'), false);
+  await checkTrailingPresence(englishDefaults.locator('[data-defaults-select="l-2"]'), false);
+  await englishDefaults.locator('[data-defaults-save]').click();
+  await checkPresetInputFaces(false);
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  const settings = page.getByRole('dialog');
+  await settings.getByRole('tab', { name: 'General', exact: true }).click();
+  await settings.locator('#cg-interface-language').selectOption('fa');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await settings.getByRole('button', { name: 'بستن', exact: true }).last().click();
+  await page.locator('[data-open-template-defaults]').click();
+  const persianDefaults = page.getByRole('dialog', { name: /^منابع پیشفرض/ });
+  await checkPicker(persianDefaults, true);
+  await checkTrailingPresence(persianDefaults.locator('[data-defaults-select="l-1"]'), true);
+  await checkTrailingPresence(persianDefaults.locator('[data-defaults-select="l-2"]'), true);
+  await persianDefaults.getByRole('button', { name: 'بستن', exact: true }).click();
+  await checkPresetInputFaces(true);
+});
+
+for (const copy of [
+  {
+    locale: 'fa',
+    picker: 'انتخاب منبع',
+    defaults: /^منابع پیشفرض/,
+    settings: 'باز کردن تنظیمات ایستگاه',
+    liveSources: 'منابع زنده',
+    sources: 'ورودی‌های Playout',
+    close: 'بستن',
+    cancel: 'انصراف',
+    picture: 'تصویر ورودی.',
+    unknown: 'جایگزین تصویر. وضعیت سیگنال ورودی مشخص نیست.',
+    noSignal: 'در حال حاضر سیگنال ورودی دریافت نمی‌شود.',
+    instruction: 'برای بررسی این ورودی، آن را انتخاب کنید.',
+    waiting: 'در انتظار سیگنال NDI',
+    inherited: 'استفاده از ورودی چیدمان',
+    catalog: /سرور فهرست ورودی‌ها/,
+  },
+  {
+    locale: 'ar',
+    picker: 'اختر مصدرًا',
+    defaults: /^المصادر الافتراضية/,
+    settings: 'فتح إعداد المحطة',
+    liveSources: 'المصادر الحية',
+    sources: 'مداخل Playout',
+    close: 'إغلاق',
+    cancel: 'إلغاء',
+    picture: 'صورة المدخل.',
+    unknown: 'صورة بديلة. حالة إشارة المدخل غير معروفة.',
+    noSignal: 'لا توجد إشارة من المدخل حاليًا.',
+    instruction: 'اختر هذا المدخل لفحصه.',
+    waiting: 'بانتظار إشارة NDI',
+    inherited: 'استخدام مدخل التخطيط',
+    catalog: /خادم قائمة المداخل/,
+  },
+] as const) {
+  test(
+    'localizes input picture tooltips and connecting states in the picker and Station setup (' +
+      copy.locale +
+      ')',
+    async ({ app }) => {
+      const { page } = app;
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      const defaults = await openDefaults(app, true);
+      await defaults.getByRole('button', { name: 'Close', exact: true }).click();
+      await app.openStationSetupAt('General');
+      await page.locator('#cg-interface-language').selectOption(copy.locale);
+      await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: copy.close, exact: true })
+        .last()
+        .click();
+      await page.evaluate((jpegBase64) => {
+        const previews = window.cg.sourcePreviews;
+        previews.thumbnails = async ({ sourceIds }) => ({
+          frames: sourceIds.map((sourceId) =>
+            sourceId === 'in-studio-1'
+              ? { sourceId, signal: 'present', jpegBase64, width: 64, height: 64 }
+              : { sourceId, signal: sourceId === 'in-studio-2' ? 'absent' : 'unknown' },
+          ),
+        });
+        previews.ndiTargets = async ({ sourceIds }) => ({
+          targets: sourceIds.map((sourceId) =>
+            sourceId === 'in-studio-3'
+              ? { sourceId, kind: 'ndi', senderName: 'Test (Connecting)', engine: 'A' }
+              : { sourceId, kind: 'other' },
+          ),
+        });
+        previews.openNdiStream = async () => () => undefined;
+      }, FRAME_A.toString('base64'));
+
+      const expectTooltip = async (tile: Locator, description: string): Promise<void> => {
+        await tile.hover();
+        const checkable = (await tile.getAttribute('data-input-thumbnail')) === 'checkable';
+        const expected = checkable ? description + ' ' + copy.instruction : description;
+        await expect
+          .poll(async () =>
+            (await page.getByRole('tooltip').allTextContents()).map((text) =>
+              text.replace(/[\u2068\u2069]/g, ''),
+            ),
+          )
+          .toEqual([expected]);
+      };
+
+      await page.locator('[data-open-template-defaults]').click();
+      const localizedDefaults = page.getByRole('dialog', { name: copy.defaults });
+      await expect(localizedDefaults.locator('[data-inputs-server]')).toHaveText(copy.catalog);
+      const inherited = localizedDefaults.locator('[data-defaults-select="l-1"]');
+      await expect(inherited).toContainText(copy.inherited);
+      await expect(inherited).toHaveAttribute('data-field-value', new RegExp(copy.inherited));
+      await inherited.click();
+      const panel = page.getByRole('dialog', { name: copy.picker, exact: true });
+      await expect(panel.locator('[data-picker-tab="inputs"]')).toHaveAttribute(
+        'data-input-view',
+        'grid',
+      );
+      const gridTile = (id: string): Locator =>
+        panel
+          .locator('.cg-vlist-action-row', {
+            has: page.locator('[data-picker-input="' + id + '"]'),
+          })
+          .locator('[data-input-thumbnail]');
+      await expect(gridTile('in-studio-3')).toContainText(copy.waiting);
+      await expect(gridTile('in-studio-1').locator('img')).toBeVisible();
+      await expectTooltip(gridTile('in-studio-1'), copy.picture);
+      await expectTooltip(gridTile('in-studio-2'), copy.noSignal);
+      await expectTooltip(gridTile('in-multicast'), copy.unknown);
+      await panel.getByRole('button', { name: copy.cancel, exact: true }).click();
+      await localizedDefaults.getByRole('button', { name: copy.close, exact: true }).click();
+
+      await page.getByRole('button', { name: copy.settings, exact: true }).click();
+      await page
+        .getByRole('dialog')
+        .getByRole('tab', { name: copy.liveSources, exact: true })
+        .click();
+      const sources = page.getByRole('region', { name: copy.sources, exact: true });
+      const settingTile = (name: string): Locator =>
+        sources
+          .locator('[data-source-input]', {
+            has: page.locator('.cg-resource__name', { hasText: name }),
+          })
+          .locator('[data-input-thumbnail]');
+      await expect(settingTile('Studio 3')).toContainText(copy.waiting);
+      await expect(settingTile('Studio 1').locator('img')).toBeVisible();
+      await expectTooltip(settingTile('Studio 1'), copy.picture);
+      await expectTooltip(settingTile('Studio 2'), copy.noSignal);
+      await expectTooltip(settingTile('Multicast'), copy.unknown);
+    },
+  );
+}
 
 test('the input picker draws consecutive direct NDI frames and meters local PCM', async ({
   app,

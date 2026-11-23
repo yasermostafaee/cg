@@ -26,6 +26,8 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { fixedLayersReasonMessage } from '../../ui/fixedLayersReasonMessage.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
+import { defaultLayerDisplayName } from '../../ui/operatorNaming.js';
+import { latinDigits } from '@cg/text-shaping';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 // 🔴 `B-238` — R-017's two canonical pieces, consumed rather than re-spelled: the ONE
 // renderer-side remove decision (which reads the bridge's published `removeExempt`), and the
@@ -300,9 +302,13 @@ export function CandidateLayersHelper(): JSX.Element {
 
 /** Does this row match what the operator typed? Name, template and layer number all count. */
 function matches(query: string, parts: readonly (string | null | undefined)[]): boolean {
-  const q = query.trim().toLowerCase();
+  const q = latinDigits(query.trim()).toLowerCase();
   if (q === '') return true;
-  return parts.some((p) => (p ?? '').toLowerCase().includes(q));
+  return parts.some((p) =>
+    latinDigits(p ?? '')
+      .toLowerCase()
+      .includes(q),
+  );
 }
 
 interface LayerRow {
@@ -608,18 +614,21 @@ function BankEditor({
     // UNVERIFIABLE case, and it keeps its confirm — `removeIsRefused` needs an item to
     // judge, and "we cannot see it" is not "it is safe".
     const offAir = item !== undefined && (item.status === 'idle' || item.status === 'loaded');
-    const rowName = slot.alias ?? defaultLayerAlias(bank, slot.layer);
+    const rowName = slot.alias ?? defaultLayerDisplayName(bank, slot.layer, localizeUi);
     const confirmed = await confirm({
-      title: `Remove “${name}” from ${rowName}?`,
+      title: localizeUi('Remove “{template}” from {row}?', { template: name, row: rowName }),
       // `SETTINGS-MATCH-02` §8 — raised from inside Station setup: that family's frame, and
       // its lighter scrim, so the row this is about stays visible behind the question.
       layer: 'sub',
       destructive: true,
       body: offAir
-        ? `The item is removed from the row and layer ${String(slot.layer)} is cleared.`
-        : `This item MAY BE ON AIR (its state cannot be verified right now). Removing it ` +
-          `CLEARS layer ${String(slot.layer)} — anything live there leaves the output ` +
-          `immediately, with no outro.`,
+        ? localizeUi('The item is removed from the row and layer {layer} is cleared.', {
+            layer: slot.layer,
+          })
+        : localizeUi(
+            'This item MAY BE ON AIR (its state cannot be verified right now). Removing it CLEARS layer {layer} — anything live there leaves the output immediately, with no outro.',
+            { layer: slot.layer },
+          ),
       confirmLabel: 'Remove template',
     });
     if (!confirmed) return;
@@ -665,7 +674,7 @@ function BankEditor({
       position: bankPosition(bank, layer),
       slot,
       name: aliases[String(layer)] ?? '',
-      placeholder: defaultLayerAlias(bank, layer),
+      placeholder: defaultLayerDisplayName(bank, layer, localizeUi),
       template: showBinding && bound !== null ? boundTemplateName(bound) : null,
       /*
         🔴 OCCUPIED IS OUR OWN RECORD, never an inference from the wire. A bound item is the
@@ -686,7 +695,12 @@ function BankEditor({
   const bedRows = bedLayers.map(rowFor);
   const keep = (row: LayerRow): boolean =>
     (!shownOnly || row.visible) &&
-    matches(query, [row.name, row.placeholder, row.template, String(row.layer)]);
+    matches(query, [
+      row.name || row.placeholder,
+      row.template,
+      String(row.layer),
+      row.name === '' ? defaultLayerAlias(bank, row.layer) : undefined,
+    ]);
   const shownOperator = operatorRows.filter(keep);
   const shownBeds = bedRows.filter(keep);
   const total = operatorRows.length + bedRows.length;
@@ -771,10 +785,7 @@ function BankEditor({
                         layer: row.layer,
                         row: row.position,
                       })}
-                      placeholder={localizeUi(
-                        isLowBankLayer(bank, row.layer) ? 'Live layer {layer}' : 'Layer {layer}',
-                        { layer: row.layer },
-                      )}
+                      placeholder={row.placeholder}
                       value={row.name}
                       onChange={(e) => {
                         setAliases({ ...aliases, [String(row.layer)]: e.target.value });
@@ -782,13 +793,7 @@ function BankEditor({
                     />
                   ) : (
                     // §2 I — the row's name as the console shows it: its alias, else its real layer.
-                    <IsolatedName>
-                      {row.name ||
-                        localizeUi(
-                          isLowBankLayer(bank, row.layer) ? 'Live layer {layer}' : 'Layer {layer}',
-                          { layer: row.layer },
-                        )}
-                    </IsolatedName>
+                    <IsolatedName alignWithInterface>{row.name || row.placeholder}</IsolatedName>
                   )}
                 </td>
                 <td>

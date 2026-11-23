@@ -6,7 +6,7 @@ import './fonts.css';
 import './chromeFonts.css';
 import './ui/controls.css';
 import './ui/forms.css';
-import { StrictMode, useEffect, type ReactNode } from 'react';
+import { StrictMode, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
@@ -77,7 +77,7 @@ const root = createRoot(rootEl);
  */
 function BootComplete({ children }: { children: ReactNode }): JSX.Element {
   const { interface: language } = useLanguages();
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = localeDirection(language);
   }, [language]);

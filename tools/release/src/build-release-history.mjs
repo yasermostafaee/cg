@@ -19,6 +19,21 @@ const COPY = {
     of: 'از',
     status: { development: 'در حال توسعه', prepared: 'آمادهٔ تحویل', published: 'منتشرشده' },
   },
+  ar: {
+    dir: 'rtl',
+    heading: 'سجل الإصدارات والتغييرات',
+    description: 'ملاحظات إصدارات',
+    intro: 'الميزات والإصلاحات في كل إصدار',
+    features: 'الميزات والتحسينات',
+    fixes: 'إصلاحات الأخطاء',
+    planned: 'قيد المتابعة',
+    pagination: 'صفحات سجل الإصدارات',
+    previous: 'الصفحة السابقة',
+    nextPage: 'الصفحة التالية',
+    page: 'الصفحة',
+    of: 'من',
+    status: { development: 'قيد التطوير', prepared: 'جاهز للتسليم', published: 'منشور' },
+  },
   en: {
     dir: 'ltr',
     heading: 'Versions and release notes',
@@ -61,16 +76,17 @@ function stringList(value, at) {
   return value.map((item) => item.trim()).filter(Boolean);
 }
 
-function translation(value, at) {
+function translation(value, at, arabic) {
   return {
     fa: requiredText(value?.fa, at + '.fa'),
     en: requiredText(value?.en, at + '.en'),
+    ...(arabic && { ar: requiredText(value?.ar, at + '.ar') }),
   };
 }
 
-function translationList(value, at) {
+function translationList(value, at, arabic) {
   if (!Array.isArray(value)) throw new Error(at + ' must be an array of translations');
-  return value.map((item, index) => translation(item, at + '[' + String(index) + ']'));
+  return value.map((item, index) => translation(item, at + '[' + String(index) + ']', arabic));
 }
 
 function legacyTranslation(text) {
@@ -93,8 +109,9 @@ export function parseReleaseHistory(source) {
     throw new Error('release history must be an object');
   }
   const legacy = data.schemaVersion === 1;
-  if (!legacy && data.schemaVersion !== 2) {
-    throw new Error('release history schemaVersion must be 1 or 2');
+  const arabic = data.schemaVersion === 3;
+  if (!legacy && data.schemaVersion !== 2 && !arabic) {
+    throw new Error('release history schemaVersion must be 1, 2 or 3');
   }
   const product = requiredText(data.product, 'product');
   if (!Array.isArray(data.releases) || data.releases.length === 0) {
@@ -117,28 +134,28 @@ export function parseReleaseHistory(source) {
       version,
       title: legacy
         ? legacyTranslation(requiredText(raw.title, at + '.title'))
-        : translation(raw.title, at + '.title'),
+        : translation(raw.title, at + '.title', arabic),
       date: requiredText(raw.date, at + '.date'),
       status,
       summary: legacy
         ? legacyTranslation(requiredText(raw.summary, at + '.summary'))
-        : translation(raw.summary, at + '.summary'),
+        : translation(raw.summary, at + '.summary', arabic),
       features: legacy
         ? stringList(raw.changes, at + '.changes').map(legacyTranslation)
-        : translationList(raw.features, at + '.features'),
-      fixes: legacy ? [] : translationList(raw.fixes, at + '.fixes'),
+        : translationList(raw.features, at + '.features', arabic),
+      fixes: legacy ? [] : translationList(raw.fixes, at + '.fixes', arabic),
       planned: raw.planned === undefined
         ? []
         : legacy
           ? stringList(raw.planned, at + '.planned').map(legacyTranslation)
-          : translationList(raw.planned, at + '.planned'),
+          : translationList(raw.planned, at + '.planned', arabic),
       downloadBaseUrl:
         typeof raw.downloadBaseUrl === 'string' && raw.downloadBaseUrl.trim() !== ''
           ? raw.downloadBaseUrl.trim().replace(/\/+$/u, '')
           : null,
     };
   });
-  return { product, releases };
+  return { product, releases, languages: arabic ? ['fa', 'en', 'ar'] : ['fa', 'en'] };
 }
 
 function list(title, items, className) {
@@ -156,7 +173,7 @@ function list(title, items, className) {
 
 function releaseCard(release, language, index) {
   const copy = COPY[language];
-  const prefix = language === 'fa' ? 'version-' : 'en-version-';
+  const prefix = language === 'fa' ? 'version-' : language + '-version-';
   const version = 'v' + release.version;
   return (
     '<details class="release" id="' + prefix +
@@ -190,7 +207,7 @@ function releaseCard(release, language, index) {
 
 const STYLE = [
   ':root{color-scheme:dark;--bg:#071018;--panel:#0d1a24;--line:#244052;--text:#eef7fb;--muted:#9bb1bf;--accent:#36c5b7;--warm:#f4bd63}',
-  '*{box-sizing:border-box}html{font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.8}[lang=fa]{font-family:Vazirmatn,Tahoma,Arial,sans-serif}',
+  '*{box-sizing:border-box}html{font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.8}[lang=fa],[lang=ar]{font-family:Vazirmatn,Tahoma,Arial,sans-serif}',
   'body{margin:0;background:radial-gradient(circle at 85% 0,#123847 0,transparent 34rem),var(--bg)}',
   'main{width:min(1380px,calc(100% - 48px));margin:auto;padding:24px 0 48px}',
   'header{margin-bottom:22px}h1{font-size:clamp(1.35rem,2.2vw,1.8rem);line-height:1.3;margin:0 0 8px}header p{color:var(--muted);max-width:760px;margin:0}',
@@ -207,11 +224,20 @@ const STYLE = [
   '[hidden]{display:none!important}@media(max-width:680px){main{width:min(100% - 20px,1080px);padding-top:30px}summary{align-items:flex-start;flex-direction:column}.meta{width:100%;justify-content:space-between}.release-body{padding:18px}}',
 ].join('');
 
-const LANGUAGE_PICKER = `
-<nav class="languages" dir="ltr" aria-label="Language / زبان">
-  <button type="button" data-language="fa" lang="fa" aria-controls="history-fa" aria-pressed="true">فارسی</button>
-  <button type="button" data-language="en" lang="en" aria-controls="history-en" aria-pressed="false">English</button>
-</nav>`;
+const LANGUAGE_NAMES = { fa: 'فارسی', en: 'English', ar: 'العربية' };
+
+function languagePicker(languages) {
+  return [
+    '<nav class="languages" dir="ltr" aria-label="Language / زبان / اللغة">',
+    ...languages.map(
+      (language) =>
+        '<button type="button" data-language="' + language + '" lang="' + language +
+        '" aria-controls="history-' + language + '" aria-pressed="' + String(language === 'fa') +
+        '">' + escapeHtml(LANGUAGE_NAMES[language]) + '</button>',
+    ),
+    '</nav>',
+  ].join('\n');
+}
 
 const SWITCH_LANGUAGE = `
 <script>
@@ -294,6 +320,7 @@ export function releaseHistoryHtml(data, options = {}) {
         '; add its changes before building installers',
     );
   }
+  const languages = data.languages ?? ['fa', 'en'];
   const license = fs.readFileSync(new URL('./vazirmatn-OFL.txt', import.meta.url), 'utf8');
   return [
     '<!doctype html>',
@@ -302,9 +329,8 @@ export function releaseHistoryHtml(data, options = {}) {
     '<meta name="description" content="' + escapeHtml(COPY.fa.description + ' ' + data.product) + '">',
     '<title>' + escapeHtml(COPY.fa.heading + ' · ' + data.product) + '</title>',
     '<style>/*\n' + license + '\n*/\n' + fontFaces() + '\n' + STYLE + '</style></head><body><main>',
-    LANGUAGE_PICKER,
-    languagePanel(data, 'fa'),
-    languagePanel(data, 'en'),
+    languagePicker(languages),
+    ...languages.map((language) => languagePanel(data, language)),
     '</main>',
     SWITCH_LANGUAGE,
     '</body></html>',

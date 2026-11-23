@@ -6,9 +6,11 @@ web host without a framework or server-side renderer. Hosted file locations are 
 ## Decisions
 
 - `docs/release/release-history.json` is the source of truth; generated HTML is never edited by hand.
-  Confirmed customer-delivered versions use published status and publication wording in both languages.
+  Confirmed customer-delivered versions use published status and publication wording in all three languages.
 - `docs/release/index.html` is self-contained and responsive. Persian is the initial RTL view and uses
-  embedded Vazirmatn. A language switch shows English in LTR. Native `details` elements make each
+  embedded Vazirmatn. The manual language switch offers English in LTR and Arabic in RTL. Schema version 3
+  requires all three translations. Sources using schema version 1 or 2 retain Persian and English.
+  Native `details` elements make each
   numbered version independently clickable, with separate feature, fix and pending lists.
   Each page contains at most fifteen numbered releases. Previous/next controls show a localized
   page count and enforce the first/last page boundaries. `next` entries remain authoring data.

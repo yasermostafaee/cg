@@ -54,6 +54,8 @@ Using the primary token was rejected because Playout tokens are engine-local and
 
 The display choice is `A`, `B`, or `A + B`, persisted per console. All choices remain visible whether or not a backup is configured, so the operator can see and prepare the reserve-monitor position before commissioning it. Without a valid mapping, B is a black `B · CH —` tile that says there is no return signal and opens no B resource; if a mapping disappears, the selected layout stays in place but every B resource is released. In the combined mode, a second persisted choice arranges the two equally sized tiles horizontally (default) or vertically; the operator's explicit choice is not overridden by panel width. Each tile has its own stable server/channel label and signal state.
 
+The two-tile flex direction follows the selected layout in the workspace and fullscreen. Compact meter rules may still respond to available width. Layout tooltips and accessible names use the console interface language. The signal and audio control groups wrap in interface order when they need an additional row.
+
 Audio has one selector: `Follow primary` (default), `A`, or `B`, and the selector also remains visible before B is mapped. The existing speaker on/off preference remains separate. The resolved available source owns the one audio decoder, loudness badge and VU meter; selecting an unavailable B leaves those surfaces silent/unknown and opens no B resource. Changing between available sources tears down the old stream before opening the new one. This is clearer than two speaker buttons and structurally prevents accidental mixing. Cinegy's single meter beside multiple pictures supports this model.
 
 ### 5. Current-primary changes roles, never labels

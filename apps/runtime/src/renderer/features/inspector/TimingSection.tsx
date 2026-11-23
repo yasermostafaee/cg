@@ -110,7 +110,7 @@ export function TimingSection({
           aria-expanded={open}
           onClick={disclosure?.toggle ?? (() => setLocalOpen((expanded) => !expanded))}
         >
-          <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
+          <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl={!open} />
           {localizeUi('Timing')}
         </button>
       </h2>
@@ -126,9 +126,9 @@ export function TimingSection({
               <Tag
                 className="cg-meta-chip"
                 data-testid="timing-mode-fact"
-                title={MODE_LONG[playout.mode]}
+                title={localizeUi(MODE_LONG[playout.mode] ?? playout.mode)}
               >
-                {MODE_WORD[playout.mode] ?? playout.mode}
+                {localizeUi(MODE_WORD[playout.mode] ?? playout.mode)}
               </Tag>
             </div>
             {playout.holdSource !== undefined && (
@@ -137,9 +137,9 @@ export function TimingSection({
                 <Tag
                   className="cg-meta-chip"
                   data-testid="timing-hold-fact"
-                  title={HOLD_LONG[playout.holdSource]}
+                  title={localizeUi(HOLD_LONG[playout.holdSource] ?? playout.holdSource)}
                 >
-                  {HOLD_WORD[playout.holdSource] ?? playout.holdSource}
+                  {localizeUi(HOLD_WORD[playout.holdSource] ?? playout.holdSource)}
                 </Tag>
               </div>
             )}

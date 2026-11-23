@@ -129,7 +129,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(pv.locator('[data-rehearsal-frame]')).toHaveCount(1);
     await page.locator('[data-open-template-defaults]').click();
     const defaults = page.getByRole('dialog', { name: 'Source defaults' });
-    const inputServer = `Input server · ${new URL(playout.baseUrl).host}`;
+    const inputServer = `Input catalog server · ${new URL(playout.baseUrl).host}`;
     await expect(defaults.locator('[data-inputs-server]')).toHaveText(inputServer);
     const field = defaults.locator('[data-defaults-select="plate-1"]');
     const save = defaults.getByRole('button', { name: 'Save defaults' });

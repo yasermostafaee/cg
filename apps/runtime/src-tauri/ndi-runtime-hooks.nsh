@@ -29,3 +29,12 @@ ndi_runtime_check_program_files:
 
 ndi_runtime_done:
 !macroend
+
+; CG Control Setup writes the initial language after the interactive installer succeeds.
+; Standard uninstall removes it. An explicit update keeps it.
+!macro NSIS_HOOK_POSTUNINSTALL
+  ${If} $UpdateMode <> 1
+    Delete "$INSTDIR\cg-control-install-language"
+    RMDir "$INSTDIR"
+  ${EndIf}
+!macroend

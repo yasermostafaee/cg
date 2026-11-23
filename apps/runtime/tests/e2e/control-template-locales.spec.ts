@@ -182,7 +182,21 @@ for (const strings of locales) {
           editor.getByRole('textbox', { name: strings.presetName, exact: true }),
         ).toHaveValue(strings.defaultPreset);
 
-        await editor.getByText(strings.advanced, { exact: true }).click();
+        const headings = editor.locator('.cg-live-layout-section-heading');
+        await expect(headings).toHaveCount(4);
+        for (const heading of await headings.all()) {
+          await expect(heading.locator('svg:last-child')).toHaveCSS(
+            'transform',
+            'matrix(-1, 0, 0, 1, 0, 0)',
+          );
+        }
+
+        const advanced = headings.filter({ hasText: strings.advanced });
+        await advanced.click();
+        await expect(advanced.locator('svg:last-child')).toHaveCSS(
+          'transform',
+          'matrix(0, 1, -1, 0, 0, 0)',
+        );
         await expect(
           editor.getByRole('button', { name: strings.defaultFit, exact: true }),
         ).toBeVisible();

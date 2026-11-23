@@ -155,7 +155,10 @@ export function SourceLabel({
         originDescription={originDescription}
       />
       {source.unavailable && (
-        <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>
+        <Tag
+          className="cg-source-tag cg-source-tag--unavailable"
+          title={source.reason === undefined ? undefined : localizeUi(source.reason)}
+        >
           {localizeUi('Unavailable')}
         </Tag>
       )}

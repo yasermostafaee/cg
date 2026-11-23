@@ -11,6 +11,7 @@ pub mod dev;
 pub mod engine;
 pub mod field;
 pub mod icons;
+pub mod language;
 pub mod layout;
 pub mod model;
 pub mod observe;

@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import { PLAYLIST_AUDIO_LOCKED_REASON, type TemplateInfo } from '@cg/shared-ipc';
@@ -139,6 +139,7 @@ export function LivePlateAudioDialog({
   onClose,
 }: LivePlateAudioDialogProps): React.JSX.Element {
   const localizeUi = useUiText();
+  const presentMessage = useFeedbackText();
   const [refusal, setRefusal] = useState<string | null>(null);
   /**
    * What the operator is dragging RIGHT NOW, before it is committed.
@@ -242,8 +243,10 @@ export function LivePlateAudioDialog({
           .map((plate) => plate.name);
         setRefusal(
           names.length > 0
-            ? `The change was refused for ${names.join(', ')} — those plates are unchanged.`
-            : 'The volume change was refused.',
+            ? presentMessage('The change was refused for {names} — those plates are unchanged.', {
+                names: names.join(', '),
+              })
+            : presentMessage('The volume change was refused.'),
         );
       }
     });
@@ -310,15 +313,17 @@ export function LivePlateAudioDialog({
             <br />
             {localizeUi('SOLO silences all other frames of this row, including hidden frames.')}
           </span>
-          <ModalAction actionRole="cancel" onClick={onClose}>
-            {localizeUi('Close')}
+          <ModalAction actionRole="cancel" className="cg-audio-close" onClick={onClose}>
+            <span>{localizeUi('Close')}</span>
           </ModalAction>
         </>
       }
     >
       <div className="cg-audio-context" data-audio-context="">
         <span>
-          {String(plates.length)} {plates.length === 1 ? localizeUi('frame') : localizeUi('frames')}
+          {localizeUi(plates.length === 1 ? '{count} frame' : '{count} frames', {
+            count: plates.length,
+          })}
           {activeLook !== null && (
             <>
               {' · '}
@@ -345,13 +350,14 @@ export function LivePlateAudioDialog({
       */}
       <div className="cg-audio-head" aria-hidden="true">
         <span>{localizeUi('Frame / source')}</span>
-        <span>{localizeUi('Requested gain')}</span>
+        <span>{localizeUi('Volume')}</span>
         <span>{localizeUi('Audio controls')}</span>
       </div>
       {plates.map((plate) => {
         // `PLAYOUT-FEATURES-01` C — the playlist output's box: every control disabled, the state locked.
         const locked = audioLockedOf(plate.plateId);
-        const lockedTitle = locked ? { title: PLAYLIST_AUDIO_LOCKED_REASON } : {};
+        const lockedReason = localizeUi(PLAYLIST_AUDIO_LOCKED_REASON);
+        const lockedTitle = locked ? { title: lockedReason } : {};
         const value = locked ? 0 : shown(plate.plateId);
         const pill: PlateAudioPill = locked
           ? LOCKED_PILL
@@ -364,7 +370,7 @@ export function LivePlateAudioDialog({
         // (`on 1-10`), never a hand-built `Layer N`, which is a ROW's name (`cg/bank-shape`).
         const seatLine =
           plate.seated?.coordinate !== undefined
-            ? `on ${plate.seated.coordinate}`
+            ? localizeUi('on {coordinate}', { coordinate: plate.seated.coordinate })
             : localizeUi('not seated');
         const sourceName =
           sourceNameOf?.(plate.plateId) ??
@@ -424,7 +430,7 @@ export function LivePlateAudioDialog({
                 style={{ color: pill.tone }}
                 title={localizeUi(pill.detail)}
               >
-                {pill.label}
+                {localizeUi(pill.label)}
               </small>
             </div>
             <span className="cg-audio-verbs">
@@ -439,7 +445,7 @@ export function LivePlateAudioDialog({
                   commit({ [plate.plateId]: 1 });
                 }}
                 disabled={locked}
-                title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : ON_TITLE}
+                title={locked ? lockedReason : localizeUi(ON_TITLE)}
                 aria-label={localizeUi('Full volume for {name} (100%, not the previous level)', {
                   name: plate.name,
                 })}
@@ -452,7 +458,7 @@ export function LivePlateAudioDialog({
                   commit({ [plate.plateId]: 0 });
                 }}
                 disabled={locked}
-                title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : OFF_TITLE}
+                title={locked ? lockedReason : localizeUi(OFF_TITLE)}
                 aria-label={localizeUi('Silence {name}', { name: plate.name })}
               >
                 {localizeUi('OFF')}
@@ -471,10 +477,8 @@ export function LivePlateAudioDialog({
                 */
                 title={
                   locked
-                    ? PLAYLIST_AUDIO_LOCKED_REASON
-                    : plateIds.length < 2
-                      ? SOLO_ALONE_TITLE
-                      : SOLO_TITLE
+                    ? lockedReason
+                    : localizeUi(plateIds.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)
                 }
                 aria-label={localizeUi(
                   'Solo {name} — silences the other {count} plate(s) on this row, with no restore',

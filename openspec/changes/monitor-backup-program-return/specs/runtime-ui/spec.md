@@ -21,6 +21,21 @@ Each tile SHALL show its picture ONLY while the bridge reports that engine/chann
 - **WHEN** A + B is selected and the operator chooses the vertical layout
 - **THEN** B is placed below A, the choice is remembered on that console, and choosing horizontal places B beside A without reconnecting either feed
 
+#### Scenario: A narrow workspace honors the operator's layout choice
+
+- **GIVEN** two programme returns are visible in a narrow workspace panel
+- **WHEN** the operator selects the horizontal layout
+- **THEN** both returns appear side by side immediately
+- **AND** entering and leaving fullscreen preserves the selected arrangement
+- **AND** both layout controls' tooltips and accessible names use the selected interface language
+
+#### Scenario: The programme toolbar fits a narrow workspace
+
+- **GIVEN** the normal workspace narrows the PROGRAM panel while the operator monitors two returns
+- **THEN** return status, loudness and the air count remain visible
+- **AND** the source selector, speaker, volume, VU and all-meters controls remain reachable
+- **AND** the header actions and programme pictures stay visible
+
 #### Scenario: No backup mapping keeps an honest reserve position
 
 - **WHEN** server B is absent or channel N has no valid mapped M

@@ -382,11 +382,14 @@ export function OutputsSection({
       <details className="cg-setup-details">
         <summary>{localizeUi('How are outputs identified?')}</summary>
         <p>
-          {localizeUi('What')} {playoutEngineWording('casparcg.config', engine)} declares versus
-          what is running, read over AMCP: INFO CONFIG for the declaration, INFO &lt;channel&gt; for
-          the running set, re-read every minute. A program output (decklink, bluefish, ndi, ffmpeg,
-          artnet) that is declared and not running is the operator alarm; a preview window or the
-          local sound device is noted here only.
+          {localizeUi(
+            'The console compares the outputs declared in {config} with what is running. Every minute it reads {declared} and {running} over AMCP. A declared programme output (decklink, bluefish, ndi, ffmpeg, artnet) that is down triggers an alarm. Preview windows and local audio devices appear only in this check.',
+            {
+              config: localizeUi(playoutEngineWording('casparcg.config', engine)),
+              declared: 'INFO CONFIG',
+              running: 'INFO <channel>',
+            },
+          )}
         </p>
       </details>
     </section>

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UserConfig } from 'vite';
+import { CONTROL_LANGUAGE_KEY } from '../src/renderer/i18n/localePreferences.js';
 
 /**
  * `P-041` — the DEV server is LAN-visible by default, the PREVIEW server is not, and the
@@ -37,6 +38,25 @@ afterEach(() => {
   else process.env.CG_BRIDGE_CONSOLE = savedBridgeConsole;
   if (savedConsoleHost === undefined) delete process.env.CG_CONSOLE_HOST;
   else process.env.CG_CONSOLE_HOST = savedConsoleHost;
+});
+
+it('inlines only the splash catalog entries and its build identity', async () => {
+  const { injectSplashLanguage } = await import('../vite.config.js');
+  const injected = injectSplashLanguage('/* CG_SPLASH_LOCALE */ null');
+  const result = JSON.parse(injected);
+  expect(result).toMatchObject({
+    key: CONTROL_LANGUAGE_KEY,
+    buildStamp: { builtAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
+    messages: {
+      en: { CONNECTING: 'CONNECTING' },
+      fa: { CONNECTING: 'در حال اتصال' },
+      ar: { CONNECTING: 'جارٍ الاتصال' },
+    },
+  });
+  const keys = Object.keys(result.messages.en);
+  expect(keys).toHaveLength(7);
+  expect(Object.keys(result.messages.fa)).toEqual(keys);
+  expect(Object.keys(result.messages.ar)).toEqual(keys);
 });
 
 /**

@@ -6,6 +6,7 @@
 //! drawn first with the real tokens, faces and icons.
 
 use crate::icons::Icon;
+use crate::language::SetupLanguage;
 use crate::model::{format_bytes, Model, Page, StepState};
 
 fn format_copy_bytes(bytes: u64) -> String {
@@ -52,6 +53,9 @@ impl Rect {
     }
     pub fn contains(&self, x: f32, y: f32) -> bool {
         x >= self.x && x < self.x + self.w && y >= self.y && y < self.y + self.h
+    }
+    pub fn mirrored(self) -> Rect {
+        Rect::new(WIN_W - self.right(), self.y, self.w, self.h)
     }
     pub fn right(&self) -> f32 {
         self.x + self.w
@@ -105,9 +109,9 @@ pub enum Role {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextAlign {
-    Left,
+    Start,
     Center,
-    Right,
+    End,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -154,6 +158,9 @@ pub enum Item {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WidgetId {
+    LanguageEnglish,
+    LanguagePersian,
+    LanguageArabic,
     Next,
     Back,
     Cancel,
@@ -265,6 +272,7 @@ pub struct RailStep {
 }
 
 pub struct Scene {
+    pub language: SetupLanguage,
     pub items: Vec<Item>,
     /// In Tab order.
     pub widgets: Vec<Widget>,
@@ -296,15 +304,28 @@ impl Scene {
 /// Measures text the way the painter will draw it: (width, height) at a maximum width.
 pub trait Measure {
     fn measure(&self, text: &str, style: Style, max_w: f32) -> (f32, f32);
+    fn measure_localized(
+        &self,
+        text: &str,
+        style: Style,
+        max_w: f32,
+        _language: SetupLanguage,
+    ) -> (f32, f32) {
+        self.measure(text, style, max_w)
+    }
 }
 
 struct Builder<'a> {
     m: &'a dyn Measure,
+    language: SetupLanguage,
     items: Vec<Item>,
     widgets: Vec<Widget>,
 }
 
 impl Builder<'_> {
+    fn measure(&self, text: &str, style: Style, max_w: f32) -> (f32, f32) {
+        self.m.measure_localized(text, style, max_w, self.language)
+    }
     fn text(&mut self, rect: Rect, text: impl Into<String>, style: Style, color: Rgb) {
         self.items.push(Item::Text {
             rect,
@@ -312,7 +333,7 @@ impl Builder<'_> {
             style,
             color,
             role: Role::Text,
-            align: TextAlign::Left,
+            align: TextAlign::Start,
             wrap: false,
         });
     }
@@ -334,13 +355,13 @@ impl Builder<'_> {
             style: Style::Title,
             color: palette::TEXT,
             role: Role::Heading,
-            align: TextAlign::Left,
+            align: TextAlign::Start,
             wrap: false,
         });
     }
     /// A line that may wrap; returns its height.
     fn para(&mut self, x: f32, y: f32, w: f32, text: &str, color: Rgb) -> f32 {
-        let (_, h) = self.m.measure(text, Style::Body, w);
+        let (_, h) = self.measure(text, Style::Body, w);
         let h = h.max(20.0);
         self.items.push(Item::Text {
             rect: Rect::new(x, y, w, h),
@@ -348,7 +369,7 @@ impl Builder<'_> {
             style: Style::Body,
             color,
             role: Role::Text,
-            align: TextAlign::Left,
+            align: TextAlign::Start,
             wrap: true,
         });
         h
@@ -380,7 +401,7 @@ impl Builder<'_> {
         } else {
             Style::Button
         };
-        let (w, _) = self.m.measure(label, style, 400.0);
+        let (w, _) = self.measure(label, style, 400.0);
         let w = (w + 32.0).ceil();
         if variant == Variant::Primary {
             w.max(88.0)
@@ -632,9 +653,72 @@ fn server_page(b: &mut Builder, m: &Model) {
     refusal(b, row + 36.0, shown.address);
 }
 
+fn technical(language: SetupLanguage, value: &str) -> String {
+    // DirectWrite reads the LTR embedding in mixed lines, including neutral units and drive colons.
+    if language.is_rtl() {
+        format!("\u{202a}{value}\u{202c}")
+    } else {
+        value.to_owned()
+    }
+}
+
+fn welcome_line(language: SetupLanguage, text: &'static str) -> &'static str {
+    match text {
+        "The playout console · connects to CG Bridge" => language.text(
+            text,
+            "کنسول کنترل پخش · متصل به CG Bridge",
+            "وحدة التحكم في البث · تتصل بـ CG Bridge",
+        ),
+        "This user only · no administrator rights" => language.text(
+            text,
+            "فقط برای این کاربر · بدون نیاز به دسترسی مدیر",
+            "لهذا المستخدم فقط · بصلاحيات المستخدم العادي",
+        ),
+        WEBVIEW2_LINE => language.text(
+            text,
+            "محیط اجرای Microsoft WebView2",
+            "بيئة تشغيل Microsoft WebView2",
+        ),
+        _ => text,
+    }
+}
+
+pub(crate) fn progress_message(language: SetupLanguage, message: &'static str) -> &'static str {
+    match message {
+        "Preparing" => language.text(message, "آماده‌سازی", "جارٍ التحضير"),
+        "Installing the WebView2 runtime" => language.text(
+            message,
+            "نصب محیط اجرای WebView2",
+            "جارٍ تثبيت بيئة تشغيل WebView2",
+        ),
+        "Preparing files" => language.text(message, "آماده‌سازی فایل‌ها", "جارٍ تحضير الملفات"),
+        "Copying files" => language.text(message, "کپی فایل‌ها", "جارٍ نسخ الملفات"),
+        "Registering" => language.text(
+            message,
+            "ثبت برنامه در ویندوز",
+            "جارٍ تسجيل التطبيق في Windows",
+        ),
+        "Creating shortcuts" => language.text(message, "ساخت میان‌برها", "جارٍ إنشاء الاختصارات"),
+        "Finishing" => language.text(message, "تکمیل نصب", "جارٍ إكمال التثبيت"),
+        _ => message,
+    }
+}
+
 pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
+    let language = m.language;
+    let next = language.text("Next", "ادامه", "متابعة");
+    let cancel = language.text("Cancel", "انصراف", "إلغاء");
+    let back = language.text("Back", "بازگشت", "رجوع");
+    let close = language.text("Close", "بستن", "إغلاق");
+    let install = if m.is_update() {
+        language.text("Update", "به‌روزرسانی", "تحديث")
+    } else {
+        language.text("Install", "نصب", "تثبيت")
+    };
+    let open_log = language.text("Open log", "باز کردن گزارش", "فتح السجل");
     let mut b = Builder {
         m: measure,
+        language,
         items: Vec::new(),
         widgets: Vec::new(),
     };
@@ -643,11 +727,43 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
     let escape;
 
     match m.page {
+        Page::Language => {
+            b.heading(Rect::new(X0, 54.0, CONTENT_W, 34.0), m.title());
+            for (index, (id, option, label)) in [
+                (WidgetId::LanguageEnglish, SetupLanguage::English, "English"),
+                (WidgetId::LanguagePersian, SetupLanguage::Persian, "فارسی"),
+                (WidgetId::LanguageArabic, SetupLanguage::Arabic, "العربية"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                b.widgets.push(Widget::new(
+                    id,
+                    WidgetKind::Radio(language == option),
+                    Rect::new(X0, 118.0 + index as f32 * 52.0, CONTENT_W, 40.0),
+                    label,
+                    true,
+                ));
+            }
+            footer(
+                &mut b,
+                &[
+                    (WidgetId::Next, next, Variant::Primary, true),
+                    (WidgetId::Cancel, cancel, Variant::Ghost, true),
+                ],
+            );
+            primary = Some(WidgetId::Next);
+            escape = Some(WidgetId::Cancel);
+        }
         Page::Welcome => {
             b.heading(Rect::new(X0, 54.0, 380.0, 34.0), m.title());
             b.text(
                 Rect::new(X0, 96.0, 380.0, 20.0),
-                format!("Publisher: {PUBLISHER}"),
+                format!(
+                    "{} {}",
+                    language.text("Publisher:", "ناشر:", "الناشر:"),
+                    technical(language, PUBLISHER)
+                ),
                 Style::Body,
                 palette::TEXT_SECONDARY,
             );
@@ -656,7 +772,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             });
             let mut y = 170.0;
             if let Some(line) = m.version_line() {
-                let (_, h) = measure.measure(&line, Style::Body, CONTENT_W - 50.0);
+                let (_, h) = b.measure(&line, Style::Body, CONTENT_W - 50.0);
                 let box_h = (h.max(20.0) + 20.0).round();
                 b.items.push(Item::Callout {
                     rect: Rect::new(X0, y, CONTENT_W, box_h),
@@ -677,14 +793,20 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 y += box_h + 22.0;
             }
             for (icon, text) in p.lines {
-                let h = b.line(y, *icon, text, palette::TEXT_MUTED, palette::TEXT_SECONDARY);
+                let h = b.line(
+                    y,
+                    *icon,
+                    welcome_line(language, text),
+                    palette::TEXT_MUTED,
+                    palette::TEXT_SECONDARY,
+                );
                 y += h + 10.0;
             }
             if p.uses_webview2 && m.facts.webview2_missing {
                 let h = b.line(
                     y,
                     Icon::Package,
-                    WEBVIEW2_LINE,
+                    welcome_line(language, WEBVIEW2_LINE),
                     palette::TEXT_MUTED,
                     palette::TEXT_SECONDARY,
                 );
@@ -701,13 +823,14 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 );
                 y += h + 10.0;
             }
-            footer(
-                &mut b,
-                &[
-                    (WidgetId::Next, "Next", Variant::Primary, m.platform_ok()),
-                    (WidgetId::Cancel, "Cancel", Variant::Ghost, true),
-                ],
-            );
+            let mut buttons = vec![
+                (WidgetId::Next, next, Variant::Primary, m.platform_ok()),
+                (WidgetId::Cancel, cancel, Variant::Ghost, true),
+            ];
+            if p.id == ProductId::Control {
+                buttons.push((WidgetId::Back, back, Variant::Ghost, true));
+            }
+            footer(&mut b, &buttons);
             primary = Some(WidgetId::Next);
             escape = Some(WidgetId::Cancel);
         }
@@ -718,7 +841,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 b.label(y, "Program");
                 b.text(
                     Rect::new(X0, y + 22.0, CONTENT_W, 20.0),
-                    m.dir.clone(),
+                    technical(language, &m.dir),
                     Style::Body,
                     palette::TEXT,
                 );
@@ -734,8 +857,9 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                     y += 68.0;
                 }
             } else if m.dir_changeable() {
-                b.label(y, "Folder");
-                let change_w = b.button_w("Change", Variant::Secondary);
+                b.label(y, language.text("Folder", "پوشهٔ نصب", "مجلد التثبيت"));
+                let change = language.text("Change", "تغییر", "تغيير");
+                let change_w = b.button_w(change, Variant::Secondary);
                 let field = Rect::new(X0, y + 22.0, CONTENT_W - 10.0 - change_w, 34.0);
                 b.items.push(Item::Field { rect: field });
                 b.icon(
@@ -746,7 +870,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 );
                 b.text(
                     Rect::new(field.x + 34.0, field.y + 7.0, field.w - 44.0, 20.0),
-                    m.dir.clone(),
+                    technical(language, &m.dir),
                     Style::Body,
                     palette::TEXT,
                 );
@@ -754,21 +878,21 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                     WidgetId::Change,
                     WidgetKind::Button(Variant::Secondary),
                     Rect::new(X1 - change_w, y + 22.0, change_w, 34.0),
-                    "Change",
+                    change,
                     true,
                 ));
                 y += 82.0;
             } else {
-                b.label(y, "Folder");
+                b.label(y, language.text("Folder", "پوشهٔ نصب", "مجلد التثبيت"));
                 b.text(
                     Rect::new(X0, y + 22.0, CONTENT_W, 20.0),
-                    m.dir.clone(),
+                    technical(language, &m.dir),
                     Style::Body,
                     palette::TEXT,
                 );
                 y += 68.0;
             }
-            b.label(y, "Space");
+            b.label(y, language.text("Space", "فضای دیسک", "مساحة القرص"));
             let row = |b: &mut Builder, y: f32, k: &str, v: String| {
                 b.text(
                     Rect::new(X0, y, 96.0, 20.0),
@@ -786,15 +910,19 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             row(
                 &mut b,
                 y + 22.0,
-                "Needed",
-                format_bytes(m.config.install_bytes),
+                language.text("Needed", "مورد نیاز", "المطلوبة"),
+                technical(language, &format_bytes(m.config.install_bytes)),
             );
             if let Some(free) = m.space.free {
                 row(
                     &mut b,
                     y + 48.0,
-                    &format!("Free on {}", m.space.drive),
-                    format_bytes(free),
+                    &format!(
+                        "{} {}",
+                        language.text("Free on", "آزاد در", "المتاحة على"),
+                        technical(language, &m.space.drive)
+                    ),
+                    technical(language, &format_bytes(free)),
                 );
             }
             y += 82.0;
@@ -808,18 +936,17 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 );
                 y += h + 10.0;
             }
-            let go = if m.is_update() { "Update" } else { "Install" };
             // CG Bridge goes on to its Playout page; the apps install from here.
             let (forward, label) = if m.has_server_page() {
-                (WidgetId::Next, "Next")
+                (WidgetId::Next, next)
             } else {
-                (WidgetId::Install, go)
+                (WidgetId::Install, install)
             };
             footer(
                 &mut b,
                 &[
                     (forward, label, Variant::Primary, m.can_install()),
-                    (WidgetId::Back, "Back", Variant::Ghost, true),
+                    (WidgetId::Back, back, Variant::Ghost, true),
                 ],
             );
             primary = Some(forward);
@@ -827,12 +954,16 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
         }
         Page::Server => {
             server_page(&mut b, m);
-            let go = if m.is_update() { "Update" } else { "Install" };
             footer(
                 &mut b,
                 &[
-                    (WidgetId::Install, go, Variant::Primary, m.can_install()),
-                    (WidgetId::Back, "Back", Variant::Ghost, true),
+                    (
+                        WidgetId::Install,
+                        install,
+                        Variant::Primary,
+                        m.can_install(),
+                    ),
+                    (WidgetId::Back, back, Variant::Ghost, true),
                 ],
             );
             primary = Some(WidgetId::Install);
@@ -842,7 +973,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             b.heading(Rect::new(X0, 54.0, CONTENT_W, 34.0), m.title());
             b.text(
                 Rect::new(X0, 162.0, CONTENT_W, 20.0),
-                m.progress.words,
+                progress_message(language, m.progress.words),
                 Style::Words,
                 palette::TEXT,
             );
@@ -853,7 +984,13 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             });
             b.text(
                 Rect::new(X0, 212.0, CONTENT_W / 2.0, 14.0),
-                format!("STEP {} OF {}", m.progress.step, m.progress.of),
+                format!(
+                    "{} {} {} {}",
+                    language.text("STEP", "مرحلهٔ", "الخطوة"),
+                    m.progress.step,
+                    language.text("OF", "از", "من"),
+                    m.progress.of
+                ),
                 Style::Readout,
                 palette::SPLASH_READOUT,
             );
@@ -866,21 +1003,27 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 None if !m.progress.waiting => {
                     format!("{}%", (m.shown * 100.0).floor() as u32)
                 }
-                None => "In progress".into(),
+                None => language
+                    .text("In progress", "در حال انجام", "جارٍ التنفيذ")
+                    .into(),
             };
             b.items.push(Item::Text {
                 rect: Rect::new(X0 + CONTENT_W / 2.0, 212.0, CONTENT_W / 2.0, 14.0),
-                text: detail,
+                text: if m.progress.copy.is_some() || !m.progress.waiting {
+                    technical(language, &detail)
+                } else {
+                    detail
+                },
                 style: Style::Readout,
                 color: palette::SPLASH_READOUT,
                 role: Role::Text,
-                align: TextAlign::Right,
+                align: TextAlign::End,
                 wrap: false,
             });
             let can_cancel = !m.progress.engine_started && !m.cancelling;
             footer(
                 &mut b,
-                &[(WidgetId::Cancel, "Cancel", Variant::Ghost, can_cancel)],
+                &[(WidgetId::Cancel, cancel, Variant::Ghost, can_cancel)],
             );
             escape = can_cancel.then_some(WidgetId::Cancel);
         }
@@ -914,17 +1057,27 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 );
             }
             // The one option, at the foot's left: the box and its label are one target.
-            let (lw, _) = measure.measure(p.launch_label, Style::Body, 300.0);
+            let launch = language.text(
+                p.launch_label,
+                "اجرای CG Control پس از نصب",
+                "تشغيل CG Control بعد التثبيت",
+            );
+            let (lw, _) = b.measure(launch, Style::Body, 300.0);
             b.widgets.push(Widget::new(
                 WidgetId::Launch,
                 WidgetKind::Checkbox(m.launch),
                 Rect::new(X0, 476.0, 28.0 + lw.ceil(), 24.0),
-                p.launch_label,
+                launch,
                 true,
             ));
-            let mut buttons = vec![(WidgetId::Finish, "Finish", Variant::Primary, true)];
+            let mut buttons = vec![(
+                WidgetId::Finish,
+                language.text("Finish", "پایان", "إنهاء"),
+                Variant::Primary,
+                true,
+            )];
             if m.outcome.warning.is_some() {
-                buttons.push((WidgetId::OpenLog, "Open log", Variant::Ghost, true));
+                buttons.push((WidgetId::OpenLog, open_log, Variant::Ghost, true));
             }
             footer(&mut b, &buttons);
             primary = Some(WidgetId::Finish);
@@ -936,17 +1089,17 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 ok: false,
             });
             b.heading(Rect::new(X0, 124.0, CONTENT_W, 34.0), m.title());
-            let reason = m
-                .outcome
-                .reason
-                .clone()
-                .unwrap_or_else(|| "Setup stopped.".into());
+            let reason = m.outcome.reason.clone().unwrap_or_else(|| {
+                language
+                    .text("Setup stopped.", "نصب متوقف شد.", "توقّف التثبيت.")
+                    .into()
+            });
             b.para(X0, 168.0, CONTENT_W, &reason, palette::TEXT_SECONDARY);
             footer(
                 &mut b,
                 &[
-                    (WidgetId::Close, "Close", Variant::Primary, true),
-                    (WidgetId::OpenLog, "Open log", Variant::Ghost, true),
+                    (WidgetId::Close, close, Variant::Primary, true),
+                    (WidgetId::OpenLog, open_log, Variant::Ghost, true),
                 ],
             );
             primary = Some(WidgetId::Close);
@@ -957,14 +1110,22 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
     let version_y = RAIL_WORDMARK_Y + 24.0;
     b.rail_text(
         version_y,
-        format!("Version {}", m.config.version),
+        format!(
+            "{} {}",
+            language.text("Version", "نسخهٔ", "الإصدار"),
+            technical(language, &m.config.version)
+        ),
         Style::Body,
         palette::TEXT_SECONDARY,
     );
     if let Some(build_id) = &m.config.build_id {
         b.rail_text(
             version_y + 20.0,
-            format!("Build {build_id}"),
+            format!(
+                "{} {}",
+                language.text("Build", "بیلد", "البناء"),
+                technical(language, build_id)
+            ),
             Style::Readout,
             palette::TEXT_MUTED,
         );
@@ -972,12 +1133,13 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
 
     // Help, at the rail's foot: the guide when it is bundled; CG Bridge's status once installed.
     if help_target(m).is_some() {
-        let (w, _) = measure.measure("Help", Style::Body, 100.0);
+        let help = language.text("Help", "راهنما", "مساعدة");
+        let (w, _) = b.measure(help, Style::Body, 100.0);
         b.widgets.push(Widget::new(
             WidgetId::Help,
             WidgetKind::Link,
             Rect::new(32.0, 476.0, 32.0 + w.ceil(), 24.0),
-            "Help",
+            help,
             true,
         ));
     }
@@ -986,18 +1148,23 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
         WidgetId::Minimize,
         WidgetKind::TitleButton,
         Rect::new(708.0, 0.0, 46.0, 40.0),
-        "Minimise",
+        language.text("Minimise", "کمینه کردن", "تصغير"),
         true,
     ));
     b.widgets.push(Widget::new(
         WidgetId::CloseWindow,
         WidgetKind::TitleButton,
         Rect::new(754.0, 0.0, 46.0, 40.0),
-        "Close",
+        close,
         !installing || (!m.progress.engine_started && !m.cancelling),
     ));
 
-    let rail = m
+    let step_gap = if p.id == ProductId::Control {
+        36.0
+    } else {
+        48.0
+    };
+    let mut rail: Vec<_> = m
         .step_labels()
         .iter()
         .zip(m.steps())
@@ -1006,17 +1173,48 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             label,
             state,
             cx: 47.0,
-            cy: 178.0 + 48.0 * i as f32,
+            cy: 178.0 + step_gap * i as f32,
         })
         .collect();
 
+    if language.is_rtl() {
+        for item in &mut b.items {
+            let rect = match item {
+                Item::Text { rect, .. }
+                | Item::Icon { rect, .. }
+                | Item::Tile { rect }
+                | Item::Callout { rect }
+                | Item::Field { rect }
+                | Item::Bar { rect, .. }
+                | Item::Mark { rect, .. } => rect,
+            };
+            *rect = rect.mirrored();
+        }
+        for widget in &mut b.widgets {
+            if !matches!(widget.kind, WidgetKind::TitleButton) {
+                widget.rect = widget.rect.mirrored();
+            }
+        }
+        for step in &mut rail {
+            step.cx = WIN_W - step.cx;
+        }
+    }
     Scene {
+        language,
         items: b.items,
         widgets: b.widgets,
         primary,
         escape,
         rail,
-        window_title: format!("{} Setup", p.name),
+        window_title: if language.is_rtl() {
+            format!(
+                "{} {}",
+                language.text("Setup", "نصب", "تثبيت"),
+                technical(language, p.name)
+            )
+        } else {
+            format!("{} Setup", p.name)
+        },
     }
 }
 
@@ -1066,12 +1264,101 @@ mod tests {
             }],
         };
         let mut m = Model::new(product, config, facts, None, true);
+        m.page = Page::Welcome;
         m.space = Space {
             drive: "C:".into(),
             free: Some(126_000_000_000),
             writable: true,
         };
         m
+    }
+
+    #[test]
+    fn control_language_options_keep_their_names_and_mirror_the_wizard() {
+        let mut m = model(&CONTROL, Facts::default());
+        m.page = Page::Language;
+        let english = build(&m, &Fake);
+        assert_eq!(english.rail.len(), 5);
+        assert_eq!(english.primary, Some(WidgetId::Next));
+        let choices = [
+            (
+                WidgetId::LanguageEnglish,
+                SetupLanguage::English,
+                "English",
+                "Next",
+            ),
+            (
+                WidgetId::LanguagePersian,
+                SetupLanguage::Persian,
+                "فارسی",
+                "ادامه",
+            ),
+            (
+                WidgetId::LanguageArabic,
+                SetupLanguage::Arabic,
+                "العربية",
+                "متابعة",
+            ),
+        ];
+        for (id, language, name, next) in choices {
+            m.language = language;
+            let scene = build(&m, &Fake);
+            assert_eq!(scene.language, language);
+            let choice = scene.widget(id).unwrap();
+            assert_eq!(choice.kind, WidgetKind::Radio(true));
+            assert_eq!(choice.label, name);
+            assert_eq!(scene.widget(WidgetId::Next).unwrap().label, next);
+            assert_eq!(
+                scene
+                    .widgets
+                    .iter()
+                    .filter(|w| w.kind == WidgetKind::Radio(true))
+                    .count(),
+                1
+            );
+            if language.is_rtl() {
+                let ltr = english.widget(id).unwrap().rect;
+                assert_eq!(choice.rect, ltr.mirrored());
+                assert_eq!(scene.rail[0].cx, WIN_W - english.rail[0].cx);
+            }
+            assert_eq!(
+                scene.widget(WidgetId::CloseWindow).unwrap().rect,
+                english.widget(WidgetId::CloseWindow).unwrap().rect
+            );
+        }
+    }
+
+    #[test]
+    fn control_wizard_localizes_progress_and_preserves_technical_values() {
+        let mut m = model(&CONTROL, Facts::default());
+        m.language = SetupLanguage::Arabic;
+        m.page = Page::Location;
+        m.dir = r"C:\Apps\CG Control".into();
+        m.config.build_id = Some("7272a51b".into());
+        let location = build(&m, &Fake);
+        let texts = location.texts();
+        assert!(texts.contains(&"مجلد التثبيت"));
+        assert!(texts.contains(&"\u{202a}C:\\Apps\\CG Control\u{202c}"));
+        assert!(texts
+            .iter()
+            .any(|text| text.starts_with("البناء") && text.contains("7272a51b")));
+        assert_eq!(location.widget(WidgetId::Install).unwrap().label, "تثبيت");
+
+        m.page = Page::Installing;
+        m.progress.words = "Installing the WebView2 runtime";
+        let installing = build(&m, &Fake);
+        assert!(installing
+            .texts()
+            .contains(&"جارٍ تثبيت بيئة تشغيل WebView2"));
+        assert!(installing
+            .texts()
+            .iter()
+            .any(|text| text.starts_with("الخطوة")));
+
+        m.page = Page::Failed;
+        let failed = build(&m, &Fake);
+        assert!(failed.texts().contains(&"توقّف التثبيت."));
+        assert_eq!(failed.widget(WidgetId::OpenLog).unwrap().label, "فتح السجل");
     }
 
     #[test]
@@ -1372,12 +1659,12 @@ mod tests {
                 "Done"
             ]
         );
-        // Control: CG Control's Location installs, and its rail is the four steps it always had.
+        // Control installs from Location and includes the Language step.
         let mut c = model(&CONTROL, Facts::default());
         c.page = Page::Location;
         let s = build(&c, &Fake);
         assert_eq!(s.primary, Some(WidgetId::Install));
-        assert_eq!(s.rail.len(), 4);
+        assert_eq!(s.rail.len(), 5);
     }
 
     #[test]

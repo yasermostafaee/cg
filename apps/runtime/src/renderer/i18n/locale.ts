@@ -1,19 +1,24 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import ar from './catalogs/ar.json';
 import en from './catalogs/en.json';
 import fa from './catalogs/fa.json';
+import { CONTROL_LANGUAGE_KEY, CONTROL_LOCALES } from './localePreferences.js';
 
-export const CONTROL_LOCALES = ['en', 'fa', 'ar'] as const;
+export { CONTROL_LOCALES };
 export type Locale = (typeof CONTROL_LOCALES)[number];
 type LanguageScope = 'interface' | 'feedback';
 type Messages = Readonly<Record<string, string>>;
 type Catalog = Readonly<Record<LanguageScope, Messages>>;
 type Preferences = Readonly<Record<LanguageScope, Locale>>;
+type SavedPreferences = Readonly<Record<LanguageScope, Locale | undefined>>;
 type Values = Readonly<Record<string, string | number>>;
 
-const key = 'cg.runtime.language.v1';
 const bundled: Readonly<Record<Locale, Catalog>> = { en, fa, ar };
-const defaults: Preferences = { interface: 'en', feedback: 'en' };
+const setupLanguage = normalizeLocale(
+  (globalThis as { __CG_INSTALL_LANGUAGE__?: unknown }).__CG_INSTALL_LANGUAGE__,
+);
+const defaults: Preferences = { interface: setupLanguage, feedback: setupLanguage };
+const noSavedPreferences: SavedPreferences = { interface: undefined, feedback: undefined };
 const listeners = new Set<() => void>();
 const placeholder = /\{([A-Za-z][A-Za-z0-9]*)\}/g;
 
@@ -21,24 +26,34 @@ export function localeDirection(locale: Locale): 'ltr' | 'rtl' {
   return locale === 'en' ? 'ltr' : 'rtl';
 }
 
-export function normalizeLocale(value: unknown): Locale {
-  return CONTROL_LOCALES.find((locale) => locale === value) ?? 'en';
+function supportedLocale(value: unknown): Locale | undefined {
+  return CONTROL_LOCALES.find((locale) => locale === value);
 }
 
-function readPreferences(): Preferences {
+export function normalizeLocale(value: unknown): Locale {
+  return supportedLocale(value) ?? 'en';
+}
+
+function readSavedPreferences(): SavedPreferences {
   try {
-    const raw: unknown = JSON.parse(globalThis.localStorage.getItem(key) ?? 'null');
-    if (raw === null || typeof raw !== 'object') return defaults;
+    const raw: unknown = JSON.parse(
+      globalThis.localStorage.getItem(CONTROL_LANGUAGE_KEY) ?? 'null',
+    );
+    if (raw === null || typeof raw !== 'object') return noSavedPreferences;
     return {
-      interface: normalizeLocale('interface' in raw ? raw.interface : undefined),
-      feedback: normalizeLocale('feedback' in raw ? raw.feedback : undefined),
+      interface: supportedLocale('interface' in raw ? raw.interface : undefined),
+      feedback: supportedLocale('feedback' in raw ? raw.feedback : undefined),
     };
   } catch {
-    return defaults;
+    return noSavedPreferences;
   }
 }
 
-let current = readPreferences();
+let saved = readSavedPreferences();
+let current: Preferences = {
+  interface: saved.interface ?? defaults.interface,
+  feedback: saved.feedback ?? defaults.feedback,
+};
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
@@ -56,13 +71,15 @@ export function useLanguages(): Preferences {
 }
 
 export function setLanguage(scope: LanguageScope, locale: Locale): void {
-  if (current[scope] === locale) return;
-  current = { ...current, [scope]: locale };
+  if (saved[scope] === locale) return;
+  saved = { ...saved, [scope]: locale };
   try {
-    globalThis.localStorage.setItem(key, JSON.stringify(current));
+    globalThis.localStorage.setItem(CONTROL_LANGUAGE_KEY, JSON.stringify(saved));
   } catch {
     // The current session can still use the choice if local storage is unavailable.
   }
+  if (current[scope] === locale) return;
+  current = { ...current, [scope]: locale };
   for (const listener of listeners) listener();
 }
 
@@ -89,7 +106,10 @@ function translate(
 
 export function useUiText(): (source: string, values?: Values) => string {
   const prefs = useLanguages();
-  return (source, values) => translate(prefs, 'interface', source, values);
+  return useCallback(
+    (source: string, values?: Values) => translate(prefs, 'interface', source, values),
+    [prefs],
+  );
 }
 
 export function useFeedbackText(): (source: string, values?: Values) => string {

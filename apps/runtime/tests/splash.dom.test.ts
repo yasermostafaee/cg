@@ -2,6 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import ar from '../src/renderer/i18n/catalogs/ar.json';
+import en from '../src/renderer/i18n/catalogs/en.json';
+import fa from '../src/renderer/i18n/catalogs/fa.json';
+import { CONTROL_LANGUAGE_KEY } from '../src/renderer/i18n/localePreferences.js';
 import {
   SPLASH_CEILING_MS,
   SPLASH_FADE_MS,
@@ -54,10 +58,10 @@ function inlineNumber(name: string): number {
   return Number(match[1]);
 }
 
-function runSplashScript(): void {
+function runSplashScript(script = inlineScript): void {
   // Evaluated rather than imported on purpose: this IS the shipped script, character
   // for character, not a copy of it kept in the test.
-  new Function(inlineScript)();
+  new Function(script)();
 }
 
 function splashEl(): HTMLElement | null {
@@ -82,6 +86,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.removeItem(CONTROL_LANGUAGE_KEY);
+  document.documentElement.lang = 'en';
+  document.documentElement.removeAttribute('dir');
   /**
    * DRAIN THE QUEUE EXPLICITLY. Seven tests in this file end with timers deliberately
    * pending — the ceiling armed and never reached, or the 450 ms fade caught mid-flight.
@@ -102,6 +110,54 @@ afterEach(() => {
 const shownPct = (): string | null => document.getElementById('cg-splash-pct')?.textContent ?? null;
 const phaseLabel = (): string | null =>
   document.getElementById('cg-splash-phase')?.textContent ?? null;
+
+describe('the splash uses the interface language before the renderer loads', () => {
+  const script = inlineScript.replace('/* CG_SPLASH_LOCALE */ null', () =>
+    JSON.stringify({
+      key: CONTROL_LANGUAGE_KEY,
+      buildStamp: { version: '1.2.13', builtAt: '2026-08-01' },
+      messages: { en: en.interface, fa: fa.interface, ar: ar.interface },
+    }),
+  );
+
+  it('reads saved Persian instead of the Arabic installer default and localizes the real phases', () => {
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE__', 'ar');
+    localStorage.setItem(CONTROL_LANGUAGE_KEY, '{"interface":"fa","feedback":"en"}');
+    runSplashScript(script);
+
+    expect(document.documentElement.lang).toBe('fa');
+    expect(document.documentElement.dir).toBe('rtl');
+    expect(splashEl()?.getAttribute('aria-label')).toBe(fa.interface['CG CONTROL is starting']);
+    expect(document.getElementById('cg-splash-tagline')?.textContent).toBe(
+      fa.interface['Broadcast graphics playout controller'],
+    );
+    const stamp = document.getElementById('cg-splash-version')?.textContent;
+    expect(stamp).toBe('نسخهٔ \u20661.2.13\u2069 · تاریخ ساخت \u20662026-08-01\u2069');
+    for (const key of SPLASH_PHASES) {
+      splash().phase(key);
+      expect(phaseLabel()).toBe(fa.interface[key]);
+    }
+  });
+
+  it('uses the Arabic installer choice when only the feedback language is saved', () => {
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE__', 'ar');
+    localStorage.setItem(CONTROL_LANGUAGE_KEY, '{"feedback":"fa"}');
+    runSplashScript(script);
+    expect(document.documentElement.lang).toBe('ar');
+    expect(splashEl()?.dir).toBe('rtl');
+    splash().phase('CONNECTING');
+    expect(phaseLabel()).toBe(ar.interface.CONNECTING);
+  });
+
+  it('falls back to English for invalid storage and an unsupported installer choice', () => {
+    vi.stubGlobal('__CG_INSTALL_LANGUAGE__', ['ar']);
+    localStorage.setItem(CONTROL_LANGUAGE_KEY, '{invalid');
+    runSplashScript(script);
+    expect(document.documentElement.lang).toBe('en');
+    expect(document.documentElement.dir).toBe('ltr');
+    expect(phaseLabel()).toBe('INITIALIZING');
+  });
+});
 
 describe('the inline splash mirrors the startup timing contract', () => {
   it('uses the same ceiling, fade and phase list', () => {

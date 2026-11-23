@@ -4,6 +4,7 @@
 //! vector, so the whole page stays crisp at 150 % and 200 %.
 
 use crate::icons::{self, Icon};
+use crate::language::SetupLanguage;
 use crate::layout::{
     Item, Measure, RailStep, Rect, Scene, Style, TextAlign, Variant, WidgetId, WidgetKind, FOOT_Y,
     RAIL_LOGO, RAIL_W, RAIL_WORDMARK_Y, TITLE_H, WIN_H, WIN_W,
@@ -74,7 +75,7 @@ pub struct Gfx {
     pub d2d: ID2D1Factory,
     pub dwrite: IDWriteFactory,
     pub wic: IWICImagingFactory,
-    formats: RefCell<HashMap<(Style, bool), IDWriteTextFormat>>,
+    formats: RefCell<HashMap<(Style, bool, &'static str), IDWriteTextFormat>>,
     icons: RefCell<HashMap<(Icon, u32), Vec<ID2D1PathGeometry>>>,
     round: ID2D1StrokeStyle,
 }
@@ -229,12 +230,23 @@ impl Gfx {
         geos
     }
 
-    fn format(&self, style: Style, bold_override: bool) -> Result<IDWriteTextFormat> {
-        if let Some(f) = self.formats.borrow().get(&(style, bold_override)) {
+    fn format(
+        &self,
+        style: Style,
+        bold_override: bool,
+        language: SetupLanguage,
+    ) -> Result<IDWriteTextFormat> {
+        let locale = match language {
+            SetupLanguage::English => "en-us",
+            SetupLanguage::Persian => "fa-ir",
+            SetupLanguage::Arabic => "ar-sa",
+        };
+        let key = (style, bold_override, locale);
+        if let Some(f) = self.formats.borrow().get(&key) {
             return Ok(f.clone());
         }
         let (family, weight) = match style {
-            Style::Readout => ("Consolas", DWRITE_FONT_WEIGHT_NORMAL),
+            Style::Readout if !language.is_rtl() => ("Consolas", DWRITE_FONT_WEIGHT_NORMAL),
             Style::Title | Style::Label | Style::Button | Style::RailCurrent => {
                 ("Segoe UI", DWRITE_FONT_WEIGHT_SEMI_BOLD)
             }
@@ -254,12 +266,10 @@ impl Gfx {
                 DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_FONT_STRETCH_NORMAL,
                 style.size(),
-                &HSTRING::from("en-us"),
+                &HSTRING::from(locale),
             )?
         };
-        self.formats
-            .borrow_mut()
-            .insert((style, bold_override), f.clone());
+        self.formats.borrow_mut().insert(key, f.clone());
         Ok(f)
     }
 
@@ -271,9 +281,10 @@ impl Gfx {
         max_w: f32,
         wrap: bool,
         align: DWRITE_TEXT_ALIGNMENT,
+        language: SetupLanguage,
     ) -> Result<IDWriteTextLayout> {
         unsafe {
-            let format = self.format(style, false)?;
+            let format = self.format(style, false, language)?;
             let wide: Vec<u16> = text.encode_utf16().collect();
             let layout = self
                 .dwrite
@@ -283,6 +294,9 @@ impl Gfx {
             } else {
                 DWRITE_WORD_WRAPPING_NO_WRAP
             })?;
+            if language.is_rtl() {
+                layout.SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT)?;
+            }
             layout.SetTextAlignment(align)?;
             if !wrap {
                 let sign = self.dwrite.CreateEllipsisTrimmingSign(&format)?;
@@ -298,7 +312,7 @@ impl Gfx {
                 Style::Readout => 0.13,
                 _ => 0.0,
             };
-            if spacing > 0.0 {
+            if spacing > 0.0 && !language.is_rtl() {
                 if let Ok(l1) = layout.cast::<IDWriteTextLayout1>() {
                     let range = DWRITE_TEXT_RANGE {
                         startPosition: 0,
@@ -366,7 +380,24 @@ impl Gfx {
 
 impl Measure for Gfx {
     fn measure(&self, text: &str, style: Style, max_w: f32) -> (f32, f32) {
-        match self.layout(text, style, max_w, true, DWRITE_TEXT_ALIGNMENT_LEADING) {
+        self.measure_localized(text, style, max_w, SetupLanguage::English)
+    }
+
+    fn measure_localized(
+        &self,
+        text: &str,
+        style: Style,
+        max_w: f32,
+        language: SetupLanguage,
+    ) -> (f32, f32) {
+        match self.layout(
+            text,
+            style,
+            max_w,
+            true,
+            DWRITE_TEXT_ALIGNMENT_LEADING,
+            language,
+        ) {
             Ok(l) => {
                 let m = Gfx::metrics(&l);
                 (m.widthIncludingTrailingWhitespace, m.height)
@@ -378,6 +409,7 @@ impl Measure for Gfx {
 
 /// One frame's drawing context.
 struct Painter<'a> {
+    language: SetupLanguage,
     g: &'a Gfx,
     rt: &'a ID2D1RenderTarget,
     dev: &'a mut Device,
@@ -504,7 +536,7 @@ impl Painter<'_> {
         align: DWRITE_TEXT_ALIGNMENT,
         wrap: bool,
     ) {
-        let Ok(layout) = self.g.layout(text, style, r.w, wrap, align) else {
+        let Ok(layout) = self.g.layout(text, style, r.w, wrap, align, self.language) else {
             return;
         };
         let y = if wrap {
@@ -547,6 +579,7 @@ impl Painter<'_> {
 /// Draw one frame. The caller has called `BeginDraw`.
 pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
     let mut p = Painter {
+        language: f.scene.language,
         g,
         rt,
         dev,
@@ -556,14 +589,17 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
         rt.SetTransform(&Matrix3x2::identity());
         rt.Clear(Some(&color(product_surface(f.product), 1.0)));
     }
+    let rtl = f.scene.language.is_rtl();
+    let body_w = WIN_W - RAIL_W;
+    let body_x = if rtl { 0.0 } else { RAIL_W };
     rail(&mut p, f);
     // The foot: the sign-in card's — a raised surface, ruled above.
     p.fill(
-        Rect::new(RAIL_W, FOOT_Y, WIN_W - RAIL_W, WIN_H - FOOT_Y),
+        Rect::new(body_x, FOOT_Y, body_w, WIN_H - FOOT_Y),
         palette::SURFACE_RAISED,
         1.0,
     );
-    p.hline(RAIL_W, WIN_W, FOOT_Y, palette::BORDER);
+    p.hline(body_x, body_x + body_w, FOOT_Y, palette::BORDER);
 
     // The page enters: a short rise and fade (none under reduced motion: page_t is 1).
     let e = ease_out(f.page_t);
@@ -573,14 +609,15 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
         p.layer(e);
     }
     // Rail text stays fixed while the wizard changes pages.
-    let on_rail = |item: &&Item| matches!(item, Item::Text { rect, .. } if rect.right() <= RAIL_W);
+    let in_body = |rect: Rect| rect.x >= body_x && rect.right() <= body_x + body_w;
+    let on_rail = |item: &&Item| matches!(item, Item::Text { rect, .. } if !in_body(*rect));
     for item in f.scene.items.iter().filter(|item| !on_rail(item)) {
         page_item(&mut p, f, item);
     }
     // The page's own controls (the folder's Change, the Playout page's fields) enter with the page;
     // the foot's buttons, Help and the title bar's stay where they are.
     let on_page = |w: &&crate::layout::Widget| {
-        w.rect.x >= RAIL_W && w.rect.y >= TITLE_H && w.rect.bottom() <= FOOT_Y
+        in_body(w.rect) && w.rect.y >= TITLE_H && w.rect.bottom() <= FOOT_Y
     };
     for w in f.scene.widgets.iter().filter(on_page) {
         widget(&mut p, f, w);
@@ -601,17 +638,26 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
 }
 
 fn rail(p: &mut Painter, f: &Frame) {
+    let rtl = f.scene.language.is_rtl();
+    let rail_x = if rtl { WIN_W - RAIL_W } else { 0.0 };
     p.fill(
-        Rect::new(0.0, 0.0, RAIL_W, WIN_H),
+        Rect::new(rail_x, 0.0, RAIL_W, WIN_H),
         product_rail(f.product),
         1.0,
     );
-    p.vline(RAIL_W - 0.5, 0.0, WIN_H, palette::BORDER);
+    let divider = if rtl { rail_x + 0.5 } else { RAIL_W - 0.5 };
+    p.vline(divider, 0.0, WIN_H, palette::BORDER);
+    if rtl {
+        unsafe { p.rt.SetTransform(&Matrix3x2::translation(rail_x, 0.0)) };
+    }
     // `P-067` — the product's OWN scene, faint above Help (CG Control's is the one every rail drew).
     draw_art(p, &rail_art::display_list(rail_art::rail_art(f.product)));
     // Each installer uses the same product tile here and on its welcome page.
     product_tile(p, f, RAIL_LOGO);
     wordmark(p, f.role);
+    if rtl {
+        unsafe { p.rt.SetTransform(&Matrix3x2::identity()) };
+    }
     // The steps.
     for (i, step) in f.scene.rail.iter().enumerate() {
         if i > 0 {
@@ -706,7 +752,7 @@ fn wordmark(p: &mut Painter, role: &str) {
     let size = 13.0;
     let spacing = 0.3 * size;
     let Ok(layout) = (|| -> Result<IDWriteTextLayout> {
-        let format = p.g.format(Style::Body, true)?;
+        let format = p.g.format(Style::Body, true, SetupLanguage::English)?;
         let wide: Vec<u16> = text.encode_utf16().collect();
         unsafe {
             let layout = p.g.dwrite.CreateTextLayout(&wide, &format, 400.0, 100.0)?;
@@ -857,7 +903,16 @@ fn rail_step(p: &mut Painter, step: &RailStep, t: f32) {
         }
     };
     p.text(
-        Rect::new(cx + 25.0, cy - 10.0, 150.0, 20.0),
+        Rect::new(
+            if p.language.is_rtl() {
+                cx - 175.0
+            } else {
+                cx + 25.0
+            },
+            cy - 10.0,
+            150.0,
+            20.0,
+        ),
         step.label,
         label_style,
         label_color,
@@ -896,9 +951,9 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
             ..
         } => {
             let align = match align {
-                TextAlign::Left => DWRITE_TEXT_ALIGNMENT_LEADING,
+                TextAlign::Start => DWRITE_TEXT_ALIGNMENT_LEADING,
                 TextAlign::Center => DWRITE_TEXT_ALIGNMENT_CENTER,
-                TextAlign::Right => DWRITE_TEXT_ALIGNMENT_TRAILING,
+                TextAlign::End => DWRITE_TEXT_ALIGNMENT_TRAILING,
             };
             p.text(*rect, text, *style, *color, 1.0, align, *wrap);
         }
@@ -938,16 +993,32 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
         } => {
             p.fill_round(*rect, 2.0, palette::SPLASH_RAIL, 1.0);
             let w = rect.w * fraction.clamp(0.0, 1.0);
+            let rtl = p.language.is_rtl();
             let (start, end) = progress_colors(f.product);
-            let filled = Rect::new(rect.x, rect.y, w, rect.h);
-            fill_progress(p, filled, start, end);
+            let filled = Rect::new(
+                if rtl { rect.right() - w } else { rect.x },
+                rect.y,
+                w,
+                rect.h,
+            );
+            if rtl {
+                fill_progress(p, filled, end, start);
+            } else {
+                fill_progress(p, filled, start, end);
+            }
             let remaining = rect.w - w;
             if *waiting && remaining > 0.5 {
-                let track = Rect::new(filled.right(), rect.y, remaining, rect.h);
+                let track = Rect::new(
+                    if rtl { rect.x } else { filled.right() },
+                    rect.y,
+                    remaining,
+                    rect.h,
+                );
                 p.fill_round(track, 2.0, end, 0.28);
                 if let Some(t) = f.activity_t {
                     let scan = (track.w * 0.3).clamp(1.5, 72.0).min(track.w);
-                    let x = track.x + (track.w - scan) * t;
+                    let phase = if rtl { 1.0 - t } else { t };
+                    let x = track.x + (track.w - scan) * phase;
                     p.fill_round(Rect::new(x, track.y, scan, track.h), 2.0, end, 0.8);
                 }
             }
@@ -997,6 +1068,15 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
     } else {
         w.rect
     };
+    let rtl = f.scene.language.is_rtl();
+    let part = |start: f32, y: f32, width: f32, height: f32| {
+        let x = if rtl {
+            r.right() - start - width
+        } else {
+            r.x + start
+        };
+        Rect::new(x, r.y + y, width, height)
+    };
     match w.kind {
         WidgetKind::Button(variant) => {
             let k = if pressed { 0.92 } else { 1.0 + 0.12 * hover };
@@ -1041,7 +1121,7 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
             }
         }
         WidgetKind::Checkbox(checked) => {
-            let b = Rect::new(r.x, r.y + 3.0, 18.0, 18.0);
+            let b = part(0.0, 3.0, 18.0, 18.0);
             if checked {
                 let fill = mix(palette::ACCENT, palette::TOGGLE_ON_HOVER, hover);
                 p.fill_round(b, 4.0, fill, a);
@@ -1061,7 +1141,7 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
                 );
             }
             p.text(
-                Rect::new(r.x + 28.0, r.y + 2.0, r.w - 28.0, 20.0),
+                part(28.0, 2.0, r.w - 28.0, 20.0),
                 &w.label,
                 Style::Body,
                 palette::TEXT,
@@ -1075,9 +1155,10 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
         }
         WidgetKind::Link => {
             let ink = mix(palette::TEXT_MUTED, palette::TEXT, hover);
-            p.icon(Icon::CircleHelp, r.x + 4.0, r.y + 4.0, 16.0, ink, a, 2.0);
+            let help = part(4.0, 4.0, 16.0, 16.0);
+            p.icon(Icon::CircleHelp, help.x, help.y, 16.0, ink, a, 2.0);
             p.text(
-                Rect::new(r.x + 28.0, r.y + 2.0, r.w - 28.0, 20.0),
+                part(28.0, 2.0, r.w - 28.0, 20.0),
                 &w.label,
                 Style::Body,
                 ink,
@@ -1106,7 +1187,10 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
             };
             p.fill_round(r, 4.0, fill, a);
             p.border_round(r, 4.0, line, a);
-            let (cx, cy) = (r.x + 16.0, r.y + r.h / 2.0);
+            let (cx, cy) = (
+                if rtl { r.right() - 16.0 } else { r.x + 16.0 },
+                r.y + r.h / 2.0,
+            );
             p.ring(
                 cx,
                 cy,
@@ -1123,7 +1207,7 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
                 p.circle(cx, cy, 3.5, palette::ACCENT, a);
             }
             p.text(
-                Rect::new(r.x + 30.0, r.y, r.w - 36.0, r.h),
+                part(30.0, 0.0, r.w - 36.0, r.h),
                 &w.label,
                 Style::Body,
                 palette::TEXT,

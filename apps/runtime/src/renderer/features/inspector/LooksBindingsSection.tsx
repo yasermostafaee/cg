@@ -1,11 +1,13 @@
 import { useUiText } from '../../i18n/locale.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { useId, useSyncExternalStore } from 'react';
+import { Check } from 'lucide-react';
 import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { templateFocusTarget } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
@@ -115,7 +117,6 @@ const styles = {
    * button a small vertical stack also means the Persian preset name and its state can wrap
    * inside the same fixed geometry without changing the neighbouring presets' alignment.
    */
-  lookName: { fontWeight: 700, fontSize: 'var(--r-text-sm)' },
   /**
    * 🔴 **SESSION BP — THE BADGE WEARS THE STATE'S OWN COLOUR, and the argument that said it
    * must not is now FALSE and has been REPLACED rather than left standing.**
@@ -422,7 +423,10 @@ export function LooksBindingsSection({
               onClick={() => onEditLook(look.id)}
             >
               {/* The look's name is the TEMPLATE AUTHOR'S string — isolated, never bare. */}
-              <IsolatedName>{look.name}</IsolatedName>
+              <span className="cg-look-preset__caption">
+                {isActive && <Icon icon={Check} size={13} />}
+                <IsolatedName>{look.name}</IsolatedName>
+              </span>
               {badge.text !== null && (
                 <span
                   /*
@@ -437,7 +441,7 @@ export function LooksBindingsSection({
                   data-look-badge={badge.tone}
                 >
                   {' '}
-                  {badge.text}
+                  {localizeUi(badge.text)}
                 </span>
               )}
               {/*

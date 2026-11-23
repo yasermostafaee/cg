@@ -5,12 +5,14 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  TEMPLATE_TIMING_VERSION,
   type CompositionFieldGroup,
   type ControlLiveLayout,
   type StackItemState,
 } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import {
   __resetDraftsForTest,
   buildApplyPayload,
@@ -124,6 +126,61 @@ async function render(
 }
 
 describe('B-067 — the Inspector renders nested-composition fields', () => {
+  for (const [locale, words] of [
+    ['fa', { ready: 'آماده', primary: 'اصلی', center: 'وسط', fixed: 'ثابت', title: 'عنوان' }],
+    ['ar', { ready: 'جاهز', primary: 'الرئيسي', center: 'الوسط', fixed: 'ثابت', title: 'العنوان' }],
+  ] as const) {
+    it('localizes Inspector chrome and a live plate title in ' + locale, async () => {
+      const card = NESTED_TEMPLATE.groups?.[0];
+      if (card === undefined) throw Error('Missing field group');
+      const titleGroup: CompositionFieldGroup = {
+        ...card,
+        aggregate: {
+          fields: [{ id: 'title', type: 'text', label: 'Title', required: false, default: '' }],
+          groups: [],
+        },
+      };
+      const info: TemplateInfo = {
+        ...NESTED_TEMPLATE,
+        playout: { v: TEMPLATE_TIMING_VERSION, mode: 'static' },
+        sharedFrameTitles: [
+          [
+            ['card', 'title'],
+            ['other', 'title'],
+          ],
+        ],
+        groups: [
+          titleGroup,
+          { ...titleGroup, instanceId: 'other', name: 'other' },
+          { ...titleGroup, instanceId: 'authored', name: 'authored', compositionId: 'different' },
+        ],
+      };
+      setLanguage('interface', locale);
+      try {
+        const el = await render(info, {
+          ...item(),
+          slot: { channel: 1, layer: 59, server: 'primary' },
+        });
+        expect(
+          el.querySelector('.cg-inspector-identity__summary .cg-meta-chip')?.textContent,
+        ).toContain(words.ready);
+        expect(el.querySelector('.cg-inspector-identity__details')?.textContent).toContain(
+          words.primary,
+        );
+        expect(el.querySelector('.cg-inspector-position__summary')?.textContent).toContain(
+          words.center,
+        );
+        expect(el.querySelector('[data-testid="timing-mode-fact"]')?.textContent).toBe(words.fixed);
+        expect(
+          [...el.querySelectorAll('[data-field-heading="title"]')].map(
+            (field) => field.textContent,
+          ),
+        ).toEqual([words.title, words.title, 'Title']);
+      } finally {
+        await act(async () => setLanguage('interface', 'en'));
+      }
+    });
+  }
   it('keeps every field group visible for a legacy look catalogue without instance ownership', async () => {
     const card = NESTED_TEMPLATE.groups?.[0];
     if (card === undefined) throw new Error('Missing title fixture group');

@@ -658,6 +658,11 @@
       #cg-splash-phase {
         transition: opacity 0.14s ease;
       }
+      #cg-splash[dir='rtl'] .cg-splash__tagline,
+      #cg-splash[dir='rtl'] #cg-splash-phase,
+      #cg-splash[dir='rtl'] #cg-splash-version {
+        letter-spacing: normal;
+      }
       .cg-splash__readout[data-done='true'] #cg-splash-phase {
         opacity: 0;
       }
@@ -944,13 +949,15 @@
           </svg>
           <span>APASAI</span>
         </div>
-        <p class="cg-splash__tagline">Broadcast graphics playout controller</p>
+        <p id="cg-splash-tagline" class="cg-splash__tagline">
+          Broadcast graphics playout controller
+        </p>
 
         <div class="cg-splash__progress">
           <div class="cg-splash__rail"><div class="cg-splash__fill" id="cg-splash-fill"></div></div>
           <div class="cg-splash__readout" id="cg-splash-readout">
             <span id="cg-splash-phase">INITIALIZING</span>
-            <span id="cg-splash-pct">0%</span>
+            <span id="cg-splash-pct" dir="ltr">0%</span>
           </div>
         </div>
       </div>
@@ -967,7 +974,7 @@
           `0.0.0` placeholder is omitted by the shared build-stamp plugin.
         -->
         <span id="cg-splash-version"><!-- CG_BUILD_STAMP --></span>
-        <span>CASPARCG · AMCP + OSC</span>
+        <span dir="ltr">CASPARCG · AMCP + OSC</span>
       </div>
     </div>
 
@@ -996,6 +1003,43 @@
         if (window.__CG_SPLASH_DISABLED__) {
           el.remove();
           return;
+        }
+
+        // Vite inlines the small subset of interface messages used before the bundle starts.
+        var locale = /* CG_SPLASH_LOCALE */ null;
+        var words;
+        if (locale) {
+          var language = 'en';
+          var seed = window.__CG_INSTALL_LANGUAGE__;
+          if (typeof seed === 'string' && Object.hasOwn(locale.messages, seed)) language = seed;
+          try {
+            var saved = JSON.parse(window.localStorage.getItem(locale.key));
+            if (
+              saved &&
+              typeof saved.interface === 'string' &&
+              Object.hasOwn(locale.messages, saved.interface)
+            )
+              language = saved.interface;
+          } catch {}
+          words = locale.messages[language];
+          var direction = language === 'en' ? 'ltr' : 'rtl';
+          document.documentElement.lang = el.lang = language;
+          document.documentElement.dir = el.dir = direction;
+          el.setAttribute('aria-label', words['CG CONTROL is starting']);
+          document.getElementById('cg-splash-tagline').textContent =
+            words['Broadcast graphics playout controller'];
+
+          // Keep the literal version and ISO date together in a right-to-left sentence.
+          function stampPart(key, placeholder, value) {
+            var literal = direction === 'rtl' ? '\u2066' + value + '\u2069' : value;
+            return words[key].replace(placeholder, literal);
+          }
+          var stamp = locale.buildStamp;
+          var stampParts = [];
+          if (stamp.version !== '0.0.0')
+            stampParts.push(stampPart('Version {version}', '{version}', stamp.version));
+          stampParts.push(stampPart('Build date {date}', '{date}', stamp.builtAt));
+          document.getElementById('cg-splash-version').textContent = stampParts.join(' · ');
         }
 
         // CENTRAL-BRIDGE-01 — this splash is the FIRST thing CG Control's window shows: the app
@@ -1035,7 +1079,7 @@
           var i = PHASES.indexOf(key);
           if (i < completed || dismissed) return;
           completed = i;
-          if (phaseEl) phaseEl.textContent = key;
+          if (phaseEl) phaseEl.textContent = words ? words[key] : key;
           render();
         }
 

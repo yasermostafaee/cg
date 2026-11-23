@@ -4407,3 +4407,9 @@ B-433 through B-437 are already present in the tracked bug headings. The next fr
 - B-451 — Help authors create the missing Focus destinations for a multi-plate preset, `docs/prd/bugs-designer.md`.
 
 The next unassigned bug number is B-452.
+
+### 2026-11-24 — Initial CG Control language selection takes P-079
+
+- `P-079` — choose English, Persian or Arabic on the first CG Control setup page and persist the initial application language — [platform.md](platform.md).
+
+The next unassigned platform number is `P-080`.

@@ -1,6 +1,7 @@
 //! The setup's state: which page, what was found on this machine, what the user chose, and how
 //! the install went. Pure — the window, the engine and the tests all drive the same model.
 
+use crate::language::SetupLanguage;
 use crate::observe::{compare_versions, Progress};
 use crate::product::{Config, Home, Product, ProductId};
 use crate::server::{ServerSetup, StoredBridge, PLAYOUT_ENGINE_NAME};
@@ -8,6 +9,7 @@ use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
+    Language,
     Welcome,
     Location,
     /// `RELEASE-0111-01` Part A — CG Bridge only: where its Playout is (`server.rs`).
@@ -96,17 +98,22 @@ pub enum StepState {
     Failed,
 }
 
-/// The rail: CG Control's and CG Designer's four steps; CG Bridge adds a server page.
-pub const STEPS: [&str; 4] = ["Welcome", "Location", "Installing", "Done"];
-pub const BRIDGE_STEPS: [&str; 5] = [
-    "Welcome",
-    "Location",
-    PLAYOUT_ENGINE_NAME,
-    "Installing",
-    "Done",
+/// Stable rail identities, independent of their display language.
+const STEPS: &[Page] = &[Page::Welcome, Page::Location, Page::Installing, Page::Done];
+const CONTROL_STEPS: &[Page] = &[
+    Page::Language,
+    Page::Welcome,
+    Page::Location,
+    Page::Installing,
+    Page::Done,
 ];
-const BRIDGE_STANDALONE_STEPS: [&str; 5] =
-    ["Welcome", "Location", "CasparCG", "Installing", "Done"];
+const BRIDGE_STEPS: &[Page] = &[
+    Page::Welcome,
+    Page::Location,
+    Page::Server,
+    Page::Installing,
+    Page::Done,
+];
 /// The most steps a rail has (the window keeps one tick animation per step).
 pub const MAX_STEPS: usize = 5;
 
@@ -116,6 +123,7 @@ pub struct Model {
     pub facts: Facts,
     pub kind: Kind,
     pub page: Page,
+    pub language: SetupLanguage,
     /// The install folder the engine is given (or keeps).
     pub dir: String,
     /// The folder was given on the command line (`/D=`).
@@ -172,7 +180,12 @@ impl Model {
             config,
             facts,
             kind,
-            page: Page::Welcome,
+            page: if product.id == ProductId::Control {
+                Page::Language
+            } else {
+                Page::Welcome
+            },
+            language: SetupLanguage::default(),
             dir,
             dir_preset,
             space: Space::default(),
@@ -199,15 +212,59 @@ impl Model {
         self.product.id == ProductId::Bridge
     }
 
-    /// The rail's steps, for this product.
-    pub fn step_labels(&self) -> &'static [&'static str] {
-        if self.has_server_page() && self.server.standalone {
-            &BRIDGE_STANDALONE_STEPS
-        } else if self.has_server_page() {
-            &BRIDGE_STEPS
-        } else {
-            &STEPS
+    pub fn choose_language(&mut self, language: SetupLanguage) -> bool {
+        if self.product.id != ProductId::Control
+            || self.page != Page::Language
+            || self.language == language
+        {
+            return false;
         }
+        self.language = language;
+        true
+    }
+
+    pub fn next_page(&self) -> Option<Page> {
+        match self.page {
+            Page::Language => Some(Page::Welcome),
+            Page::Welcome => Some(Page::Location),
+            Page::Location if self.has_server_page() => Some(Page::Server),
+            _ => None,
+        }
+    }
+
+    pub fn previous_page(&self) -> Option<Page> {
+        match self.page {
+            Page::Welcome if self.product.id == ProductId::Control => Some(Page::Language),
+            Page::Location => Some(Page::Welcome),
+            Page::Server => Some(Page::Location),
+            _ => None,
+        }
+    }
+
+    fn step_pages(&self) -> &'static [Page] {
+        match self.product.id {
+            ProductId::Control => CONTROL_STEPS,
+            ProductId::Bridge => BRIDGE_STEPS,
+            ProductId::Designer => STEPS,
+        }
+    }
+
+    pub fn step_labels(&self) -> Vec<&'static str> {
+        let l = self.language;
+        self.step_pages()
+            .iter()
+            .map(|page| match page {
+                Page::Language => l.text("Language", "زبان", "اللغة"),
+                Page::Welcome => l.text("Welcome", "خوش‌آمد", "مرحبًا"),
+                Page::Location => l.text("Location", "محل نصب", "موقع التثبيت"),
+                Page::Server if self.server.standalone => "CasparCG",
+                Page::Server => PLAYOUT_ENGINE_NAME,
+                Page::Installing | Page::Failed => {
+                    l.text("Installing", "در حال نصب", "جارٍ التثبيت")
+                }
+                Page::Done => l.text("Done", "پایان", "تم"),
+            })
+            .collect()
     }
 
     pub fn is_update(&self) -> bool {
@@ -250,24 +307,15 @@ impl Model {
     /// Each step's state, one per `step_labels()`.
     pub fn steps(&self) -> Vec<StepState> {
         use StepState::*;
-        let labels = self.step_labels();
-        let at = |label: &str| labels.iter().position(|l| *l == label).unwrap_or(0);
-        let (current, failed) = match self.page {
-            Page::Welcome => (at("Welcome"), false),
-            Page::Location => (at("Location"), false),
-            Page::Server => (
-                at(if self.server.standalone {
-                    "CasparCG"
-                } else {
-                    PLAYOUT_ENGINE_NAME
-                }),
-                false,
-            ),
-            Page::Installing => (at("Installing"), false),
-            Page::Done => (labels.len(), false),
-            Page::Failed => (at("Installing"), true),
+        let pages = self.step_pages();
+        let failed = self.page == Page::Failed;
+        let target = if failed { Page::Installing } else { self.page };
+        let current = if self.page == Page::Done {
+            pages.len()
+        } else {
+            pages.iter().position(|&page| page == target).unwrap_or(0)
         };
-        (0..labels.len())
+        (0..pages.len())
             .map(|i| match i.cmp(&current) {
                 Ordering::Less => Done,
                 Ordering::Equal if failed => Failed,
@@ -279,61 +327,137 @@ impl Model {
 
     /// The page's title.
     pub fn title(&self) -> String {
-        let name = self.product.name;
-        let update = self.is_update();
-        match self.page {
+        let l = self.language;
+        let text = match self.page {
+            Page::Language => l.text("Choose a language", "انتخاب زبان", "اختر اللغة"),
             Page::Welcome => match self.kind {
-                Kind::Update { .. } => format!("Update {name}?"),
-                Kind::Reinstall => format!("Reinstall {name}?"),
-                Kind::Fresh | Kind::Replace { .. } => format!("Install {name}?"),
+                Kind::Update { .. } => l.text(
+                    "Update {name}?",
+                    "{name} به‌روزرسانی شود؟",
+                    "هل تريد تحديث {name}؟",
+                ),
+                Kind::Reinstall => l.text(
+                    "Reinstall {name}?",
+                    "{name} دوباره نصب شود؟",
+                    "هل تريد إعادة تثبيت {name}؟",
+                ),
+                Kind::Fresh | Kind::Replace { .. } => l.text(
+                    "Install {name}?",
+                    "{name} نصب شود؟",
+                    "هل تريد تثبيت {name}؟",
+                ),
             },
-            Page::Location => "Location".into(),
-            Page::Server if self.server.standalone => "CasparCG".into(),
-            Page::Server => PLAYOUT_ENGINE_NAME.into(),
-            Page::Installing if update => format!("Updating {name}"),
-            Page::Installing => format!("Installing {name}"),
-            Page::Done if update => format!("{name} is updated"),
-            Page::Done => format!("{name} is installed"),
-            Page::Failed if update => format!("{name} was not updated"),
-            Page::Failed => format!("{name} was not installed"),
-        }
+            Page::Location => l.text("Location", "محل نصب", "موقع التثبيت"),
+            Page::Server if self.server.standalone => "CasparCG",
+            Page::Server => PLAYOUT_ENGINE_NAME,
+            Page::Installing if self.is_update() => l.text(
+                "Updating {name}",
+                "در حال به‌روزرسانی {name}",
+                "جارٍ تحديث {name}",
+            ),
+            Page::Installing => {
+                l.text("Installing {name}", "در حال نصب {name}", "جارٍ تثبيت {name}")
+            }
+            Page::Done if self.is_update() => l.text(
+                "{name} is updated",
+                "{name} به‌روزرسانی شد",
+                "تم تحديث {name}",
+            ),
+            Page::Done => l.text("{name} is installed", "{name} نصب شد", "تم تثبيت {name}"),
+            Page::Failed if self.is_update() => l.text(
+                "{name} was not updated",
+                "{name} به‌روزرسانی نشد",
+                "تعذّر تحديث {name}",
+            ),
+            Page::Failed => l.text(
+                "{name} was not installed",
+                "{name} نصب نشد",
+                "تعذّر تثبيت {name}",
+            ),
+        };
+        text.replace("{name}", self.product.name)
     }
 
     /// Welcome's one line about an installed copy.
     pub fn version_line(&self) -> Option<String> {
-        let (name, v) = (self.product.name, &self.config.version);
-        match &self.kind {
-            Kind::Fresh => None,
-            Kind::Update { from } => Some(format!(
-                "Update from {from} to {v}. Your settings are kept."
-            )),
-            Kind::Reinstall => Some(format!("{name} {v} is installed. Your settings are kept.")),
-            Kind::Replace { from } => {
-                Some(format!("Replace {from} with {v}. Your settings are kept."))
-            }
-        }
+        let l = self.language;
+        let (text, previous) = match &self.kind {
+            Kind::Fresh => return None,
+            Kind::Update { from } => (
+                l.text(
+                    "Update from {previous} to {version}. Your settings are kept.",
+                    "به‌روزرسانی از {previous} به {version}. تنظیمات شما حفظ می‌شود.",
+                    "التحديث من {previous} إلى {version}. ستُحفظ إعداداتك.",
+                ),
+                Some(from),
+            ),
+            Kind::Reinstall => (
+                l.text(
+                    "{name} {version} is installed. Your settings are kept.",
+                    "{name} نسخهٔ {version} نصب است. تنظیمات شما حفظ می‌شود.",
+                    "الإصدار {version} من {name} مثبت. ستُحفظ إعداداتك.",
+                ),
+                None,
+            ),
+            Kind::Replace { from } => (
+                l.text(
+                    "Replace {previous} with {version}. Your settings are kept.",
+                    "نسخهٔ {previous} با {version} جایگزین می‌شود. تنظیمات شما حفظ می‌شود.",
+                    "سيُستبدل الإصدار {previous} بالإصدار {version}. ستُحفظ إعداداتك.",
+                ),
+                Some(from),
+            ),
+        };
+        let text = text
+            .replace("{version}", &self.config.version)
+            .replace("{name}", self.product.name);
+        Some(match previous {
+            Some(from) => text.replace("{previous}", from),
+            None => text,
+        })
     }
 
     /// Lines that need reading before Next, in caution ink.
     pub fn welcome_cautions(&self) -> Vec<String> {
+        let l = self.language;
         let mut out = Vec::new();
         if !self.platform_ok() {
             out.push(format!("{} needs 64-bit Windows.", self.product.name));
         }
         if self.facts.app_running && self.product.id != ProductId::Bridge {
-            out.push(format!("{} is open. Setup closes it.", self.product.name));
+            out.push(
+                l.text(
+                    "{name} is open. Setup closes it.",
+                    "{name} باز است. نصب‌کننده آن را می‌بندد.",
+                    "{name} مفتوح. سيغلقه برنامج التثبيت.",
+                )
+                .replace("{name}", self.product.name),
+            );
         }
         out
     }
 
     pub fn location_cautions(&self) -> Vec<String> {
-        let mut out = Vec::new();
+        let l = self.language;
         if !self.space.writable {
-            out.push("This folder needs administrator rights.".to_string());
-        } else if !self.space_ok() {
-            out.push(format!("Not enough space on {}.", self.space.drive));
+            return vec![l
+                .text(
+                    "This folder needs administrator rights.",
+                    "این پوشه به دسترسی مدیر نیاز دارد.",
+                    "يتطلب هذا المجلد صلاحيات المسؤول.",
+                )
+                .to_string()];
         }
-        out
+        if !self.space_ok() {
+            return vec![l
+                .text(
+                    "Not enough space on {drive}.",
+                    "فضای کافی روی درایو {drive} نیست.",
+                    "المساحة غير كافية على محرك الأقراص {drive}.",
+                )
+                .replace("{drive}", &self.space.drive)];
+        }
+        Vec::new()
     }
 }
 
@@ -357,7 +481,7 @@ pub fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::product::{MainFile, BRIDGE, CONTROL};
+    use crate::product::{MainFile, BRIDGE, CONTROL, DESIGNER};
 
     fn config(product: ProductId) -> Config {
         Config {
@@ -381,8 +505,41 @@ mod tests {
     }
 
     #[test]
+    fn only_control_starts_on_language_and_uses_stable_transitions() {
+        let mut m = Model::new(&CONTROL, config(ProductId::Control), facts(), None, false);
+        assert_eq!(m.page, Page::Language);
+        assert_eq!(m.language, SetupLanguage::English);
+        assert_eq!(m.steps()[0], StepState::Current);
+        assert_eq!(
+            m.step_labels(),
+            ["Language", "Welcome", "Location", "Installing", "Done"]
+        );
+        assert!(m.choose_language(SetupLanguage::Persian));
+        assert_eq!(m.step_labels()[0], "زبان");
+        assert_eq!(m.title(), "انتخاب زبان");
+        assert_eq!(m.steps()[0], StepState::Current);
+        m.page = m.next_page().unwrap();
+        assert_eq!(m.page, Page::Welcome);
+        assert_eq!(m.steps()[0], StepState::Done);
+        assert_eq!(m.previous_page(), Some(Page::Language));
+        assert_eq!(m.next_page(), Some(Page::Location));
+        assert!(!m.choose_language(SetupLanguage::Arabic));
+        assert_eq!(m.title(), "CG Control نصب شود؟");
+        m.page = Page::Failed;
+        assert_eq!(m.steps()[3], StepState::Failed);
+
+        for product in [&DESIGNER, &BRIDGE] {
+            let mut model = Model::new(product, config(product.id), facts(), None, false);
+            assert_eq!(model.page, Page::Welcome);
+            assert_eq!(model.previous_page(), None);
+            assert!(!model.choose_language(SetupLanguage::Arabic));
+        }
+    }
+
+    #[test]
     fn a_first_install_asks_to_install_and_may_choose_a_folder() {
-        let m = Model::new(&CONTROL, config(ProductId::Control), facts(), None, false);
+        let mut m = Model::new(&CONTROL, config(ProductId::Control), facts(), None, false);
+        m.page = Page::Welcome;
         assert_eq!(m.kind, Kind::Fresh);
         assert_eq!(m.title(), "Install CG Control?");
         assert_eq!(m.version_line(), None);
@@ -402,6 +559,7 @@ mod tests {
             ..facts()
         };
         let mut m = Model::new(&CONTROL, config(ProductId::Control), f, None, false);
+        m.page = Page::Welcome;
         assert_eq!(m.title(), "Update CG Control?");
         assert_eq!(
             m.version_line().unwrap(),
@@ -416,7 +574,7 @@ mod tests {
 
     #[test]
     fn the_same_or_a_newer_copy_is_named() {
-        let same = Model::new(
+        let mut same = Model::new(
             &CONTROL,
             config(ProductId::Control),
             Facts {
@@ -426,6 +584,7 @@ mod tests {
             None,
             false,
         );
+        same.page = Page::Welcome;
         assert_eq!(same.title(), "Reinstall CG Control?");
         let newer = Model::new(
             &CONTROL,

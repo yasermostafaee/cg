@@ -310,6 +310,104 @@ async function registerFlatTemplate(app: { page: Page }): Promise<void> {
   }, FLAT_TPL);
 }
 
+test('highlights the selected preset and localizes its PVW state and Safe areas tooltip', async ({
+  app,
+}) => {
+  const { page } = app;
+  await registerLooksTemplate(app);
+  const layer = await app.loadTemplate(LOOKS_TPL);
+  await app.selectLayerRow(layer);
+  await app.showMonitors();
+
+  const two = page.locator('[data-look-tab="two"]');
+  const solo = page.locator('[data-look-tab="solo"]');
+  const appearance = (preset: typeof two) =>
+    preset.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [style.backgroundColor, style.borderTopColor, style.boxShadow];
+    });
+  await expect(two).toHaveAttribute('aria-pressed', 'true');
+  await expect(solo).toHaveAttribute('aria-pressed', 'false');
+  await expect(two).toHaveCSS('border-start-start-radius', '9999px');
+  await expect(two.locator('.lucide-check')).toBeVisible();
+  await expect(solo.locator('.lucide-check')).toHaveCount(0);
+  const active = await appearance(two);
+  const idle = await appearance(solo);
+  expect(active[0]).not.toBe(idle[0]);
+  expect(active[1]).not.toBe(idle[1]);
+  expect(active[2]).not.toBe(idle[2]);
+  await expect(two.locator('[data-look-badge]')).toHaveCount(0);
+
+  await solo.click();
+  await page.mouse.move(0, 0);
+  await expect(solo).toHaveAttribute('aria-pressed', 'true');
+  await expect(solo.locator('.lucide-check')).toBeVisible();
+  await expect(two.locator('.lucide-check')).toHaveCount(0);
+  await expect.poll(() => appearance(solo)).toEqual(active);
+  await expect.poll(() => appearance(two)).toEqual(idle);
+  await expect(solo.locator('[data-look-badge]')).toHaveCount(0);
+
+  await two.click();
+  await page.mouse.move(0, 0);
+  await app.layerRow(layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const badge = two.locator('[data-look-badge="rehearsing"]');
+  const guides = page.locator('[data-monitor-safe-areas]');
+  await expect(badge).toHaveText('SHOWING IN PVW');
+  await expect(guides).toHaveAttribute('title', /^Action 93% · Graphics 90% · EBU R95/);
+  await expect.poll(() => appearance(two)).toEqual(active);
+
+  for (const language of [
+    {
+      code: 'fa',
+      settings: 'Open Station setup',
+      general: 'General',
+      close: 'بستن',
+      badge: 'در حال نمایش در PVW',
+      inspector: 'ویژگی‌ها',
+      disclosures: ['جزئیات لایه', 'موقعیت', 'زمان‌بندی'],
+      defaultLabel: /^\u2068?پیشفرض/,
+      guides: /^محدودهٔ امن حرکت ۹۳٪.*EBU R95.*فقط در پیش‌نمایش$/,
+    },
+    {
+      code: 'ar',
+      settings: 'باز کردن تنظیمات ایستگاه',
+      general: 'عمومی',
+      close: 'إغلاق',
+      badge: 'معروض في PVW',
+      inspector: 'لوحة الخصائص',
+      disclosures: ['تفاصيل الطبقة', 'الموضع', 'التوقيت'],
+      defaultLabel: /^\u2068?افتراضي/,
+      guides: /^المنطقة الآمنة للحركة ٩٣٪.*EBU R95.*للمعاينة فقط$/,
+    },
+  ]) {
+    await page.getByRole('button', { name: language.settings, exact: true }).click();
+    const settings = page.getByRole('dialog');
+    await settings.getByRole('tab', { name: language.general, exact: true }).click();
+    await settings.locator('#cg-interface-language').selectOption(language.code);
+    await settings.getByRole('button', { name: language.close, exact: true }).last().click();
+    await expect(badge).toHaveText(language.badge);
+    await expect(page.getByRole('complementary', { name: language.inspector })).toBeVisible();
+    await expect(
+      page.locator('[data-look-binding="two:l-1"] [data-source-label="choice"]'),
+    ).toHaveText(language.defaultLabel);
+    await expect(guides).toHaveAttribute('title', language.guides);
+    for (const name of language.disclosures) {
+      const button = page.getByRole('button', { name, exact: true });
+      if ((await button.getAttribute('aria-expanded')) === 'true') await button.click();
+      await expect(button).toHaveAttribute('aria-expanded', 'false');
+      await expect(button.locator('.lucide-chevron-right')).toHaveCSS(
+        'transform',
+        'matrix(-1, 0, 0, 1, 0, 0)',
+      );
+      await button.click();
+      await expect(button).toHaveAttribute('aria-expanded', 'true');
+      await expect(button.locator('.lucide-chevron-down')).toHaveCSS('transform', 'none');
+    }
+    await expect(two).toHaveAttribute('aria-pressed', 'true');
+    await expect(two.locator('bdi')).toHaveText('2-box');
+  }
+});
+
 test('PLATE INPUTS lists every look with its own frames, and the flat template keeps its editor', async ({
   app,
 }) => {
