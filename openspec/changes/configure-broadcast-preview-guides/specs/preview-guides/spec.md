@@ -92,6 +92,7 @@ guides SHALL use the selected reference.
 - **AND** the 100% frame and additional 80% guide have a separate explanation.
 - **AND** the percentage rows are inset from Show frame, with their vertical rule on the left
   in English and on the right in Persian and Arabic.
+- **AND** the Persian Safe Areas labels and explanations call the reference «محدوده».
 
 #### Scenario: Designer snaps to visible safe area borders
 

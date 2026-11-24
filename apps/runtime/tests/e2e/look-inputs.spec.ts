@@ -482,7 +482,7 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
       closeGuideSettings: 'بستن تنظیمات محدودهٔ امن',
       help16x9: /برای تصویر تمام‌صفحه با نسبت ۱۶:۹.*EBU R95/,
       help4x3: /SMPTE ST 2046-1.*۵۷۶ و ۴۸۰ خطی/,
-      frameToggle: 'نمایش قاب',
+      frameToggle: 'نمایش محدوده',
       guideBorders: 'حاشیه‌های محدودهٔ امن',
       actionGuide: 'محدودهٔ عمل ۹۳٪',
     },
@@ -535,6 +535,10 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
     await guideSettings.getByRole('radio', { name: '4:3', exact: true }).click();
     await expect(help).toContainText(language.help4x3);
     await expectNestedSafeGuideBorders(guideSettings, language, 'rtl');
+    if (language.code === 'fa') {
+      await expect(guideSettings.getByText('ویرایش محدوده', { exact: true })).toBeVisible();
+      await expect(guideSettings.getByLabel('رنگ محدوده', { exact: true })).toBeVisible();
+    }
     await guideSettings
       .getByRole('button', { name: language.closeGuideSettings, exact: true })
       .click();
