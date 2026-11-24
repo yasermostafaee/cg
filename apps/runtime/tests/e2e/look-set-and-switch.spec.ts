@@ -275,6 +275,69 @@ test('§4 — a six-frame template with five irregular looks renders exactly its
   await expect(picker.locator('[aria-pressed="true"]')).toHaveCount(1);
 });
 
+test('R-123 keeps the English plate count after a Persian preset name ending in a number', async ({
+  app,
+}) => {
+  const page = app.page;
+  const presetName = 'پریست 3';
+  const templateId = 'e2e-bidi-look-tooltip';
+  await page.evaluate(
+    async ({ seedId, templateId, presetName }) => {
+      const template = (await window.cg.templates.list()).find(
+        (entry) => entry.templateId === seedId,
+      );
+      if (template?.liveSources?.looks === undefined) throw new Error('Missing six-frame fixture');
+      await window.cg.templates.import({
+        template: {
+          ...template,
+          templateId,
+          name: 'Mixed direction preset tooltip',
+          liveSources: {
+            ...template.liveSources,
+            looks: template.liveSources.looks.map((look) =>
+              look.id === 'trio' ? { ...look, name: presetName } : look,
+            ),
+          },
+        },
+        html: '<!doctype html><html><body>Mixed direction preset tooltip</body></html>',
+      });
+    },
+    { seedId: SIX, templateId, presetName },
+  );
+
+  const layer = await app.loadTemplate(templateId);
+  const preset = app.layerRow(layer).locator('[data-look-id="trio"]');
+  await expect(preset).toHaveText(presetName);
+  await expect(preset).toHaveAttribute('title', /· 3 plates$/);
+  await preset.hover();
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveCSS('direction', 'ltr');
+  const bounds = await tooltip.evaluate((element, name) => {
+    const node = element.firstChild;
+    if (node === null || node.nodeType !== Node.TEXT_NODE) throw new Error('Missing tooltip text');
+    const text = node.textContent ?? '';
+    const range = document.createRange();
+    const measure = (part: string, startAt = 0) => {
+      const start = text.indexOf(part, startAt);
+      if (start < 0) throw new Error(`Missing tooltip fragment "${part}"`);
+      range.setStart(node, start);
+      range.setEnd(node, start + part.length);
+      const { left, right } = range.getBoundingClientRect();
+      return { left, right };
+    };
+    return {
+      name: measure(name),
+      separator: measure('·'),
+      count: measure('3', text.indexOf('·') + 1),
+      noun: measure('plates'),
+    };
+  }, presetName);
+  expect(bounds.name.right).toBeLessThanOrEqual(bounds.separator.left + 0.5);
+  expect(bounds.separator.right).toBeLessThanOrEqual(bounds.count.left + 0.5);
+  expect(bounds.count.right).toBeLessThanOrEqual(bounds.noun.left + 0.5);
+});
+
 test('§4 — the look strip is exactly what the token home declares, measured in Chromium', async ({
   app,
 }) => {

@@ -1,7 +1,7 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useLanguages, useUiText } from '../../i18n/locale.js';
 import type { TemplateLiveSources } from '@cg/shared-ipc';
 import type { ControlLiveLayout } from '@cg/shared-schema';
-import { templateFocusTarget } from '@cg/shared-ipc';
+import { directionOf, isolateText, templateFocusTarget } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { colors, cssVars, LOOK_STRIP_PX } from '../../theme.js';
 
@@ -249,6 +249,7 @@ export function LookPicker({
   onAir,
 }: Props): JSX.Element {
   const translateUi = useUiText();
+  const { interface: interfaceLanguage } = useLanguages();
   const preview = target === 'preview';
   const starting = target === 'next';
   const targetLabel = { air: 'PGM preset', next: 'Starting preset', preview: 'Preview preset' }[
@@ -311,6 +312,12 @@ export function LookPicker({
         {looks.map((look) => {
           const live = look.id === activeId;
           const count = look.frames.length;
+          // Keep numbers in an RTL preset name separate from the English plate count.
+          // The RTL catalogs already isolate every interpolated value.
+          const label =
+            interfaceLanguage === 'en' && directionOf(look.label) === 'rtl'
+              ? isolateText(look.label)
+              : look.label;
           return (
             <Button
               key={look.id}
@@ -352,7 +359,7 @@ export function LookPicker({
               title={
                 refusal ??
                 translateUi('{look} · {count} {plates}', {
-                  look: look.label,
+                  look: label,
                   count: String(count),
                   plates: translateUi(count === 1 ? 'plate' : 'plates'),
                 })
@@ -366,7 +373,7 @@ export function LookPicker({
               // `B-151` — and the TARGET, so a screen reader gets the same answer the label
               // gives sighted operators: this press changes the preview, or it changes air.
               aria-label={translateUi(live ? '{look} · {target} — current' : '{look} · {target}', {
-                look: look.label,
+                look: label,
                 target: translateUi(targetLabel),
               })}
               data-look-id={look.id}

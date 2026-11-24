@@ -20,4 +20,5 @@
 - [x] Verify the CG Control name and localized surrounding text in the interface and feedback catalogs.
 - [x] Verify both password visibility tooltips and accessible names in English, Persian and Arabic.
       Unit tests covered the shared input, and Windows Chromium verified both RTL sign-in screens.
+- [x] Verify the Layers preset tooltip ordering and plate-count phrase with an authored RTL name in English Chromium. Windows Edge confirmed that «پریست 3» appears before the separator and “3 plates” follows it. The English-only tooltip checks also passed.
 - [ ] Record the carrying Linux Playwright result.

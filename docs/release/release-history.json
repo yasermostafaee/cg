@@ -80,6 +80,11 @@
       ],
       "fixes": [
         {
+          "fa": "در رابط انگلیسی، راهنمای پریست در نوار لایه‌ها ابتدا نام فارسی یا عربی پریست را نشان می‌دهد. جداکننده و تعداد قاب‌ها پس از نام می‌آیند.",
+          "en": "In the English interface, Layers preset tooltips show the authored Persian or Arabic name first, followed by the separator and the complete plate count.",
+          "ar": "تعرض تلميحات الإعدادات المسبقة في طبقات الواجهة الإنجليزية الاسم الفارسي أو العربي أولاً، ثم الفاصل وعبارة عدد الإطارات كاملة."
+        },
+        {
           "fa": "دکمهٔ «از فایل…» در پنل ویژگی‌ها، چه متصل و چه شناور، پنجرهٔ انتخاب فایل را باز می‌کند. لغو انتخاب، فایل پیوست و مقدار فعلی فیلد را حفظ می‌کند.",
           "en": "From file opens the file picker from either a docked or floating Inspector. Cancelling the picker keeps the current attachment and field value.",
           "ar": "يفتح زر «من ملف…» نافذة اختيار الملفات من لوحة الخصائص المثبتة أو العائمة. يحافظ إلغاء الاختيار على الملف المرفق وقيمة الحقل الحالية."

@@ -8,6 +8,8 @@ Add English, Persian and Arabic language preferences, README-linked source catal
 
 Keep the CG Control product name in English lettering in interface text and action feedback. Localize both states of password visibility controls, including their tooltips and accessible names.
 
+Keep authored right-to-left preset names in order within English Layers tooltips, with the plate count after the name.
+
 ## Capabilities
 
 - Modified capability: `runtime-ui`.

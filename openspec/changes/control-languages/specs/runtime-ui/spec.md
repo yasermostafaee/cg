@@ -56,6 +56,12 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **AND** feedback uses its own locale direction even when the interface uses a different direction.
 - **AND** a removal confirmation starts with the exact template name, and the PVW empty state explains that it sends nothing to the Playout Engine.
 
+#### Scenario: Read an Arabic or Persian preset name in an English tooltip
+
+- **WHEN** the operator hovers a Layers preset with a Persian or Arabic name in the English interface
+- **THEN** the tooltip shows the authored name first in its own reading direction
+- **AND** the separator follows the name and the count and English plate label read together
+
 #### Scenario: Read a template assignment in Stations settings
 
 - **WHEN** a graphic is assigned to a row in the Station setup Layers tab

@@ -5402,6 +5402,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN the operator hovers a source preview THEN its status and tooltip are localized. The source lists label the catalogue server independently of the picture or audio provider, and the A/B indicators stay beside the picker chevron in Inspector and source defaults.
 - WHEN the operator reads the Channel tab in Persian or Arabic THEN the dimensions and frame-rate units keep their technical order, and the video and output explanations are localized.
 - WHEN a title, status, tooltip or feedback sentence in Persian or Arabic starts with a Latin name THEN that name leads from the right and retains the order of its letters. The message direction comes from the selected feedback language.
+- WHEN the operator hovers a Layers preset with a Persian or Arabic name in the English interface THEN the authored name comes before the separator, followed by the plate count and its label as one phrase.
 - WHEN the operator opens Station layers THEN column labels and descriptions follow the interface direction, with separate isolation for authored values and technical identifiers.
 - WHEN the PGM status strip wraps THEN audio controls remain flush with its right edge in English and its left edge in Persian or Arabic.
 - WHEN a preset is selected in the Inspector THEN it has the standard button shape and its selected color remains visible.

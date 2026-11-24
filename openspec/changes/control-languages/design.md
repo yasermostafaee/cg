@@ -8,6 +8,8 @@ Modal headings and operator copy inherit the interface direction. Action notices
 
 Translations keep the product name CG Control in English lettering. The shared password field uses the interface language for the visibility button's tooltip and accessible name. Both describe the action the button will perform, Show password for a masked value and Hide password for a visible value. The password input itself uses left-to-right entry.
 
+The Layers preset tooltip isolates the authored preset name within the localized sentence. In English, a Persian or Arabic name keeps its own reading direction. The tooltip presents the name first, then the separator and the complete plate-count phrase.
+
 ## Verification
 
 Prove the operator path in a fresh Runtime build and preserve the station write behavior and permissions.
