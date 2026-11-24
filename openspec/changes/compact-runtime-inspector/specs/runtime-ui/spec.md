@@ -8,6 +8,11 @@ SHALL summarize the effective anchor and offsets and indicate an unapplied Posit
 Inspector SHALL keep Update and Discard in a separate footer outside the scrollport and retain the
 existing field editors. Timing SHALL appear before Position.
 
+#### Scenario: Match the approved control group colors
+
+- **WHEN** the Position, Preset effect and Input effect groups are visible in the Inspector
+- **THEN** their fill is `#182330` and their outline is `#283747` in each interface direction
+
 #### Scenario: Scroll the Inspector without moving its footer
 
 - **WHEN** the operator scrolls a tall Inspector in either interface direction

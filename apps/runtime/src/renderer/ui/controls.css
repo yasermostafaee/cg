@@ -2832,9 +2832,9 @@ textarea.cg-field--autogrow {
 
 .cg-inspector-position__placement,
 .cg-inspector-body .cg-position-effect__body {
-  border: 1px solid var(--r-border);
+  border: 1px solid var(--r-insp-section-line);
   border-radius: var(--r-radius-md);
-  background: var(--r-surface-raised);
+  background: var(--r-insp-section-bg);
   padding: var(--r-space-2);
 }
 

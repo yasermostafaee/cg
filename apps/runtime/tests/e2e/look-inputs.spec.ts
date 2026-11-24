@@ -410,6 +410,17 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
   await app.selectLayerRow(layer);
   await app.showMonitors();
 
+  for (const selector of [
+    '.cg-inspector-position__placement',
+    '.cg-inspector-effect--frame',
+    '.cg-inspector-effect--input',
+  ]) {
+    const group = app.inspector.locator(selector);
+    await expect(group).toBeVisible();
+    await expect(group).toHaveCSS('background-color', 'rgb(24, 35, 48)');
+    await expect(group).toHaveCSS('border-top-color', 'rgb(40, 55, 71)');
+  }
+
   const two = page.locator('[data-look-tab="two"]');
   const solo = page.locator('[data-look-tab="solo"]');
   const appearance = (preset: typeof two) =>

@@ -11,6 +11,8 @@ Timing is above Position. Shared grids align labels above the Position, Preset e
 Input effect controls and respond to the width of the Inspector. Preset buttons retain
 space for a second status line. The body is the only scrollport and the commit footer
 sits in its own row.
+The Position, Preset effect and Input effect groups share the approved fill (`#182330`)
+and outline (`#283747`) from the Runtime theme.
 
 ## Interaction
 

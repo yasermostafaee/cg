@@ -10,6 +10,7 @@ layer and its programme state in view.
   when Position is collapsed.
 - Align simple Fields in compact rows and give larger editors the width they need.
 - Place Timing before Position and align the Position, Preset effect and Input effect controls.
+- Match the approved fill and outline for those three control groups.
 - Keep space in the preset buttons for Programme and Preview status, and keep the Update and Discard footer outside the scrollport.
 
 ## Capabilities

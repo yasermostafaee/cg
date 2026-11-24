@@ -15,6 +15,7 @@
 - [x] Verify Timing order, the separate scrollport and footer, responsive Position and effects, and
       stacked preset name and status in Windows Chromium.
 - [ ] Record the carrying Linux E2E run.
+- [x] Check the Position, Preset effect and Input effect groups against the approved color values in Windows Chromium.
 
 The [Linux run for c019352a](https://github.com/yasermostafaee/cg/actions/runs/43015973303/job/130509988163)
 found five layout failures that prompted the companion-width and Sequence-width follow-up.

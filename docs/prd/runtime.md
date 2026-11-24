@@ -297,7 +297,9 @@ template and current status visible. A collapsed Position shows the effective an
 and still marks unapplied changes. Align the labels and values of simple Fields in compact rows.
 Keep space for text areas, item editors and grouped fields. The footer stays at the bottom.
 Timing precedes Position. Group related position and effect controls and put their labels above
-the fields. Preset buttons leave room for their title and a second Programme or Preview status line.
+the fields. Use the approved blue-gray fill and outline for the Position, Preset effect and
+Input effect groups. Preset buttons leave room for their title and a second Programme or Preview
+status line.
 
 **Why:** After the R-007 design-system rollout the controls read well
 stylistically, but the operator finds the inputs still too small / cramped

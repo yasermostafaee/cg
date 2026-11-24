@@ -2994,6 +2994,9 @@ export const cssVars = {
    */
   '--r-insp-section-text': `${String(INSPECTOR_PX.sectionText)}px`,
   '--r-insp-section-tracking': INSPECTOR_PX.sectionTracking,
+  // The approved Inspector control groups have their own slate surface and outline.
+  '--r-insp-section-bg': '#182330',
+  '--r-insp-section-line': '#283747',
   '--r-insp-label-text': `${String(INSPECTOR_PX.labelText)}px`,
   '--r-insp-label-line': `${String(INSPECTOR_PX.labelLine)}px`,
   '--r-insp-field-text': `${String(INSPECTOR_PX.fieldText)}px`,
