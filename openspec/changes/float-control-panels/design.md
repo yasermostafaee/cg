@@ -20,6 +20,11 @@ panes. A docked panel's full dialogs use the main document, while popovers use t
 panel's document. Detached dialogs stay in their own windows. The renderer keeps one shortcut
 dispatcher across all panel documents.
 
+A main-window tooltip that crosses a visible docked WebView is also drawn in that
+WebView at the same physical position. The WebView clips its copy to its own bounds.
+The main document owns the tooltip's accessible text and dismissal. Copies pass
+pointer events through to the panel and stay within docked windows.
+
 The Windows prototype exercised the same HWND through dock, float, maximize, restore,
 independent close prevention and redock. The preview iframe, WebRTC connection and running
 video and audio survived. Two-display and mixed-DPI verification remain part of the installed

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { panelWindow, usePanelDocument } from './PanelDocument.js';
 
 /**
@@ -103,7 +104,28 @@ interface Tip {
   bottom: number;
 }
 
-export function Tooltip(): JSX.Element | null {
+export interface TooltipBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface TooltipSurface {
+  key: string;
+  container: HTMLElement;
+  left: number;
+  top: number;
+  scale: number;
+}
+
+export type TooltipSurfaces = (box: TooltipBox) => readonly TooltipSurface[];
+
+export function Tooltip({
+  surfaces,
+}: {
+  surfaces?: TooltipSurfaces | undefined;
+} = {}): JSX.Element | null {
   const view = panelWindow(usePanelDocument());
   const [tip, setTip] = useState<Tip | null>(null);
   const timer = useRef<number | null>(null);
@@ -211,6 +233,8 @@ export function Tooltip(): JSX.Element | null {
     view.addEventListener('change', hide, true);
     view.addEventListener('focusin', onFocusIn, true);
     view.addEventListener('focusout', hide, true);
+    view.addEventListener('resize', hide);
+    view.addEventListener('blur', hide);
     // Escape dismisses, like every other transient surface in this app.
     view.addEventListener('keydown', onKeyDown, true);
     function onKeyDown(e: KeyboardEvent): void {
@@ -226,12 +250,14 @@ export function Tooltip(): JSX.Element | null {
       view.removeEventListener('change', hide, true);
       view.removeEventListener('focusin', onFocusIn, true);
       view.removeEventListener('focusout', hide, true);
+      view.removeEventListener('resize', hide);
+      view.removeEventListener('blur', hide);
       view.removeEventListener('keydown', onKeyDown, true);
     };
   }, [view]);
 
   if (tip === null) return null;
-  return <Bubble tip={tip} />;
+  return <Bubble tip={tip} surfaces={surfaces} />;
 }
 
 /**
@@ -240,10 +266,17 @@ export function Tooltip(): JSX.Element | null {
  * there is no room above. Measured rather than transform-based so a bubble near
  * any edge is nudged fully on-screen instead of spilling off it.
  */
-function Bubble({ tip }: { tip: Tip }): JSX.Element {
-  const view = panelWindow(usePanelDocument());
+function Bubble({
+  tip,
+  surfaces,
+}: {
+  tip: Tip;
+  surfaces: TooltipSurfaces | undefined;
+}): JSX.Element {
+  const owner = usePanelDocument();
+  const view = panelWindow(owner);
   const ref = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<(TooltipBox & { fontFamily: string }) | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -258,24 +291,58 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
       MARGIN,
       vh - b.height - MARGIN,
     );
-    setPos({ left, top });
+    setPos({
+      left,
+      top,
+      width: b.width,
+      height: b.height,
+      fontFamily: view.getComputedStyle(el).fontFamily,
+    });
   }, [tip, view]);
 
+  const className = tip.fieldValue ? 'cg-tooltip cg-tooltip--value' : 'cg-tooltip';
+  const direction = tip.fieldValue ? 'auto' : undefined;
   return (
-    <div
-      ref={ref}
-      role="tooltip"
-      dir={tip.fieldValue ? 'auto' : undefined}
-      className={tip.fieldValue ? 'cg-tooltip cg-tooltip--value' : 'cg-tooltip'}
-      style={{
-        left: pos?.left ?? 0,
-        top: pos?.top ?? 0,
-        // Hidden for the measuring pass so it never flashes at 0,0.
-        visibility: pos === null ? 'hidden' : 'visible',
-      }}
-    >
-      {tip.text}
-    </div>
+    <>
+      <div
+        ref={ref}
+        role="tooltip"
+        dir={direction}
+        className={className}
+        style={{
+          left: pos?.left ?? 0,
+          top: pos?.top ?? 0,
+          // Hidden for the measuring pass so it never flashes at 0,0.
+          visibility: pos === null ? 'hidden' : 'visible',
+        }}
+      >
+        {tip.text}
+      </div>
+      {pos !== null &&
+        surfaces?.(pos).map(({ key, container, left, top, scale }) =>
+          createPortal(
+            <div
+              aria-hidden="true"
+              dir={direction ?? owner.documentElement.dir}
+              className={className}
+              style={{
+                left,
+                top,
+                width: pos.width,
+                maxWidth: 'none',
+                boxSizing: 'border-box',
+                fontFamily: pos.fontFamily,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              {tip.text}
+            </div>,
+            container,
+            key,
+          ),
+        )}
+    </>
   );
 }
 

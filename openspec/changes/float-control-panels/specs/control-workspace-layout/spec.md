@@ -16,6 +16,13 @@ CG Control SHALL allow operators to detach PGM, PVW, Layers and Inspector into i
 - **THEN** the existing companion choices remain available for docked companions
 - **AND** each detached companion retains its independent window.
 
+#### Scenario: Read a toolbar tooltip over docked panels
+
+- **WHEN** the operator hovers over or keyboard-focuses a main toolbar button whose tooltip crosses the docked panels
+- **THEN** the entire tooltip is visible above the panels and does not intercept pointer input
+- **AND** Escape dismisses the entire tooltip
+- **AND** the tooltip stays inside the main window.
+
 #### Scenario: Select a row while Inspector is detached
 
 - **WHEN** the operator clicks the selected row again

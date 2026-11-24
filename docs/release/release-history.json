@@ -80,6 +80,11 @@
       ],
       "fixes": [
         {
+          "fa": "تولتیپ دکمه‌های نوار بالای CG Control روی پنل‌های متصل کامل دیده می‌شود.",
+          "en": "CG Control's top toolbar tooltips remain fully visible over docked panels.",
+          "ar": "تظهر تلميحات أزرار الشريط العلوي في CG Control كاملةً فوق اللوحات المثبتة."
+        },
+        {
           "fa": "توضیح محدوده‌های امن با انتخاب نسبت عوض می‌شود. مرجع ۱۶:۹ و ۴:۳ جداست و درصدها بر اساس ابعاد محدودهٔ سفارشی محاسبه می‌شوند. ردیف‌های درصد زیر «نمایش محدوده» در فارسی و عربی از سمت راست تورفتگی دارند.",
           "en": "Safe Areas help follows the selected guide ratio, with separate references for 16:9 and 4:3 and proportional guidance for custom frames. Percentage rows are indented under Show frame in both interface directions.",
           "ar": "يتغيّر شرح المناطق الآمنة بحسب نسبة الإطار المختار، مع مرجع مستقل لكلّ من ١٦:٩ و٤:٣ وشرح للأدلة النسبية في الإطارات المخصصة. تظهر صفوف النسب تحت «إظهار الإطار» بإزاحة من اليمين في الواجهة العربية والفارسية."

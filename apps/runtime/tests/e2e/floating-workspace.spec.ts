@@ -84,6 +84,66 @@ async function placement(page: Page, panel: FloatingPanelId) {
   );
 }
 
+test('R-129 keeps the header tooltip visible across a docked monitor', async ({ page }) => {
+  const app = new RuntimeApp(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await armMockRuntime(page);
+  const documents = await openPanelDocuments(page);
+  const pgm = documents.get('pgm')!;
+  // The mock-only banner otherwise separates the header tooltip from the monitor.
+  await page.getByRole('alert', { name: 'Test mode' }).evaluate((banner) => {
+    banner.style.display = 'none';
+  });
+  await app.showMonitors();
+  await page.mouse.move(1, 1);
+
+  const hideMonitors = page.getByRole('button', { name: 'Hide monitors', exact: true });
+  const mainTip = page.getByRole('tooltip');
+  const dockTip = pgm.locator('.cg-tooltip[aria-hidden="true"]');
+  const title = 'Fold PREVIEW and PROGRAM away — the layer list takes the height';
+  await hideMonitors.hover();
+  await expect(mainTip).toHaveText(title);
+
+  const tip = (await mainTip.boundingBox())!;
+  const dock = (await page.locator('[data-floating-dock="pgm"]').boundingBox())!;
+  const left = Math.max(tip.x, dock.x);
+  const top = Math.max(tip.y, dock.y);
+  const right = Math.min(tip.x + tip.width, dock.x + dock.width);
+  const bottom = Math.min(tip.y + tip.height, dock.y + dock.height);
+  expect(right).toBeGreaterThan(left);
+  expect(bottom).toBeGreaterThan(top);
+
+  await expect(dockTip).toHaveText(title);
+  await expect(dockTip).toBeVisible();
+  await expect(pgm.getByRole('tooltip')).toHaveCount(0);
+  const rendered = (await dockTip.boundingBox())!;
+  expect(Math.abs(rendered.x - (tip.x - dock.x))).toBeLessThan(1);
+  expect(Math.abs(rendered.y - (tip.y - dock.y))).toBeLessThan(1);
+  expect(rendered.width).toBeCloseTo(tip.width, 1);
+  expect(rendered.height).toBeCloseTo(tip.height, 1);
+  const hit = await dockTip.evaluate(
+    (element, { x, y }) => {
+      const target = element.ownerDocument.elementFromPoint(x, y);
+      return Boolean(target?.closest('[data-floating-panel-content]')) && !element.contains(target);
+    },
+    { x: (left + right) / 2 - dock.x, y: (top + bottom) / 2 - dock.y },
+  );
+  expect(hit).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(mainTip).toHaveCount(0);
+  await expect(dockTip).toHaveCount(0);
+
+  await pgm.getByRole('button', { name: /^Float / }).click();
+  await expect.poll(() => placement(page, 'pgm')).toMatchObject({ width: expect.any(Number) });
+  // Move away first so the main document receives a new pointerover even though the
+  // native pane is simulated by a separate browser window.
+  await page.mouse.move(1, 1);
+  await hideMonitors.hover();
+  await expect(mainTip).toHaveText(title);
+  await expect(dockTip).toHaveCount(0);
+});
+
 test('R-129 floats and redocks stable panel documents with one selection, draft and PVW session', async ({
   page,
 }) => {

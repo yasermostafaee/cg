@@ -5452,6 +5452,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN the operator detaches a panel THEN its window can move to another display and maximize there, and the other panels remain available in the main window.
 - WHEN a detached PGM or PVW is maximized THEN the window contains the monitor and its own controls. Layers and Inspector remain visible in their existing windows and use the same selection and draft.
 - WHEN PGM or PVW is maximized inside the main window THEN the existing R-111 controls remain available for docked companions. A separately detached Layers or Inspector panel retains its existing placement and a single interactive surface.
+- WHEN a main toolbar tooltip overlaps docked panels THEN its full text remains visible above those panels and the tooltip leaves panel controls clickable.
 - WHEN Inspector is detached and the operator clicks the already selected row again THEN the row remains selected and Inspector stays open. Selecting a different row updates that same Inspector.
 - WHEN the operator changes window or companion layout THEN active preview and monitor sound retain their state. No duplicate input or output preview is opened and no playout action is sent as a result of a layout change.
 - WHEN the operator chooses Exit floating THEN the same panel returns to its previous place in the main window, including its current state.

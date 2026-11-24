@@ -38,6 +38,7 @@ import {
   FloatingPanelSlot,
   FloatingPanelSurface,
   FloatingWorkspaceProvider,
+  WorkspaceTooltip,
 } from './features/workspace/floatingWorkspace.js';
 import type { FloatingPanelDocuments } from './features/workspace/floatingPanelDocuments.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
@@ -63,7 +64,6 @@ import { RefusalBanner } from './features/status/RefusalBanner.js';
 import { takeRefusalChannels } from './features/layers/takeRefusalLine.js';
 import { useFixedSlots } from './hooks/useFixedLayers.js';
 import { StatusBar } from './features/status/StatusBar.js';
-import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
 import { useEngineSessions } from './hooks/useEngineSessions.js';
 import { useBackupChannels } from './hooks/useBackupChannels.js';
@@ -836,7 +836,7 @@ export function App({
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
           by delegation — nothing new has to be wired, which is the point (see
           `ui/Tooltip.tsx`). */}
-        <Tooltip />
+        <WorkspaceTooltip />
         <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
         <StationSetupDialog
           open={stationSetup.open}

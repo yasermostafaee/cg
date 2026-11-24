@@ -17,5 +17,7 @@
 ## 3. Verification
 
 - [x] Test selecting the same row and a different row with Inspector detached in Windows Chromium.
+- [x] Verify main toolbar tooltips stay above intersecting docked panels in Chromium and WebView2.
+      The native smoke covered hover, keyboard focus, Escape and click-through.
 - [ ] Verify the packaged app on two physical displays with different scaling.
 - [ ] Record the carrying Linux Playwright result.

@@ -22,12 +22,13 @@ import {
 import type { ConfigurableShellLayout } from '../../hooks/useShellLayout.js';
 import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { PanelDocumentProvider } from '../../ui/PanelDocument.js';
-import { Tooltip } from '../../ui/Tooltip.js';
+import { Tooltip, type TooltipSurfaces } from '../../ui/Tooltip.js';
 import type { FloatingPanelDocuments } from './floatingPanelDocuments.js';
 
 interface FloatingWorkspace {
   documents: FloatingPanelDocuments;
   placements: FloatingPanelPlacements;
+  tooltipSurfaces: TooltipSurfaces;
   dockElement: (panel: FloatingPanelId, element: HTMLDivElement | null) => void;
   detach: (panel: FloatingPanelId) => void;
   redock: (panel: FloatingPanelId) => void;
@@ -40,6 +41,10 @@ const FloatingWorkspaceContext = createContext<FloatingWorkspace | null>(null);
 
 export function useFloatingWorkspace(): FloatingWorkspace | null {
   return useContext(FloatingWorkspaceContext);
+}
+
+export function WorkspaceTooltip(): JSX.Element {
+  return <Tooltip surfaces={useFloatingWorkspace()?.tooltipSurfaces} />;
 }
 
 function boundsOf(element: HTMLDivElement | null | undefined): FloatingPanelDock | null {
@@ -202,6 +207,41 @@ export function FloatingWorkspaceProvider({
           : {
               documents,
               placements: layout.floatingPanels,
+              tooltipSurfaces: (box) => {
+                // Docked WebViews paint over the main document regardless of CSS z-index.
+                // Draw the same bubble at the same physical position in each it crosses.
+                const scale = window.devicePixelRatio;
+                const left = box.left * scale;
+                const top = box.top * scale;
+                const right = left + box.width * scale;
+                const bottom = top + box.height * scale;
+                return FLOATING_PANEL_IDS.flatMap((panel) => {
+                  const request = sent.current.get(panel);
+                  const dock = request?.dock;
+                  const host = documents.panels.get(panel);
+                  if (
+                    host === undefined ||
+                    layout.floatingPanels[panel] !== undefined ||
+                    !request?.visible ||
+                    dock == null ||
+                    right <= dock.left ||
+                    bottom <= dock.top ||
+                    left >= dock.left + dock.width ||
+                    top >= dock.top + dock.height
+                  )
+                    return [];
+                  const localScale = host.window.devicePixelRatio;
+                  return [
+                    {
+                      key: panel,
+                      container: host.root.ownerDocument.body,
+                      left: (left - dock.left) / localScale,
+                      top: (top - dock.top) / localScale,
+                      scale: scale / localScale,
+                    },
+                  ];
+                });
+              },
               dockElement,
               detach: (panel) =>
                 layout.setFloatingPanel(
