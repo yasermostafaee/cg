@@ -1,6 +1,6 @@
 # Tasks — Upcoming Programs (D-219)
 
-Lane **FULL**. The change adds persisted authoring state and later reaches the programme output.
+Lane **FULL**. The change adds persisted authoring state and later reaches the program output.
 
 ## 1. Designer authoring and safe sample rehearsal
 
@@ -43,14 +43,14 @@ Lane **FULL**. The change adds persisted authoring state and later reaches the p
       including the default-off state and silence in Side by side, pause, focus changes and Out.
       Verify rehearsal-only `.vcg` and standalone HTML omit private rows and sole-use media and
       sounds while retaining authored settings and shared production assets. Map to **Edit, save
-      and rehearse local media and text**, **Audition and silence the focused programme in Designer**,
+      and rehearse local media and text**, **Audition and silence the focused program in Designer**,
       and **Export and play without test rows or assets**. Record local audio audition separately
       from PGM acceptance.
 - [x] 1.11 Verify independent title and airtime Auto/RTL/LTR controls, stable numeric-only airtime
       alignment in a real browser, and per-field inheritance for focused card text. Map to
       **Keep numeric and Persian airtime aligned while styling focus**. Verify save and export.
 - [x] 1.12 Verify Carousel row direction and each fixed focus slot across list boundaries, distinct
-      wrapped neighbours, and separate sizes and opacity. Map to **Use the chosen direction and
+      wrapped neighbors, and separate sizes and opacity. Map to **Use the chosen direction and
       fixed focus slot through a list boundary**. Verify focus order, Repeat, save and export.
 - [ ] 1.13 Verify the revised creation preset against **Create the new default and reopen an
       existing design**. Check drop placement, three cards, four-second dwell, one pass and
@@ -112,7 +112,7 @@ Lane **FULL**. The change adds persisted authoring state and later reaches the p
       entry in Project Assets and excluded its derived image from both visible selectors.
       Project package restart tests verified the video-to-poster link and ordinary image reuse.
 - [ ] 1.20 Verify **Move focus across three cards before entering the next group** and **Scale a
-      focused card above its neighbours independently of focus behavior**. Measure actual card and
+      focused card above its neighbors independently of focus behavior**. Measure actual card and
       slot bounds in Designer Rehearse. Check fixed-slot defaults on new and reopened legacy
       elements, both focus modes with overlap on and off, in-group scale and opacity duration,
       stable slot gap, overlap stacking, group boundary Next effect, partial final group and Repeat.
@@ -126,13 +126,42 @@ Lane **FULL**. The change adds persisted authoring state and later reaches the p
       title and airtime data and the separate display choice after save/reopen and Prepared export.
       Local Playwright verified all four independent selectors, focused Inherit and separate RTL
       alignment. Schema and Runtime tests verified legacy and focused inheritance behavior.
+- [ ] 1.22 Author and persist independent Entrance motion and Exit motion modes with their
+      stagger duration, interval and card order controls. Map real Designer Playwright and
+      focused runtime tests to **Stagger the first visible cards in the authored logical
+      order**, **Stagger normal Out and finish all cards before Content-driven Outro**, and
+      **Reopen and export independently authored card motion**. Verify visible Side by side
+      and Carousel cards animate in the chosen order, including RTL and partial groups.
+      Verify the effect duration and stagger interval independently, legacy Together behavior,
+      Next and focus movement without a second Entrance, Out during finite Exit, and quick Stop
+      canceling pending effects. Verify final delayed Exit before Content-driven completion in
+      the exported template runtime. Record the focused results and carrying green Linux E2E step.
+      Local Designer Playwright passed staggered Entrance, reverse-staggered Out, independent
+      Next, project save/reopen and playback from standalone HTML. Focused schema and runtime
+      suites verified legacy defaults, timing and partial groups, visibility-gated focus media,
+      Quick Stop and completion only after the last exit. The carrying Linux result is pending.
+- [ ] 1.23 Author and persist Exit then enter for Next motion with separate Current page exit and
+      Next page entrance effects, motion modes, durations, intervals and logical card orders.
+      Verify **Finish the current page's cards before entering the next page**, **Use Next motion
+      only when the displayed page changes**, and **Save, export and stop independent Next page
+      motion** in focused runtime and Designer Playwright. Cover last-to-first exit, first-to-last
+      entrance, independent durations and intervals, the phase handoff, manual Next and Previous,
+      automatic advance, Fixed Carousel, Across cards with in-group focus and a short final group,
+      Sequential, RTL order, and old and new focused video across the change. Cover normal Out and
+      Quick Stop during both phases, finite Content-driven completion, legacy Page effect, and
+      save/reopen and export. Record the full local gate and carrying green Linux E2E step.
+      Local Designer Playwright measured reverse outgoing cards, forward incoming cards, no
+      visible overlap at the handoff, independent scene boundaries and in-page focus hops. Focused
+      Runtime and Schema tests passed, including RTL order, short final groups, paused and queued
+      turns, Cut and Together phases, Out, Quick Stop and single focused-video ownership.
 
-## 2. Playout data and CG Control preparation
+## 2. Standalone CG Control preparation and Playout data
 
 - [ ] 2.1 Confirm a target Playout rundown contract for ordered eligible events, stable occurrences,
-      actual programme identity and updated timing. The owner confirmed on 2026-11-24 that the
+      actual program identity and updated timing. The owner confirmed on 2026-11-24 that the
       real API or file-delivery path is still undecided. Playout adapter integration and acceptance
-      depend on that contract, and the Designer and Prepared work can proceed independently.
+      depend on that contract. Designer Prepared and standalone CG Control manual preparation can
+      proceed independently.
 - [ ] 2.2 Add typed Bridge methods and schema for the normalized feed and the graphic's prepared
       payload. Use the active channel's authorized scope and pin fixture/adapter coverage.
 - [ ] 2.3 Add operator selection, independent count and page navigation, title/time overrides,
@@ -140,18 +169,40 @@ Lane **FULL**. The change adds persisted authoring state and later reaches the p
       reordered schedules and independent PVW/PGM state against the runtime spec scenarios.
 - [ ] 2.4 Localize the operator surfaces in English, Persian and Arabic and validate the two RTL
       interfaces in a real browser. Run the carrying Linux E2E with the new operator scenarios.
-- [ ] 2.5 Verify the CG Control source contract across the packaged Prepared list, the complete
-      Manual load/edit/replace path and Playout mode. Exercise explicit ready updates on the live
-      graphic, editing a stopped row, invalid source/media and a concurrent automation refresh. Map
-      to the source and update scenarios in `runtime-upcoming-programs`. Keep Playout adapter and
-      plant acceptance outstanding until the real target contract, media readiness and PGM are tested.
+- [ ] 2.5 Verify the CG Control source contract across packaged Prepared, Manual and Playout modes.
+      Exercise explicit ready updates on the live graphic, invalid source/media and a concurrent
+      automation refresh. Map to **Use Designer Prepared, operator Manual or the active Playout
+      list** and **Update prepared content live without restarting the graphic**. Complete Playout
+      adapter and plant acceptance against the real target contract, media readiness and PGM.
+- [x] 2.6 Implement standalone CG Control manual preparation per stack row. Start from a copy of
+      published Designer rows or an empty list, and allow add, remove, reorder and per-program
+      title, airtime and photo/video edits. Keep each stack row independent. Show the current
+      draft in browser Preview, confirm valid changes for the row's explicit Take and retain the
+      last confirmed list after canceled or unsuccessful edits. Localize this operator flow in
+      English, Persian and Arabic.
+- [ ] 2.7 Verify **Edit one stack row starting with the Designer Prepared list**, **Build an
+      empty stack row without Playout** and **Preview and confirm the draft without changing
+      program output** with CG Control Playwright. Cover two stack rows using the same
+      template, unapproved sample exclusion, mixed-direction titles and times, media and focused
+      playback, preview isolation after switching rows, and confirmation without a broadcast
+      command. Verify explicit Take uses the confirmed row and preview cannot replace an active
+      graphic. Record the full local gate and carrying green Linux E2E for the manual path.
+      The focused Bridge integration verified a missing upload preserves the last confirmed list,
+      off-air preparation sends zero AMCP, the resident UPDATE carrying the content hashes precedes
+      PLAY, on-air preparation is refused and Stop preserves the confirmed list. The template HTTP
+      server returned the uploaded poster and the requested video range. A refused resident UPDATE
+      prevented PLAY, and retry used the confirmed list.
+      The three CG Control browser cases passed locally, including PNG and moving WebM in PVW,
+      staged Take refusal, off-air Update, Discard, and isolation between two rows using the same
+      template. The empty Manual list cases verified the Persian and Arabic editor and media picker.
+      All 16 Designer Upcoming Programs browser regressions passed against the rebuilt renderer.
 
 ## 3. Pictures, excerpts, and audio
 
-- [ ] 3.0 Bind real programme data and prepared media into the authored regions. Rehearse the
-      full-screen and overlay compositions with the same programme payload.
+- [ ] 3.0 Bind real program data and prepared media into the authored regions. Rehearse the
+      full-screen and overlay compositions with the same program payload.
 
-- [ ] 3.1 Resolve authorised image/promo identities, preview/edit approved excerpt in/out, and
+- [ ] 3.1 Resolve authorized image/promo identities, preview/edit approved excerpt in/out, and
       resolve the provider and generated poster or fallback before Take. Preload motion for the
       expected focus and stills for other cards using the supported engine/asset path. Verify
       **Change media focus without overlapping motion or audio** for the accepted Prepared,

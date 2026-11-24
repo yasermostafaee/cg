@@ -1,8 +1,121 @@
 import { describe, expect, it } from 'vitest';
+import { readCgControl, withCgControl } from '../src/control-payload.js';
+import {
+  UPCOMING_PROGRAM_MEDIA_PATH_RE,
+  UpcomingProgramsOverridesSchema,
+  upcomingProgramMediaAssetId,
+  upcomingProgramMediaHash,
+  upcomingProgramMediaPath,
+  upcomingProgramsMediaHashes,
+  upcomingProgramsOverrideIssue,
+  type UpcomingProgramsTemplateMetadata,
+} from '../src/upcoming-programs-control.js';
 import {
   UpcomingProgramsCardStyleSchema,
   upcomingProgramsCardStyleOf,
 } from '../src/upcoming-programs.js';
+
+describe('Upcoming Programs Take data', () => {
+  const sha = 'a'.repeat(64);
+  const poster = 'b'.repeat(64);
+  const metadata: UpcomingProgramsTemplateMetadata = {
+    elements: [
+      { id: 'cards', name: 'Cards', layout: 'carousel', mediaVisible: true, preparedItems: [] },
+    ],
+    assets: [{ id: 'approved-photo', name: 'Approved photo', kind: 'image' }],
+  };
+  const overrides = UpcomingProgramsOverridesSchema.parse({
+    cards: [
+      {
+        id: 'one',
+        title: 'برنامه ۲',
+        airtime: '22:30',
+        mediaAssetId: upcomingProgramMediaAssetId(sha),
+        mediaKind: 'video',
+        posterAssetId: upcomingProgramMediaAssetId(poster),
+        url: 'https://untrusted.invalid/',
+      },
+      { id: 'two', title: 'دوم', mediaKind: 'image', mediaAssetId: 'approved-photo' },
+      {
+        id: 'third',
+        title: '',
+        mediaKind: 'image',
+        mediaAssetId: upcomingProgramMediaAssetId(poster),
+      },
+    ],
+  });
+
+  it('round trips only typed values and drops a malformed member independently', () => {
+    expect(readCgControl(withCgControl({}, { upcomingPrograms: overrides }))).toEqual({
+      upcomingPrograms: overrides,
+    });
+    expect(overrides.cards?.[0]).not.toHaveProperty('url');
+    expect(readCgControl({ __cg: { upcomingPrograms: { cards: [null] }, take: 'valid' } })).toEqual(
+      {
+        take: 'valid',
+      },
+    );
+    expect(
+      UpcomingProgramsOverridesSchema.safeParse({
+        cards: [overrides.cards?.[0], overrides.cards?.[0]],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('distinguishes allowed packaged and uploaded visuals without accepting URLs or audio', () => {
+    const uploaded = new Map([
+      [sha, 'video'],
+      [poster, 'image'],
+    ] as const);
+    expect(upcomingProgramsOverrideIssue(metadata, overrides, uploaded)).toBeUndefined();
+    expect(upcomingProgramsOverrideIssue(metadata, overrides, new Map())).toBe(
+      'upcoming-program-media-unavailable',
+    );
+    expect(
+      upcomingProgramsOverrideIssue(
+        metadata,
+        {
+          cards: [
+            {
+              id: 'one',
+              title: '',
+              mediaKind: 'image',
+              mediaAssetId: 'https://untrusted.invalid/',
+            },
+          ],
+        },
+        uploaded,
+      ),
+    ).toBe('upcoming-program-media-unavailable');
+    expect(
+      upcomingProgramsOverrideIssue(
+        metadata,
+        { cards: [{ id: 'one', title: '', audioAssetId: 'anything' }] },
+        uploaded,
+      ),
+    ).toBe('upcoming-programs-invalid');
+    expect(upcomingProgramsMediaHashes(overrides)).toEqual([sha, poster]);
+    expect(upcomingProgramMediaHash(upcomingProgramMediaAssetId(sha))).toBe(sha);
+    expect(upcomingProgramMediaHash('upcoming-media:../other')).toBeUndefined();
+    expect(upcomingProgramMediaPath(sha)).toMatch(UPCOMING_PROGRAM_MEDIA_PATH_RE);
+  });
+
+  it('lets the operator edit titles with validated dormant media behind a hidden aperture', () => {
+    expect(
+      upcomingProgramsOverrideIssue(
+        {
+          ...metadata,
+          elements: metadata.elements.map((element) => ({ ...element, mediaVisible: false })),
+        },
+        overrides,
+        new Map([
+          [sha, 'video'],
+          [poster, 'image'],
+        ]),
+      ),
+    ).toBeUndefined();
+  });
+});
 
 describe('Upcoming Programs card styling', () => {
   it('keeps legacy cards at their original size, opacity and direction defaults', () => {

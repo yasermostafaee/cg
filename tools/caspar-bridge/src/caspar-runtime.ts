@@ -100,14 +100,20 @@ import {
   isRetainedOnAir,
   operatorFieldUpdateRefusal,
   ownsLiveSeats,
+  upcomingProgramsMediaHashes,
+  upcomingProgramsOverrideIssue,
   withCgControl,
 } from '@cg/shared-schema';
-import type { CgPage } from '@cg/shared-schema';
+import type { CgPage, UpcomingProgramsOverrides } from '@cg/shared-schema';
 import { PageStore } from './page-store.js';
+import { createUpcomingMediaStore } from './upcoming-media-store.js';
+import { join } from 'node:path';
 import {
   bankForChannel,
   firstBank,
   fixedBanksSlots,
+  type UpcomingMediaGetRequest,
+  type UpcomingMediaPutRequest,
   FixedLayerBankSchema,
   LayerShortcutSettingsSchema,
   isLowBankLayer,
@@ -2605,6 +2611,10 @@ export class CasparRuntime {
   readonly #pageAdvance = new Map<string, StackItemPageAdvance>();
   /** `R-100` — the pictures operators loaded, kept by SHA-256 (see `page-store.ts`). */
   readonly #pages: PageStore;
+  readonly #upcomingMedia: ReturnType<typeof createUpcomingMediaStore>;
+  readonly #upcomingPrograms = new Map<string, UpcomingProgramsOverrides>();
+  readonly #preparingUpcoming = new Set<string>();
+  readonly #takingUpcoming = new Set<string>();
   /*
     🔴 `SELF-STOP-24` / `C-013` — **ITEM ID → THE TOKEN THAT NAMES ITS CURRENT TAKE.**
 
@@ -3291,12 +3301,16 @@ export class CasparRuntime {
     // `R-100` — a removed row's book leaves with it: its page number, and every picture no other
     // row names (the sweep reads the row as already gone).
     this.#pages = new PageStore(options.pagesDir ?? null);
+    this.#upcomingMedia = createUpcomingMediaStore(
+      options.pagesDir === undefined ? null : join(options.pagesDir, 'upcoming-media'),
+    );
     this.#reconciler.on('item-removed', (info) => {
       this.#pageIndexes.delete(info.itemId);
       this.#picturePageStops.delete(info.itemId);
       this.#pageRewinds.delete(info.itemId);
       this.#pageAdvance.delete(info.itemId);
       void this.#sweepPages(info.itemId);
+      if (this.#upcomingPrograms.delete(info.itemId)) this.#sweepUpcomingMedia();
     });
     // R-034 — same shape, same reason: the delimiter list is read from disk
     // before the WebSocket can answer a `delimiters.list`, so a bridge restart
@@ -3367,6 +3381,7 @@ export class CasparRuntime {
         (sha256) => this.#pages.read(sha256),
         // A current take may report page progress many times; unlike completion this does not spend it.
         (take, field, index) => this.#onTemplatePageState(take, field, index),
+        (sha256) => this.#upcomingMedia.read(sha256),
       );
     this.#config = config;
     this.#serveOverride = serveOverride;
@@ -3884,6 +3899,7 @@ export class CasparRuntime {
       maskPlacements: this.#maskPlacements.get(itemId),
       timingOverride: this.#passTimings.get(itemId),
       pages: this.#pageIndexes.get(itemId),
+      upcomingPrograms: this.#upcomingPrograms.get(itemId),
       pageAdvance: this.#pageAdvance.get(itemId),
       soundMuted: this.#soundMutes.get(itemId),
     };
@@ -4283,6 +4299,7 @@ export class CasparRuntime {
       const timingOverride = this.#passTimings.get(item.itemId);
       // `R-100` — the page each page list is on: the console's `12 / 300` reads it.
       const pages = this.#pageIndexes.get(item.itemId);
+      const upcomingPrograms = this.#upcomingPrograms.get(item.itemId);
       const managedBook = this.#managedBookMode(item);
       const pageRewinds = this.#pageRewinds.get(item.itemId);
       // The Auto/Manual choice beside that counter.
@@ -4350,6 +4367,7 @@ export class CasparRuntime {
         timingOverride === undefined &&
         // `R-100` — and the page number, for `timingOverride`'s reason, on the day it was added.
         pages === undefined &&
+        upcomingPrograms === undefined &&
         managedBook === undefined &&
         pageRewinds === undefined &&
         pageAdvance === undefined &&
@@ -4381,6 +4399,7 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
+        ...(upcomingPrograms !== undefined && { upcomingPrograms }),
         ...(managedBook !== undefined && { managedBook }),
         ...(pageRewinds !== undefined && { pageRewinds: [...pageRewinds] }),
         ...(pageAdvance !== undefined && { pageAdvance }),
@@ -5304,6 +5323,9 @@ export class CasparRuntime {
       // `R-100` — a book reopens on the page it was on, not page 1. A direct re-apply, like the
       // two above: no page turn is sent mid-restore.
       if (item.pages !== undefined) this.#pageIndexes.set(item.itemId, { ...item.pages });
+      if (item.upcomingPrograms !== undefined) {
+        this.#upcomingPrograms.set(item.itemId, item.upcomingPrograms);
+      }
       if (item.pageAdvance !== undefined) {
         this.#pageAdvance.set(item.itemId, { ...item.pageAdvance });
       }
@@ -7884,9 +7906,35 @@ export class CasparRuntime {
   }
 
   async take(itemId: string): Promise<TakeVerdict> {
-    const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
-      this.#takeImpl(itemId),
-    );
+    const verdict = await this.#audited('take', this.#itemDetail(itemId), async () => {
+      if (this.#preparingUpcoming.has(itemId)) {
+        return { accepted: false, errorCode: 'upcoming-programs-unapplied' };
+      }
+      const item = this.#reconciler.get(itemId);
+      const template = item === null ? null : this.#templateOfItem(itemId, item.templateId);
+      const upcoming = this.#upcomingForTemplate(itemId, template?.upcomingPrograms);
+      if (upcoming === undefined && template?.upcomingPrograms === undefined) {
+        return this.#takeImpl(itemId);
+      }
+      if (this.#takingUpcoming.has(itemId) || this.#ownsLiveSeats(itemId)) {
+        return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
+      }
+      if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+      this.#takingUpcoming.add(itemId);
+      try {
+        const issue =
+          upcoming === undefined
+            ? undefined
+            : await this.#upcomingIssue(template?.upcomingPrograms, upcoming);
+        if (issue !== undefined) return { accepted: false, errorCode: issue };
+        if (this.#templateOfItem(itemId, item.templateId) !== template) {
+          return { accepted: false, errorCode: 'upcoming-programs-invalid' };
+        }
+        return await this.#takeImpl(itemId);
+      } finally {
+        this.#takingUpcoming.delete(itemId);
+      }
+    });
     /*
       `B-225` — a row that is BACK ON AIR must leave the standing notice, and it leaves it
       here rather than in the restore verb: the operator's own take of a listed row is the
@@ -8714,6 +8762,12 @@ export class CasparRuntime {
           `[caspar-bridge] ${itemId}: no page on ${String(slot.channel)}-${String(slot.layer)} ` +
             `(CG UPDATE answered 403) — this take adds it\n`,
         );
+      } else if (!told.ok && told.upcoming === true) {
+        // Playing after a refused snapshot tell would air the previous program list.
+        const errorCode = told.errorCode ?? 'amcp-error';
+        this.#reconciler.applyAck(seq, false, errorCode);
+        this.#recordTakeRefusal(itemId, { code: errorCode });
+        return { accepted: false, errorCode, refusalOnRow: true };
       } else if (!told.ok && told.lookId !== undefined) {
         lookTellFailed = told.lookId;
       }
@@ -10136,6 +10190,82 @@ export class CasparRuntime {
     return read === null
       ? { ok: false, reason: 'no-page' }
       : { ok: true, base64: read.bytes.toString('base64'), mime: read.mime };
+  }
+
+  putUpcomingMedia(request: UpcomingMediaPutRequest) {
+    return this.#upcomingMedia.put(request);
+  }
+
+  getUpcomingMedia(request: UpcomingMediaGetRequest) {
+    return this.#upcomingMedia.get(request);
+  }
+
+  async prepareUpcomingPrograms(itemId: string, upcomingPrograms: UpcomingProgramsOverrides) {
+    const item = this.#reconciler.get(itemId);
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    if (this.#ownsLiveSeats(itemId) || this.#takingUpcoming.has(itemId)) {
+      return { accepted: false, errorCode: 'upcoming-programs-on-air' };
+    }
+    if (this.#preparingUpcoming.has(itemId)) {
+      return { accepted: false, errorCode: 'upcoming-programs-unapplied' };
+    }
+    const template = this.#templateOfItem(itemId, item.templateId);
+    if (this.#managedCg !== undefined || template?.upcomingPrograms === undefined) {
+      return { accepted: false, errorCode: 'upcoming-programs-invalid' };
+    }
+    this.#preparingUpcoming.add(itemId);
+    try {
+      const issue = await this.#upcomingIssue(template.upcomingPrograms, upcomingPrograms);
+      if (issue !== undefined) return { accepted: false, errorCode: issue };
+      if (
+        this.#reconciler.get(itemId)?.templateId !== item.templateId ||
+        this.#templateOfItem(itemId, item.templateId) !== template
+      ) {
+        return { accepted: false, errorCode: 'upcoming-programs-invalid' };
+      }
+      if (this.#ownsLiveSeats(itemId)) {
+        return { accepted: false, errorCode: 'upcoming-programs-on-air' };
+      }
+      this.#upcomingPrograms.set(itemId, {
+        ...this.#upcomingForTemplate(itemId, template.upcomingPrograms),
+        ...upcomingPrograms,
+      });
+      this.#markDirty(itemId);
+      this.#sweepUpcomingMedia();
+      return { accepted: true };
+    } finally {
+      this.#preparingUpcoming.delete(itemId);
+    }
+  }
+
+  async #upcomingIssue(
+    metadata: TemplateInfo['upcomingPrograms'],
+    upcomingPrograms: UpcomingProgramsOverrides,
+  ) {
+    if (metadata === undefined) return 'upcoming-programs-invalid';
+    const uploaded = new Map<string, 'image' | 'video'>();
+    await Promise.all(
+      [...upcomingProgramsMediaHashes(upcomingPrograms)].map(async (hash) => {
+        const mime = await this.#upcomingMedia.mimeOf(hash);
+        if (mime !== null) uploaded.set(hash, mime.startsWith('image/') ? 'image' : 'video');
+      }),
+    );
+    return upcomingProgramsOverrideIssue(metadata, upcomingPrograms, uploaded);
+  }
+
+  #upcomingForTemplate(itemId: string, metadata: TemplateInfo['upcomingPrograms']) {
+    const stored = this.#upcomingPrograms.get(itemId);
+    if (stored === undefined || metadata === undefined) return undefined;
+    const known = new Set(metadata.elements.map(({ id }) => id));
+    return Object.fromEntries(Object.entries(stored).filter(([id]) => known.has(id)));
+  }
+
+  #sweepUpcomingMedia(): void {
+    const keep = new Set<string>();
+    for (const upcomingPrograms of this.#upcomingPrograms.values()) {
+      for (const hash of upcomingProgramsMediaHashes(upcomingPrograms)) keep.add(hash);
+    }
+    void this.#upcomingMedia.sweep(keep).catch(() => undefined);
   }
 
   /**
@@ -14611,7 +14741,13 @@ export class CasparRuntime {
     itemId: string,
     slot: CommandSlot,
     framePlacements?: LiveFramePlacement[],
-  ): Promise<{ ok: boolean; lookId?: string; errorCode?: string; pageGone?: true }> {
+  ): Promise<{
+    ok: boolean;
+    lookId?: string;
+    errorCode?: string;
+    pageGone?: true;
+    upcoming?: true;
+  }> {
     const takeTemplateId = this.#reconciler.get(itemId)?.templateId;
     // `R-100` — the take tells a resident page its book's page too: the one helper, both routes.
     const control = {
@@ -14627,6 +14763,7 @@ export class CasparRuntime {
     if (!told.ok) {
       return {
         ok: false,
+        ...(Object.keys(control.upcomingPrograms ?? {}).length > 0 && { upcoming: true as const }),
         ...(lookId !== undefined && { lookId }),
         ...(told.errorCode !== undefined && { errorCode: told.errorCode }),
         // `DONGLE-RECOVER-01` — see `PAGE_NOT_ON_LAYER_CODE`: the primary has no CG producer there.
@@ -29284,9 +29421,18 @@ export class CasparRuntime {
     const soundMuted = this.#soundMutes.get(itemId);
     const plateFits = this.#plateFits.get(itemId);
     const maskPlacements = this.#maskPlacements.get(itemId);
+    const upcomingMetadata =
+      templateId === undefined
+        ? undefined
+        : this.#templateOfItem(itemId, templateId)?.upcomingPrograms;
+    const upcomingPrograms =
+      upcomingMetadata === undefined
+        ? undefined
+        : (this.#upcomingForTemplate(itemId, upcomingMetadata) ?? {});
     const shared: Omit<TakeControl, 'take'> = {
       ...(framePlacements !== undefined && { framePlacements }),
       ...(maskPlacements !== undefined && { maskPlacements }),
+      ...(upcomingPrograms !== undefined && { upcomingPrograms }),
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(plateFits !== undefined &&
         Object.keys(plateFits).length > 0 && {

@@ -1017,7 +1017,7 @@ export function hasEffectiveHoldDrivers(
  * R-021 stage 2b named).
  *
  * True when the scene contains a reachable, visible sequence with operator steps enabled.
- * Prepared Upcoming Programs may also step through their exported programme rows.
+ * Prepared Upcoming Programs may also step through their exported program rows.
  * Designer can opt in to preview-only rehearsal data.
  * The runtime dispatches `next()` to each scope's registered sequence drivers.
  *

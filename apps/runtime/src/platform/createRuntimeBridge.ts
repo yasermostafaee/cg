@@ -292,6 +292,8 @@ export function createMockBridge(): RuntimeBridge {
         Promise.reject(new Error('Layer profiles require a compatible CG Bridge.')),
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
       take: (req) => Promise.resolve(mock.take(req.itemId)),
+      prepareUpcomingPrograms: (req) =>
+        Promise.resolve(mock.prepareUpcomingPrograms(req.itemId, req.upcomingPrograms)),
       update: (req) =>
         Promise.resolve(
           mock.update(
@@ -605,6 +607,10 @@ export function createMockBridge(): RuntimeBridge {
     },
 
     // `R-100` — a book's pictures: test mode keeps them in this page's memory, checked as the bridge does.
+    upcomingMedia: {
+      put: (req) => mock.putUpcomingMedia(req),
+      get: (req) => Promise.resolve(mock.getUpcomingMedia(req.sha256)),
+    },
     pages: {
       put: (req) => mock.putPage(req.name, req.base64),
       get: (req) => Promise.resolve(mock.getPage(req.sha256)),

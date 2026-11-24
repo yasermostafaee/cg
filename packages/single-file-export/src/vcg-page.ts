@@ -11,7 +11,9 @@ import {
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CG_UPCOMING_PROGRAMS_PAGE_MARKER,
   managedStaticResumePageMarker,
+  upcomingProgramsTemplateMetadataOf,
   type AssetEntry,
   type Scene,
 } from '@cg/shared-schema';
@@ -44,10 +46,11 @@ export function buildVcgIndexHtml(
   const fontStyle = fontFaces === '' ? '' : `\n    <style>\n${fontFaces}\n    </style>`;
 
   const managedResume = managedStaticResumePageMarker(scene, runtimeJs);
+  const upcomingPrograms = upcomingProgramsTemplateMetadataOf(scene) !== undefined;
   return `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />${managedResume === '' ? '' : '\n    ' + managedResume}
+    <meta charset="utf-8" />${managedResume === '' ? '' : '\n    ' + managedResume}${upcomingPrograms ? '\n    ' + CG_UPCOMING_PROGRAMS_PAGE_MARKER : ''}
     ${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}
     ${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}
     ${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}

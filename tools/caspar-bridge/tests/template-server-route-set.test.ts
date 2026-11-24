@@ -62,13 +62,14 @@ async function serve(): Promise<number> {
     () => false,
     (sha) => Promise.resolve(sha === STORED ? { bytes: PNG, mime: 'image/png' } : null),
     () => false,
+    (sha) => Promise.resolve(sha === STORED ? { bytes: PNG, mime: 'image/png' } : null),
   );
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   return server.port;
 }
 
-describe('REPLY 1 §R3 — the template server hosts exactly four routes', () => {
-  it('🔴 the route table is EXACTLY these four, by name', () => {
+describe('REPLY 1 §R3 — the template server hosts exactly five routes', () => {
+  it('🔴 the route table is EXACTLY these five, by name', () => {
     /*
       🔴 IF THIS FAILS, READ `SECURITY.md` BEFORE CHANGING THE EXPECTATION.
 
@@ -94,10 +95,11 @@ describe('REPLY 1 §R3 — the template server hosts exactly four routes', () =>
       `POST ${TEMPLATE_COMPLETE_PATH}`,
       `POST ${TEMPLATE_PAGE_STATE_PATH}`,
       'GET /page/<sha256>[.<ext>]',
+      'GET /upcoming-media/<sha256>',
     ]);
   });
 
-  it('🔴 the table carries exactly FOUR KINDS — a route class cannot be added silently', () => {
+  it('🔴 the table carries exactly FIVE KINDS — a route class cannot be added silently', () => {
     /*
       🔴 `C-037` / ADR 0010 rule 13 — THE AXIS THE FORBIDDEN-PATH LIST CANNOT COVER.
 
@@ -116,9 +118,10 @@ describe('REPLY 1 §R3 — the template server hosts exactly four routes', () =>
       'page',
       'page-state',
       'template',
+      'upcoming-media',
     ]);
     // The positive control: the table is not empty, so the equality above is a real comparison.
-    expect(TEMPLATE_SERVER_ROUTES.length).toBe(4);
+    expect(TEMPLATE_SERVER_ROUTES.length).toBe(5);
   });
 
   it('each table entry declares one method, and no entry is a wildcard', () => {
@@ -198,6 +201,11 @@ describe('REPLY 1 §R3 — the template server hosts exactly four routes', () =>
       `/page/${'a'.repeat(64)}.png%00.html`,
       `/page/${'A'.repeat(64)}.png`,
       `/page/${'a'.repeat(63)}.png`,
+      '/upcoming-media',
+      '/upcoming-media/',
+      '/upcoming-media/%2e%2e/template/t1',
+      `/upcoming-media/${'a'.repeat(64)}.mp4`,
+      `/upcoming-media/${'b'.repeat(64)}`,
     ];
     for (const path of forbidden) {
       expect(await probe(port, 'GET', path), `GET ${path} is served by the template origin`).toBe(
@@ -209,7 +217,7 @@ describe('REPLY 1 §R3 — the template server hosts exactly four routes', () =>
     }
   });
 
-  it('the four real routes are reachable — so the 404s above are a refusal, not a dead server', async () => {
+  it('the live routes answer as declared', async () => {
     // The positive control. Without it "everything 404s" is satisfied by a server that serves
     // nothing at all, and the test above would pass over a broken boundary.
     const port = await serve();
@@ -223,6 +231,8 @@ describe('REPLY 1 §R3 — the template server hosts exactly four routes', () =>
     expect(await probe(port, 'GET', `/page/${STORED}.png`)).toBe(200);
     expect(await probe(port, 'GET', `/page/${STORED}`)).toBe(200);
     expect(await probe(port, 'POST', `/page/${STORED}.png`)).toBe(404);
+    expect(await probe(port, 'GET', `/upcoming-media/${STORED}`)).toBe(200);
+    expect(await probe(port, 'POST', `/upcoming-media/${STORED}`)).toBe(404);
   });
 
   it('🔴 a stored page comes back as the stored bytes, typed, never cached, never sniffed', async () => {

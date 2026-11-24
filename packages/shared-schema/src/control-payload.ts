@@ -6,6 +6,10 @@ import { FrameTransitionPhaseSchema, type FrameTransitionPhase } from './frame-t
 import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
 import { LiveMaskPlacementsSchema, type LiveMaskPlacement } from './mask-placement.js';
 import { PositionSchema, type Position } from './scene.js';
+import {
+  UpcomingProgramsOverridesSchema,
+  type UpcomingProgramsOverrides,
+} from './upcoming-programs-control.js';
 
 /** A generated output page advertises that it can reposition its resident stage. */
 export const CG_LIVE_POSITION_PAGE_MARKER = '<meta name="cg-live-position" content="1">';
@@ -239,6 +243,8 @@ export interface CgControl {
   page?: CgPage;
   /** A row-local Auto/Manual override for one page-list sequence. */
   pageAdvance?: CgPageAdvance;
+  /** A complete row snapshot for the next play. An empty object restores Prepared. */
+  upcomingPrograms?: UpcomingProgramsOverrides;
   /**
    * The look the row is showing NOW. The page enters it through its own `setActiveLook`, so
    * the visibility flip and the re-punch happen exactly where they already happened.
@@ -386,6 +392,10 @@ function validEffectId(id: unknown): id is string {
 
 function readCgControlMembers(raw: Record<string, unknown>): CgControl {
   const { look, take } = raw;
+  const upcomingPrograms =
+    raw['upcomingPrograms'] === undefined
+      ? undefined
+      : UpcomingProgramsOverridesSchema.safeParse(raw['upcomingPrograms']);
   const placements = LiveFramePlacementsSchema.safeParse(
     (raw as Record<string, unknown>)['framePlacements'],
   );
@@ -417,6 +427,7 @@ function readCgControlMembers(raw: Record<string, unknown>): CgControl {
       also discard a perfectly good count.
     */
     ...(typeof take === 'string' && take !== '' ? { take } : {}),
+    ...(upcomingPrograms?.success === true ? { upcomingPrograms: upcomingPrograms.data } : {}),
     ...readLiveFallback((raw as Record<string, unknown>)['liveFallback']),
     ...readPlateFits((raw as Record<string, unknown>)['plates']),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),

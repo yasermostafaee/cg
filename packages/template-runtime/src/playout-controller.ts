@@ -129,6 +129,8 @@ export interface PlayoutControllerOptions {
    * (after stop / a later cycle) are ignored via a hold token.
    */
   waitForContent?: (() => Promise<void> | null) | undefined;
+  /** A scope that may receive its first content at Take retains its authored no-content timing. */
+  emptyContentUsesTimedHold?: () => boolean;
   /**
    * D-125 §D6.2b — THE ELEMENT-OUTRO GATE (closes the Phase-2 auto-exit hole, tasks 7.6).
    * Called the moment an exit begins — `startOutro()` is where EVERY exit path converges:
@@ -630,7 +632,11 @@ export class PlayoutController {
         // timed hold of 0): a synchronous outro would let a zero-hold ROOT
         // settle — and cascade stop() — before its children even received the
         // play() cascade.
-        this.scheduleHold(0, () => this.startOutro());
+        const timedFallback = this.o.emptyContentUsesTimedHold?.() === true;
+        if (timedFallback && holdBehavior === 'loop') this.startHoldLoop();
+        this.scheduleHold(timedFallback ? (this.o.playout.holdMs ?? 0) : 0, () =>
+          this.startOutro(),
+        );
         return;
       }
       // Started AFTER `waitForContent()` so a zero-length hold above never opens one.

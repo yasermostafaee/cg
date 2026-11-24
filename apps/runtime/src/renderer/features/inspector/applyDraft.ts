@@ -6,17 +6,20 @@ import {
   type InputTransition,
   type Position,
   type StackItemState,
+  type UpcomingProgramsOverrides,
 } from '@cg/shared-schema';
 import { withChannelDefaults, type TemplateInfo } from '@cg/shared-ipc';
 import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
+import { feedback } from '../../i18n/locale.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
 import { frameTransitionPreference } from './frameTransitionPreference.js';
 import { inputTransitionRequest } from './inputTransitionPreference.js';
 import {
+  acceptUpcomingProgramsDraft,
   beginFramePlacementApply,
   beginMaskPlacementApply,
   beginPreviewCropApply,
@@ -37,6 +40,7 @@ import {
   snapshotPlateDraft,
   stageField,
   timingDraftOf,
+  upcomingProgramsDraftOf,
   type FieldPath,
   type PositionDraft,
 } from './draftStore.js';
@@ -67,6 +71,7 @@ export function applyDraft(
     | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
+  const upcoming = upcomingProgramsDraftOf(item.itemId);
   // Check the whole draft before any part of Update can change the row.
   const first = template === undefined ? undefined : operatorFieldRefusals(template, sent)[0];
   if (first !== undefined) {
@@ -141,6 +146,7 @@ export function applyDraft(
     awaits the one before it, and `ok` can only ever go from true to false.
   */
   const preflight: (() => Promise<boolean>)[] = [
+    ...(upcoming === undefined ? [] : [() => prepareUpcomingPrograms(item.itemId, upcoming)]),
     ...(plates.size === 0 ? [] : [(): Promise<boolean> => sendPlateAssignments(item, plates)]),
     position,
     timing,
@@ -183,7 +189,7 @@ export function applyDraft(
     noFieldDrafts &&
     bindingsPayload === undefined &&
     combinedPosition === undefined &&
-    (deferredPosition !== undefined || geometryUpdate)
+    (deferredPosition !== undefined || geometryUpdate || upcoming !== undefined)
       ? Promise.resolve({ accepted: true })
       : sendUpdate(
           item,
@@ -254,6 +260,28 @@ export function applyDraft(
       frame.finish();
       masks.finish();
     });
+}
+
+async function prepareUpcomingPrograms(
+  itemId: string,
+  upcomingPrograms: UpcomingProgramsOverrides,
+): Promise<boolean> {
+  try {
+    const result = await window.cg.stack.prepareUpcomingPrograms({ itemId, upcomingPrograms });
+    if (result.accepted) {
+      acceptUpcomingProgramsDraft(itemId, upcomingPrograms);
+      return true;
+    }
+    reportCommandError(
+      feedback(
+        errorCodeMessage(result.errorCode) ??
+          'The upcoming program list is not valid for this template.',
+      ),
+    );
+  } catch {
+    reportCommandError(feedback('Could not prepare the upcoming programs.'));
+  }
+  return false;
 }
 
 async function applyPreviewCropDrafts(

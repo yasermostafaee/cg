@@ -11,6 +11,8 @@ import {
   type Position,
   type PositionAnchor,
   type StackItemTimingOverride,
+  type UpcomingProgramsOverrides,
+  type UpcomingProgramsSampleItem,
 } from '@cg/shared-schema';
 
 /**
@@ -65,6 +67,7 @@ import {
 export type FieldPath = readonly string[];
 
 const drafts = new Map<string, FieldValues>();
+const upcomingProgramsDrafts = new Map<string, UpcomingProgramsOverrides>();
 /**
  * D-137 / C-015 — staged plate assignments, per item: `plateId → sourceId`,
  * where the EMPTY STRING is a real staged value meaning "not assigned".
@@ -798,6 +801,45 @@ export function draftsVersion(): number {
   return version;
 }
 
+export function upcomingProgramsDraftOf(itemId: string): UpcomingProgramsOverrides | undefined {
+  return upcomingProgramsDrafts.get(itemId);
+}
+
+export function effectiveUpcomingPrograms(
+  itemId: string,
+  applied: UpcomingProgramsOverrides | undefined,
+): UpcomingProgramsOverrides | undefined {
+  const draft = upcomingProgramsDraftOf(itemId);
+  return draft === undefined ? applied : { ...applied, ...draft };
+}
+
+export function stageUpcomingPrograms(
+  itemId: string,
+  elementId: string,
+  rows: UpcomingProgramsSampleItem[],
+  applied: readonly UpcomingProgramsSampleItem[],
+): void {
+  const next = { ...upcomingProgramsDraftOf(itemId) };
+  if (JSON.stringify(rows) === JSON.stringify(applied)) delete next[elementId];
+  else next[elementId] = rows;
+  if (Object.keys(next).length === 0) upcomingProgramsDrafts.delete(itemId);
+  else upcomingProgramsDrafts.set(itemId, next);
+  bump();
+}
+
+/** Preserve newer edits made while the Bridge was preparing this snapshot. */
+export function acceptUpcomingProgramsDraft(itemId: string, sent: UpcomingProgramsOverrides): void {
+  const current = upcomingProgramsDraftOf(itemId);
+  if (current === undefined) return;
+  const next = { ...current };
+  for (const [elementId, rows] of Object.entries(sent)) {
+    if (next[elementId] === rows) delete next[elementId];
+  }
+  if (Object.keys(next).length === 0) upcomingProgramsDrafts.delete(itemId);
+  else upcomingProgramsDrafts.set(itemId, next);
+  bump();
+}
+
 /** The value at `path`, or undefined when the path doesn't resolve to a leaf value. */
 export function valueAt(values: FieldValues | undefined, path: FieldPath): FieldValue | undefined {
   // `unknown` cursor: an image value `{ assetId }` is structurally assignable to the
@@ -1059,6 +1101,7 @@ export function isItemDirty(
    */
   appliedTiming?: StackItemTimingOverride | undefined,
 ): boolean {
+  if (upcomingProgramsDrafts.has(itemId)) return true;
   const item = drafts.get(itemId);
   if (item !== undefined) {
     for (const path of leafPaths(item)) {
@@ -1148,6 +1191,7 @@ export function buildOverlayPayload(applied: FieldValues, overlay: FieldValues):
 /** Drop every unapplied edit of an item on Discard. */
 export function clearDraft(itemId: string): void {
   const hadFields = drafts.delete(itemId);
+  const hadUpcoming = upcomingProgramsDrafts.delete(itemId);
   const hadPlates = plateDrafts.delete(itemId);
   // Session BM-2 — and the per-look composition. A Discard that left one behind would be an
   // unapplied edit the operator can no longer see, on a panel reporting itself clean.
@@ -1167,6 +1211,7 @@ export function clearDraft(itemId: string): void {
   const hadMaskPlacement = maskPlacementDrafts.delete(itemId);
   if (
     hadFields ||
+    hadUpcoming ||
     hadPlates ||
     hadLooks ||
     hadPosition ||
@@ -1331,6 +1376,7 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   // A removed row has no owner for drafts, applied practice framing or an outstanding receipt.
   for (const map of [
     drafts,
+    upcomingProgramsDrafts,
     plateDrafts,
     lookBindingDrafts,
     previewLookPins,
@@ -1360,6 +1406,7 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
 /** Test-only: wipe all drafts, every kind. */
 export function __resetDraftsForTest(): void {
   drafts.clear();
+  upcomingProgramsDrafts.clear();
   plateDrafts.clear();
   lookBindingDrafts.clear();
   previewLookPins.clear();

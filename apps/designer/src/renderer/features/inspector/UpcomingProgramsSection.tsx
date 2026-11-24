@@ -1,7 +1,6 @@
 import {
   upcomingProgramsDrivesHold,
   upcomingProgramsRepeatOf,
-  upcomingProgramsTransitionOf,
   upcomingProgramsUsesPagination,
   type UpcomingProgramsElement,
 } from '@cg/shared-schema';
@@ -11,14 +10,12 @@ import { CollapseSection } from './CollapseSection.js';
 import { CheckRow } from './DynamicDataSection.js';
 import { InfoTip } from './InfoTip.js';
 import { UpcomingProgramsCardSections } from './UpcomingProgramsCardSections.js';
-import { UpcomingProgramsMotionSection } from './UpcomingProgramsMotionSection.js';
+import {
+  UpcomingProgramsMotionSection,
+  UpcomingProgramsNextMotionFields,
+} from './UpcomingProgramsMotionSection.js';
 import { UpcomingProgramsTestData } from './UpcomingProgramsTestData.js';
 import { NumberField, SelectField } from './controls.js';
-import {
-  SEQUENCE_PRESET_ORDER,
-  SEQUENCE_TRANSITION_PRESETS,
-  sequencePresetKeyFor,
-} from './sequence-presets.js';
 
 export function UpcomingProgramsSection({
   element,
@@ -63,7 +60,7 @@ export function UpcomingProgramsSection({
         />
         <CheckRow
           label="Drive content hold"
-          title="In a Content-driven composition, complete the hold after the programmes finish so Auto-out can play the timeline Outro."
+          title="In a Content-driven composition, complete the hold after the programs finish so Auto-out can play the timeline Outro."
           checked={drivesHold}
           onChange={(drivesHold) => designerStore.setElementDrivesHold(element.id, drivesHold)}
         />
@@ -81,7 +78,7 @@ export function UpcomingProgramsSection({
             </p>
             <p>
               Starter artwork is for rehearsal. Choose project media and Prepared in Designer to
-              include the current programmes and assigned media when you export.
+              include the current programs and assigned media when you export.
             </p>
           </InfoTip>
         }
@@ -142,11 +139,6 @@ function PagingFields({
   element: UpcomingProgramsElement;
   update: (patch: Partial<UpcomingProgramsElement>) => void;
 }): JSX.Element {
-  const transition = upcomingProgramsTransitionOf(element);
-  const presetKey = sequencePresetKeyFor(transition);
-  const options = SEQUENCE_PRESET_ORDER.filter(
-    (preset) => preset.key !== 'custom' || presetKey === 'custom',
-  );
   const repeat = upcomingProgramsRepeatOf(element);
   return (
     <>
@@ -178,30 +170,7 @@ function PagingFields({
           }}
         />
       )}
-      <SelectField
-        label="Next effect"
-        options={options.map((preset) => preset.key)}
-        labels={options.map((preset) => preset.label)}
-        value={presetKey}
-        onCommit={(key) => {
-          const preset = SEQUENCE_TRANSITION_PRESETS[key];
-          if (preset !== undefined) update(preset);
-        }}
-      />
-      {presetKey !== 'cut' && (
-        <NumberField
-          label="Next effect duration"
-          value={transition.transitionMs / 1000}
-          min={0.05}
-          max={Number.MAX_SAFE_INTEGER / 1000}
-          step={0.05}
-          suffix="s"
-          onCommit={(seconds) => {
-            const transitionMs = Math.round(seconds * 1000);
-            if (Number.isSafeInteger(transitionMs) && transitionMs >= 50) update({ transitionMs });
-          }}
-        />
-      )}
+      <UpcomingProgramsNextMotionFields element={element} update={update} />
     </>
   );
 }

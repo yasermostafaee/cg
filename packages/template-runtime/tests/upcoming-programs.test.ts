@@ -1,10 +1,17 @@
 import {
   UpcomingProgramsElementSchema,
+  upcomingProgramMediaAssetId,
+  upcomingProgramMediaPath,
+  withCgControl,
   type Scene,
   type UpcomingProgramsElement,
 } from '@cg/shared-schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRuntime } from '../src/runtime.js';
+import {
+  provideUpcomingProgramMedia,
+  upcomingProgramVisualUrl,
+} from '../src/upcoming-program-media.js';
 import {
   createUpcomingProgramsDriver,
   renderUpcomingProgramsPage,
@@ -86,6 +93,322 @@ function rehearseUpcoming(authored: Scene) {
 function currentPage(): HTMLElement | null {
   return document.querySelector('[data-cg-upcoming-page]');
 }
+
+function motionCards(): HTMLElement[] {
+  return Array.from(
+    currentPage()?.querySelectorAll<HTMLElement>('[data-cg-upcoming-card-motion]') ?? [],
+  );
+}
+
+const stagedRows = [
+  { id: 'first', title: 'یک' },
+  { id: 'second', title: 'دو' },
+  { id: 'third', title: 'سه' },
+  { id: 'fourth', title: 'چهار' },
+  { id: 'last', title: 'پنج' },
+];
+
+describe('Upcoming Programs staged Next', () => {
+  it('clears all old cards in RTL logical order, then enters the new group and services a queued hop', async () => {
+    const { runtime } = rehearseUpcoming(
+      contentDrivenScene({
+        layout: 'carousel',
+        visibleCards: 2,
+        advance: 'manual',
+        sampleItems: stagedRows,
+        cardStyle: { carousel: { focusMovement: 'across', focusMotionMs: 0 } },
+        nextPageEffect: {
+          exit: {
+            edge: 'fade',
+            durationMs: 200,
+            stagger: { delayMs: 120, order: 'last-to-first' },
+          },
+          entrance: {
+            edge: 'fade',
+            durationMs: 100,
+            stagger: { delayMs: 180, order: 'first-to-last' },
+          },
+        },
+      }),
+    );
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(32);
+    const old = currentPage();
+    const [first, second] = motionCards();
+    expect(old?.dir).toBe('rtl');
+    await runtime.next?.();
+    expect(currentPage()).toBe(old);
+    expect(old?.dataset['cgUpcomingPage']).toBe('second');
+
+    await runtime.next?.();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(currentPage()).toBe(old);
+    expect(first?.style.opacity).toBe('');
+    expect(Number(second?.style.opacity)).toBeGreaterThan(0);
+    expect(Number(second?.style.opacity)).toBeLessThan(1);
+    expect(document.querySelector('[data-cg-upcoming-page="third"]')).toBeNull();
+    await runtime.next?.();
+    runtime.pause?.();
+    const frozen = second?.style.opacity;
+    await vi.advanceTimersByTimeAsync(600);
+    expect(second?.style.opacity).toBe(frozen);
+    runtime.resume?.();
+    await vi.advanceTimersByTimeAsync(245);
+    expect(old?.isConnected).toBe(false);
+    expect(currentPage()?.dataset['cgUpcomingPage']).toBe('third');
+    const [third, fourth] = motionCards();
+    expect(Number(third?.style.opacity)).toBeGreaterThan(0);
+    expect(Number(third?.style.opacity)).toBeLessThan(1);
+    expect(fourth?.style.visibility).toBe('hidden');
+    expect(document.querySelectorAll('[data-cg-upcoming-page]')).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(290);
+    expect(currentPage()?.dataset['cgUpcomingPage']).toBe('fourth');
+    expect(fourth?.style.opacity).toBe('');
+
+    await runtime.next?.();
+    // The partial tail needs only one entrance duration, not two slot delays.
+    await vi.advanceTimersByTimeAsync(450);
+    expect(currentPage()?.dataset['cgUpcomingPage']).toBe('last');
+    expect(motionCards()).toHaveLength(1);
+    expect(motionCards()[0]?.style.opacity).toBe('');
+    await runtime.next?.();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(document.querySelector('[data-cg-upcoming-page="first"]')).toBeNull();
+    runtime.remove();
+  });
+
+  it('cuts outgoing and begins a Together entrance without using the old Next effect', async () => {
+    const { runtime } = rehearseUpcoming(
+      contentDrivenScene({
+        advance: 'manual',
+        transitionIn: 'left',
+        nextPageEffect: {
+          exit: { edge: 'none', durationMs: 5000 },
+          entrance: { edge: 'fade', durationMs: 200 },
+        },
+      }),
+    );
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(32);
+    const old = currentPage();
+    await runtime.next?.();
+    const entering = currentPage();
+    expect(old?.isConnected).toBe(false);
+    expect(entering?.dataset['cgUpcomingPage']).toBe('sample-2');
+    expect(entering?.style.opacity).toBe('0');
+    expect(entering?.style.transform).toBe('');
+    await vi.advanceTimersByTimeAsync(230);
+    expect(entering?.style.opacity).toBe('');
+    runtime.remove();
+  });
+
+  it('pauses outgoing video before exit and waits for the incoming focused card to be visible', async () => {
+    const playing = new Set<HTMLMediaElement>();
+    vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2);
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      playing.add(this);
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      playing.delete(this);
+    });
+    const sample = (id: string) => ({
+      id,
+      title: id,
+      mediaKind: 'video' as const,
+      mediaAssetId: id,
+    });
+    const { runtime } = rehearseUpcoming(
+      contentDrivenScene({
+        layout: 'carousel',
+        visibleCards: 2,
+        advance: 'manual',
+        sampleItems: [
+          { id: 'first', title: 'one' },
+          sample('old'),
+          sample('new'),
+          { id: 'fourth', title: 'four' },
+        ],
+        cardStyle: {
+          media: { visible: true },
+          carousel: { focusMovement: 'across', focusMotionMs: 0 },
+        },
+        nextPageEffect: {
+          exit: { edge: 'fade', durationMs: 150 },
+          entrance: {
+            edge: 'fade',
+            durationMs: 100,
+            stagger: { delayMs: 250, order: 'last-to-first' },
+          },
+        },
+      }),
+    );
+    const focusedVideo = (): HTMLVideoElement => {
+      const video = currentPage()?.querySelector<HTMLVideoElement>(
+        '[data-cg-upcoming-focus] video',
+      );
+      if (video === null || video === undefined) throw new Error('Missing focused video');
+      Object.defineProperty(video, 'HAVE_CURRENT_DATA', { value: 2 });
+      video.dispatchEvent(new Event('loadeddata'));
+      return video;
+    };
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(32);
+    await runtime.next?.();
+    const old = focusedVideo();
+    expect(playing).toEqual(new Set([old]));
+    await runtime.next?.();
+    expect(playing.size).toBe(0);
+    await vi.advanceTimersByTimeAsync(190);
+    const incoming = focusedVideo();
+    expect(incoming).not.toBe(old);
+    expect(old.isConnected).toBe(false);
+    old.dispatchEvent(new Event('loadeddata'));
+    expect(playing.size).toBe(0);
+    await vi.advanceTimersByTimeAsync(260);
+    expect(playing).toEqual(new Set([incoming]));
+    runtime.remove();
+  });
+
+  it('keeps the partial old Together pose through Out and cancels a pending page on Quick Stop', async () => {
+    const { runtime, events } = rehearseUpcoming(
+      contentDrivenScene({
+        advance: 'manual',
+        repeat: 'infinite',
+        exitEffect: { edge: 'fade-left', durationMs: 200 },
+        nextPageEffect: {
+          exit: { edge: 'left', durationMs: 800 },
+          entrance: { edge: 'none' },
+        },
+      }),
+    );
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(32);
+    const old = currentPage();
+    await runtime.next?.();
+    await vi.advanceTimersByTimeAsync(260);
+    const partial = old?.style.transform;
+    expect(partial).toMatch(/^translate\(-/);
+    const out = runtime.out();
+    expect(old?.style.transform).toBe(partial);
+    await vi.advanceTimersByTimeAsync(850);
+    await out;
+    expect(currentPage()).toBe(old);
+    expect(events).toContain('out');
+    expect(document.querySelector('[data-cg-upcoming-page="sample-2"]')).toBeNull();
+
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(32);
+    expect(currentPage()).not.toBe(old);
+    await runtime.next?.();
+    await vi.advanceTimersByTimeAsync(180);
+    await runtime.stop();
+    await vi.advanceTimersByTimeAsync(950);
+    expect(document.querySelector('[data-cg-upcoming-page="sample-2"]')).toBeNull();
+    runtime.remove();
+  });
+});
+
+describe('Upcoming Programs on the Take wire', () => {
+  it('resolves hash media only from the Bridge route or its dedicated Preview host', () => {
+    const preview = document.implementation.createHTMLDocument();
+    Object.defineProperty(preview, 'URL', { value: 'about:srcdoc' });
+    const sha = 'a'.repeat(64);
+    const id = upcomingProgramMediaAssetId(sha);
+    provideUpcomingProgramMedia(sha, 'https://untrusted.invalid/video.webm', preview);
+    expect(upcomingProgramVisualUrl(preview, id, 'video', undefined)).toBeUndefined();
+    const local = 'data:video/webm;base64,AQIDBA==';
+    provideUpcomingProgramMedia(sha, local, preview);
+    expect(upcomingProgramVisualUrl(preview, id, 'video', undefined)).toBe(local);
+    expect(upcomingProgramVisualUrl(preview, id, 'image', undefined)).toBeUndefined();
+    expect(upcomingProgramVisualUrl(document, id, 'video', undefined)).toBe(
+      upcomingProgramMediaPath(sha),
+    );
+    expect(upcomingProgramVisualUrl(document, 'toString', 'image', {})).toBeUndefined();
+  });
+
+  it('populates an empty published template and replaces its active data only on Play', async () => {
+    const element = UpcomingProgramsElementSchema.parse({
+      ...upcoming,
+      layout: 'sequence',
+      advance: 'manual',
+      cardStyle: { media: { visible: true } },
+    });
+    const hashes = { video: 'a'.repeat(64), poster: 'b'.repeat(64) };
+    const first = [
+      {
+        id: 'same-program',
+        title: 'شروع 22',
+        airtime: 'ساعت ۲۲',
+        mediaKind: 'video' as const,
+        mediaAssetId: upcomingProgramMediaAssetId(hashes.video),
+        posterAssetId: upcomingProgramMediaAssetId(hashes.poster),
+      },
+      { id: 'next-program', title: 'برنامهٔ بعد' },
+    ];
+    const draft = [{ id: 'same-program', title: 'ویرایش در انتظار Take' }];
+    const runtime = createRuntime(
+      { ...scene, layers: [{ ...firstLayer, children: [element] }] },
+      { mode: 'output', skipFontLoad: true },
+    );
+    expect(currentPage()).toBeNull();
+    await runtime.update(withCgControl({}, { upcomingPrograms: { upcoming: first } }));
+    expect(currentPage()).toBeNull();
+    await runtime.play({});
+    expect(currentPage()?.textContent).toContain('شروع 22');
+    expect(currentPage()?.querySelector('video')?.getAttribute('src')).toBe(
+      upcomingProgramMediaPath(hashes.video),
+    );
+    expect(
+      currentPage()?.querySelector('[data-cg-upcoming-video-poster]')?.getAttribute('src'),
+    ).toBe(upcomingProgramMediaPath(hashes.poster));
+
+    await runtime.update(withCgControl({}, { upcomingPrograms: { upcoming: draft } }));
+    expect(currentPage()?.textContent).toContain('شروع 22');
+    await runtime.next?.();
+    expect(currentPage()?.textContent).toContain('برنامهٔ بعد');
+    await runtime.update(
+      withCgControl({}, { take: 'second-take', upcomingPrograms: { upcoming: draft } }),
+    );
+    expect(currentPage()?.textContent).toContain('برنامهٔ بعد');
+    await runtime.play({});
+    expect(currentPage()?.textContent).toContain('ویرایش در انتظار Take');
+
+    await runtime.play(withCgControl({}, { upcomingPrograms: {} }));
+    expect(currentPage()).toBeNull();
+    runtime.remove();
+  });
+
+  it('keeps a newly populated graphic in authored Content-driven Hold until its last step', async () => {
+    vi.useFakeTimers({
+      toFake: [
+        'performance',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'setTimeout',
+        'clearTimeout',
+      ],
+    });
+    const authored = contentDrivenScene({ sampleItems: [], advance: 'manual' });
+    const runtime = createRuntime(authored, { mode: 'output', skipFontLoad: true });
+    const out = vi.fn();
+    runtime.on('stop.start', out);
+    await runtime.play(
+      withCgControl({}, { upcomingPrograms: { upcoming: [{ id: 'one', title: 'Premiere' }] } }),
+    );
+    await vi.advanceTimersByTimeAsync(11000);
+    expect(out).not.toHaveBeenCalled();
+    expect(currentPage()?.textContent).toBe('Premiere');
+    await runtime.next?.();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(out).toHaveBeenCalledOnce();
+    runtime.remove();
+  });
+});
 
 describe('Upcoming Programs card layout', () => {
   const items = [
@@ -586,6 +909,7 @@ describe('Upcoming Programs authoring samples', () => {
     await vi.advanceTimersByTimeAsync(175);
     expect(currentPage()?.style.transform).toMatch(/^translate\(-/);
     expect(currentPage()?.querySelectorAll('[data-cg-upcoming-card]')).toHaveLength(2);
+    expect(motionCards()).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(400);
     expect(currentPage()?.style.transform).toBe('');
 
@@ -605,6 +929,168 @@ describe('Upcoming Programs authoring samples', () => {
     await vi.advanceTimersByTimeAsync(1100);
     await out;
     expect(events).toEqual(['out', 'stopped']);
+    runtime.remove();
+  });
+
+  it('stages the first Entrance and reverse Exit card by card while Next remains independent', async () => {
+    const { runtime, events } = rehearseUpcoming(
+      contentDrivenScene({
+        layout: 'carousel',
+        visibleCards: 3,
+        advance: 'manual',
+        repeat: 'infinite',
+        cardStyle: { carousel: { focusMovement: 'across', focusMotionMs: 0 } },
+        sampleItems: [
+          { id: 'first', title: 'یک' },
+          { id: 'second', title: 'دو' },
+          { id: 'third', title: 'سه' },
+        ],
+        entranceEffect: {
+          edge: 'fade',
+          durationMs: 120,
+          stagger: { delayMs: 180, order: 'first-to-last' },
+        },
+        exitEffect: {
+          edge: 'left',
+          durationMs: 160,
+          stagger: { delayMs: 220, order: 'last-to-first' },
+        },
+      }),
+    );
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(85);
+    const page = currentPage();
+    const [first, second, third] = motionCards();
+    expect(Number(first?.style.opacity)).toBeGreaterThan(0);
+    expect(Number(first?.style.opacity)).toBeLessThan(1);
+    expect(second?.style.visibility).toBe('hidden');
+    expect(third?.style.visibility).toBe('hidden');
+    expect(page?.style.opacity).toBe('');
+    await runtime.next?.();
+    await vi.advanceTimersByTimeAsync(180);
+    expect(currentPage()?.dataset['cgUpcomingPage']).toBe('first');
+    expect(first?.style.opacity).toBe('');
+    expect(Number(second?.style.opacity)).toBeGreaterThan(0);
+    expect(Number(second?.style.opacity)).toBeLessThan(1);
+    expect(third?.style.visibility).toBe('hidden');
+    await vi.advanceTimersByTimeAsync(275);
+    expect(currentPage()).toBe(page);
+    expect(currentPage()?.dataset['cgUpcomingPage']).toBe('second');
+    expect(motionCards()).toEqual([first, second, third]);
+    expect(motionCards().map((card) => card.style.visibility)).toEqual(['', '', '']);
+
+    const out = runtime.out();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(third?.style.transform).toMatch(/^translate\(-/);
+    expect(first?.style.transform).toBe('');
+    expect(second?.style.transform).toBe('');
+    await vi.advanceTimersByTimeAsync(330);
+    expect(third?.style.visibility).toBe('hidden');
+    expect(second?.style.visibility).toBe('hidden');
+    expect(first?.style.visibility).toBe('');
+    expect(events).toEqual([]);
+    await vi.advanceTimersByTimeAsync(250);
+    await out;
+    expect(first?.style.visibility).toBe('hidden');
+    expect(events).toEqual(['out']);
+    runtime.remove();
+  });
+
+  it('slides only the cards already in view when Out interrupts a staggered Entrance', async () => {
+    const { runtime, events } = rehearseUpcoming(
+      contentDrivenScene({
+        layout: 'grid',
+        entranceEffect: {
+          edge: 'left',
+          durationMs: 300,
+          stagger: { delayMs: 4000, order: 'first-to-last' },
+        },
+        exitEffect: {
+          edge: 'right',
+          durationMs: 160,
+          stagger: { delayMs: 4000, order: 'last-to-first' },
+        },
+      }),
+    );
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(140);
+    const [first, second] = motionCards();
+    expect(first?.style.transform).toMatch(/^translate\(-/);
+    expect(second?.style.visibility).toBe('hidden');
+    const out = runtime.out();
+    expect(first?.style.transform).toMatch(/^translate\(-/);
+    expect(second?.style.visibility).toBe('hidden');
+    await vi.advanceTimersByTimeAsync(510);
+    await out;
+    expect(events).toContain('out');
+    expect(second?.style.visibility).toBe('hidden');
+
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(130);
+    const fresh = motionCards();
+    expect(fresh[0]).not.toBe(first);
+    expect(fresh[1]?.style.visibility).toBe('hidden');
+    await runtime.stop();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(fresh[1]?.style.visibility).toBe('hidden');
+    runtime.remove();
+  });
+
+  it('keeps a delayed focused video parked until its staggered card is visible', async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2);
+    const { runtime } = rehearseUpcoming(
+      contentDrivenScene({
+        layout: 'carousel',
+        visibleCards: 2,
+        advance: 'manual',
+        repeat: 'infinite',
+        cardStyle: { media: { visible: true }, carousel: { focusPosition: 'start' } },
+        sampleItems: [
+          { id: 'video', title: 'Video', mediaKind: 'video', mediaAssetId: 'clip' },
+          { id: 'still', title: 'Still' },
+        ],
+        entranceEffect: {
+          edge: 'fade',
+          durationMs: 120,
+          stagger: { delayMs: 220, order: 'last-to-first' },
+        },
+      }),
+    );
+    await runtime.play({});
+    const video = currentPage()?.querySelector('video');
+    if (video === null || video === undefined) throw new Error('Expected a focused video');
+    Object.defineProperty(video, 'HAVE_CURRENT_DATA', { value: 2 });
+    video.dispatchEvent(new Event('loadeddata'));
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(260);
+    expect(play).toHaveBeenCalledOnce();
+    runtime.remove();
+  });
+
+  it('finishes the last staggered card before content-driven composition Outro', async () => {
+    const { runtime, events } = rehearseUpcoming(
+      contentDrivenScene({
+        layout: 'grid',
+        dwellMs: 100,
+        exitEffect: {
+          edge: 'fade',
+          durationMs: 160,
+          stagger: { delayMs: 500, order: 'last-to-first' },
+        },
+      }),
+    );
+    await runtime.play({});
+    await vi.advanceTimersByTimeAsync(770);
+    const [first, last] = motionCards();
+    expect(first?.style.visibility).toBe('');
+    expect(last?.style.visibility).toBe('hidden');
+    expect(events).toEqual([]);
+    await vi.advanceTimersByTimeAsync(550);
+    expect(first?.style.visibility).toBe('hidden');
+    expect(events).toEqual(['out']);
     runtime.remove();
   });
 

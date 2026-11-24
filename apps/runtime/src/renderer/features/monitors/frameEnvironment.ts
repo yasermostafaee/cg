@@ -50,6 +50,7 @@ export interface PageRuntimeWindow {
      * from the page route (`page-pictures-host.ts`). Absent on a page built before it.
      */
     providePagePicture?: (sha256: string, url: string) => void;
+    provideUpcomingProgramMedia?: (sha256: string, url: string) => void;
   };
 }
 

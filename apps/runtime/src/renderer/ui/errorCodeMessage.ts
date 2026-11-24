@@ -99,6 +99,10 @@ const MESSAGES: Readonly<Record<string, string>> = {
   // `FIELD-FIXES-01-A` Decision 2 — the row's own verb says it in the row's name
   // (`takeOnAirReason`); this is the same sentence for a surface that has no row to name.
   [TAKE_ON_AIR_CODE]: takeOnAirReason('That row'),
+  'upcoming-programs-unapplied': 'Apply the upcoming programs before Take.',
+  'upcoming-programs-on-air': 'Stop the row before preparing its upcoming programs.',
+  'upcoming-programs-invalid': 'The upcoming program list is not valid for this template.',
+  'upcoming-program-media-unavailable': 'The selected program media is unavailable.',
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
   // than transient failures, so neither suggests retrying: the answer will not change
   // until the CONFIG does.

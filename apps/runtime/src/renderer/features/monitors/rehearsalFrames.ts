@@ -13,6 +13,7 @@ import type {
   PositionAnchor,
   Raster,
   StackItemState,
+  UpcomingProgramsOverrides,
 } from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
@@ -38,6 +39,7 @@ export interface RehearsalSubject {
   canEditPosition?: boolean;
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
+  upcomingPrograms?: UpcomingProgramsOverrides | undefined;
   previewPlateCrops?: StackItemState['previewPlateCrops'];
   framePlacements?: StackItemState['framePlacements'];
   appliedFramePlacements?: StackItemState['framePlacements'];

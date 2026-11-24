@@ -108,6 +108,9 @@ import type {
   StackSnapshotChannel,
   StackStopAllChannel,
   StackTakeChannel,
+  StackPrepareUpcomingProgramsChannel,
+  UpcomingMediaGetChannel,
+  UpcomingMediaPutChannel,
   StackUpdateChannel,
   PlayoutLayerState,
   LiveLayerState,
@@ -472,6 +475,9 @@ export interface RuntimeBridge {
     take(
       req: ChannelRequest<typeof StackTakeChannel>,
     ): Promise<ChannelResponse<typeof StackTakeChannel>>;
+    prepareUpcomingPrograms(
+      req: ChannelRequest<typeof StackPrepareUpcomingProgramsChannel>,
+    ): Promise<ChannelResponse<typeof StackPrepareUpcomingProgramsChannel>>;
     update(
       req: ChannelRequest<typeof StackUpdateChannel>,
     ): Promise<ChannelResponse<typeof StackUpdateChannel>>;
@@ -989,6 +995,14 @@ export interface RuntimeBridge {
    * `R-100` — a book's pictures, sent to CG Bridge one at a time; it answers each one's SHA-256,
    * which the row's page list then names.
    */
+  upcomingMedia: {
+    put(
+      req: ChannelRequest<typeof UpcomingMediaPutChannel>,
+    ): Promise<ChannelResponse<typeof UpcomingMediaPutChannel>>;
+    get(
+      req: ChannelRequest<typeof UpcomingMediaGetChannel>,
+    ): Promise<ChannelResponse<typeof UpcomingMediaGetChannel>>;
+  };
   pages: {
     put(
       req: ChannelRequest<typeof PagesPutChannel>,

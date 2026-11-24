@@ -14,10 +14,12 @@ import {
   TextElementSchema,
   TickerElementSchema,
   UpcomingProgramsElementSchema,
+  UpcomingProgramsNextPageEffectSchema,
   UpcomingProgramsSceneEffectSchema,
   VideoElementSchema,
   VideoPlaceholderElementSchema,
   elementDigitsOf,
+  upcomingProgramsNextPageEffectOf,
   upcomingProgramsPreviewCanStep,
   upcomingProgramsSceneEffectsOf,
   upcomingProgramsTransitionOf,
@@ -1106,6 +1108,35 @@ describe('SequenceItem typed union — non-breaking widening (D-083)', () => {
 });
 
 describe('Upcoming Programs rehearsal', () => {
+  it('stores staged Next separately from scene boundaries and legacy transitions', () => {
+    const nextPageEffect = UpcomingProgramsNextPageEffectSchema.parse({
+      exit: { edge: 'none' },
+      entrance: {
+        edge: 'fade',
+        durationMs: 700,
+        stagger: { delayMs: 200, order: 'first-to-last' },
+      },
+    });
+    const element = UpcomingProgramsElementSchema.parse({
+      ...baseProps,
+      type: 'upcomingPrograms',
+      layout: 'carousel',
+      transitionIn: 'right',
+      entranceEffect: { edge: 'left' },
+      nextPageEffect,
+    });
+    expect(upcomingProgramsNextPageEffectOf({})).toBeUndefined();
+    expect(upcomingProgramsNextPageEffectOf(element)).toEqual({
+      exit: { edge: 'none', durationMs: 350 },
+      entrance: nextPageEffect.entrance,
+    });
+    expect(upcomingProgramsSceneEffectsOf(element).entrance.edge).toBe('left');
+    expect(upcomingProgramsTransitionOf(element).transitionIn).toBe('right');
+    expect(UpcomingProgramsNextPageEffectSchema.safeParse({ exit: { edge: 'fade' } }).success).toBe(
+      false,
+    );
+  });
+
   it('keeps legacy projects and Next effects independent of entrance and exit effects', () => {
     const legacy = UpcomingProgramsElementSchema.parse({
       ...baseProps,
@@ -1147,9 +1178,33 @@ describe('Upcoming Programs rehearsal', () => {
     );
   });
 
+  it('keeps independent stagger delays and order on the two boundary effects', () => {
+    const entranceEffect = UpcomingProgramsSceneEffectSchema.parse({
+      edge: 'left',
+      stagger: { delayMs: 125, order: 'first-to-last' },
+    });
+    const exitEffect = UpcomingProgramsSceneEffectSchema.parse({
+      edge: 'fade',
+      durationMs: 200,
+      stagger: { delayMs: 0, order: 'last-to-first' },
+    });
+    expect(upcomingProgramsSceneEffectsOf({ entranceEffect, exitEffect })).toEqual({
+      entrance: { ...entranceEffect, durationMs: 350 },
+      exit: exitEffect,
+    });
+    for (const delayMs of [-1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(
+        UpcomingProgramsSceneEffectSchema.safeParse({
+          edge: 'fade',
+          stagger: { delayMs, order: 'first-to-last' },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it('preserves local media identity and permits finishing a manual one-item pass', () => {
     const sampleItems = [
-      { id: 'sample-1', title: 'Programme', mediaAssetId: 'sample-video', mediaKind: 'video' },
+      { id: 'sample-1', title: 'Program', mediaAssetId: 'sample-video', mediaKind: 'video' },
     ];
     const element = UpcomingProgramsElementSchema.parse({
       ...baseProps,

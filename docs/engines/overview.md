@@ -103,10 +103,19 @@ the effect.
   child-composition scope per data row through the `wireScopeSubtree`
   factory — count at play, values live; pause-safe item entrance/exit motion uses the shared
   transition sampler and exits join the existing element-outro ledger),
-- **previews Upcoming Programs** using the dedicated authored element. The Designer canvas and
-  Rehearse enable its artwork and sample rows through an explicit boot option. The template
-  runtime reuses the sequence lifecycle for preview paging, and output pages leave sample rows
-  invisible.
+- **plays Upcoming Programs** through the dedicated authored element and shared sequence lifecycle.
+  The first visible page and the exiting page resolve their own Entrance and Exit effects. The
+  runtime animates either the page group or its cards at logical stagger offsets. A delayed card
+  exit joins the element's completion before the composition can start its Content-driven Outro.
+  Page changes use the shared sequence transition. The optional Exit then enter path samples two
+  independent card effects at that boundary and waits for the last outgoing card before starting
+  the incoming page. In-group focus changes keep their own effect targets.
+  Designer Canvas and Rehearse enable private rows and sample artwork through an explicit boot
+  option. CG Control PVW passes the selected stack row's current draft to its local runtime.
+  Confirmed manual lists are stored per stack row and reach the resident output page in the
+  explicit Take control payload. Playback snapshots the selected list for that run. In the absence
+  of a manual list, the output can use the Designer's published Prepared list. The Bridge serves
+  uploaded photos, videos and posters by a validated content hash from the template's own origin.
 - **positions frame-mapped media at the Designer playhead** — D-135: `tick(frame)`
   reaches every `LottieDriver` AND every `VideoDriver` (`positionAt`), so scrubbing AND
   explicit playhead-only modes animate a Lottie and a `<video>` on the canvas instead of

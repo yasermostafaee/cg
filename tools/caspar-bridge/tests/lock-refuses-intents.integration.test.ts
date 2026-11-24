@@ -215,6 +215,22 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     expect(presence.error).toBeUndefined();
     expect(presence.payload).toMatchObject({ engines: ['A'] });
 
+    const media = await ask(ws, frames, 'media', 'upcoming-media.get', { sha256: '0'.repeat(64) });
+    expect(media.error).toBeUndefined();
+    expect(media.payload).toEqual({ kind: 'missing' });
+
+    const upload = await ask(ws, frames, 'upload', 'upcoming-media.put', {
+      name: 'card.png',
+      mime: 'image/png',
+      base64: 'AAAA',
+    });
+    expectRefused(upload.error, 'upcoming-media.put while locked');
+    const prepare = await ask(ws, frames, 'prepare', 'stack.prepare-upcoming-programs', {
+      itemId: 'nope',
+      upcomingPrograms: {},
+    });
+    expectRefused(prepare.error, 'stack.prepare-upcoming-programs while locked');
+
     const wrong = await ask(ws, frames, 'w', 'lock.release', { pin: '9999' });
     expect(wrong.error, 'release must not be refused BY THE LOCK').toBeUndefined();
     expect(wrong.payload).toMatchObject({ ok: false, reason: 'pin-mismatch' });
@@ -394,6 +410,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'templates.thumbnail',
         // `R-102` — file-backed variables keep refreshing while the operator lock is active.
         'textSources.read',
+        // D-219: a locked console can still show the media for already prepared cards.
+        'upcoming-media.get',
         'update.state',
       ].sort(),
     );

@@ -1,12 +1,12 @@
 ## ADDED Requirements
 
-### Requirement: Load a complete programme list from the chosen source
+### Requirement: Load a complete program list from the chosen source
 
 CG Control SHALL support Prepared, Manual and Playout sources for Upcoming Programs. Prepared SHALL
 load the Designer-approved list and its selected assets from the template. Manual SHALL let the
 operator build an independent list or start from a copy of prepared content and edit its count,
 order, display title, airtime and selected media. Playout SHALL use the active playlist and
-programme-occurrence overrides. CG Control SHALL identify the active source and its readiness in
+program-occurrence overrides. CG Control SHALL identify the active source and its readiness in
 Preview. The source SHALL resolve to validated ordered rows consumed by the same graphic. A
 missing Prepared list or unavailable Playout source SHALL use the configured fallback and SHALL
 keep private Designer rehearsal data off air.
@@ -16,52 +16,99 @@ keep private Designer rehearsal data off air.
 - **WHEN** the operator chooses a source for Upcoming Programs in CG Control
 - **THEN** Prepared supplies the published Designer rows and Manual accepts the operator's complete
   authored list or edits based on a prepared copy
-- **AND** Playout supplies eligible future programme occurrences with their presentation overrides
+- **AND** Playout supplies eligible future program occurrences with their presentation overrides
   and media readiness
 - **AND** Preview identifies its actual source and handles missing or unusable data through the
   configured fallback
 
-### Requirement: Apply approved operator edits to the active graphic
+### Requirement: Prepare a manual program list per CG Control stack row
+
+CG Control SHALL let an operator prepare an ordered list of programs for a stack row containing
+Upcoming Programs without a Playout connection. The initial list for a stack row SHALL be a copy
+of its published Designer Prepared rows when available and an empty list otherwise. The operator
+SHALL be able to add, remove and reorder programs and independently edit each program's
+display title, optional display airtime and optional photo or video. The row's programs SHALL
+use the authored layout and lifecycle, with the number of editable entries independent of the
+number of visible cards. CG Control SHALL keep edits scoped to the selected stack row and preserve
+the published Designer content.
+
+#### Scenario: Edit one stack row starting with the Designer Prepared list
+
+- **WHEN** two stack rows use the same template with published Designer rows and the operator edits
+  one row's titles, airtimes, image and video selections and changes the program order
+- **THEN** the edited stack row has its own ordered program list
+- **AND** the other stack row and the packaged Designer list keep their original rows and media
+
+#### Scenario: Build an empty stack row without Playout
+
+- **WHEN** a stack row has no published Designer list and the operator prepares programs without
+  a Playout connection
+- **THEN** the editor starts empty and the operator can add, remove and reorder programs
+- **AND** the operator can edit every program even when there are more entries than visible cards
+- **AND** private Designer rehearsal rows and media do not appear in CG Control
+
+### Requirement: Preview and confirm a manual program draft before Take
+
+CG Control SHALL render the selected stack row's current draft in its browser preview using the
+authored layout, media frames and playback focus rules. A canceled edit or unsuccessful
+preparation SHALL keep the last confirmed list. A late preview result for a different row or
+draft SHALL leave the current preview intact. Confirming a valid draft with the Inspector's Update
+while the row is off air SHALL prepare a list for its next Take. The console SHALL require
+confirmation before it accepts Take with local program edits still staged. Draft edits, preview and confirmation SHALL leave
+program output unchanged. The normal explicit Take SHALL use the confirmed list and its media
+for the selected stack row.
+
+#### Scenario: Preview and confirm the draft without changing program output
+
+- **WHEN** the operator previews a draft with a revised title, airtime, photo and video
+- **THEN** CG Control shows the revised content in the authored layout with motion limited to the
+  active or focused card
+- **AND** canceling or failing to prepare a draft preserves the last confirmed list
+- **AND WHEN** the operator confirms a valid draft
+- **THEN** the confirmed list is ready for the selected row and program output remains unchanged
+- **AND WHEN** the operator uses the normal Take for that stack row
+- **THEN** Take uses only that row's confirmed list and media
+
+### Requirement: Apply approved operator updates to the active graphic
 
 CG Control SHALL let the operator prepare replacement rows or override display fields and media for
-the current show. Draft edits SHALL remain staged until explicitly applied. An authorised update
+the current show. Draft edits SHALL remain staged until explicitly applied. An authorized update
 with valid, prepared assets SHALL replace the data revision of the currently taken graphic without
-restarting it or taking a stopped row. Operator edits SHALL retain separately sourced programme or
+restarting it or taking a stopped row. Operator edits SHALL retain separately sourced program or
 package values as their base. A failed preparation SHALL leave the active graphic on its last safe
 revision. Editing SHALL remain independent of the event window and the current playlist position.
 
-#### Scenario: Update prepared content live and stage a stopped row for its next Take
+#### Scenario: Update prepared content live without restarting the graphic
 
 - **WHEN** the operator edits the title, airtime or media on a prepared row or supplies a replacement list
 - **THEN** the changes are available in Preview while PGM keeps its current data revision
 - **AND WHEN** the operator explicitly applies the ready changes to an active graphic
 - **THEN** that graphic shows the new revision without replaying its entrance or advancing Playout
-- **AND** a stopped row keeps the changes staged until its next Take
 
-### Requirement: Select upcoming programme occurrences from Playout
+### Requirement: Select upcoming program occurrences from Playout
 
-In Playout mode CG Control SHALL use eligible future programme occurrences in the selected channel
+In Playout mode CG Control SHALL use eligible future program occurrences in the selected channel
 and active playlist. It SHALL look after the relevant playlist anchor and preserve the order provided by
-Playout. Commercials, bumpers, graphics, cancelled or skipped items, and further segments of the
-programme being counted SHALL be excluded. Distinct occurrences SHALL keep separate identities even
+Playout. Commercials, bumpers, graphics, canceled or skipped items, and further segments of the
+program being counted SHALL be excluded. Distinct occurrences SHALL keep separate identities even
 when they use the same title or asset. The desired selection count SHALL be an operator-set positive
 integer independent of layout capacity, page and carousel focus. The UI SHALL report when fewer
-eligible programmes are available and present only the eligible occurrences it found. Overflow in a
+eligible programs are available and present only the eligible occurrences it found. Overflow in a
 grouped presentation SHALL be available in subsequent pages. Single SHALL display one card.
 
-#### Scenario: Select a programme count independently of layout
+#### Scenario: Select a program count independently of layout
 
-- **WHEN** the operator requests five future programmes with a card capacity of two and the playlist
-  contains programme segments, an advertisement, a cancelled entry and a graphics event
-- **THEN** the resulting selection contains the next five distinct eligible programme occurrences in
+- **WHEN** the operator requests five future programs with a card capacity of two and the playlist
+  contains program segments, an advertisement, a canceled entry and a graphics event
+- **THEN** the resulting selection contains the next five distinct eligible program occurrences in
   Playout order, skipping the listed ineligible entries
 - **AND** a multi-card paged layout can reach all five while rendering at most two at once
-- **AND** a shortage shows only the available programmes and states the shortfall
+- **AND** a shortage shows only the available programs and states the shortfall
 
-### Requirement: Override the presentation title and airtime per programme occurrence
+### Requirement: Override the presentation title and airtime per program occurrence
 
 CG Control SHALL let the operator see the source title and airtime and edit each corresponding display
-value independently. Title resolution SHALL prefer the operator's title, then a programme's editorial
+value independently. Title resolution SHALL prefer the operator's title, then a program's editorial
 short title, then its source title. Airtime SHALL support the source time, a literal custom label such
 as `ساعت ۲`, or hiding the time for that occurrence. A display override SHALL follow the stable occurrence across reorder, refresh
 or updated start time. Clearing a display override SHALL resume the source value if available.
@@ -70,10 +117,10 @@ source schedule unchanged. Preview SHALL show a newly received start time alongs
 label retained from the earlier schedule. Unusable or absent title and time SHALL be editable before take. The
 graphic SHALL follow the authored text fit when a long title remains and SHALL omit untrusted airtime.
 
-#### Scenario: Keep display overrides on the right programme after a schedule change
+#### Scenario: Keep display overrides on the right program after a schedule change
 
 - **WHEN** the operator shortens a title and sets a broadcast airtime for one occurrence and Playout
-  reorders that occurrence among programmes with similar or identical titles
+  reorders that occurrence among programs with similar or identical titles
 - **THEN** the new position shows the override for that occurrence without changing source metadata
 - **AND** clearing either override restores only its corresponding latest source value
 - **AND** the override is unavailable to a different occurrence using the same media
@@ -81,7 +128,7 @@ graphic SHALL follow the authored text fit when a long title remains and SHALL o
 ### Requirement: Prepare photo and video for playback
 
 For authored visual slots CG Control SHALL support an approved poster/photo, a separate promo clip,
-or a bounded excerpt of an eligible programme's media. Operators SHALL be able to preview and specify
+or a bounded excerpt of an eligible program's media. Operators SHALL be able to preview and specify
 the excerpt range before the take. The initial visible cards SHALL be preloaded before being
 marked ready. Readiness for a focused clip SHALL include a decoded opening frame on the intended
 output engine. Surrounding Carousel cards and every Side by side card SHALL require only a ready
@@ -93,20 +140,20 @@ transferring a clip while accepting the take. If an item cannot be decoded or is
 its readiness deadline, a prepared poster SHALL be available where possible, followed by a legible
 text-only card. The graphic SHALL preserve the authored size, fitting, clipping and position of
 visible media. Reusing the source file for an excerpt SHALL preserve the excerpt's audio tracks and
-leave the main programme asset and its editorial marks intact.
+leave the main program asset and its editorial marks intact.
 
 #### Scenario: Display prepared media with a poster or text fallback
 
-- **WHEN** the operator selects an image and a valid in/out excerpt for upcoming programme cards
+- **WHEN** the operator selects an image and a valid in/out excerpt for upcoming program cards
 - **THEN** preview shows the intended asset and segment in their authored frames
 - **AND** the first page is ready only when each visible card has prepared media or its selected fallback
 - **AND** a missing or unsupported clip plays no unprepared media and uses the ready poster or text
 
 ### Requirement: Keep motion and sound with the current media focus
 
-Prepared, Manual and Playout sources SHALL share the same focus rules in CG Control and programme
+Prepared, Manual and Playout sources SHALL share the same focus rules in CG Control and program
 output. Only the current Single or Sequential card or the focused Carousel card SHALL play video.
-Other visible cards SHALL render ready stills and remain silent. An authorised focus change SHALL
+Other visible cards SHALL render ready stills and remain silent. An authorized focus change SHALL
 pause the departing clip and silence its audio immediately, even during a simultaneous effect or
 when the incoming clip still needs its fallback. Only the newly focused and ready clip SHALL play
 motion and, when its mix policy permits, audio.
@@ -121,38 +168,38 @@ motion and, when its mix policy permits, audio.
 - **AND** Side by side shows generated posters for video sources without playing any video or promo sound
 - **AND** a legacy clip without a generated poster uses a decoded fixed frame or text
 
-### Requirement: Control the programme and promo audio independently
+### Requirement: Control the program and promo audio independently
 
 CG Control SHALL start Preview muted, with optional local-only listening. Secondary overlays SHALL
-leave programme audio in place and SHALL start with promo audio muted. The operator SHALL be able to
+leave program audio in place and SHALL start with promo audio muted. The operator SHALL be able to
 select the approved promo audio and its approved mix behavior when supported. A full-screen primary
 event SHALL use its configured silence or promo clip audio. With promo audio enabled, the current
 focus SHALL own that sound. The outgoing clip SHALL reach silence before the incoming clip
 becomes audible. The handoff SHALL restore the following item's
 expected audio policy without leaving a promo mixer override active. The Bridge SHALL use the
-authorised Playout contract for programme audio ownership.
+authorized Playout contract for program audio ownership.
 
 #### Scenario: Audition and air a promo without leaking audio
 
 - **WHEN** the operator enables local Preview listening on a video promo
-- **THEN** only the Preview sound changes and programme mixer gain remains unchanged
+- **THEN** only the Preview sound changes and program mixer gain remains unchanged
 - **AND WHEN** an overlay is taken with default settings
-- **THEN** the programme keeps its sound and promo media stays muted
+- **THEN** the program keeps its sound and promo media stays muted
 - **AND WHEN** an approved audio choice is taken and the graphic ends or is skipped
 - **THEN** playback follows that choice during the graphic, keeps non-focused clips silent and hands over
-  with the expected programme sound
+  with the expected program sound
 
-### Requirement: Play a secondary graphic over a host programme
+### Requirement: Play a secondary graphic over a host program
 
 A secondary Upcoming Programs event SHALL reference a host occurrence and stay within its permitted
 window. It SHALL support operator Preview and explicit Take, or a configured Playout trigger. It
-SHALL layer over the existing programme on CG-owned output. An authorised page change SHALL affect
+SHALL layer over the existing program on CG-owned output. An authorized page change SHALL affect
 the running graphic only. PVW pages, configuration edits and asset preparation alone SHALL leave PGM
 untouched. Stop or scheduled out SHALL remove the graphic's own resources within the host window.
 
-#### Scenario: Display the graphic on the current programme picture
+#### Scenario: Display the graphic on the current program picture
 
-- **WHEN** the operator previews and takes an overlay during the host programme
+- **WHEN** the operator previews and takes an overlay during the host program
 - **THEN** the same host picture continues behind the graphic until the overlay finishes
 - **AND** paging in Preview leaves PGM unaffected and paging the on-air overlay changes only its graphic
 - **AND** the overlay exits within the host window without advancing the main playlist
@@ -173,19 +220,19 @@ format, audio and event duration.
 
 #### Scenario: Play a full-screen playlist row and hand over on time
 
-- **WHEN** a full-screen Upcoming Programs row is scheduled between two programmes
+- **WHEN** a full-screen Upcoming Programs row is scheduled between two programs
 - **THEN** it plays as an independent primary for its own allotted duration
 - **AND** manual page navigation advances cards without starting the next playlist item
-- **AND** an early Content-driven Outro keeps the next programme's scheduled boundary intact
+- **AND** an early Content-driven Outro keeps the next program's scheduled boundary intact
 - **AND** the next scheduled item starts at its boundary even when pages remain or Repeat is infinite
 - **AND WHEN** the station accepts only file-based media primaries
 - **THEN** the prepared clip can occupy that same duration and has predictable encoded progression
 
 ### Requirement: Validate schedule revision and output readiness before take
 
-The operator SHALL be able to inspect the programme order, overrides, media fallback state, feed
+The operator SHALL be able to inspect the program order, overrides, media fallback state, feed
 freshness and readiness of each configured output in Preview. Changed input SHALL produce a new
-prepared revision for the next take. An authorised take SHALL use one coherent ready snapshot.
+prepared revision for the next take. An authorized take SHALL use one coherent ready snapshot.
 Automatic feed refreshes SHALL apply to future takes. The currently aired revision can change
 through an explicit validated operator update. Unavailable, invalid or stale input SHALL activate
 the configured fallback. An unsafe secondary SHALL stay off or finish its already taken safe
@@ -195,11 +242,11 @@ report the actual role/readiness and the As-Run result for verification.
 
 #### Scenario: Handle a changed or unavailable schedule at the take boundary
 
-- **WHEN** Playout reorders the upcoming programmes or an asset fails before the next take
+- **WHEN** Playout reorders the upcoming programs or an asset fails before the next take
 - **THEN** the next preparation shows the changed revision, readiness and valid fallback
 - **AND** once taken, the graphic keeps its prepared selection while automatic refreshes prepare
   independently and an operator can explicitly apply a ready revision
 - **AND WHEN** a fresh, safe take is unavailable
-- **THEN** overlay handling leaves programme picture and sound in place, and primary handling
+- **THEN** overlay handling leaves program picture and sound in place, and primary handling
   gives Playout its configured filler or skip with a timely handoff
 - **AND** no fallback airs private rehearsal or stale schedule data, an undefined picture or unintended audio

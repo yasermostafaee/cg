@@ -1,22 +1,22 @@
 ## Context
 
 The Designer authors and exports reusable `.vcg` compositions. CG Control prepares PVW in the browser,
-and explicit takes use the Bridge. The Playout system owns programme order, programme timing and the
-original programme audio. A library of playable clips alone cannot determine which programme is next.
+and explicit takes use the Bridge. The Playout system owns program order, program timing and the
+original program audio. A library of playable clips alone cannot determine which program is next.
 
 Viz Mosart distinguishes full-screen primary story elements from secondary overlays, and primary
 Autotake can advance the rundown at an item boundary. Viz Channel Branding maps playlist event metadata
 to text, image and video fields. Imagine Gallium shows the complementary option of rendering a promo to
 a regular video deliverable for transmission. [Viz Mosart rundown](https://docs.vizrt.com/viz-mosart-users-guide/5.11/Rundown_View.html) · [Viz Mosart template timing](https://docs.vizrt.com/viz-mosart-admin-guide/5.5/Template_Properties.html) · [Viz Channel Branding metadata](https://docs.vizrt.com/viz-channelbranding-guide/5.6/Dynamic_Content_from_Playlist_Metadata.html) · [Imagine Gallium](https://imaginecommunications.com/content/uploads/2025/11/ImagineComms-Gallium-Brochure-112025.pdf#page=5)
 
-## 1. Authoring and programme data
+## 1. Authoring and program data
 
 - Use a distinct schema element and Inspector. Keep scene placement, typography, style and layout in
   the composition and use the same renderer for Canvas, Preview and exported template runtime.
 - Single displays the first item of the selected feed. Side by side displays several equally weighted
   cards. Sequential displays one card per page. Carousel displays several cards with a single focus
   that moves around the selected list. Keep the authored number of visible slots independent of the
-  number of programme occurrences selected for a particular take.
+  number of program occurrences selected for a particular take.
 - Show airtime is an authored display setting. Sequential and Carousel have automatic or manual
   advance. Automatic dwell belongs to the graphic's progression and the scheduled event duration
   belongs to Playout. Changing pages operates inside the running scene.
@@ -52,36 +52,56 @@ a regular video deliverable for transmission. [Viz Mosart rundown](https://docs.
   and covers absent ordinary settings in saved projects. Inherit follows the corresponding ordinary
   role. Preserve the authored value in the project and in a Prepared export's data rows.
 - Carousel uses logical slot order. In Fixed, the focus keeps its authored Start, Center or End
-  slot. Wrap displayed neighbours to fill the available slots with unique items while retaining
-  programme order and the finite-pass boundary. Fixed remains the creation and stored fallback.
+  slot. Wrap displayed neighbors to fill the available slots with unique items while retaining
+  program order and the finite-pass boundary. Fixed remains the creation and stored fallback.
 - Across cards partitions the list into groups up to the visible capacity. The cards in each group
-  keep their slots while Next, Previous or Automatic advance moves focus across them in programme
+  keep their slots while Next, Previous or Automatic advance moves focus across them in program
   order. Apply authored scale and opacity over Focus move duration within the group. Use the Next
   effect for the change to a different group. A short final group keeps the remaining occurrences
-  in order and preserves the author's Repeat policy. Motion and authorised sound move immediately
+  in order and preserves the author's Repeat policy. Motion and authorized sound move immediately
   with the active focus.
 - Allow overlap is an independent Carousel setting and defaults off. When off, reserve enough room
   to keep card bounds disjoint, including during in-group focus animation. When on, calculate
-  stable slots independently of the focused scale and layer the focused card above neighbouring
+  stable slots independently of the focused scale and layer the focused card above neighboring
   cards. Scaling may cross their edges while their positions stay fixed.
 - Apply the refreshed broadcast card design only when inserting a new element. Preserve the
   established 1271 × 324 scene-pixel box at the author's drop position, three-card Carousel,
   four-second Automatic dwell and single pass. Keep stored appearance, editable rows and legacy
   fallbacks on reopen and import, including an intentionally empty list.
-- Reuse the shared SequenceDriver and existing Sequence effects for the authored Next effect.
-  The new-carousel preset slides in from the left and out to the right simultaneously. Authored
-  entry and exit directions, sequencing and duration apply when the page changes. Legacy elements
-  with absent transition settings still use Cut. Page effect duration, focus move duration, dwell
-  and the playlist occurrence duration each retain independent ownership.
-- Store the Upcoming Programs group's Entrance and Exit effects as optional settings with separate
-  durations. Animate the visible card group once at the beginning of its run and once when its
-  active run exits via normal Out or finite completion. Page transitions and focus changes keep
-  their own animation scope. The supplied Push right page preset has no group effects by default,
-  and absent settings keep existing graphics' behavior. Designer Rehearse exposes Out separately
-  from quick Stop. On finite completion, finish the group Exit before reporting that driver's
-  completion. The coordinator still waits on other drivers and the authored Exit delay before
-  the timeline Outro. Out shares the same in-flight Exit for the group. Quick Stop bypasses the
-  group effect and keeps the existing timeline Outro behavior.
+- Route actual page changes through the shared SequenceDriver. When `nextPageEffect` is absent,
+  Next motion uses Page effect with the existing direction, sequencing and duration settings.
+  New Carousel elements retain their simultaneous left/right slide preset. Legacy elements with
+  absent transition settings still use Cut.
+- Optional `nextPageEffect` stores separate Current page exit and Next page entrance settings.
+  Exit then enter uses the existing card-motion model independently for those phases, including
+  Together, Staggered cards, duration, interval and logical card order. Start the incoming phase
+  only after the last delayed outgoing card finishes. Pause the outgoing clip and sound as its page
+  starts leaving. Mount the incoming page at the handoff and gate video and approved sound on its
+  focused card becoming visible. Begin with two 300 ms fades, each with a 300 ms stagger interval,
+  outgoing last to first and incoming first to last. The first and last phases of the full run
+  keep their own authored settings.
+- Treat each actual change in Sequential or Fixed Carousel as a page change. In Across cards
+  Carousel, use Next motion only when navigation moves to a different visible group. Keep the
+  shared focus movement for steps within a group. Next motion, focus movement, dwell and the
+  playlist occurrence duration retain independent settings.
+- Store Entrance and Exit as optional phase settings with independent effects, modes and durations.
+  Together applies the effect to the visible page container and is the fallback for existing
+  settings. In Staggered cards mode, each visible card performs the phase effect in logical
+  display order or its reverse. The first card starts immediately and subsequent starts are
+  spaced by the authored interval. Each card runs for the same authored duration for that phase.
+  The stagger interval starts at the current phase duration when first enabled and can then
+  be adjusted independently. The default order is first to last for Entrance and last to first
+  for Exit. RTL changes where logical start appears on screen, and the selected order follows
+  that start. A missing effect runs no group or card animation.
+- The first visible page receives Entrance once per run. The last visible page at normal Out or
+  finite completion receives one Exit. Keep card-effect transforms separate from card placement,
+  focus movement and other page transition transforms. The supplied Push right page preset still starts
+  with Entrance and Exit disabled. Designer Rehearse exposes Out separately from quick Stop.
+  A finite completion waits for the last delayed Exit animation to settle before the driver
+  reports completion. The coordinator still waits on other drivers and the authored Exit delay
+  before the timeline Outro. Out during a page change cancels the pending handoff and starts the
+  run's Exit on the mounted page. Out during a run Exit shares that exit. Quick Stop cancels
+  running and pending card effects and keeps the existing timeline Outro behavior.
 - Repeat is a Designer-authored content timing default for Sequential and Carousel. The driver can
   wrap through the full selected list indefinitely or run a positive number of complete passes.
   New elements author one pass. Existing elements with missing repeat keep their infinite fallback.
@@ -111,7 +131,7 @@ a regular video deliverable for transmission. [Viz Mosart rundown](https://docs.
   video and its approved sound share the same playback owner.
 - Open the existing-style Test media modal to pick a Project Assets image or video. Use the normal
   Project Assets workflow to import or trim source media. The empty modal points to that workflow.
-  Confirming a selection assigns the existing asset to the initiating row. Cancelling preserves
+  Confirming a selection assigns the existing asset to the initiating row. Canceling preserves
   the row and its media selection.
 - On selection of an existing video, generate a reusable poster from the selected conformed clip
   through the existing poster decode path. Store the still with stable derivative metadata linking
@@ -135,15 +155,16 @@ a regular video deliverable for transmission. [Viz Mosart rundown](https://docs.
   the package asset closure. The typed Prepared payload contributes the approved list and
   the assets those rows reference. Production assets separately used elsewhere remain available.
 - Keep a common graphics payload for Prepared, Manual and Playout so all three sources use the
-  same layout and lifecycle. Prepared starts from the Designer package. Manual consists of CG Control
-  edits or a replacement list for the current show. Playout starts from the live automation source
-  and resolves per-occurrence presentation overrides. CG Control and the Bridge validate the source
-  and prepared media revision before any on-air use.
+  same layout and lifecycle. Prepared starts from the Designer package. CG Control owns manual
+  preparation per stack row, using a copy of the published list where available and an empty list
+  otherwise. The stage below covers manual preparation before Take. Playout starts from the live
+  automation source and resolves per-occurrence presentation overrides. CG Control and the Bridge
+  validate the source and prepared media revision before any on-air use.
 - For production, keep normalized records of channel, playlist and event occurrence identity, schedule
-  order, programme grouping and type, title, optional expected start, media reference, and snapshot
+  order, program grouping and type, title, optional expected start, media reference, and snapshot
   freshness. Anchor lookahead on the host occurrence for a secondary and on the full-screen event's
   own occurrence for a primary. Skip advertisements, junctions, repeat segments of the same show,
-  cancelled/skipped events and other graphics in that lookahead. Distinct scheduled occurrences of
+  canceled/skipped events and other graphics in that lookahead. Distinct scheduled occurrences of
   the same title or asset each retain their own identity. Keep local event overrides separate from the
   feed and resolve explicit display values before schedule metadata.
 - Confirm the authenticated Engine/automation contract and exact supported operations at integration
@@ -163,17 +184,40 @@ editable starter rows in Designer rehearsal. Prepared output uses assigned Proje
 
 Use case: photorealistic-natural. Generate a single precision-aligned contact sheet for three test stills in a premium English-language television network's schedule carousel. Canvas aspect approximately 3:1, three equal landscape images, edge-to-edge, exact borders at 1/3 and 2/3, no margins, dividers or text. Left: Morning Edition, sunlit Mediterranean waterfront city at golden dawn, warm pale sky and layered limestone architecture. Middle: The Night Report, sophisticated dark television news studio with silhouetted camera, diffuse teal light, city skyline visible behind glass, clean architectural composition. Right: Cities After Dark, elevated view of densely built city in deep blue twilight, electric gold streams of traffic and illuminated windows, editorial architectural photography. Realistic optical texture, natural colors, calm deliberate composition and legibility at small thumbnail size, no visible logos, graphics, signs, type, or watermark. The three panels are separate photos with clean hard cuts; do not blend the scenes.
 
-Use case: photorealistic-natural. Create a precision-aligned 2 by 2 contact sheet of four distinct high-end editorial television programme stills, equal quadrants with exact horizontal and vertical center cuts, no margin or overlap, canvas 3:2. Upper left: Into the Wild, a misty evergreen forest river and cool mountains shot on location at dawn. Upper right: The Long View, a distant astronomical observatory silhouette and a wide luminous indigo night sky with a natural Milky Way. Lower left: Studio Sessions, a warm and intimate recording studio, piano and vintage microphone with soft gold lights and subtle lens grain. Lower right: Coastline Stories, a drone's panorama of Atlantic breakers, green cliffs and a small lighthouse in cool afternoon sun. Photorealistic cinematography with distinct premium palettes, clear subjects legible at thumbnail size. Imagery all the way to each quadrant's edges. No text, type, logos, overlay or watermark.
+Use case: photorealistic-natural. Create a precision-aligned 2 by 2 contact sheet of four distinct high-end editorial television program stills, equal quadrants with exact horizontal and vertical center cuts, no margin or overlap, canvas 3:2. Upper left: Into the Wild, a misty evergreen forest river and cool mountains shot on location at dawn. Upper right: The Long View, a distant astronomical observatory silhouette and a wide luminous indigo night sky with a natural Milky Way. Lower left: Studio Sessions, a warm and intimate recording studio, piano and vintage microphone with soft gold lights and subtle lens grain. Lower right: Coastline Stories, a drone's panorama of Atlantic breakers, green cliffs and a small lighthouse in cool afternoon sun. Photorealistic cinematography with distinct premium palettes, clear subjects legible at thumbnail size. Imagery all the way to each quadrant's edges. No text, type, logos, overlay or watermark.
 
 </details>
 
-## 2. Prepare snapshots, media and sound
+## 2. Prepare a manual list in CG Control
+
+- Use the selected graphic's stack row as the edit and preview boundary. Initialize it from the
+  explicitly published Designer list when present, otherwise start empty. Let the operator add,
+  remove and reorder programs and edit each program's title, optional display airtime and
+  optional image or video. Keep each row's list independent, even when multiple stack rows use
+  the same template. Preserve the published template data as the source of its defaults.
+- Use the authored layout, media frames and focus rules to preview the draft in CG Control's
+  existing browser preview. Match preview results to the selected row and its current draft,
+  including when media preparation finishes after the operator switches rows. Keep invalid or
+  canceled changes from replacing the last confirmed version.
+- Use the Inspector's Update to confirm the validated list for an off-air stack row. The normal
+  explicit Take uses that version. A console with unapplied program edits asks the operator to
+  apply them before Take. Draft changes, preview and confirmation leave program output as it was. Use the
+  renderer's established still and text fallbacks for program cards with absent or unusable media.
+  Engine-specific readiness, live replacement and Playout integration keep their own acceptance.
+- For local photo or video attachments the console checks browser decoding before upload, then sends
+  the media through the control socket. The console derives a poster from the video and uploads it
+  as a still. The Bridge validates the actual media type and size and persists the bytes by their
+  content hash. Confirmed row data carries these references. The template fetches approved media
+  from the read-only same-origin media route. It can read ranges for video. AMCP carries only the
+  list and media references. The browser Preview reads its own copies through the control socket.
+
+## 3. Prepare scheduled snapshots, media and sound
 
 - Refresh the preparation against the latest complete schedule before a take. Preview shows the
   prepared revision and any changes to order, timing or readiness. Taking publishes one coherent
   selection with its overrides and resolved media. Freeze that selection through its display. Further
   automatic refreshes apply to the next prepared take and retain matching occurrence overrides. A
-  deliberate authorised operator update can apply a new ready revision to the active graphic without
+  deliberate authorized operator update can apply a new ready revision to the active graphic without
   taking or restarting it. Edits to an inactive graphic are staged for its next Take.
 - The operator can use a supplied poster or approved promo asset, choose an image, or mark an
   in/out excerpt on an available source. A Playout-side media worker cuts the chosen range with
@@ -187,14 +231,14 @@ Use case: photorealistic-natural. Create a precision-aligned 2 by 2 contact shee
   conformed clip before Take. A decoded fixed frame or text covers missing poster generation.
   In PVW, offer a ready poster or text version when a clip is still pending or cannot be used.
   File creation, transfer and initial decoding happen before Take.
-- Preview starts muted and listening is local. In an overlay, keep the programme sound by default.
+- Preview starts muted and listening is local. In an overlay, keep the program sound by default.
   The station's approved mix may add promo sound. On either air path, a Carousel passes promo
   audio only from the focused clip when enabled. Bring the outgoing clip to silence before raising
   the incoming clip, even during rapid manual steps. The full-screen row uses its configured
-  silence or focused clip audio. Restore the next programme's expected audio at the boundary and
+  silence or focused clip audio. Restore the next program's expected audio at the boundary and
   verify the transition on PGM.
 
-## 3. Playlist execution and fallback
+## 4. Playlist execution and fallback
 
 - A secondary event references its host occurrence and its trigger or offset. It consumes a graphics
   layer, with its end bounded by the host window. Updating its draft, auditioning or paging in PVW has
@@ -211,7 +255,7 @@ Use case: photorealistic-natural. Create a precision-aligned 2 by 2 contact shee
   and duration from the same reviewed snapshot. Operator confirms its identity and age before the file
   is scheduled. Re-render or reject a changed snapshot before airing the file. A rendered clip follows
   its encoded page progression for the scheduled slot.
-- With no usable next programme or with stale/unknown readiness, keep an overlay off or complete its
+- With no usable next program or with stale/unknown readiness, keep an overlay off or complete its
   current safe presentation. A failed primary follows Playout's preconfigured safe filler or skip policy.
   The failure path cleans up only the graphic's own resources and observes the same scheduling boundary.
-  Confirm the real primary A/B programme handoff, plus independent PVW/PGM and audio on the target plant.
+  Confirm the real primary A/B program handoff, plus independent PVW/PGM and audio on the target plant.

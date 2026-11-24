@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { UpcomingProgramsElementSchema } from '@cg/shared-schema';
+import { CG_UPCOMING_PROGRAMS_PAGE_MARKER, UpcomingProgramsElementSchema } from '@cg/shared-schema';
 import type { Scene } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 import { ExporterSingleFile } from '../src/exporter-single-file.js';
@@ -711,6 +711,8 @@ describe('ExporterSingleFile — D-128 Phase 5 video inlining', () => {
     expect(html).toContain(`"vid-1":"${expectedDataUri}"`);
     expect(html).not.toContain('vid-test');
     expect(html).not.toContain('sound-test');
+    expect(html.slice(0, 1024)).toContain(CG_UPCOMING_PROGRAMS_PAGE_MARKER);
+    expect(html).toContain("media-src data: 'self';");
     expect(issues.filter((issue) => issue.code === 'missing-asset')).toEqual([]);
   });
 
@@ -789,7 +791,8 @@ describe('ExporterSingleFile — D-128 Phase 5 video inlining', () => {
   it('the artifact CSP admits the inlined video (media-src data:) — the artifact must not block its own bytes', async () => {
     const { html } = await videoExporter().produce(sceneWithVideos('vid-1'));
     const csp = /Content-Security-Policy"\s*content="([^"]+)"/.exec(html)?.[1] ?? '';
-    expect(csp).toContain('media-src data:');
+    expect(csp).toContain('media-src data:;');
+    expect(html.slice(0, 1024)).not.toContain(CG_UPCOMING_PROGRAMS_PAGE_MARKER);
     expect(csp).toContain("default-src 'none'");
   });
 

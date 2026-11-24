@@ -1085,11 +1085,42 @@ export const UpcomingProgramsSampleItemSchema = z.object({
 });
 export type UpcomingProgramsSampleItem = z.infer<typeof UpcomingProgramsSampleItemSchema>;
 
+export const UpcomingProgramsItemsSchema = z
+  .array(UpcomingProgramsSampleItemSchema)
+  .superRefine((items, ctx) => {
+    const ids = new Set<string>();
+    items.forEach(({ id }, index) => {
+      if (ids.has(id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'id'],
+          message: 'Program item IDs must be unique',
+        });
+      }
+      ids.add(id);
+    });
+  });
+
 export const UpcomingProgramsSceneEffectSchema = z.object({
   edge: SequenceEdgeSchema,
   durationMs: z.number().int().positive().safe().optional(),
+  stagger: z
+    .object({
+      delayMs: z.number().int().nonnegative().safe(),
+      order: z.enum(['first-to-last', 'last-to-first']),
+    })
+    .optional(),
 });
 export type UpcomingProgramsSceneEffect = z.infer<typeof UpcomingProgramsSceneEffectSchema>;
+export type UpcomingProgramsResolvedSceneEffect = UpcomingProgramsSceneEffect & {
+  durationMs: number;
+};
+
+export const UpcomingProgramsNextPageEffectSchema = z.object({
+  exit: UpcomingProgramsSceneEffectSchema,
+  entrance: UpcomingProgramsSceneEffectSchema,
+});
+export type UpcomingProgramsNextPageEffect = z.infer<typeof UpcomingProgramsNextPageEffectSchema>;
 
 export const UpcomingProgramsElementSchema = ElementBaseSchema.extend({
   type: z.literal('upcomingPrograms'),
@@ -1107,28 +1138,14 @@ export const UpcomingProgramsElementSchema = ElementBaseSchema.extend({
   transitionMs: z.number().int().positive().safe().optional(),
   entranceEffect: UpcomingProgramsSceneEffectSchema.optional(),
   exitEffect: UpcomingProgramsSceneEffectSchema.optional(),
+  nextPageEffect: UpcomingProgramsNextPageEffectSchema.optional(),
   dataSource: z.enum(['rehearsal', 'prepared']).optional(),
   // Authored rows are local rehearsal data unless explicitly selected as prepared output.
-  sampleItems: z
-    .array(UpcomingProgramsSampleItemSchema)
-    .superRefine((items, ctx) => {
-      const ids = new Set<string>();
-      items.forEach(({ id }, index) => {
-        if (ids.has(id)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [index, 'id'],
-            message: 'Sample item ids must be unique',
-          });
-        }
-        ids.add(id);
-      });
-    })
-    .default([]),
+  sampleItems: UpcomingProgramsItemsSchema.default([]),
 });
 export type UpcomingProgramsElement = z.infer<typeof UpcomingProgramsElementSchema>;
 
-/** An authored programme graphic only participates in content-driven hold when enabled. */
+/** An authored program graphic only participates in content-driven hold when enabled. */
 export function upcomingProgramsDrivesHold(
   element: Pick<UpcomingProgramsElement, 'drivesHold'>,
 ): boolean {
@@ -1164,18 +1181,41 @@ export function upcomingProgramsTransitionOf(
   };
 }
 
-/** Resolve the outer effects independently of the transition between pages. */
-export function upcomingProgramsSceneEffectsOf(
-  element: Pick<UpcomingProgramsElement, 'entranceEffect' | 'exitEffect'>,
-): {
-  entrance: { edge: UpcomingProgramsSceneEffect['edge']; durationMs: number };
-  exit: { edge: UpcomingProgramsSceneEffect['edge']; durationMs: number };
-} {
-  const resolve = (effect: UpcomingProgramsSceneEffect | undefined) => ({
+interface UpcomingProgramsResolvedEffectPair {
+  entrance: UpcomingProgramsResolvedSceneEffect;
+  exit: UpcomingProgramsResolvedSceneEffect;
+}
+
+function resolveUpcomingProgramsEffect(
+  effect: UpcomingProgramsSceneEffect | undefined,
+): UpcomingProgramsResolvedSceneEffect {
+  return {
     edge: effect?.edge ?? 'none',
     durationMs: effect?.durationMs ?? 350,
-  });
-  return { entrance: resolve(element.entranceEffect), exit: resolve(element.exitEffect) };
+    ...(effect?.stagger !== undefined && { stagger: effect.stagger }),
+  };
+}
+
+/** Resolve the scene boundaries independently of transitions between pages. */
+export function upcomingProgramsSceneEffectsOf(
+  element: Pick<UpcomingProgramsElement, 'entranceEffect' | 'exitEffect'>,
+): UpcomingProgramsResolvedEffectPair {
+  return {
+    entrance: resolveUpcomingProgramsEffect(element.entranceEffect),
+    exit: resolveUpcomingProgramsEffect(element.exitEffect),
+  };
+}
+
+/** The explicit serial page turn, with the ordinary Next effect as the fallback. */
+export function upcomingProgramsNextPageEffectOf(
+  element: Pick<UpcomingProgramsElement, 'nextPageEffect'>,
+): UpcomingProgramsResolvedEffectPair | undefined {
+  const { nextPageEffect } = element;
+  if (nextPageEffect === undefined) return undefined;
+  return {
+    entrance: resolveUpcomingProgramsEffect(nextPageEffect.entrance),
+    exit: resolveUpcomingProgramsEffect(nextPageEffect.exit),
+  };
 }
 
 /** Preview accepts blank editing rows without turning them into visible cards. */

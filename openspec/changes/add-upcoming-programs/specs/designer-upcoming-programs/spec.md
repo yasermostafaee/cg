@@ -31,7 +31,7 @@ background and border color. The title and airtime SHALL each have independent p
 font sizes, colors and alignments. The optional photo/video region SHALL have its own position,
 size and fitting choice. Designer SHALL visualize an enabled region with a preview-only placeholder
 even without a media feed and keep disabled media frames absent. Saved projects and exported
-templates SHALL preserve the authored design. The programme output SHALL never render the Designer
+templates SHALL preserve the authored design. The program output SHALL never render the Designer
 placeholder. Previously authored card and text values SHALL remain in force on older elements.
 
 #### Scenario: Style the cards and align title, airtime and media independently
@@ -134,12 +134,12 @@ as typed and SHALL be used when a saved ordinary setting is absent. A focused fi
 offer Inherit, which resolves its corresponding ordinary choice. Digit shaping SHALL apply only to
 the rendered title or airtime. Direction, alignment and stored data SHALL retain their independent
 values. Saved projects and approved Prepared exports SHALL preserve the authored digit settings and
-the literal programme titles and airtimes.
+the literal program titles and airtimes.
 
 #### Scenario: Choose different digit sets for ordinary and focused title and airtime
 
 - **WHEN** the author sets ordinary Title Digits to Latin, ordinary Airtime Digits to Persian, and
-  focused Title Digits to Arabic-Indic in a Carousel with mixed-digit programme text
+  focused Title Digits to Arabic-Indic in a Carousel with mixed-digit program text
 - **THEN** each ordinary role displays its selected digits and the focused title uses Arabic-Indic
 - **AND** focused airtime uses the ordinary Persian choice while set to Inherit
 - **AND** Keyboard displays the original mixed digits with the authored direction and alignment
@@ -153,17 +153,17 @@ be the default for new elements and when the saved setting is absent. In Fixed m
 SHALL be able to choose a Start, Center or End focus slot in the logical row direction. The author
 SHALL be able to set scale and opacity separately for ordinary and focused cards. During navigation
 or timed advance in Fixed, the focused card SHALL remain in the chosen slot, including when the
-first or last programme is focused. Displayed neighbours SHALL wrap without duplicates when cards
-are available. The focused sequence SHALL follow programme order and the authored Repeat policy.
+first or last program is focused. Displayed neighbors SHALL wrap without duplicates when cards
+are available. The focused sequence SHALL follow program order and the authored Repeat policy.
 Saved projects and exported templates SHALL preserve these choices.
 
 #### Scenario: Use the chosen direction and fixed focus slot through a list boundary
 
 - **WHEN** the author selects a row direction and a Start, Center or End focus slot in Fixed mode
-  and steps through the first and last programme in a Carousel
+  and steps through the first and last program in a Carousel
 - **THEN** the same logical slot contains the focused card at every step and the row follows the
   configured direction
-- **AND** the visible neighbours fill available slots with distinct programme occurrences
+- **AND** the visible neighbors fill available slots with distinct program occurrences
 - **AND** the focused and ordinary cards use their separately authored sizes and opacity
 - **AND** advancing after the last item follows the authored Repeat policy
 
@@ -171,37 +171,37 @@ Saved projects and exported templates SHALL preserve these choices.
 
 Carousel SHALL offer Across cards as a Focus behavior. Across cards SHALL show consecutive groups
 up to the authored visible card count. Next, Previous and Automatic advance SHALL traverse the
-cards inside the displayed group in programme order without moving their slot anchors. The focus
+cards inside the displayed group in program order without moving their slot anchors. The focus
 SHALL apply the separately authored scale and opacity using Focus move duration. The authored
 Next effect SHALL apply when entering a different group. The final partial group SHALL use its
-remaining programmes in order and the author's finite or infinite Repeat behavior SHALL continue
+remaining programs in order and the author's finite or infinite Repeat behavior SHALL continue
 to apply. Video and allowed sound SHALL transfer immediately to the active focus. Saved projects
 and exported templates SHALL preserve the behavior and duration.
 
 #### Scenario: Move focus across three cards before entering the next group
 
-- **WHEN** the author rehearses a Carousel of seven programmes with Across cards and capacity three
+- **WHEN** the author rehearses a Carousel of seven programs with Across cards and capacity three
 - **THEN** focus starts on the first card and the next two advances move it to the center and last
   card of that same group in logical row order
 - **AND** the same cards retain their slot anchors while focus scale and opacity animate
-- **AND** neighbouring slots retain the authored spacing and only the newly focused card can play video
+- **AND** neighboring slots retain the authored spacing and only the newly focused card can play video
 - **AND** the next advance uses the Next effect to show the next group, starting at its first card
 - **AND** Previous can return through an earlier group and the final group contains the last remaining
-  programme without repeating earlier cards within the same pass
+  program without repeating earlier cards within the same pass
 
-### Requirement: Allow the focused Carousel card to overlap its neighbours
+### Requirement: Allow the focused Carousel card to overlap its neighbors
 
 Designer SHALL offer Allow overlap independently of Focus behavior, defaulting to off for new and
 older elements. With Allow overlap off, the Carousel SHALL keep adjacent cards disjoint while
 scaling. With Allow overlap on, the focused card SHALL be allowed to scale over adjacent cards
-while their slot anchors stay fixed. The focused card SHALL appear above its neighbours where
+while their slot anchors stay fixed. The focused card SHALL appear above its neighbors where
 their bounds intersect. Saved projects and exported templates SHALL preserve the choice.
 
-#### Scenario: Scale a focused card above its neighbours independently of focus behavior
+#### Scenario: Scale a focused card above its neighbors independently of focus behavior
 
 - **WHEN** the author enables Allow overlap in Fixed or Across cards and increases the focused scale
   enough for the visible bounds to intersect
-- **THEN** the focused card appears above its neighbours and their slot anchors stay in place
+- **THEN** the focused card appears above its neighbors and their slot anchors stay in place
 - **AND** setting Allow overlap off keeps the card bounds disjoint
 - **AND** reopening an older project with these options absent uses Fixed focus with overlap disabled
 
@@ -231,14 +231,28 @@ Prepared preview and exported playback SHALL show only assigned media and the co
 
 ### Requirement: Author Next effects for paged Upcoming Programs layouts
 
-Sequential and Carousel SHALL offer authored Next effects using the shared Sequence transition
-controls. The new Carousel creation preset SHALL use its authored slide effect, while older
-elements with no transition settings SHALL keep Cut. The author SHALL be able to adjust the entry
-and exit effects, their sequencing and the duration for effects that animate. Designer rehearsal
-SHALL apply the selected effect when manual navigation or automatic dwell changes the displayed
-page. Across cards uses Focus move duration for movement within a group and Next effect when the
-group changes. Saving and exporting SHALL preserve the effect and duration alongside the separate
-dwell setting.
+Sequential and Carousel SHALL offer Next motion with Page effect and Exit then enter. Page effect
+SHALL preserve the shared Sequence transition controls, including the entry and exit effects,
+sequencing and duration. Newly inserted Carousel elements SHALL use their authored slide preset.
+Older elements SHALL use their authored Page effect if the new setting is absent and SHALL keep
+Cut if they have no transition settings.
+
+Exit then enter SHALL offer separate Current page exit and Next page entrance effects. Each
+phase SHALL support Together or Staggered cards with its own effect and duration. For staggered
+motion, the duration SHALL apply to each card, and the author SHALL be able to set the start
+interval and First to last or Last to first logical order for each phase. Enabling the new mode
+SHALL start with 0.3-second per-card fades and 0.3-second intervals, using last-to-first Exit and
+first-to-last Entrance. All visible outgoing card effects SHALL finish before the incoming page
+starts entering. Card order SHALL follow the page's logical display direction in LTR and RTL.
+The selected movement edges retain their physical directions. Outgoing motion media and audio
+SHALL pause at the start of its page's exit. The incoming focused clip SHALL wait for its card
+to start appearing before playing video or any approved sound.
+
+Designer Rehearse and exported playback SHALL apply Next motion when manual Next, manual
+Previous or automatic advance changes the page. Sequential and Fixed Carousel SHALL use it on
+page changes. Across cards SHALL use the authored Focus move duration within one visible group
+and Next motion between groups. A page change SHALL leave the authored run Entrance, run Exit
+and dwell settings intact. Save and export SHALL preserve the selected mode and phase settings.
 
 #### Scenario: Rehearse the authored Next effect in Sequential and Carousel
 
@@ -249,22 +263,60 @@ dwell setting.
 - **THEN** the authored effect runs and ends with the new card in focus
 - **AND** changing the effect duration leaves the authored dwell unchanged
 
-### Requirement: Author an Entrance and Exit for the entire visible card group
+#### Scenario: Finish the current page's cards before entering the next page
 
-Designer SHALL offer independent Entrance and Exit effect and duration settings for the Upcoming
-Programs group. The Entrance SHALL apply once when the visible card group first appears on a new
-run. Next and Previous SHALL use the authored page or focus transition and preserve the Entrance's
-settled state during navigation and Carousel focus changes. Normal Out and finite content completion SHALL
-play the group's configured Exit once. The composition SHALL continue to manage its authored
-Outro through its existing lifecycle, including Content-driven completion. Designer Rehearse
-SHALL let the operator use normal Out or the existing quick Stop. Stop SHALL keep its quick
-content-clear path. When a setting is absent, the corresponding group effect SHALL be disabled.
-New elements using the supplied Push right page effect SHALL also start with both group effects
-disabled. Saved projects and exported templates SHALL preserve each authored effect and duration.
+- **WHEN** the author selects Exit then enter and configures a last-to-first Current page exit
+  and a first-to-last Next page entrance with independent effects, durations and stagger intervals
+- **THEN** the last ordered outgoing card finishes before any incoming card starts its effect
+- **AND** the incoming cards use their own authored order, spacing and duration
+- **AND** departing media pauses at exit start and new motion is limited to the incoming focused card
+  once it starts appearing
+- **AND** Previous and automatic advance use the same phase settings on their actual page changes
+
+#### Scenario: Use Next motion only when the displayed page changes
+
+- **WHEN** the author rehearses an Across cards Carousel with Exit then enter
+- **THEN** steps within one group use the authored focus movement
+- **AND** crossing the group boundary plays both Next phases once
+- **AND** each actual page change in Fixed Carousel and Sequential can use the same Next motion
+- **AND** RTL follows logical card order and each phase animates the actual cards on its page
+
+#### Scenario: Save, export and stop independent Next page motion
+
+- **WHEN** the author saves and exports a template with independent Next page phases
+- **THEN** the phase settings survive reopen and play through the exported template's runtime
+- **AND WHEN** the operator uses normal Out during a page change
+- **THEN** the run's configured Exit acts on the mounted page and a pending page does not enter afterward
+- **AND** Quick Stop cancels pending and running page motion through its existing quick path
+- **AND** finishing a finite run uses the run's Exit and existing Content-driven completion
+- **AND** templates with no Next page setting retain their existing Page effect
+
+### Requirement: Author independent Entrance and Exit motion for the visible cards
+
+Designer SHALL offer independent Entrance and Exit effects, with Entrance motion and Exit motion
+selecting each phase's mode. Together SHALL animate the visible group on its existing timeline.
+Staggered cards mode SHALL apply the chosen effect to each currently visible card using Entrance
+duration or Exit duration per card. The first ordered card SHALL start immediately. Each following
+card SHALL start one Entrance stagger or Exit stagger interval after the previous start.
+Enabling the mode for the first time SHALL initialize its interval from the phase duration.
+Entrance card order SHALL default to first to last, and Exit card order to last to first. The
+author SHALL be able to reverse either order. Logical order SHALL follow the authored card
+layout direction, including RTL. Existing elements SHALL default to Together when no motion
+mode was saved. Absent effects SHALL remain disabled, including on the new Push right preset.
+Saving or exporting SHALL preserve each authored motion mode, effect, duration, interval and
+card order.
+
+The Entrance SHALL run once on the first visible page of a fresh run. Next and Previous SHALL
+use the authored page or focus transition without replaying Entrance. Normal Out and finite
+completion SHALL trigger one Exit of the current visible cards. For Content-driven completion,
+the driver SHALL finish all delayed card effects before reporting completion to the composition.
+Out arriving during that Exit SHALL reuse it. Designer Rehearse SHALL retain quick Stop, which
+SHALL cancel pending and running card effects and clear the content through its existing path.
 
 #### Scenario: Rehearse one group entrance and an independent normal Out
 
-- **WHEN** the author selects different Entrance, Exit and Next effects and plays the graphic in Rehearse
+- **WHEN** the author selects Together for Entrance and Exit, chooses different Entrance, Exit
+  and Next effects and plays the graphic in Rehearse
 - **THEN** the first visible cards enter as one group with its Entrance effect and duration
 - **AND** turning a page uses the Next effect and moving focus in place uses its own animation,
   with the Entrance remaining settled throughout navigation
@@ -274,14 +326,41 @@ disabled. Saved projects and exported templates SHALL preserve each authored eff
 
 #### Scenario: Finish a finite run through the group Exit and composition Outro
 
-- **WHEN** the opted-in Upcoming Programs group finishes its finite run in a Content-driven composition
+- **WHEN** the opted-in Upcoming Programs with Together Exit finishes its finite run in
+  a Content-driven composition
 - **THEN** the group completes its Exit effect once before reporting completion to the composition
 - **AND** the composition waits for any other enabled drivers and its Exit delay before its authored Outro
 - **AND** an Out that arrives as the group is closing leaves one Exit in flight
 - **AND** an existing graphic without an authored group effect and a new default Push right graphic
   use their original timing and page effects until the author sets Entrance or Exit
 
-### Requirement: Repeat the selected programmes for an authored number of passes
+#### Scenario: Stagger the first visible cards in the authored logical order
+
+- **WHEN** an author applies an effect and enables Staggered cards for Entrance in a multi-card layout
+- **THEN** its initial stagger interval equals Entrance duration and cards start in logical
+  first-to-last order, with each effect running for the authored duration
+- **AND WHEN** the author changes the interval and reverses Entrance card order in an RTL layout
+- **THEN** the animation follows the new start spacing and logical last-to-first order
+- **AND** switching pages or moving Carousel focus uses the existing authored Next or focus effect
+  without starting a new Entrance
+
+#### Scenario: Stagger normal Out and finish all cards before Content-driven Outro
+
+- **WHEN** the author sets Entrance motion to Together and Exit motion to Staggered cards
+- **THEN** normal Out staggers the currently visible cards once, starting at the logical last card
+- **AND WHEN** finite Content-driven playback starts the same exit behavior
+- **THEN** it waits for the last delayed card's animation before completing, even if Out is requested again
+- **AND** the composition still observes the other drivers and Exit delay before its authored Outro
+- **AND** quick Stop cancels the running and pending card effects
+
+#### Scenario: Reopen and export independently authored card motion
+
+- **WHEN** the author saves and exports a graphic with different Entrance and Exit motion, effect,
+  duration, stagger interval and order settings
+- **THEN** Designer uses those settings on reopen and the exported graphic uses the same card motion
+- **AND** older graphics with an effect but no motion mode continue to animate Together
+
+### Requirement: Repeat the selected programs for an authored number of passes
 
 Sequential and Carousel SHALL offer Infinite repeat and Fixed passes. Fixed passes SHALL accept a
 positive whole Pass count. A new element SHALL be authored with one pass, and older elements with
@@ -294,7 +373,7 @@ leave the active playlist event's own duration unchanged.
 #### Scenario: Rehearse finite and infinite repeats
 
 - **WHEN** the author sets a finite repeat count of two in Sequential or Carousel and runs the
-  graphic through the seven sample programmes
+  graphic through the seven sample programs
 - **THEN** the graphic completes two full passes and stops paging after the final card completes
 - **AND WHEN** the author enables infinite repeat and rehearses past the last card
 - **THEN** the list starts its next pass at the first card
@@ -335,12 +414,12 @@ source is absent or excluded.
 - **WHEN** an opted-in paged graphic runs with Infinite repeat in a Content-driven composition
 - **THEN** wrapping to a new pass leaves the graphic in Hold, and an operator Out starts its authored Outro
 - **AND** completion that arrives after Out leaves the already-started Outro unchanged
-- **AND WHEN** the author opens a project saved without the opt-in or there is no eligible programme data
+- **AND WHEN** the author opens a project saved without the opt-in or there is no eligible program data
 - **THEN** it uses the composition's normal timing and effective-driver fallback
 
-### Requirement: Edit and rehearse local programme entries and media
+### Requirement: Edit and rehearse local program entries and media
 
-Designer SHALL seed a new element with seven editable English programme examples. The author SHALL
+Designer SHALL seed a new element with seven editable English program examples. The author SHALL
 be able to add, remove and reorder test entries, edit each entry's title and display airtime, and
 choose or clear a Project image or video for each row. The add, remove and reorder actions SHALL
 use compact icons with accessible names. The stored project SHALL retain the authored ordered
@@ -366,7 +445,7 @@ Assets. The empty picker SHALL point to the normal Project Assets import workflo
 import and video trim SHALL remain in that workflow. Confirming an existing image or video SHALL
 assign it to the test entry that opened the picker. On video selection, Designer SHALL use its
 existing poster decode path to create an image from the selected conformed clip and retain it as
-a reusable derivative linked to that video. Cancelling the picker SHALL preserve the test entry
+a reusable derivative linked to that video. Canceling the picker SHALL preserve the test entry
 and its previous media. The selected media and generated poster SHALL follow the publication state
 of their list.
 
@@ -379,14 +458,14 @@ of their list.
 - **AND** confirming a video assigns that asset and links a generated poster from its conformed clip
 - **AND** Rehearse plays the video when its card is active and shows the generated poster when the
   card is among the surrounding cards
-- **AND** cancelling the modal preserves the prior media choice
+- **AND** canceling the modal preserves the prior media choice
 
 ### Requirement: Show one video asset with its linked poster in Designer
 
 Designer SHALL store stable metadata linking a generated poster to its source video. Project Assets
 and project-backed asset pickers, including Test media, SHALL display the source video as one
 selectable item and use the linked poster for its thumbnail and selection preview when ready.
-The generated image SHALL be absent as a separate catalogue entry while it is used solely as a
+The generated image SHALL be absent as a separate catalog entry while it is used solely as a
 poster. Previously linked generated posters SHALL follow the same rule. A poster independently
 referenced by the project as an image SHALL stay available for that use. The visibility rule SHALL
 preserve each asset's bytes and existing references. The linked poster SHALL remain available to
@@ -399,11 +478,11 @@ Prepared export.
   Test media picker
 - **THEN** the source video appears as one item with its poster available as the thumbnail and preview
 - **AND** the generated image remains packaged and visible on still cards as appropriate to its source
-- **AND** reopening a project with an older linked poster keeps the catalogue free of the duplicate
+- **AND** reopening a project with an older linked poster keeps the catalog free of the duplicate
   while preserving the stored image and all references
 - **AND** a generated image referenced independently remains visible as an image
 
-### Requirement: Play video only for the active or focused programme card
+### Requirement: Play video only for the active or focused program card
 
 Designer Rehearse and supported Prepared playback SHALL allow video motion only on the current
 Single or Sequential card, or on the focused Carousel card. Surrounding Carousel cards and all
@@ -433,9 +512,9 @@ or clear a separately imported Project Sound as Test sound for a test entry. Aud
 SHALL default to off. When audition is enabled and a video is playing in Rehearse, only the focused
 video's assigned sound in Single, Sequential or Carousel SHALL play locally. Side by side SHALL
 remain silent. Pause, focus or entry change, and Out SHALL stop the affected audition sound. Local
-audition SHALL leave programme audio and mixer levels unchanged.
+audition SHALL leave program audio and mixer levels unchanged.
 
-#### Scenario: Audition and silence the focused programme in Designer
+#### Scenario: Audition and silence the focused program in Designer
 
 - **WHEN** the author assigns Test sound to a local video and starts Rehearse
 - **THEN** the video plays silently until the author enables Audition focused video
@@ -451,7 +530,7 @@ element without a source setting SHALL be rehearsal-only. This includes the supp
 preset and its seven editable examples. In rehearsal-only mode, Designer SHALL omit the local
 rows and their sole-use media from the exported runtime payload. Production assets referenced
 independently elsewhere in the project SHALL remain available to their owning elements. Without
-an authorised source, exported playback SHALL have no rehearsal cards, audio or navigation.
+an authorized source, exported playback SHALL have no rehearsal cards, audio or navigation.
 
 #### Scenario: Export and play without test rows or assets
 
@@ -460,11 +539,11 @@ an authorised source, exported playback SHALL have no rehearsal cards, audio or 
 - **THEN** the authored display and lifecycle settings are carried in both export formats
 - **AND** those formats contain no test rows or sole-use rehearsal media and sound references or bytes
 - **AND** the exported graphic remains free of rehearsal cards, media and navigation until a runtime
-  programme source supplies approved data
+  program source supplies approved data
 
 ### Requirement: Publish a curated list as the Designer Prepared source
 
-Designer SHALL let the author explicitly select Prepared to publish the current programme list
+Designer SHALL let the author explicitly select Prepared to publish the current program list
 from the existing authoring editor. The `.vcg` and single-file HTML SHALL carry the approved typed
 rows in order, including their titles, display airtimes and selected Project images, videos or
 sounds. The exports SHALL include the referenced Project posters for the approved clips. A Prepared
@@ -488,12 +567,12 @@ SHALL leave rehearsal data private.
 ### Requirement: Compose reusable text and media cards for both air roles
 
 Designer SHALL support authored text-only cards and cards with framed media. A layout SHALL be
-usable in a full-screen composition or an overlay composition with the same runtime programme
-inputs. Each composition SHALL apply its authored card design to the supplied programme data.
+usable in a full-screen composition or an overlay composition with the same runtime program
+inputs. Each composition SHALL apply its authored card design to the supplied program data.
 
-#### Scenario: Reuse the programme inputs in two authored compositions
+#### Scenario: Reuse the program inputs in two authored compositions
 
 - **WHEN** an author prepares a full-screen composition and an overlay with smaller media frames
 - **THEN** each composition retains its own appearance and framing
-- **AND** both accept the same programme title, display airtime and prepared media values
+- **AND** both accept the same program title, display airtime and prepared media values
 - **AND** a text-only variant remains legible when the operator takes it as the prepared fallback

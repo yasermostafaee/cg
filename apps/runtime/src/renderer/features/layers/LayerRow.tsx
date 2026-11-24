@@ -54,7 +54,7 @@ import { rowState, type RowBinding } from './rowState.js';
 import { BackupStatus } from './BackupStatus.js';
 import { plateLabelOf, takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
-import { preservePreviewLookPin } from '../inspector/draftStore.js';
+import { preservePreviewLookPin, upcomingProgramsDraftOf } from '../inspector/draftStore.js';
 import {
   effectiveLayoutEffects,
   frameTransitionPreference,
@@ -628,7 +628,13 @@ export function LayerRow({
     // the fix, and passing `item` here again is exactly how it would come undone.
     binding,
     observed: slot.observed,
-    hasNext: template?.hasNext === true,
+    hasNext:
+      template?.hasNext === true ||
+      template?.upcomingPrograms?.elements.some(
+        ({ id, layout }) =>
+          (layout === 'sequence' || layout === 'carousel') &&
+          (item?.upcomingPrograms?.[id]?.length ?? 0) > 1,
+      ) === true,
     // `R-100` — a book row turns its page with NEXT / PREV (the bridge's number).
     book: rowBook,
     linkDown,
@@ -734,7 +740,10 @@ export function LayerRow({
     // A bound row can only be re-loaded if this browser still holds its
     // template. `true` on an unbound row, where the question is meaningless.
     templateAvailable: item === null || template !== null,
-    play: (itemId) => window.cg.stack.take({ itemId }),
+    play: (itemId) =>
+      upcomingProgramsDraftOf(itemId) === undefined
+        ? window.cg.stack.take({ itemId })
+        : Promise.resolve({ accepted: false, errorCode: 'upcoming-programs-unapplied' }),
     next: (itemId) => window.cg.stack.next({ itemId }),
     page: (itemId, field, to) => window.cg.stack.page({ itemId, field, to }),
     update: (itemId) => onUpdate(itemId),

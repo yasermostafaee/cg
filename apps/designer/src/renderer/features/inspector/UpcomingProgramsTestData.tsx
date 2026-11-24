@@ -123,7 +123,7 @@ export function UpcomingProgramsTestData({
       {item !== undefined && (
         <>
           <SelectField
-            label="Test programme"
+            label="Test program"
             options={items.map(({ id }) => id)}
             labels={items.map(({ title }, index) => `${String(index + 1)}. ${title || 'Untitled'}`)}
             value={item.id}
@@ -196,7 +196,7 @@ export function UpcomingProgramsTestData({
         </>
       )}
       <div style={{ display: 'flex', gap: '0.2rem', padding: '0.25rem 0' }}>
-        <Control size="sm" aria-label="Add test programme" title="Add test programme" onClick={add}>
+        <Control size="sm" aria-label="Add test program" title="Add test program" onClick={add}>
           <Icon icon={Plus} size={14} />
         </Control>
         {item !== undefined && (
@@ -221,8 +221,8 @@ export function UpcomingProgramsTestData({
             </Control>
             <Control
               size="sm"
-              aria-label="Remove test programme"
-              title="Remove test programme"
+              aria-label="Remove test program"
+              title="Remove test program"
               onClick={() => {
                 onChange(items.filter(({ id }) => id !== item.id));
                 selectItem((items[position + 1] ?? items[position - 1])?.id);

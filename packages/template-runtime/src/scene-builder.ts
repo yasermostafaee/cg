@@ -441,18 +441,19 @@ function buildUpcomingPrograms(element: UpcomingProgramsElement, ctx: BuildCtx):
   const items = ctx.showUpcomingProgramsSampleItems
     ? upcomingProgramsPreviewItems(element)
     : upcomingProgramsPreparedItems(element);
-  if (items.length === 0) return host;
   host.style.display = element.visible ? 'grid' : 'none';
-  host.appendChild(
-    renderUpcomingProgramsPage(
-      ctx.doc,
-      element,
-      items,
-      0,
-      undefined,
-      ctx.showUpcomingProgramsSampleItems,
-    ),
-  );
+  if (items.length > 0) {
+    host.appendChild(
+      renderUpcomingProgramsPage(
+        ctx.doc,
+        element,
+        items,
+        0,
+        undefined,
+        ctx.showUpcomingProgramsSampleItems,
+      ),
+    );
+  }
   if (element.visible) {
     ctx.scope.upcomingPrograms.push({ element, host, items });
   }

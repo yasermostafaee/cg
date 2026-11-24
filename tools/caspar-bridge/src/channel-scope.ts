@@ -354,6 +354,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'templates.source.get': STATION_WIDE,
   // `RUN-NEXT-VERSION-03` 1.1 — a stored picture read back by its hash: the station's page store.
   'pages.get': STATION_WIDE,
+  'upcoming-media.get': STATION_WIDE,
   'update.state': STATION_WIDE,
   'bridgeSession.state': STATION_WIDE,
   'bridgeSession.engines': STATION_WIDE,
@@ -409,6 +410,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'stack.page': INTENT,
   // `R-100` — storing one picture of a book: the answer is the verdict on the principal's own press.
   'pages.put': INTENT,
+  'upcoming-media.put': INTENT,
   'stack.out': INTENT,
   'stack.pgm-plate-crop': INTENT,
   'stack.preview-plate-crop': INTENT,
@@ -430,6 +432,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'stack.stop-all': INTENT,
   'stack.swap-live-source': INTENT,
   'stack.take': INTENT,
+  'stack.prepare-upcoming-programs': INTENT,
   'stack.update': INTENT,
   'station.take-off-air': INTENT,
   'templates.import': INTENT,

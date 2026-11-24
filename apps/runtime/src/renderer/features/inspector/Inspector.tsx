@@ -92,6 +92,8 @@ import {
   effectiveValue,
   isFieldDirty,
   isItemDirty,
+  effectiveUpcomingPrograms,
+  stageUpcomingPrograms,
   stageField,
   stageFieldBatch,
   subscribeDrafts,
@@ -100,6 +102,8 @@ import {
   valueAt,
   type FieldPath,
 } from './draftStore.js';
+import { UpcomingProgramsEditor } from './UpcomingProgramsEditor.js';
+import { importUpcomingProgramMedia } from './upcomingProgramMedia.js';
 import {
   formatNumberLike,
   parseLocalizedNumber,
@@ -572,6 +576,8 @@ export function Inspector({
   }
 
   const itemId = item.itemId;
+  const upcoming = managedCg ? undefined : resolvedInfo?.upcomingPrograms;
+  const effectiveUpcoming = effectiveUpcomingPrograms(itemId, item.upcomingPrograms);
   const schema = resolvedInfo?.fields ?? null;
   const lookCarrier = resolvedInfo?.liveSources;
   const looks = lookCarrier?.looks ?? [];
@@ -848,6 +854,25 @@ export function Inspector({
             setPreviewLookPin(itemId, lookId);
           }}
         />
+        {upcoming?.elements.map((element) => {
+          const applied = item.upcomingPrograms?.[element.id] ?? element.preparedItems;
+          return (
+            <UpcomingProgramsEditor
+              key={`${itemId}:${element.id}`}
+              element={element}
+              rows={effectiveUpcoming?.[element.id] ?? applied}
+              mediaOptions={upcoming.assets.map(({ id, kind, name }) => ({
+                assetId: id,
+                kind,
+                label: name,
+                posterAssetId: element.preparedItems.find(({ mediaAssetId }) => mediaAssetId === id)
+                  ?.posterAssetId,
+              }))}
+              onChange={(rows) => stageUpcomingPrograms(itemId, element.id, rows, applied)}
+              onImport={importUpcomingProgramMedia}
+            />
+          );
+        })}
         <div className="cg-inspector-section cg-inspector-fields">
           <h2>{localizeUi('Fields')}</h2>
           {isEmpty ? (

@@ -728,7 +728,7 @@ export function PreviewModal({
             {hasUpcomingSound && (
               <CheckRow
                 label="Audition focused video"
-                title="Play the focused programme's test sound during Rehearse."
+                title="Play the focused program's test sound during Rehearse."
                 checked={auditionUpcoming}
                 onChange={setAuditionUpcoming}
               />

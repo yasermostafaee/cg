@@ -297,7 +297,17 @@ Paged layouts reuse the runtime sequence clock and step dispatch, with authored 
 layout managed by the Upcoming Programs renderer. Card dimensions use scene pixels and the title,
 airtime and media regions use fractions of the card. The preview frame visualizes the authored
 media aperture. The sequence driver handles authored page transitions and repeat counts. Output
-boot excludes sample rows.
+boots with rows explicitly published as Prepared.
+
+CG Control's Manual rows travel as a complete `__cg.upcomingPrograms` snapshot keyed by authored
+element ID. A resident Take tell holds the snapshot until `play()` starts. The driver then replaces
+its list before frame and hold playback starts. Empty elements can receive Manual rows on the same
+path. An absent element key uses its Prepared rows and an explicit empty list displays no cards.
+
+The runtime resolves uploaded photo, video and poster IDs to content-addressed paths on the template
+origin. The same-origin CG Control Preview frame receives those bytes through
+`CG.provideUpcomingProgramMedia` before it plays a draft. The wire payload carries asset IDs and
+the renderer applies authored motion and focus rules to the resolved media.
 
 A `repeater` element builds as the clipped outer box, registered as
 `{ element, host, depth, visited }` on `scope.repeaters` (the build-context
@@ -873,6 +883,22 @@ rebuilt runtime knows nothing of it: the host re-tells it after each build (the 
 - An empty items list is complete by definition at `start()` (the ticker's
   zero-content parity). Transition edges are PHYSICAL — `direction` drives
   per-item bidi isolation only, never mirrors motion.
+
+**Upcoming Programs card motion (D-219).** A run's first page and the currently visible page
+at normal Out or finite completion apply separate authored Entrance and Exit effects. Together
+samples one effect on the page group. Staggered cards samples each card in logical display
+order or the reverse, offsetting each start by the configured interval. Card effects have
+their own targets, so the page-level Next transition and focus scale can retain their own
+motion. Completion resolves only after the last delayed card finishes. The normal Out and
+finite completion paths reuse an exit already in progress. Quick Stop discards its remaining
+card effects.
+
+Next motion optionally takes the shared SequenceDriver's page transition through Exit then enter.
+It runs the outgoing page's authored effect to completion, including the final card's stagger,
+before mounting the incoming page for its own effect. In-group Carousel steps still move focus
+within the existing page. The old page's video stops before the handoff, and the incoming focused
+video can play when its card starts appearing. Normal Out cancels the page handoff and lets the
+run's Exit act on the mounted page. Quick Stop drops the pending page motion.
 
 ### VideoDriver — the self-advancing medium + the seek policy (D-128 Phase 4)
 

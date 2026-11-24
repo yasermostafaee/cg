@@ -13,7 +13,9 @@ import {
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CG_UPCOMING_PROGRAMS_PAGE_MARKER,
   playoutOf,
+  upcomingProgramsTemplateMetadataOf,
   withoutEditorBackdrop,
   withoutEditorOutputRaster,
   withUpcomingProgramsOutputItems,
@@ -477,10 +479,11 @@ function buildSingleFileHtml(parts: HtmlParts): string {
   const w = String(scene.resolution.width);
   const h = String(scene.resolution.height);
   const managedResume = managedStaticResumePageMarker(scene, cgJsIife);
+  const upcomingPrograms = upcomingProgramsTemplateMetadataOf(scene) !== undefined;
   return `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />${managedResume === '' ? '' : '\n    ' + managedResume}
+    <meta charset="utf-8" />${managedResume === '' ? '' : '\n    ' + managedResume}${upcomingPrograms ? '\n    ' + CG_UPCOMING_PROGRAMS_PAGE_MARKER : ''}
     ${CG_LIVE_POSITION_PAGE_MARKER}
     ${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}
     ${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}
@@ -524,7 +527,7 @@ function buildSingleFileHtml(parts: HtmlParts): string {
          host list: a page loads pictures from the bridge that served it, never from elsewhere.
          Over file:// the origin is opaque, so this admits nothing there. -->
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data: 'self'; media-src data:; connect-src 'self';" />
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data: 'self'; media-src data:${upcomingPrograms ? " 'self'" : ''}; connect-src 'self';" />
     <title>${escapeHtml(scene.name)}</title>
     <!-- CEF-compat: keep CSS within common CasparCG builds (CEF 63=2.2,
          71=2.3.x, 117=2.4.x) — avoid bleeding-edge properties. -->

@@ -5,6 +5,7 @@ import { PositionSchema } from '../scene.js';
 import { LiveCropFocusSchema } from '../live-fit.js';
 import { LiveFramePlacementsSchema } from '../frame-placement.js';
 import { LiveMaskPlacementsSchema } from '../mask-placement.js';
+import { UpcomingProgramsOverridesSchema } from '../upcoming-programs-control.js';
 import {
   LivePlateVolumesSchema,
   LiveSourceFrozenAssignmentSchema,
@@ -261,6 +262,8 @@ export const StackItemStateSchema = z.object({
    * ⚠ ABSENT MEANS INHERITING the template's authored values, not "zero" and not "one".
    */
   timingOverride: StackItemTimingOverrideSchema.optional(),
+  /** Confirmed program lists for this row's next Take. */
+  upcomingPrograms: UpcomingProgramsOverridesSchema.optional(),
   /**
    * `R-100` — the PAGE each of the row's page lists is on (field id → 0-based index), the
    * published half of the pair whose retained half is {@link RetainedStackItemSchema.pages}.
@@ -676,6 +679,7 @@ export const RetainedStackItemSchema = z.object({
    * looping forever with the console showing it as normal. `B-107` / `B-109` exactly.
    */
   timingOverride: StackItemTimingOverrideSchema.optional(),
+  upcomingPrograms: UpcomingProgramsOverridesSchema.optional(),
   /**
    * `R-100` — the page each page list is on, RETAINED for `timingOverride`'s reason: this schema
    * is a strict whitelist, so an undeclared key is stripped in silence and a book would reopen
@@ -743,6 +747,7 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.foregroundLayer !== undefined && { foregroundLayer: item.foregroundLayer }),
     ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
     ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
+    ...(item.upcomingPrograms !== undefined && { upcomingPrograms: item.upcomingPrograms }),
     ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
     ...(item.pages !== undefined && { pages: item.pages }),
     ...(item.pageAdvance !== undefined && { pageAdvance: item.pageAdvance }),

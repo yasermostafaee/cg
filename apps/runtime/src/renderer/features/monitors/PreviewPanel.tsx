@@ -53,6 +53,7 @@ import {
   snapshotFramePlacementDraft,
   draftsVersion,
   effectivePosition,
+  effectiveUpcomingPrograms,
   maskPlacementsWithDraft,
   previewLookPin,
   setPreviewLookPin,
@@ -377,6 +378,7 @@ export function PreviewPanel({
             already gives the fields: what is rehearsed is exactly what Apply would send.
           */
             timing: effectiveTimingFor(info?.playout, item),
+            upcomingPrograms: effectiveUpcomingPrograms(item.itemId, item.upcomingPrograms),
             /**
              * 🔴 **SESSION BQ — THE RESOLUTION INPUTS, all four levels, not a pre-joined
              * name map.**

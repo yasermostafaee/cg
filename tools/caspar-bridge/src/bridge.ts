@@ -148,6 +148,9 @@ import {
   StackPageChannel,
   PagesGetChannel,
   PagesPutChannel,
+  UpcomingMediaGetChannel,
+  UpcomingMediaPutChannel,
+  StackPrepareUpcomingProgramsChannel,
   BridgeCapabilitiesChannel,
   StackRestoreReportChangedChannel,
   StackRestoreReportChannel,
@@ -1744,7 +1747,13 @@ export function channelsForRequest(
     judged by its permission (`operator`) alone; an unnamed picture is swept after its grace.
   */
   // `RUN-NEXT-VERSION-03` 1.1 — and reading one back acts on none either: a read of the same store.
-  if (name === PagesPutChannel.name || name === PagesGetChannel.name) return [];
+  if (
+    name === PagesPutChannel.name ||
+    name === PagesGetChannel.name ||
+    name === UpcomingMediaPutChannel.name ||
+    name === UpcomingMediaGetChannel.name
+  )
+    return [];
 
   /*
     🔴 `PAGE-REBUILD-01` (`C-034`) — KEEPING A PACKAGE AND SENDING A REBUILT PAGE ACT ON NO CHANNEL.
@@ -6141,6 +6150,13 @@ export function buildRoutes(
         b.load(r.itemId, r.templateId, r.fields),
     ),
     route(StackTakeChannel, 'operator', 'operator', (r: { itemId: string }) => b.take(r.itemId)),
+    route(
+      StackPrepareUpcomingProgramsChannel,
+      'operator',
+      'operator',
+      (r: ChannelRequest<typeof StackPrepareUpcomingProgramsChannel>) =>
+        b.prepareUpcomingPrograms(r.itemId, r.upcomingPrograms),
+    ),
     // Session BM-2 — the texts AND the row's per-look inputs, in ONE atomic call.
     route(
       StackUpdateChannel,
@@ -6195,6 +6211,18 @@ export function buildRoutes(
     ),
     // `RUN-NEXT-VERSION-03` 1.1 — one stored picture read back, for PVW and the page tools.
     route(PagesGetChannel, 'read', 'read', (r: { sha256: string }) => b.getPage(r.sha256)),
+    route(
+      UpcomingMediaPutChannel,
+      'operator',
+      'operator',
+      (r: ChannelRequest<typeof UpcomingMediaPutChannel>) => b.putUpcomingMedia(r),
+    ),
+    route(
+      UpcomingMediaGetChannel,
+      'read',
+      'read',
+      (r: ChannelRequest<typeof UpcomingMediaGetChannel>) => b.getUpcomingMedia(r),
+    ),
     route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>
       b.remove(r.itemId),

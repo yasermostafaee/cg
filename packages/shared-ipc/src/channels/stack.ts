@@ -14,6 +14,7 @@ import {
   PositionSchema,
   RetainedStackItemSchema,
   StackItemStateSchema,
+  UpcomingProgramsOverridesSchema,
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
@@ -137,6 +138,13 @@ export const StackTakeChannel = defineChannel(
      */
     refusalOnRow: z.literal(true).optional(),
   }),
+);
+
+/** Confirm a complete Manual list while the row is off air. */
+export const StackPrepareUpcomingProgramsChannel = defineChannel(
+  'stack.prepare-upcoming-programs',
+  z.object({ itemId: IdSchema, upcomingPrograms: UpcomingProgramsOverridesSchema }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
 /**

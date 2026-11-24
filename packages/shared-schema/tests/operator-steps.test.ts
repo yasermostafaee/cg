@@ -90,8 +90,8 @@ describe('Upcoming Programs steps', () => {
       type: 'upcomingPrograms',
       layout: 'carousel',
       sampleItems: [
-        { id: 'first', title: 'First programme' },
-        { id: 'second', title: 'Second programme' },
+        { id: 'first', title: 'First program' },
+        { id: 'second', title: 'Second program' },
       ],
     });
     expect(hasNextStep(scene([graphic]), [])).toBe(false);

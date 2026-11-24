@@ -931,6 +931,7 @@ export function RehearsalStage({
             // Straight from the ORDER, which came from the real CasparCG layer.
             zIndex={frameZIndex(index)}
             fields={subject.fields}
+            upcomingPrograms={subject.upcomingPrograms}
             position={subject.position}
             outputReference={subject.outputReference}
             rowName={subject.rowName}

@@ -75,6 +75,9 @@ import {
   StackSnapshotChannel,
   StackStateChangedChannel,
   StackTakeChannel,
+  StackPrepareUpcomingProgramsChannel,
+  UpcomingMediaGetChannel,
+  UpcomingMediaPutChannel,
   StackUpdateChannel,
   TemplatesActedChannel,
   TemplatesChangedChannel,
@@ -1977,6 +1980,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ipcChannels.StackSetMaskPlacementsChannel, req),
     load: (req: ChannelRequest<typeof StackLoadChannel>) => this.#invoke(StackLoadChannel, req),
     take: (req: ChannelRequest<typeof StackTakeChannel>) => this.#invoke(StackTakeChannel, req),
+    prepareUpcomingPrograms: (req: ChannelRequest<typeof StackPrepareUpcomingProgramsChannel>) =>
+      this.#invoke(StackPrepareUpcomingProgramsChannel, req),
     update: (req: ChannelRequest<typeof StackUpdateChannel>) =>
       this.#invoke(StackUpdateChannel, req),
     // C-012 — the graceful stop (outro runs, producer stays resident).
@@ -2567,6 +2572,13 @@ export class WebSocketRuntime implements RuntimeBridge {
    * request gets a longer wait than an ordinary verb: a console on a slow link to a remote bridge must
    * not see a picture refused by its own clock while the bridge is still receiving it.
    */
+  readonly upcomingMedia = {
+    put: (req: ChannelRequest<typeof UpcomingMediaPutChannel>) =>
+      this.#invoke(UpcomingMediaPutChannel, req, PAGE_PUT_TIMEOUT_MS),
+    get: (req: ChannelRequest<typeof UpcomingMediaGetChannel>) =>
+      this.#invoke(UpcomingMediaGetChannel, req, PAGE_PUT_TIMEOUT_MS),
+  };
+
   readonly pages = {
     put: (req: ChannelRequest<typeof PagesPutChannel>) =>
       this.#invoke(PagesPutChannel, req, PAGE_PUT_TIMEOUT_MS),

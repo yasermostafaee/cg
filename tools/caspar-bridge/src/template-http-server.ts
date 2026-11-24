@@ -8,7 +8,10 @@ import {
   PAGE_MEDIA_PATH_RE,
   TEMPLATE_COMPLETE_PATH,
   TEMPLATE_PAGE_STATE_PATH,
+  UPCOMING_PROGRAM_MEDIA_PATH_PREFIX,
+  UPCOMING_PROGRAM_MEDIA_PATH_RE,
 } from '@cg/shared-schema';
+import type { StoredUpcomingMedia } from './upcoming-media-store.js';
 
 /** Where/how the template HTTP server binds + the host CasparCG uses to reach it. */
 export interface TemplateServeOptions {
@@ -238,7 +241,7 @@ export interface TemplateServerRoute {
   /** The single method this route answers. Anything else is refused. */
   readonly method: 'GET' | 'POST';
   /** Which handler serves it — the router's discriminant. */
-  readonly kind: 'template' | 'complete' | 'page-state' | 'page';
+  readonly kind: 'template' | 'complete' | 'page-state' | 'page' | 'upcoming-media';
   /** Does this path select the route? Query already stripped. */
   readonly match: (path: string) => boolean;
 }
@@ -280,6 +283,12 @@ export const TEMPLATE_SERVER_ROUTES: readonly TemplateServerRoute[] = [
     kind: 'page',
     match: (path) => PAGE_MEDIA_PATH_RE.test(path) || PAGE_MEDIA_HASH_PATH_RE.test(path),
   },
+  {
+    name: 'GET /upcoming-media/<sha256>',
+    method: 'GET',
+    kind: 'upcoming-media',
+    match: (path) => UPCOMING_PROGRAM_MEDIA_PATH_RE.test(path),
+  },
 ];
 
 /** The served-template path, in one place so the route table and the handler cannot disagree. */
@@ -294,7 +303,7 @@ const TEMPLATE_PATH_RE = /^\/template\/([^/]+)$/;
  * `getHtml` (the bridge's `TemplateRegistry`), so a re-import/remove is reflected
  * with no server change. Separate from the control WebSocket (which stays
  * loopback); this server exposes template HTML and, since `R-100`, the book pages the bridge
- * stored (`GET /page/<sha256>.<ext>`, read-only) — no control surface.
+ * stored and the media for Upcoming Programs. Both media routes are read-only.
  */
 export class TemplateHttpServer {
   readonly focusPaints = new FocusArtworkPaints();
@@ -352,17 +361,22 @@ export class TemplateHttpServer {
   readonly #readPage:
     | ((sha256: string) => Promise<{ bytes: Buffer; mime: string } | null>)
     | undefined;
+  readonly #readUpcomingMedia:
+    | ((sha256: string) => Promise<StoredUpcomingMedia | null>)
+    | undefined;
 
   constructor(
     getHtml: (templateId: string) => string | null,
     onComplete?: (take: string) => boolean,
     readPage?: (sha256: string) => Promise<{ bytes: Buffer; mime: string } | null>,
     onPageState?: (take: string, field: string, index: number) => boolean,
+    readUpcomingMedia?: (sha256: string) => Promise<StoredUpcomingMedia | null>,
   ) {
     this.#getHtml = getHtml;
     this.#onComplete = onComplete;
     this.#readPage = readPage;
     this.#onPageState = onPageState;
+    this.#readUpcomingMedia = readUpcomingMedia;
   }
 
   /** Start listening. Idempotent — a second call resolves without rebinding. */
@@ -433,6 +447,10 @@ export class TemplateHttpServer {
       void this.#handlePage(req, res, path);
       return;
     }
+    if (route.kind === 'upcoming-media') {
+      void this.#handleUpcomingMedia(req, res, path);
+      return;
+    }
     const match = TEMPLATE_PATH_RE.exec(path);
     if (match !== null) {
       const id = decodeURIComponent(match[1] ?? '');
@@ -500,6 +518,54 @@ export class TemplateHttpServer {
       'x-content-type-options': 'nosniff',
     });
     res.end(page.bytes);
+  }
+
+  async #handleUpcomingMedia(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    path: string,
+  ): Promise<void> {
+    const headers = {
+      'cache-control': 'no-store',
+      'cross-origin-resource-policy': 'same-origin',
+      'x-content-type-options': 'nosniff',
+    };
+    const origin = req.headers.origin;
+    const fetchSite = req.headers['sec-fetch-site'];
+    const foreignOrigin = origin !== undefined && origin !== `http://${req.headers.host ?? ''}`;
+    const foreignSite =
+      fetchSite !== undefined && fetchSite !== 'same-origin' && fetchSite !== 'none';
+    const read = this.#readUpcomingMedia;
+    const media =
+      req.method === 'GET' && read !== undefined && !foreignOrigin && !foreignSite
+        ? await read(path.slice(UPCOMING_PROGRAM_MEDIA_PATH_PREFIX.length)).catch(() => null)
+        : null;
+    if (media === null) {
+      res.writeHead(404, { ...headers, 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+      return;
+    }
+
+    const size = media.bytes.byteLength;
+    const mediaHeaders = { ...headers, 'content-type': media.mime, 'accept-ranges': 'bytes' };
+    if (req.headers.range === undefined) {
+      res.writeHead(200, { ...mediaHeaders, 'content-length': String(size) });
+      res.end(media.bytes);
+      return;
+    }
+    const range = parseMediaRange(req.headers.range, size);
+    if (range === null) {
+      res.writeHead(416, { ...headers, 'content-range': `bytes */${String(size)}` });
+      res.end();
+      return;
+    }
+    const { start, end } = range;
+    res.writeHead(206, {
+      ...mediaHeaders,
+      'content-range': `bytes ${String(start)}-${String(end)}/${String(size)}`,
+      'content-length': String(end + 1 - start),
+    });
+    res.end(media.bytes.subarray(start, end + 1));
   }
 
   /**
@@ -740,4 +806,28 @@ export class TemplateHttpServer {
     this.#sockets.clear();
     this.#busy.clear();
   }
+}
+
+/** One inclusive range is enough for Chromium's media seeking. */
+function parseMediaRange(value: string, length: number): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(value.trim());
+  if (match === null || length === 0) return null;
+  const first = match[1] ?? '';
+  const last = match[2] ?? '';
+  if (first === '') {
+    const suffix = Number(last);
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) return null;
+    return { start: Math.max(0, length - suffix), end: length - 1 };
+  }
+  const start = Number(first);
+  const end = last === '' ? length - 1 : Number(last);
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start >= length ||
+    end < start
+  ) {
+    return null;
+  }
+  return { start, end: Math.min(length - 1, end) };
 }

@@ -29,18 +29,17 @@ should be treated like signed software:
   `default-src 'none'`) until 2026-09-15.
   🔴 **ACCEPTED BY THE OWNER ON 2026-09-16**, for the reasons set out in
   `openspec/changes/template-signals-completion/design.md` §1 and recorded in
-  [ADR 0009](docs/adrs/0009-timing-setting-ownership.md). It exists for exactly one message: a
-  token-bearing template reporting its own run state — completion, or the live page of a book —
-  so the console stays honest ([[C-013]]). **Do not widen it further without strong justification** — a host list or a
-  scheme wildcard is what "phoning home" means, and `'self'` is not.
-- **The narrow part is not the policy, it is the key.** A page opens no connection at all unless
-  the bridge handed it a per-take token inside the reserved `__cg` payload. A single-file
-  template dropped into CasparCG by hand, a template served by anything that is not this bridge,
-  and the Designer's own preview all receive no token and therefore never open a socket.
-- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS TEMPLATES, THEIR BOOK PAGES AND TWO TOKEN-BOUND REPORTS, NOTHING ELSE.** `'self'`
+  [ADR 0009](docs/adrs/0009-timing-setting-ownership.md). It lets a token-bearing
+  template report its completion or the live page of a book so the console stays
+  honest ([[C-013]]). Keep the policy limited to the template's own origin.
+- **Run-state reports require a per-take token.** The bridge supplies that token
+  inside the reserved `__cg` payload. A single-file template dropped into
+  CasparCG by hand or Designer's own preview receive no token and send no reports.
+- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS TEMPLATES, BOOK PAGES, UPCOMING PROGRAMS MEDIA AND TWO TOKEN-BOUND REPORTS, NOTHING ELSE.** `'self'`
   is an ORIGIN, not a path, so a served template can reach **every route on the server that
-  served it**. That origin therefore hosts exactly four routes — `GET /template/<id>`,
-  `POST /complete`, `POST /page-state` and `GET /page/<sha256>[.<ext>]` — and **no control, identity or general data route may
+  served it**. That origin hosts five routes — `GET /template/<id>`,
+  `POST /complete`, `POST /page-state`, `GET /page/<sha256>[.<ext>]` and
+  `GET /upcoming-media/<sha256>` — and **no control, identity or general data route may
   ever be added to it.** The control WebSocket is deliberately a separate server on a separate
   port (`DEFAULT_BRIDGE_PORT`), which is what keeps it outside `'self'`. The rule is enforced,
   not merely stated: the router consults `TEMPLATE_SERVER_ROUTES` and nothing else, and
@@ -62,6 +61,14 @@ should be treated like signed software:
     current live take, the field is that row's declared page list and the integer is in range. It
     updates that row's published counter, spends no token, exposes no lookup or enumeration, and
     performs no playout verb. Malformed, stale and off-air reports are indistinguishable `404`s.
+  - **The Upcoming Programs media route (D-219).** A template can fetch an individual stored
+    PNG, JPEG, WebP, WebM or MP4 by its full content hash. The store validates media type and a
+    24 MiB upload limit through the separate control socket. The template origin admits only
+    GET for this route, with no listing, access to other files or CORS permission. It rejects
+    cross-origin browser requests and serves typed bytes with `nosniff`, `no-store` and
+    `Cross-Origin-Resource-Policy: same-origin`. One byte range supports video seeking. The
+    template endpoint should stay on the secured graphics network with the other template routes.
+    A network client that can reach it and knows the full hash can request that object.
 
 ## Reporting a vulnerability
 

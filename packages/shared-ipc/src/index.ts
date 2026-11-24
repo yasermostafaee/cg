@@ -62,6 +62,7 @@ export * from './channels/common.js';
 export * from './channels/stack.js';
 // `R-100` — a book's pages, sent to CG Bridge one picture at a time, and their limits.
 export * from './channels/pages.js';
+export * from './channels/upcoming-programs.js';
 // `R-102` — live UTF-8 field sources, read under CG Bridge's configured safe root.
 export * from './channels/textSources.js';
 // The station-wide folder those portable names resolve below; configurable from CG Control.

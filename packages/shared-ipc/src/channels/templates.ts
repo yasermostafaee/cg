@@ -18,6 +18,7 @@ import {
   PositionSchema,
   PresetTransitionFrameSchema,
   ResolutionSchema,
+  UpcomingProgramsTemplateMetadataSchema,
   controlLiveLayoutFocusTarget,
   framePlacementFits,
   liveRevealMaskFromRects,
@@ -567,6 +568,7 @@ const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 export const TemplateInfoSchema = z.object({
   templateId: IdSchema,
+  upcomingPrograms: UpcomingProgramsTemplateMetadataSchema.optional(),
   /** Optional authoring data for a live layout created in CG Control. */
   controlLiveLayout: ControlLiveLayoutSchema.optional(),
   /** The kept authoring package for editing or duplicating this exact revision. */

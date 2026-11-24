@@ -1,4 +1,9 @@
-import { isOnAirStatus, operatorFieldUpdateRefusal, ownsLiveSeats } from '@cg/shared-schema';
+import {
+  isOnAirStatus,
+  operatorFieldUpdateRefusal,
+  ownsLiveSeats,
+  upcomingProgramsOverrideIssue,
+} from '@cg/shared-schema';
 import type {
   AuditEntry,
   InputTransition,
@@ -6,6 +11,7 @@ import type {
   StackItemState,
   StackItemStatus,
   TakeRefusal,
+  UpcomingProgramsOverrides,
 } from '@cg/shared-schema';
 import type {
   ConnectionConfig,
@@ -123,6 +129,13 @@ import {
   type AuditCursor,
   type AuditFilter,
   type AuditNaming,
+  type UpcomingMediaGetResult,
+  type UpcomingMediaPutRequest,
+  type UpcomingMediaPutResult,
+  type UpcomingMediaMime,
+  UPCOMING_MEDIA_MAX_BASE64_LENGTH,
+  UPCOMING_MEDIA_MAX_BYTES,
+  probeUpcomingMedia,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { configuredHosts, isLoopbackHost } from '../shared/loopback.js';
@@ -439,6 +452,7 @@ export class MockRuntime {
    * imported with; a re-import on one channel replaces that channel's entry and no other.
    */
   readonly #templateLists = new Map<number, Map<string, TemplateInfo>>();
+  readonly #upcomingMedia = new Map<string, { mime: UpcomingMediaMime; base64: string }>();
   /**
    * The seed library — §14.5 Stage E's look-bearing template joins the starters when armed —
    * listed on every channel declared the FIRST time a list is read: the bridge's one-time copy,
@@ -983,6 +997,56 @@ export class MockRuntime {
     const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
     this.#pages.set(sha256, { base64, mime: probe.mime });
     return { accepted: true, sha256, width: probe.width, height: probe.height };
+  }
+
+  async putUpcomingMedia(request: UpcomingMediaPutRequest): Promise<UpcomingMediaPutResult> {
+    if (request.base64.length > UPCOMING_MEDIA_MAX_BASE64_LENGTH) {
+      return { ok: false, errorCode: 'media-too-large' };
+    }
+    let bytes: Uint8Array<ArrayBuffer>;
+    try {
+      bytes = base64ToBytes(request.base64);
+    } catch {
+      return { ok: false, errorCode: 'media-invalid-base64' };
+    }
+    if (bytes.length > UPCOMING_MEDIA_MAX_BYTES) return { ok: false, errorCode: 'media-too-large' };
+    if (probeUpcomingMedia(bytes) !== request.mime) {
+      return { ok: false, errorCode: 'media-type-mismatch' };
+    }
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    this.#upcomingMedia.set(sha256, { base64: request.base64, mime: request.mime });
+    return { ok: true, sha256, mime: request.mime };
+  }
+
+  getUpcomingMedia(sha256: string): UpcomingMediaGetResult {
+    const found = this.#upcomingMedia.get(sha256);
+    return found === undefined ? { kind: 'missing' } : { kind: 'media', ...found };
+  }
+
+  prepareUpcomingPrograms(itemId: string, upcomingPrograms: UpcomingProgramsOverrides) {
+    const item = this.#find(itemId);
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    if (ownsLiveSeats(item, false))
+      return { accepted: false, errorCode: 'upcoming-programs-on-air' };
+    const template = this.templateGet(item.templateId, item.slot?.channel);
+    if (template?.upcomingPrograms === undefined) {
+      return { accepted: false, errorCode: 'upcoming-programs-invalid' };
+    }
+    const uploaded = new Map(
+      [...this.#upcomingMedia].map(([hash, { mime }]) => [
+        hash,
+        mime.startsWith('image/') ? ('image' as const) : ('video' as const),
+      ]),
+    );
+    const issue = upcomingProgramsOverrideIssue(
+      template.upcomingPrograms,
+      upcomingPrograms,
+      uploaded,
+    );
+    if (issue !== undefined) return { accepted: false, errorCode: issue };
+    this.#patch(itemId, { upcomingPrograms: { ...item.upcomingPrograms, ...upcomingPrograms } });
+    return { accepted: true };
   }
 
   /** `RUN-NEXT-VERSION-03` 1.1 parity — read one stored picture back, as the bridge does. */

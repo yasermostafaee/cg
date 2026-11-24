@@ -31,6 +31,7 @@ import {
   stripCgControl,
   upcomingProgramsCanStep,
   upcomingProgramsDrivesHold,
+  upcomingProgramsPreviewItems,
   upcomingProgramsSceneEffectsOf,
   upcomingProgramsUsesPagination,
   managedResumePlan,
@@ -46,6 +47,8 @@ import {
   type Look,
   type SequenceElement,
   type UpcomingProgramsElement,
+  type UpcomingProgramsOverrides,
+  type UpcomingProgramsSampleItem,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import { itemsInDigits } from './typed-digits.js';
@@ -194,6 +197,7 @@ interface ContentDriver {
   id: string;
   drivesHold: boolean;
   whenComplete: () => Promise<void>;
+  hasContent?: () => boolean;
 }
 
 /**
@@ -235,6 +239,8 @@ interface ScopeNode {
   children: ScopeNode[];
   /** D-104 — this scope's hold is content-driven (a "coordinator"). */
   isCoordinator: boolean;
+  /** Whether the current Take gives the coordinator an effective content source. */
+  hasHoldDrivers: () => boolean;
   /** D-104 — reset + start this scope's OWN content drivers (tickers / clocks / sequences). */
   startOwnContent: () => void;
   /** D-104 — this scope's OWN content completion (`Promise.all` of its content sources), or null if it has none. */
@@ -354,7 +360,7 @@ function aggregateContentWait(
     // (mirrors render's display:none), so a visible infinite driver inside a hidden instance can't keep
     // the parent open. Skip BEFORE descending — neither its settle nor its content gates the hold.
     if (!child.visible) continue;
-    if (child.isCoordinator) {
+    if (child.isCoordinator && child.hasHoldDrivers()) {
       waits.push(child.whenSettled());
     } else {
       const childWait = nestedContentWait(child);
@@ -388,10 +394,12 @@ function effectiveDrivesParentHold(
 function nestedContentWait(node: ScopeNode): Promise<void> | null {
   const waits: Promise<void>[] = [];
   for (const d of node.contentDrivers) {
-    if (effectiveDrivesParentHold(node.holdOverrides, d)) waits.push(d.whenComplete());
+    if (d.hasContent?.() !== false && effectiveDrivesParentHold(node.holdOverrides, d)) {
+      waits.push(d.whenComplete());
+    }
   }
   for (const child of node.instanceChildren) {
-    if (child.isCoordinator) {
+    if (child.isCoordinator && child.hasHoldDrivers()) {
       waits.push(child.whenSettled());
     } else {
       const childWait = nestedContentWait(child);
@@ -426,6 +434,7 @@ function nestedContentWait(node: ScopeNode): Promise<void> | null {
 function scopeHasEffectiveHoldDrivers(
   scope: FieldScope,
   overrides?: Readonly<Record<string, boolean>>,
+  upcomingItems?: ReadonlyMap<string, readonly UpcomingProgramsSampleItem[]>,
 ): boolean {
   // B-034 — a HIDDEN content element (`visible: false`) is never an effective driver, regardless of
   // `drivesHold` / `holdOverrides` (a comp whose only content is hidden has no drivers ⇒ B-032 timed).
@@ -438,8 +447,14 @@ function scopeHasEffectiveHoldDrivers(
   for (const c of scope.clocks)
     if (c.element.mode === 'countdown' && drives(c.element)) return true;
   for (const sq of scope.sequences) if (drives(sq.element)) return true;
-  for (const { element } of scope.upcomingPrograms)
-    if (overrides?.[element.id] ?? upcomingProgramsDrivesHold(element)) return true;
+  for (const { element, items } of scope.upcomingPrograms) {
+    if (
+      (overrides?.[element.id] ?? upcomingProgramsDrivesHold(element)) &&
+      (upcomingItems === undefined || (upcomingItems.get(element.id) ?? items).length > 0)
+    ) {
+      return true;
+    }
+  }
   // D-125 §D2.1 — a Lottie is a driver ONLY when it OPTED IN (`=== true`, the INVERSE
   // default), so it can't be folded into `drives()` above. Without this a composition
   // whose only hold driver is an opted-in Lottie would fall back to `timed` (B-032) and
@@ -455,7 +470,10 @@ function scopeHasEffectiveHoldDrivers(
   for (const child of scope.children)
     // B-034 — a HIDDEN instance's whole subtree is inert: don't descend (so a content-driven comp
     // whose only drivers live inside hidden instances resolves to timed, matching the runtime hold).
-    if (child.visible !== false && scopeHasEffectiveHoldDrivers(child.scope, child.holdOverrides))
+    if (
+      child.visible !== false &&
+      scopeHasEffectiveHoldDrivers(child.scope, child.holdOverrides, upcomingItems)
+    )
       return true;
   return false;
 }
@@ -479,6 +497,7 @@ interface WiredSubtree {
   tickers: TickerDriver[];
   clocks: ClockDriver[];
   sequences: SequenceDriver[];
+  applyUpcomingPrograms: (() => void)[];
   repeaters: RepeaterDriver[];
   /** D-125 — Lottie drivers of this subtree (driven-frame players). */
   lotties: LottieDriver[];
@@ -1099,6 +1118,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // Every wired subtree, in wiring order (the static tree first; repeater rows
   // join per stamp). The runtime-level cascades iterate this set.
   const subtrees = new Set<WiredSubtree>();
+  let activeUpcomingPrograms = new Map<string, readonly UpcomingProgramsSampleItem[]>();
+  let nextUpcomingPrograms: UpcomingProgramsOverrides | undefined;
+  const setUpcomingProgramTake = (snapshot: UpcomingProgramsOverrides): void => {
+    activeUpcomingPrograms = new Map(
+      Object.entries(snapshot).map(([id, sampleItems]) => [
+        id,
+        upcomingProgramsPreviewItems({ sampleItems }),
+      ]),
+    );
+    for (const subtree of subtrees) for (const apply of subtree.applyUpcomingPrograms) apply();
+  };
   const cuttableUpcomingOutros = new WeakMap<ElementOutroDriver, () => void>();
   let upcomingOutrosCut = false;
 
@@ -1204,6 +1234,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const tickers: TickerDriver[] = [];
     const clocks: ClockDriver[] = [];
     const sequences: SequenceDriver[] = [];
+    const applyUpcomingPrograms: (() => void)[] = [];
     const repeaters: RepeaterDriver[] = [];
     const lotties: LottieDriver[] = [];
     const videos: VideoDriver[] = [];
@@ -1220,6 +1251,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       hasContentDrivingAncestor: boolean,
     ): ScopeNode => {
       const scopeOverride = overrides[path];
+      const hasHoldDrivers = (): boolean =>
+        scopeHasEffectiveHoldDrivers(scope, undefined, activeUpcomingPrograms);
       // D-187 — resolve the composition's Hold picture once, before media drivers are built.
       // Furniture, Video and Lottie all consume this same value; an element-local copy would
       // let the background move while its bed freezes (or the reverse).
@@ -1625,6 +1658,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const holdUpcomingPrograms: ContentDriver[] = [];
       const staticUpcomingPrograms: SequenceDriver[] = [];
       for (const { element, host, items } of scope.upcomingPrograms) {
+        let currentItems = activeUpcomingPrograms.get(element.id) ?? items;
         const paged = upcomingProgramsUsesPagination(element);
         const drivesHold = upcomingProgramsDrivesHold(element);
         const frameOutro = hasAuthoredContentFrameOutro(scope.source, element);
@@ -1632,7 +1666,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const driver = createUpcomingProgramsDriver(
           host,
           element,
-          items,
+          currentItems,
           options.clock,
           options.assetUrls,
           syncUpcomingAudio,
@@ -1643,19 +1677,37 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           host.dataset['cgContent'] = 'upcomingPrograms';
         }
         if (frameOutro) host.dataset['cgOutro'] = 'upcoming-programs-frame';
-        if (effectOutro) {
-          if (!frameOutro) host.dataset['cgOutro'] = 'upcoming-programs-effect';
-          scopeOutroLotties.push(driver);
-          cuttableUpcomingOutros.set(driver, () => driver.cutOutro(frameOutro));
+        if (effectOutro && !frameOutro) host.dataset['cgOutro'] = 'upcoming-programs-effect';
+        if (effectOutro || (paged && element.nextPageEffect !== undefined)) {
+          // A staged page turn must stop at Out even when the composition owns the final paint.
+          const outro = effectOutro
+            ? driver
+            : {
+                playOutro: (): Promise<void> => {
+                  driver.stop();
+                  return Promise.resolve();
+                },
+              };
+          scopeOutroLotties.push(outro);
+          cuttableUpcomingOutros.set(outro, () => driver.cutOutro(frameOutro));
         }
         sequences.push(driver);
         scopeSequences.push(driver);
         if (!paged) staticUpcomingPrograms.push(driver);
-        if (!upcomingProgramsCanStep(element, items.length)) operatorFixed.add(driver);
+        if (!upcomingProgramsCanStep(element, currentItems.length)) operatorFixed.add(driver);
+        applyUpcomingPrograms.push(() => {
+          const replacement = activeUpcomingPrograms.get(element.id) ?? items;
+          if (replacement === currentItems) return;
+          currentItems = replacement;
+          driver.replaceUpcomingItems(replacement);
+          if (upcomingProgramsCanStep(element, replacement.length)) operatorFixed.delete(driver);
+          else operatorFixed.add(driver);
+        });
         lookMediaPark.register({ node: host, driver, parkable: !drivesHold });
         const content = {
           id: element.id,
           drivesHold,
+          hasContent: () => currentItems.length > 0,
           whenComplete: (): Promise<void> => {
             // Static cards have a duration only when a content-driven hold waits for them.
             if (!paged) driver.setAdvance('auto');
@@ -2238,18 +2290,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // or a hidden look's crawl would run from here to the end of the graphic.
         lookMediaPark.reassert();
       };
-      const ownContentWait = (): Promise<void> | null =>
-        holdTickers.length > 0 ||
-        holdCountdowns.length > 0 ||
-        holdSequences.length > 0 ||
-        holdUpcomingPrograms.length > 0 ||
-        holdLotties.length > 0 ||
-        holdVideos.length > 0
+      const ownContentWait = (): Promise<void> | null => {
+        const upcomingHolds = holdUpcomingPrograms.filter(
+          (driver) => driver.hasContent?.() === true,
+        );
+        return holdTickers.length > 0 ||
+          holdCountdowns.length > 0 ||
+          holdSequences.length > 0 ||
+          upcomingHolds.length > 0 ||
+          holdLotties.length > 0 ||
+          holdVideos.length > 0
           ? Promise.all([
               ...holdTickers.map((t) => t.whenComplete()),
               ...holdCountdowns.map((c) => c.whenComplete()),
               ...holdSequences.map((s) => s.whenComplete()),
-              ...holdUpcomingPrograms.map((s) => s.whenComplete()),
+              ...upcomingHolds.map((s) => s.whenComplete()),
               // D-125 §D6.3 — only OPTED-IN (`drivesHold === true`) Lotties are in this
               // array: a freeze Lottie completes at `introEnd`, an idle-loop one never does.
               ...holdLotties.map((l) => l.whenComplete()),
@@ -2258,6 +2313,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               ...holdVideos.map((v) => v.whenComplete()),
             ]).then(() => undefined)
           : null;
+      };
       const stopScopeContent = (): void => {
         for (const t of scopeTickers) t.stop();
         for (const c of scopeClocks) c.stop();
@@ -2587,6 +2643,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               return aggregateContentWait(ownContentWait(), instanceChildren);
             }
           : undefined,
+        emptyContentUsesTimedHold: (): boolean =>
+          (!isGlobalRoot || options.contentHold === undefined) && !hasHoldDrivers(),
         onContentStart: drivesContent
           ? (): void => {
               startOwnContent();
@@ -2643,6 +2701,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         controller,
         children: [...instanceChildren],
         isCoordinator,
+        hasHoldDrivers,
         startOwnContent,
         ownContentWait,
         contentDrivers,
@@ -2772,6 +2831,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       tickers,
       clocks,
       sequences,
+      applyUpcomingPrograms,
       repeaters,
       lotties,
       videos,
@@ -3625,6 +3685,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           that delivers load data through `play`.
       */
       const control = readCgControl(data);
+      const upcomingSnapshot = control?.upcomingPrograms ?? nextUpcomingPrograms;
+      nextUpcomingPrograms = undefined;
+      if (!showUpcomingProgramsSampleItems && upcomingSnapshot !== undefined) {
+        setUpcomingProgramTake(upcomingSnapshot);
+      }
       // Merge (don't replace) so a `CG PLAY` with no data preserves whatever a
       // prior `CG ADD`/`UPDATE` already set — the CasparCG flow updates first,
       // then plays with no args. play(data) still applies its data. Order no
@@ -3886,6 +3951,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         scene the export preflight never saw.
       */
       const receivedControl = readCgControl(data);
+      if (
+        !showUpcomingProgramsSampleItems &&
+        receivedControl?.upcomingPrograms !== undefined &&
+        (machine.state === 'pending' ||
+          machine.state === 'stopped' ||
+          receivedControl.take !== undefined)
+      ) {
+        // Even a resident take tell leaves the currently painted snapshot intact until PLAY.
+        nextUpcomingPrograms = receivedControl.upcomingPrograms;
+      }
       const releaseNativeBorderEffectId = receivedControl?.releaseNativeBorderEffectId;
       if (releaseNativeBorderEffectId !== undefined) {
         if (releaseNativeBorderEffectId === nativeBorderEffectId) setNativeBorders([]);

@@ -22,6 +22,7 @@ import {
   pageListsOf,
   TEMPLATE_TIMING_VERSION,
   templateTimingOf,
+  upcomingProgramsTemplateMetadataOf,
   runtimeShortfall,
   runtimeShortfallMessage,
   withListLimits,
@@ -365,8 +366,10 @@ export async function produceTemplateDelivery(
   // display (see `templateName.ts`), and this is the one hop where it is still in hand.
   const name = pickTemplateName(manifest.name, scene.name);
   const liveSources = buildTemplateLiveSources(scene);
+  const upcomingPrograms = upcomingProgramsTemplateMetadataOf(scene, manifest.assetIndex);
   const template: TemplateInfo = {
     templateId: manifest.id,
+    ...(upcomingPrograms !== undefined && { upcomingPrograms }),
     ...(scene.controlLiveLayout !== undefined && {
       controlLiveLayout: scene.controlLiveLayout,
       controlLiveLayoutSource: sha256Hex(bytes),

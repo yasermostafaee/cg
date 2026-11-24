@@ -156,7 +156,7 @@ describe('Exporter (.vcg) — D-128 Phase 5 video packaging', () => {
     expect(files.has(PATH_B)).toBe(false);
   });
 
-  it('packages images, clips and sounds used only by prepared programme rows', async () => {
+  it('packages images, clips and sounds used only by prepared program rows', async () => {
     const pictureBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 12, 34]);
     const soundBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2]);
     const posterBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 56, 78]);

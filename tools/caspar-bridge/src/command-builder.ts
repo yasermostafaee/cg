@@ -13,6 +13,7 @@ import {
   type FrameTransitionPhase,
   type LiveFramePlacement,
   type LiveMaskPlacement,
+  type UpcomingProgramsOverrides,
 } from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
@@ -46,6 +47,7 @@ export interface TakeControl {
   readonly sound?: CgSound;
   readonly framePlacements?: LiveFramePlacement[];
   readonly maskPlacements?: LiveMaskPlacement[];
+  readonly upcomingPrograms?: UpcomingProgramsOverrides;
 }
 
 /**
@@ -284,6 +286,7 @@ export class CommandBuilder {
       ...(control.plates !== undefined && { plates: control.plates }),
       ...(control.framePlacements !== undefined && { framePlacements: control.framePlacements }),
       ...(control.maskPlacements !== undefined && { maskPlacements: control.maskPlacements }),
+      ...(control.upcomingPrograms !== undefined && { upcomingPrograms: control.upcomingPrograms }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, ordered)),

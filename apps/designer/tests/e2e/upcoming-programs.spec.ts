@@ -1,8 +1,22 @@
 import { readFileSync } from 'node:fs';
+import type { Locator } from '@playwright/test';
 import { DesignerApp, test, expect } from './fixtures/designer.js';
 
+function cardFadeStates(cards: Locator): Promise<string[]> {
+  return cards.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const style = getComputedStyle(node);
+      const opacity = Number(style.opacity);
+      if (style.display === 'none' || style.visibility === 'hidden' || opacity <= 0.001) {
+        return 'hidden';
+      }
+      return opacity >= 0.999 ? 'visible' : 'moving';
+    }),
+  );
+}
+
 test.describe('D-219 — Upcoming Programs', () => {
-  test('authors its own layouts and previews more than five programme cards', async ({ app }) => {
+  test('authors its own layouts and previews more than five program cards', async ({ app }) => {
     await app.newProject('Upcoming lineup');
     await app.addUpcomingPrograms();
 
@@ -263,14 +277,14 @@ test.describe('D-219 — Upcoming Programs', () => {
     await inspector.getByLabel('Advance', { exact: true }).selectOption('manual');
     await inspector.getByLabel('Next effect', { exact: true }).selectOption('cut');
     await inspector.getByRole('button', { name: 'Toggle Test data' }).click();
-    const testProgramme = inspector.getByLabel('Test programme', { exact: true });
+    const testProgram = inspector.getByLabel('Test program', { exact: true });
     const testTitle = inspector.getByLabel('Test title', { exact: true });
     const testAirtime = inspector.getByLabel('Test airtime', { exact: true });
     for (const [id, title, airtime] of [
       ['program-1', 'Story ١۲3', '١۲:3۴'],
       ['program-2', 'Chapter ۴5٦', '4۵:٦7'],
     ] as const) {
-      await testProgramme.selectOption(id);
+      await testProgram.selectOption(id);
       await testTitle.fill(title);
       await testTitle.press('Enter');
       await testAirtime.fill(airtime);
@@ -594,14 +608,14 @@ test.describe('D-219 — Upcoming Programs', () => {
     await expect(cardPage).toHaveCSS('column-gap', '0px');
 
     await inspector.getByRole('button', { name: 'Toggle Test data' }).click();
-    const testProgramme = inspector.getByLabel('Test programme', { exact: true });
+    const testProgram = inspector.getByLabel('Test program', { exact: true });
     const testTitle = inspector.getByLabel('Test title', { exact: true });
     const testAirtime = inspector.getByLabel('Test airtime', { exact: true });
     for (const [id, title, airtime] of [
       ['program-1', 'مستند ایران از آسمان', 'ساعت ۲'],
       ['program-2', 'گفت‌وگوی شبانه', '۰۲:۴۵'],
     ] as const) {
-      await testProgramme.selectOption(id);
+      await testProgram.selectOption(id);
       await testTitle.fill(title);
       await testTitle.press('Enter');
       await testAirtime.fill(airtime);
@@ -779,6 +793,227 @@ test.describe('D-219 — Upcoming Programs', () => {
     expect(html).toContain('"exitEffect":{"edge":"fade","durationMs":1200}');
   });
 
+  test('staggers the visible cards on Entrance and Out without staggering Next', async ({
+    app,
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'storage', { configurable: true, value: undefined });
+    });
+    await app.goto();
+    await app.newProject('Upcoming staggered cards');
+    await app.addUpcomingPrograms();
+    const { inspector } = app;
+    const number = async (label: string, value: string) => {
+      const input = inspector.getByLabel(label, { exact: true });
+      await input.fill(value);
+      await input.press('Enter');
+    };
+    await inspector.getByLabel('Layout', { exact: true }).selectOption('carousel');
+    await inspector.getByLabel('Advance', { exact: true }).selectOption('manual');
+    await inspector.getByLabel('Next effect', { exact: true }).selectOption('crossfade');
+    await number('Next effect duration', '1');
+    await inspector.getByRole('button', { name: 'Toggle Carousel focus' }).click();
+    await inspector.getByLabel('Focus behavior', { exact: true }).selectOption('across');
+    await number('Focus move duration', '0');
+    await inspector.getByRole('button', { name: 'Toggle Entrance and exit' }).click();
+    for (const [boundary, order] of [
+      ['Entrance', 'first-to-last'],
+      ['Exit', 'last-to-first'],
+    ] as const) {
+      await inspector.getByLabel(`${boundary} effect`, { exact: true }).selectOption('fade');
+      await number(`${boundary} duration`, '0.7');
+      const motion = inspector.getByLabel(`${boundary} motion`, { exact: true });
+      await expect(motion).toHaveValue('group');
+      await motion.selectOption('stagger');
+      await number(`${boundary} stagger`, '0.85');
+      await inspector.getByLabel(`${boundary} card order`, { exact: true }).selectOption(order);
+    }
+
+    await app.openPreviewModal();
+    const pages = app.previewFrame.locator('[data-cg-upcoming-page]');
+    const currentPage = pages.last();
+    const wrappers = currentPage.locator('[data-cg-upcoming-card-motion]');
+    const focus = app.previewFrame.locator('[data-cg-upcoming-focus]');
+    const cardMotion = (cards = wrappers) => cardFadeStates(cards);
+    const observeCards = () => expect.poll(cardMotion, { intervals: [50] });
+
+    await app.play();
+    await observeCards().toEqual(['moving', 'hidden', 'hidden']);
+    await observeCards().toEqual(['visible', 'moving', 'hidden']);
+    await observeCards().toEqual(['visible', 'visible', 'visible']);
+    await expect(focus).toHaveAttribute('data-cg-upcoming-card', 'program-1');
+
+    for (const id of ['program-2', 'program-3']) {
+      await app.next();
+      await expect(focus).toHaveAttribute('data-cg-upcoming-card', id);
+      await expect(pages).toHaveCount(1);
+      await observeCards().toEqual(['visible', 'visible', 'visible']);
+    }
+    await app.next();
+    await expect(pages).toHaveCount(2);
+    await expect(focus).toHaveAttribute('data-cg-upcoming-card', 'program-4');
+    expect(await cardMotion()).toEqual(['visible', 'visible', 'visible']);
+    await expect(pages).toHaveCount(1);
+    await expect(currentPage.locator('[data-cg-upcoming-card]')).toHaveCount(3);
+
+    await app.previewDialog.getByRole('button', { name: 'Out', exact: true }).click();
+    await observeCards().toEqual(['visible', 'visible', 'moving']);
+    await observeCards().toEqual(['visible', 'moving', 'hidden']);
+    await expect(currentPage).toBeHidden();
+
+    await app.previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await inspector.getByRole('button', { name: 'Toggle Test data' }).click();
+    await inspector.getByLabel('On-air data', { exact: true }).selectOption('prepared');
+
+    const saving = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'SAVE', exact: true }).click();
+    const project = await saving;
+    const chunks: Buffer[] = [];
+    for await (const chunk of await project.createReadStream()) chunks.push(Buffer.from(chunk));
+
+    await app.goto();
+    const choosing = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Import project', exact: true }).click();
+    await (
+      await choosing
+    ).setFiles({
+      name: project.suggestedFilename(),
+      mimeType: 'application/zip',
+      buffer: Buffer.concat(chunks),
+    });
+    await app.expectStudio();
+
+    const { html } = await app.exportHtml();
+    expect(html).toContain(
+      '"entranceEffect":{"edge":"fade","durationMs":700,"stagger":{"delayMs":850,"order":"first-to-last"}}',
+    );
+    expect(html).toContain(
+      '"exitEffect":{"edge":"fade","durationMs":700,"stagger":{"delayMs":850,"order":"last-to-first"}}',
+    );
+    const output = await page.context().newPage();
+    try {
+      await output.setContent(html);
+      await output.waitForFunction(
+        () => typeof (window as unknown as { play?: unknown }).play === 'function',
+      );
+      const exportedCards = output.locator('[data-cg-upcoming-card-motion]');
+      await output.evaluate(() => {
+        void (window as unknown as { play: () => void | Promise<void> }).play();
+      });
+      await expect
+        .poll(() => cardMotion(exportedCards), { intervals: [50] })
+        .toEqual(['visible', 'moving', 'hidden']);
+      await expect
+        .poll(() => cardMotion(exportedCards), { intervals: [50] })
+        .toEqual(['visible', 'visible', 'visible']);
+    } finally {
+      await output.close();
+    }
+  });
+
+  test('fully exits the current page in reverse order before entering the next in forward order', async ({
+    app,
+  }) => {
+    await app.newProject('Upcoming ordered page switch');
+    await app.addUpcomingPrograms();
+    const { inspector, previewFrame } = app;
+    const field = (label: string) => inspector.getByLabel(label, { exact: true });
+    const number = async (label: string, value: string) => {
+      await field(label).fill(value);
+      await field(label).press('Enter');
+    };
+    await field('Layout').selectOption('carousel');
+    await number('Visible cards', '3');
+    await field('Advance').selectOption('manual');
+    await expect(field('Next motion')).toHaveValue('group');
+    await field('Next motion').selectOption('stagger');
+    for (const [side, order] of [
+      ['Current page exit', 'last-to-first'],
+      ['Next page entrance', 'first-to-last'],
+    ] as const) {
+      await field(`${side} effect`).selectOption('fade');
+      await field(`${side} motion`).selectOption('stagger');
+      await number(`${side} duration`, '0.7');
+      await number(`${side} stagger`, '0.8');
+      await field(`${side} card order`).selectOption(order);
+    }
+    await inspector.getByRole('button', { name: 'Toggle Carousel focus' }).click();
+    await field('Focus behavior').selectOption('across');
+    await number('Focus move duration', '0');
+
+    await inspector.getByRole('button', { name: 'Toggle Entrance and exit' }).click();
+    for (const boundary of ['Entrance', 'Exit'] as const) {
+      await field(`${boundary} effect`).selectOption('fade');
+      await expect(field(`${boundary} motion`)).toHaveValue('group');
+      await number(`${boundary} duration`, '0.8');
+    }
+
+    await app.openPreviewModal();
+    const layout = previewFrame.locator('[data-cg-upcoming-layout]');
+    const pages = layout.locator('[data-cg-upcoming-page]');
+    const first = layout.locator('[data-cg-upcoming-group="program-1"]');
+    const second = layout.locator('[data-cg-upcoming-group="program-4"]');
+    const focus = layout.locator('[data-cg-upcoming-focus]');
+    const groupFade = () =>
+      pages.evaluateAll((nodes) => {
+        const node = nodes[0];
+        if (nodes.length !== 1 || node === undefined) return false;
+        const opacity = Number(getComputedStyle(node).opacity);
+        return opacity > 0 && opacity < 1;
+      });
+    const cardFades = (group: Locator) =>
+      expect.poll(() => cardFadeStates(group.locator('[data-cg-upcoming-card-motion]')), {
+        intervals: [50],
+      });
+    await app.play();
+    await expect.poll(groupFade).toBe(true);
+    await expect(first).toHaveCSS('opacity', '1');
+    await expect(focus).toHaveAttribute('data-cg-upcoming-card', 'program-1');
+
+    for (const id of ['program-2', 'program-3']) {
+      await app.next();
+      await expect(focus).toHaveAttribute('data-cg-upcoming-card', id);
+      await expect(pages).toHaveCount(1);
+      await cardFades(first).toEqual(['visible', 'visible', 'visible']);
+    }
+
+    // Check each rendered frame as styles change, including the handoff between the two phases.
+    await layout.evaluate((node) => {
+      node.setAttribute('data-test-overlapping-pages', 'false');
+      new MutationObserver(() => {
+        const visible = Array.from(node.querySelectorAll('[data-cg-upcoming-page]')).filter(
+          (page) =>
+            Array.from(page.querySelectorAll('[data-cg-upcoming-card]')).some((card) =>
+              card.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
+            ),
+        );
+        if (visible.length > 1) node.setAttribute('data-test-overlapping-pages', 'true');
+      }).observe(node, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['style'],
+      });
+    });
+
+    await app.next();
+    await cardFades(first).toEqual(['visible', 'visible', 'moving']);
+    await cardFades(first).toEqual(['visible', 'moving', 'hidden']);
+    await cardFades(first).toEqual(['moving', 'hidden', 'hidden']);
+    await cardFades(second).toEqual(['moving', 'hidden', 'hidden']);
+    await expect(first).toBeHidden();
+    await cardFades(second).toEqual(['visible', 'moving', 'hidden']);
+    await cardFades(second).toEqual(['visible', 'visible', 'visible']);
+    await expect(focus).toHaveAttribute('data-cg-upcoming-card', 'program-4');
+    await expect(layout).toHaveAttribute('data-test-overlapping-pages', 'false');
+
+    await app.previewDialog.getByRole('button', { name: 'Out', exact: true }).click();
+    await expect.poll(groupFade).toBe(true);
+    await cardFades(second).toEqual(['visible', 'visible', 'visible']);
+    await expect(second).toBeHidden();
+  });
+
   test('stops after two full passes and wraps when repeat is infinite', async ({ app }) => {
     await app.newProject('Upcoming passes');
     await app.addUpcomingPrograms();
@@ -842,15 +1077,15 @@ test.describe('D-219 — Upcoming Programs', () => {
     await app.inspector.getByLabel('Advance', { exact: true }).selectOption('manual');
     await app.inspector.getByLabel('Next effect', { exact: true }).selectOption('cut');
     await app.inspector.getByRole('button', { name: 'Toggle Test data' }).click();
-    const testProgramme = app.inspector.getByLabel('Test programme', { exact: true });
-    const add = app.inspector.getByRole('button', { name: 'Add test programme', exact: true });
+    const testProgram = app.inspector.getByLabel('Test program', { exact: true });
+    const add = app.inspector.getByRole('button', { name: 'Add test program', exact: true });
     await expect(add.locator('svg')).toHaveCount(1);
     await expect(add).toHaveText('');
     await add.click();
-    await expect(testProgramme.locator('option')).toHaveCount(8);
-    await app.inspector.getByRole('button', { name: 'Remove test programme', exact: true }).click();
-    await expect(testProgramme.locator('option')).toHaveCount(7);
-    await testProgramme.selectOption('program-2');
+    await expect(testProgram.locator('option')).toHaveCount(8);
+    await app.inspector.getByRole('button', { name: 'Remove test program', exact: true }).click();
+    await expect(testProgram.locator('option')).toHaveCount(7);
+    await testProgram.selectOption('program-2');
     const title = app.inspector.getByLabel('Test title', { exact: true });
     await title.fill('معرفی آزمایشی');
     await title.press('Enter');

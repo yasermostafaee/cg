@@ -106,7 +106,7 @@ describe('buildPlayoutMetadata', () => {
       id: 'upcoming',
       type: 'upcomingPrograms',
       drivesHold: true,
-      sampleItems: [{ id: 'next', title: 'Upcoming programme' }],
+      sampleItems: [{ id: 'next', title: 'Upcoming program' }],
     });
     const withUpcoming = (element: typeof upcoming): Scene => ({
       ...fixtureScene,

@@ -329,6 +329,7 @@ describe('C-038 — the census: every route, classified', () => {
       'templates.thumbnail',
       // `R-102` — a bounded read from the bridge-administered text-source root.
       'textSources.read',
+      'upcoming-media.get',
       'update.state',
     ]);
   });

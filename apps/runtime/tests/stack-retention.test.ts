@@ -769,6 +769,17 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     // was added, because this guard refuses to run against a fixture that does not populate
     // every carriable key: an unpopulated field would make the assertion below pass vacuously.
     timingOverride: { repeat: 2, delayMs: 1500 },
+    upcomingPrograms: {
+      'upcoming-element': [
+        {
+          id: 'program-1',
+          title: 'After the news',
+          airtime: '21:00',
+          mediaAssetId: `upcoming-media:${'a'.repeat(64)}`,
+          mediaKind: 'image',
+        },
+      ],
+    },
     // `R-100` — the page a row's book is on, added the day the field was, for the reason above.
     pages: { book: 11 },
     // `BOOK-IN-CONTROL` — the row-local Manual/Auto choice must survive retention too.

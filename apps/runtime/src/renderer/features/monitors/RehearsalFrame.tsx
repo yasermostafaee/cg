@@ -15,13 +15,16 @@ import {
   controlLiveLayoutSoloTarget,
   pageMediaPath,
   positionQuery,
+  upcomingProgramsMediaHashes,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
+  CG_UPCOMING_PROGRAMS_PAGE_MARKER,
   withCgControl,
   type ControlLiveLayout,
   type FrameTransitionPhase,
   type LiveFramePlacement,
   type LiveMaskPlacement,
+  type UpcomingProgramsOverrides,
 } from '@cg/shared-schema';
 import {
   activeLookOf,
@@ -67,6 +70,7 @@ import {
   runRehearsalEffect,
 } from './rehearsalPresetEffects.js';
 import { previewFocusSwitch } from './previewFocusSwitch.js';
+import { upcomingProgramMediaDataUrl } from '../inspector/upcomingProgramMedia.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -182,6 +186,7 @@ interface Props {
   zIndex: number;
   /** The operator's current (possibly unapplied) field values for the item. */
   fields: FieldValues;
+  upcomingPrograms?: UpcomingProgramsOverrides | undefined;
   /** The operator's applied placement override (R-011), when the item has one. */
   position: Position | undefined;
   outputReference?: Raster | undefined;
@@ -244,6 +249,7 @@ export function RehearsalFrame({
   fit,
   zIndex,
   fields,
+  upcomingPrograms,
   position,
   outputReference,
   rowName,
@@ -360,6 +366,22 @@ export function RehearsalFrame({
   const templateWindow = useCallback((): TemplateWindow | null => {
     return (frameRef.current?.contentWindow as TemplateWindow | null | undefined) ?? null;
   }, []);
+  // Upcoming lists are adopted before play. Reboot this one local frame after a settled edit.
+  const upcomingKey = upcomingPrograms === undefined ? '' : JSON.stringify(upcomingPrograms);
+  const [upcomingRevision, setUpcomingRevision] = useState(upcomingKey);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setUpcomingRevision(upcomingKey), 200);
+    return () => window.clearTimeout(timer);
+  }, [upcomingKey]);
+  const previewUpcoming = useMemo(
+    () =>
+      upcomingRevision === ''
+        ? undefined
+        : (JSON.parse(upcomingRevision) as UpcomingProgramsOverrides),
+    [upcomingRevision],
+  );
+  const previewPlaying = useRef(playing);
+  previewPlaying.current = playing;
 
   /**
    * Hand the page the picture its next turn names (`providePagePicture`): this frame's origin has no
@@ -419,11 +441,12 @@ export function RehearsalFrame({
           ...(framePlacements !== undefined && { framePlacements }),
           ...(maskPlacements !== undefined && { maskPlacements }),
           ...(timing !== undefined && { timing }),
+          ...(previewUpcoming !== undefined && { upcomingPrograms: previewUpcoming }),
           // `RUN-NEXT-VERSION-03` 1.1 — a take carries its page (`#pageControl`); so does PVW's.
           ...(page !== undefined && { page }),
         }),
       ),
-    [fields, activeLookId, framePlacements, maskPlacements, timing, page],
+    [fields, activeLookId, framePlacements, maskPlacements, timing, page, previewUpcoming],
   );
 
   /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */
@@ -495,9 +518,9 @@ export function RehearsalFrame({
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
-  useEffect(() => {
+  useLayoutEffect(() => {
     setReady(false);
-  }, [html]);
+  }, [html, upcomingRevision]);
 
   // THE CLEANUP IS NOT TIDINESS. Without it an unmounting frame leaves its id in
   // the stage's ready set, so a row that leaves rehearse and comes back is
@@ -1030,6 +1053,7 @@ export function RehearsalFrame({
     */
     // eslint-disable-next-line jsx-a11y/iframe-has-title
     <iframe
+      key={upcomingRevision}
       ref={frameRef}
       aria-label={translateUi('{row} rehearsal preview', { row: rowName })}
       data-rehearsal-frame={itemId}
@@ -1038,8 +1062,10 @@ export function RehearsalFrame({
       onLoad={() => {
         // `D-165` — PVW is silent: mute the page's own sound BEFORE the frame reports ready,
         // so no PLAY reaches a page that could still make a sound.
-        silencePage(frameRef.current?.contentWindow as TemplateWindow | null);
-        const stage = frameRef.current?.contentDocument?.querySelector<HTMLElement>('.cg-stage');
+        const win = templateWindow();
+        silencePage(win);
+        const doc = frameRef.current?.contentDocument;
+        const stage = doc?.querySelector<HTMLElement>('.cg-stage');
         authoredPlacement.current =
           stage == null
             ? null
@@ -1050,7 +1076,25 @@ export function RehearsalFrame({
                 overridden: false,
               };
         loadedHtml.current = html;
-        setReady(true);
+        if (previewUpcoming === undefined) {
+          if (previewPlaying.current && html.includes(CG_UPCOMING_PROGRAMS_PAGE_MARKER)) playNow();
+          setReady(true);
+          return;
+        }
+        void Promise.all(
+          [...upcomingProgramsMediaHashes(previewUpcoming)].map(async (hash) => ({
+            hash,
+            url: await upcomingProgramMediaDataUrl(hash),
+          })),
+        ).then((media) => {
+          if (frameRef.current?.contentDocument !== doc) return;
+          for (const { hash, url } of media) {
+            if (url !== undefined) win?.CG?.provideUpcomingProgramMedia?.(hash, url);
+          }
+          win?.update?.(playPayload());
+          if (previewPlaying.current) playNow();
+          setReady(true);
+        });
       }}
       style={{
         // Sized to the CHANNEL RASTER and fitted by the shared transform — the

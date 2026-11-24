@@ -2,6 +2,7 @@ import {
   cubicBezierEase,
   EASING_PRESETS,
   upcomingProgramsCardStyleOf,
+  upcomingProgramsNextPageEffectOf,
   upcomingProgramsRepeatOf,
   upcomingProgramsSceneEffectsOf,
   upcomingProgramsTransitionOf,
@@ -16,13 +17,25 @@ import { detectDirection, writeFieldDigits } from '@cg/text-shaping';
 import {
   SequenceDriver,
   type RenderedSequenceItem,
+  type SequenceBoundaryKind,
+  type SequenceBoundaryMotion,
   type SequenceInPlaceTransition,
 } from './sequence-driver.js';
 import type { RuntimeClock } from './types.js';
+import { upcomingProgramVisualUrl } from './upcoming-program-media.js';
+import {
+  createUpcomingCardBoundary,
+  createUpcomingPageBoundary,
+  upcomingCardMotion,
+  upcomingPageMotion,
+  UPCOMING_BOUNDARY_HIDDEN,
+  type UpcomingCardMotion,
+} from './upcoming-card-motion.js';
 
 type CardStyle = ReturnType<typeof upcomingProgramsCardStyleOf>;
 const MEDIA_GUIDE_OUTLINE = 'inset 0 0 0 1px #8294A0';
 const FOCUSED_CARD = '[data-cg-upcoming-focus]';
+const FOCUSED_MEDIA_CARD = `${FOCUSED_CARD}:not(${UPCOMING_BOUNDARY_HIDDEN})`;
 const PROGRAM_VIDEO = 'video[data-cg-upcoming-media-source]';
 const FOCUS_EASE: BezierEasing = EASING_PRESETS['ease-in-out'] ?? [0.42, 0, 0.58, 1];
 
@@ -233,7 +246,9 @@ function mountProgramMedia(
         posterReady = ready;
         paintReadyMedia();
       },
-      posterAssetId === undefined ? undefined : assetUrls?.[posterAssetId],
+      posterAssetId === undefined
+        ? undefined
+        : upcomingProgramVisualUrl(doc, posterAssetId, 'image', assetUrls),
     );
     aperture.appendChild(poster);
   }
@@ -256,7 +271,7 @@ function mountProgramMedia(
         sourceReady = ready;
         paintReadyMedia();
       },
-      assetUrls?.[mediaAssetId],
+      upcomingProgramVisualUrl(doc, mediaAssetId, mediaKind, assetUrls),
     );
     aperture.appendChild(nextSource);
   };
@@ -295,7 +310,7 @@ export function syncUpcomingProgramsPreviewAudio(stage: HTMLElement, enabled: bo
   const focused = enabled
     ? sounds.find((audio) => {
         const card = audio.closest(
-          '[data-cg-upcoming-playing]:not([aria-hidden="true"]) [data-cg-upcoming-focus]',
+          `[data-cg-upcoming-playing]:not([aria-hidden="true"]):not(${UPCOMING_BOUNDARY_HIDDEN}) ${FOCUSED_MEDIA_CARD}`,
         );
         return card?.querySelector<HTMLVideoElement>('video')?.paused === false;
       })
@@ -311,10 +326,12 @@ export function syncUpcomingProgramsPreviewAudio(stage: HTMLElement, enabled: bo
 interface UpcomingPage {
   node: HTMLElement;
   transitionFocus?: (id: string) => SequenceInPlaceTransition | undefined;
+  createBoundaryMotion?: (kind: SequenceBoundaryKind) => SequenceBoundaryMotion | undefined;
+  createPageTurnMotion?: (kind: SequenceBoundaryKind) => SequenceBoundaryMotion;
 }
 
 function playablePage(
-  { node, transitionFocus }: UpcomingPage,
+  { node, transitionFocus, createBoundaryMotion, createPageTurnMotion }: UpcomingPage,
   syncAudio: () => void,
 ): RenderedSequenceItem {
   const observedSources = new WeakSet<HTMLMediaElement>();
@@ -324,7 +341,8 @@ function playablePage(
       !active ||
       !video.isConnected ||
       node !== node.parentElement?.lastElementChild ||
-      video.closest(FOCUSED_CARD) === null
+      node.matches(UPCOMING_BOUNDARY_HIDDEN) ||
+      video.closest(FOCUSED_MEDIA_CARD) === null
     ) {
       video.pause();
       return;
@@ -375,6 +393,26 @@ function playablePage(
       return effect;
     };
   }
+  const mediaHidden = (): boolean =>
+    node.matches(UPCOMING_BOUNDARY_HIDDEN) ||
+    node.querySelector(`${FOCUSED_CARD}${UPCOMING_BOUNDARY_HIDDEN}`) !== null;
+  const withMedia = (motion: SequenceBoundaryMotion): SequenceBoundaryMotion => ({
+    durationMs: motion.durationMs,
+    paint(elapsedMs) {
+      const before = mediaHidden();
+      motion.paint(elapsedMs);
+      if (active && before !== mediaHidden()) startFocusedMedia();
+    },
+  });
+  if (createBoundaryMotion !== undefined) {
+    rendered.createBoundaryMotion = (kind) => {
+      const motion = createBoundaryMotion(kind);
+      return motion === undefined ? undefined : withMedia(motion);
+    };
+  }
+  if (createPageTurnMotion !== undefined) {
+    rendered.createPageTurnMotion = (kind) => withMedia(createPageTurnMotion(kind));
+  }
   return rendered;
 }
 
@@ -400,6 +438,13 @@ function buildUpcomingProgramsPage(
   const { layout, visibleCards, showAirtime } = element;
   const { w, h } = element.transform.size;
   const style = upcomingProgramsCardStyleOf(element);
+  const effects = upcomingProgramsSceneEffectsOf(element);
+  const nextPage = upcomingProgramsUsesPagination(element)
+    ? upcomingProgramsNextPageEffectOf(element)
+    : undefined;
+  const staggered = [effects.entrance, effects.exit, nextPage?.entrance, nextPage?.exit].some(
+    (effect) => effect !== undefined && effect.edge !== 'none' && effect.stagger !== undefined,
+  );
   const carousel = layout === 'carousel' ? style.carousel : undefined;
   const rowAlignment =
     style.verticalAlign === 'top' ? 'start' : style.verticalAlign === 'bottom' ? 'end' : 'center';
@@ -506,6 +551,7 @@ function buildUpcomingProgramsPage(
   if (layout === 'grid') page.style.alignContent = rowAlignment;
 
   let focusedCardId = items[index]?.id;
+  const cardMotions: UpcomingCardMotion[] = [];
   const cards = new Map<
     string,
     {
@@ -519,6 +565,7 @@ function buildUpcomingProgramsPage(
       layout === 'sequence' ||
       (carousel !== undefined && cardIndex === focusSlot);
     const card = doc.createElement('div');
+    const slot = staggered ? doc.createElement('div') : card;
     card.dataset['cgUpcomingCard'] = item.id;
     Object.assign(card.style, {
       position: 'relative',
@@ -528,8 +575,21 @@ function buildUpcomingProgramsPage(
       minHeight: '0',
       borderRadius: px(style.cornerRadius),
     });
+    if (staggered) {
+      slot.dataset['cgUpcomingCardClip'] = '';
+      Object.assign(slot.style, {
+        position: 'relative',
+        minWidth: '0',
+        minHeight: '0',
+        overflow: 'hidden',
+      });
+      card.style.width = '100%';
+      card.style.height = '100%';
+      slot.appendChild(card);
+      cardMotions.push(upcomingCardMotion(card, { width: cardWidth, height: cardHeight }));
+    }
     if (carousel !== undefined) {
-      Object.assign(card.style, {
+      Object.assign(slot.style, {
         alignSelf: rowAlignment,
         justifySelf: 'center',
         width: px(cardWidth),
@@ -537,8 +597,8 @@ function buildUpcomingProgramsPage(
         transformOrigin: `center ${style.verticalAlign}`,
       });
     } else if (layout === 'grid') {
-      card.style.alignSelf = rowAlignment;
-      card.style.height = '100%';
+      slot.style.alignSelf = rowAlignment;
+      slot.style.height = '100%';
     }
 
     const aperture =
@@ -596,7 +656,7 @@ function buildUpcomingProgramsPage(
       );
       card.style.border = `${px(borderWidth)} solid ${highlighted ? style.focusedBorderColor : style.borderColor}`;
       card.style.backgroundColor = highlighted ? style.focusedBackground : style.background;
-      if (carousel?.allowOverlap) card.style.zIndex = highlighted ? '1' : '0';
+      if (carousel?.allowOverlap) slot.style.zIndex = highlighted ? '1' : '0';
       if (aperture !== undefined) {
         sizeMediaFrame(aperture, style.media, {
           width: cardWidth - 2 * borderWidth,
@@ -613,18 +673,33 @@ function buildUpcomingProgramsPage(
         carousel.unfocusedScale * (1 - focusAmount) + carousel.focusedScale * focusAmount;
       const opacity =
         carousel.unfocusedOpacity * (1 - focusAmount) + carousel.focusedOpacity * focusAmount;
-      card.style.transform = scale === 1 ? '' : `scale(${String(scale)})`;
-      card.style.opacity = String(opacity);
+      slot.style.transform = scale === 1 ? '' : `scale(${String(scale)})`;
+      slot.style.opacity = String(opacity);
     };
     setFocus(initiallyFocused);
     paintEmphasis(initiallyFocused ? 1 : 0);
     if (across) cards.set(item.id, { setFocus, paintEmphasis });
-    page.appendChild(card);
+    page.appendChild(slot);
   });
-  if (!across || carousel === undefined) return { node: page };
+  const built: UpcomingPage = { node: page };
+  const pageMotion =
+    nextPage === undefined ? undefined : upcomingPageMotion(page, { width: w, height: h });
+  if (staggered || pageMotion !== undefined) {
+    built.createBoundaryMotion = (kind) =>
+      createUpcomingCardBoundary(cardMotions, kind, effects[kind]) ??
+      (kind === 'exit' && pageMotion !== undefined && effects.exit.edge !== 'none'
+        ? createUpcomingPageBoundary(pageMotion, kind, effects.exit)
+        : undefined);
+  }
+  if (nextPage !== undefined && pageMotion !== undefined) {
+    built.createPageTurnMotion = (kind) =>
+      createUpcomingCardBoundary(cardMotions, kind, nextPage[kind]) ??
+      createUpcomingPageBoundary(pageMotion, kind, nextPage[kind]);
+  }
+  if (!across || carousel === undefined) return built;
   const durationMs = carousel.focusMotionMs;
   return {
-    node: page,
+    ...built,
     transitionFocus: (id) => {
       if (focusedCardId === undefined || focusedCardId === id) return undefined;
       const outgoing = cards.get(focusedCardId);
@@ -646,28 +721,38 @@ function buildUpcomingProgramsPage(
   };
 }
 
+export interface UpcomingProgramsDriver extends SequenceDriver {
+  replaceUpcomingItems(items: readonly UpcomingProgramsSampleItem[]): void;
+}
+
 export function createUpcomingProgramsDriver(
   host: HTMLElement,
   element: UpcomingProgramsElement,
-  items: readonly UpcomingProgramsSampleItem[],
+  initialItems: readonly UpcomingProgramsSampleItem[],
   clock: RuntimeClock | undefined,
   assetUrls: Readonly<Record<string, string>> | undefined,
   syncAudio: () => void,
   compositionOwnsOutro: boolean,
   rehearsal: boolean,
-): SequenceDriver {
+): UpcomingProgramsDriver {
   const paged = upcomingProgramsUsesPagination(element);
-  const pages = paged ? items : items.slice(0, 1);
-  const indices = new Map(pages.map((item, index) => [item.id, index]));
+  let items = initialItems;
+  const pagesOf = (rows: readonly UpcomingProgramsSampleItem[]) =>
+    paged ? rows : rows.slice(0, 1);
+  let pages = pagesOf(items);
+  let indices = new Map(pages.map((item, index) => [item.id, index]));
   const repeat = paged ? upcomingProgramsRepeatOf(element) : 1;
+  const advance = () =>
+    paged && (pages.length > 1 || repeat !== 'infinite') ? element.advance : 'manual';
+  const driverItems = () => pages.map(({ id, title }) => ({ id, text: title }));
   const effects = upcomingProgramsSceneEffectsOf(element);
   let rendered: RenderedSequenceItem | undefined;
-  return new SequenceDriver({
+  const driver = new SequenceDriver({
     host,
     direction: 'ltr',
-    items: pages.map(({ id, title }) => ({ id, text: title })),
+    items: driverItems(),
     defaultDwellMs: element.dwellMs,
-    advance: paged && (pages.length > 1 || repeat !== 'infinite') ? element.advance : 'manual',
+    advance: advance(),
     ...upcomingProgramsTransitionOf(paged ? element : {}),
     entranceEffect: effects.entrance,
     exitEffect: effects.exit,
@@ -701,5 +786,15 @@ export function createUpcomingProgramsDriver(
     },
     onComplete: () => rendered?.pause(),
     clock,
+  });
+  return Object.assign(driver, {
+    replaceUpcomingItems(replacement: readonly UpcomingProgramsSampleItem[]): void {
+      items = replacement;
+      pages = pagesOf(items);
+      indices = new Map(pages.map((item, index) => [item.id, index]));
+      rendered = undefined;
+      driver.reset(driverItems());
+      driver.setAdvance(advance());
+    },
   });
 }
