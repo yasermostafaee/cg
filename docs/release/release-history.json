@@ -18,6 +18,16 @@
       },
       "features": [
         {
+          "fa": "CG Bridge می‌تواند یک کانال با گروه DualReady در Playout ‎.37 را در سرویس نصب‌شده فعال کند. گرافیک‌های HTML ثابت و توالی‌های دستیِ پشتیبانی‌شده با داده و صفحهٔ تأییدشده بازیابی می‌شوند.",
+          "en": "The installed CG Bridge can opt a single channel into a Playout .37 DualReady group. Supported static HTML and manual sequences recover their confirmed data and page.",
+          "ar": "يمكن تفعيل مجموعة DualReady في Playout .37 لقناة واحدة عبر خدمة CG Bridge المثبّتة. تُستعاد بيانات وصفحات رسومات HTML الثابتة والتسلسلات اليدوية المدعومة وفق آخر حالة مؤكدة."
+        },
+        {
+          "fa": "هنگام قطعی Engine اصلی، CG Control تصویر و صدای مسیر تأییدشدهٔ پشتیبان را تا وقتی در دسترس است حفظ می‌کند.",
+          "en": "When the configured Playout Engine goes offline, its verified reserve return remains available for picture and manual audio monitoring.",
+          "ar": "عند انقطاع محرّك Playout الأساسي تبقى إشارة المحرّك الاحتياطي الذي تم التحقق منه متاحة لمراقبة الصورة واختيار الصوت يدويًا."
+        },
+        {
           "fa": "در CG Control ویندوز، پنل‌های برنامه، پیش‌نمایش، لایه‌ها و ویژگی‌ها پنجرهٔ شناور مستقل دارند. بازگشت به پنجرهٔ اصلی انتخاب لایه، تغییرات اعمال‌نشده و پخش را حفظ می‌کند. پروفایل رابط جای پنجره‌های شناور را ذخیره می‌کند.",
           "en": "Windows CG Control can float Programme, Preview, Layers and Inspector in separate windows. Docking keeps the selected layer, drafts and running preview. UI profiles save floating window placement.",
           "ar": "يمكن لـCG Control على Windows فصل لوحات البرنامج والمعاينة والطبقات والخصائص في نوافذ مستقلة. تحافظ إعادتها إلى النافذة الرئيسية على الطبقة المحددة والمسودات والمعاينة الجارية. تحفظ ملفات تعريف الواجهة مواضع النوافذ العائمة."

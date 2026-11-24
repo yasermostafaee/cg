@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 import { DEFAULT_OSC_PORT, RESERVED_OSC_PORT, RESERVED_OSC_PORT_REASON } from '@cg/shared-ipc';
+import { managedMemberSchema } from './managed-cg-contract.js';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (D2) — **CG BRIDGE'S CONFIGURATION FILE**, `%ProgramData%\CG Bridge\cg-bridge.json`.
@@ -19,6 +20,32 @@ import { DEFAULT_OSC_PORT, RESERVED_OSC_PORT, RESERVED_OSC_PORT_REASON } from '@
  */
 
 const port = z.number().int().min(1).max(65535);
+
+const managedServiceMember = managedMemberSchema
+  .pick({ engineId: true, channelCode: true, nativeChannel: true })
+  .extend({
+    origin: managedMemberSchema.shape.apiOrigin.transform((value) => new URL(value).origin),
+    channelCode: managedMemberSchema.shape.channelCode.refine(
+      (value) => value !== '.' && value !== '..',
+    ),
+  })
+  .strict();
+
+/** Explicit DualReady opt-in for a single declared station channel. A is first, B second. */
+export const ManagedCgServiceConfigSchema = z
+  .object({
+    channel: managedMemberSchema.shape.nativeChannel,
+    groupId: z.string().regex(/^[a-z0-9_-][a-z0-9_.-]{0,127}$/i),
+    members: z.tuple([managedServiceMember, managedServiceMember]),
+  })
+  .strict()
+  .refine(
+    ({ members: [a, b] }) =>
+      a.origin !== b.origin && a.engineId.toLowerCase() !== b.engineId.toLowerCase(),
+    { path: ['members'], message: 'DualReady needs two distinct Engine origins and IDs.' },
+  );
+
+export type ManagedCgServiceConfig = z.infer<typeof ManagedCgServiceConfigSchema>;
 
 export const ServiceConfigSchema = z
   .object({
@@ -42,6 +69,8 @@ export const ServiceConfigSchema = z
     bridgeAddress: z.string().min(1).optional(),
     /** Root of live UTF-8 field sources. Relative paths in templates resolve only below this. */
     textSourceRoot: z.string().min(1).optional(),
+    /** Uses this service's separately authenticated Playout sessions. */
+    managedCg: ManagedCgServiceConfigSchema.optional(),
   })
   .strict()
   .superRefine((config, ctx) => {
@@ -50,6 +79,13 @@ export const ServiceConfigSchema = z
         code: 'custom',
         path: ['playoutAddress'],
         message: 'A standalone station does not have a Playout address.',
+      });
+    }
+    if (config.mode === 'standalone' && config.managedCg !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['managedCg'],
+        message: 'DualReady requires a Playout station.',
       });
     }
     if (config.mode !== 'standalone' && config.playoutAddress === undefined) {

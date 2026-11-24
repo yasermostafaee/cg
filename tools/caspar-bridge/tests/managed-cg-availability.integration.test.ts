@@ -184,6 +184,117 @@ it('reconciles the retained unresolved receipt on its selected Engine before all
   pair.assertFixtureHealthy();
 });
 
+it.each([
+  ['A', 'B'],
+  ['B', 'A'],
+] as const)(
+  'reads the confirmed layout from %s-selected peer %s after the selected Engine stops',
+  async (selected, peer) => {
+    const { pair, store, writer } = await lab();
+    const layout = [{ ...html, data: { title: 'Latest title' }, page: 2 }];
+    expect(await writer().editLayout(() => layout)).toMatchObject({ status: 'applied' });
+    pair.transferCheckpoint('A', 'B');
+    if (selected === 'B') {
+      pair.disconnect('A');
+      expect(await writer().editLayout(() => undefined)).toEqual({ status: 'unchanged' });
+      pair.reconnect('A');
+      pair.transferCheckpoint('B', 'A');
+    }
+    const before = store().read();
+    expect(before.selected?.selection.engineId).toBe(selected);
+    const requestCount = pair.requests.length;
+    pair.disconnect(selected);
+
+    expect(await writer().readAppliedLayout()).toEqual(layout);
+    expect(pair.requests.slice(requestCount)).toEqual([
+      { engine: selected, method: 'GET', route: 'owner' },
+      { engine: peer, method: 'GET', route: 'owner' },
+      { engine: peer, method: 'GET', route: 'availability' },
+      { engine: peer, method: 'GET', route: 'state' },
+    ]);
+    expect(store().read()).toEqual(before);
+    expect(pair.posts).toHaveLength(1);
+    pair.assertFixtureHealthy();
+  },
+);
+
+it('does not restore a cleared row from an out-of-date replica while the selected Engine is gone', async () => {
+  const { pair, store, writer } = await lab();
+  expect(await writer().editLayout(() => [html])).toMatchObject({ status: 'applied' });
+  pair.transferCheckpoint('A', 'B');
+  pair.disconnect('B');
+  expect(await writer().editLayout(() => [])).toMatchObject({ status: 'applied' });
+  const cleared = store().read();
+  pair.reconnect('B');
+  pair.disconnect('A');
+  const requestCount = pair.requests.length;
+
+  await expect(writer().readAppliedLayout()).rejects.toThrow('has not confirmed');
+  expect(pair.snapshot('B').layers).toEqual([html]);
+  expect(pair.requests.slice(requestCount).every(({ method }) => method === 'GET')).toBe(true);
+
+  pair.reconnect('A');
+  pair.transferCheckpoint('A', 'B');
+  pair.disconnect('A');
+  expect(await writer().readAppliedLayout()).toEqual([]);
+  expect(store().read()).toEqual(cleared);
+  expect(pair.selections.map(({ engine }) => engine)).toEqual(['A']);
+  expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A']);
+  pair.assertFixtureHealthy();
+});
+
+it('keeps the same checkpoint selection when the selected Engine has no operator credential', async () => {
+  const { pair, store, writer } = await lab();
+  expect(await writer().editLayout(() => [html])).toMatchObject({ status: 'applied' });
+  pair.transferCheckpoint('A', 'B');
+  const before = store().read();
+  const requestCount = pair.requests.length;
+  const commands = new ManagedCgAvailabilityCommands({
+    groupId,
+    members: pair.members.map((member) =>
+      member.engineId === 'A' ? { ...member, operatorBearer: () => undefined } : member,
+    ),
+    store: store(),
+  });
+
+  await expect(commands.readAppliedLayout()).rejects.toThrow('needs an operator session');
+  expect(pair.requests.slice(requestCount)).toEqual([]);
+  expect(store().read()).toEqual(before);
+  pair.assertFixtureHealthy();
+});
+
+it('checks transport before observing the peer if the installed selection has lost its session', async () => {
+  const { pair, store, writer } = await lab();
+  expect(await writer().editLayout(() => [html])).toMatchObject({ status: 'applied' });
+  pair.transferCheckpoint('A', 'B');
+  const before = store().read();
+  const requestCount = pair.requests.length;
+  const commands = new ManagedCgAvailabilityCommands({
+    groupId,
+    members: pair.members.map((member) => ({
+      ...member,
+      requestOrigin: member.origin,
+      operatorBearer: member.engineId === 'A' ? () => undefined : member.operatorBearer,
+    })),
+    store: store(),
+  });
+
+  await expect(commands.readAppliedLayout()).rejects.toThrow('needs an operator session');
+  expect(pair.requests.slice(requestCount)).toEqual([
+    { engine: 'A', method: 'GET', route: 'owner' },
+  ]);
+  pair.disconnect('A');
+  expect(await commands.readAppliedLayout()).toEqual([html]);
+  expect(pair.requests.slice(requestCount + 1)).toEqual([
+    { engine: 'A', method: 'GET', route: 'owner' },
+    { engine: 'B', method: 'GET', route: 'owner' },
+    { engine: 'B', method: 'GET', route: 'availability' },
+    { engine: 'B', method: 'GET', route: 'state' },
+  ]);
+  expect(store().read()).toEqual(before);
+  pair.assertFixtureHealthy();
+});
+
 it('restores the latest complete layout on a stale reserve by the same ID and stays selected after A returns', async () => {
   const { pair, store, writer } = await lab();
   const initial = writer();
@@ -380,6 +491,11 @@ it.each(['breakAuth', 'misMap'] as const)(
     pair.transferCheckpoint('A', 'B');
     pair[breakEngine]('A');
 
+    const requestCount = pair.requests.length;
+    await expect(writer().readAppliedLayout()).rejects.toThrow();
+    expect(pair.requests.slice(requestCount)).toEqual([
+      { engine: 'A', method: 'GET', route: 'owner' },
+    ]);
     await expect(writer().editLayout(() => [])).rejects.toThrow();
     expect(pair.posts.map(({ engine }) => engine)).toEqual(['A']);
     expect(pair.selections.map(({ engine }) => engine)).toEqual(['A']);

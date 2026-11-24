@@ -184,6 +184,10 @@ export async function availabilityPair(cleanup: Cleanup) {
       json(res, { error: 'invalid_token' }, 401);
       return;
     }
+    if (req.method === 'GET' && url.pathname === prefix + 'owner' && !req.headers.authorization) {
+      json(res, { error: 'invalid_token' }, 401);
+      return;
+    }
     expect(req.headers.authorization).toBe('Bearer token-' + engine);
     expect(url.pathname.startsWith(prefix)).toBe(true);
 

@@ -216,6 +216,25 @@ file. To change a value, re-run the installer with it, or edit the file and rest
 the service. The same values can be given on the command line (`cg-bridge.exe caspar-bridge.mjs
 --service-config <file> --port …`); the command line wins.
 
+#### Opt in to External CG v2 DualReady
+
+For a station with one declared channel, configure the same verified DualReady group on
+both Playout Engines before adding `managedCg` to the Bridge service configuration. The
+object contains `channel`, `groupId`, and `members`. List A then B, with `engineId`,
+`origin`, `channelCode` and `nativeChannel` for each, copied from Playout's group.
+`origin` is the advertised API origin of the member. When Engine A is on the Bridge's
+machine, the service can still use its existing authenticated loopback URL.
+
+In CG Control, sign in the Bridge on A and B independently under Connection, using
+accounts allowed to operate the mapped channel and edit its playlist. The service
+retains the renewable sessions and the DualReady controller state in its state home.
+Both Engines must be able to fetch the Bridge's advertised template URL, and Playout's
+group must already approve that origin. Keep the service state when upgrading or restarting.
+An installer upgrade preserves the opt-in. The approved initial types are self-contained
+static HTML and supported finite manual Cut sequences with their authored pages or
+bundled images. Live layouts, timed crawls and automatic sequences require their own
+absolute recovery support.
+
 #### Live text files for locked template fields
 
 Designer stores only a relative name such as `newsroom/crawl.txt`. CG Bridge reads that file below

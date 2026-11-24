@@ -113,6 +113,27 @@ shall continue to come from their existing contract.
   checkpoint, different controller or a sequence ahead of the durable Bridge state
 - **THEN** Bridge refuses to issue a new layout.
 
+### Requirement: An installed Bridge can opt one declared channel into DualReady
+
+An authenticated CG Bridge service SHALL activate DualReady only for an explicitly configured
+two-Engine group that matches its single declared channel and its own Playout connections. It
+SHALL use each Engine's separately renewable Bridge session for that Engine's API, retaining
+the existing Control sign-in and channel permissions. The service SHALL retain its selection
+and committed layout across restart and SHALL fence native graphics writes.
+
+#### Scenario: The selected Engine is unavailable while Control reads the stack
+
+- **WHEN** there is a committed checkpoint and its selected Engine cannot be contacted
+- **THEN** Bridge MAY restore the stack display from the other Engine only after it verifies the
+  identical checkpoint, controller, native application and absence of an unresolved command
+- **AND** the read SHALL leave the selected Engine unchanged.
+
+#### Scenario: An Engine is reachable with a missing or refused operator session
+
+- **WHEN** the selected Engine answers, but its operator session is missing or refused
+- **THEN** Bridge SHALL require that Engine's operator session and SHALL NOT treat the refusal
+  as a transport outage.
+
 ### Requirement: The static HTML pilot restores the applied template state
 
 The opt-in Bridge pilot SHALL use the managed layout API for Play, Update, Stop and Clear

@@ -52,13 +52,18 @@ export type { PersistedStack } from './stack-store.js';
 // `CENTRAL-BRIDGE-01` §1 A — CG Bridge the service: its configuration file (D2), `/health` (D10),
 // the reserved-port check (D11) and the one-time import of an older per-user state.
 export {
+  ManagedCgServiceConfigSchema,
   ServiceConfigError,
   loadServiceConfig,
   serviceFlags,
   withServiceFlags,
   writeServiceConfig,
 } from './service-config.js';
-export type { LoadedServiceConfig, ServiceConfig } from './service-config.js';
+export type {
+  LoadedServiceConfig,
+  ManagedCgServiceConfig,
+  ServiceConfig,
+} from './service-config.js';
 export { createSharedFilesController } from './shared-files.js';
 export type { SharedFilesController } from './shared-files.js';
 // `B-312` — the service's connection keeps Station setup's server B across a restart.

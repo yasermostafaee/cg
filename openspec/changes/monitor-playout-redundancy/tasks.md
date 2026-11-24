@@ -192,8 +192,16 @@
       `cg.channelNotMigrated`. The Legacy reserve reconnect has no automatic replay of
       the active row. D1 operator sessions read D4, while the unmigrated managed routes
       cannot establish their write permission.
-- [ ] Verify service opt-in and member-local operator session renewal on migrated test
-      channels with the installed Bridge and Control.
+- [x] Add an authenticated service opt-in for a single declared channel and separate
+      Engine sessions. Verify missing credentials, unavailable selected Engine and a
+      caught-up peer with the exact checkpoint in local fixtures.
+- [x] Run the authenticated service entry point with separate station D1 sessions on the
+      migrated .37 pair. The service and Control kept the picture book on page 2 after
+      Bridge restart, and both Engine sessions renewed through D2.
+- [x] Restart the physical .37 Core on B with A selected and page 2 on air. A and B rendered
+      page 2 at the same committed sequence 7 after B returned. B had a new Core generation.
+      Static Play, Update, Stop and Remove, book Play, Go to page 3, Previous and final
+      Clear made eight layout submissions, all to A. Both outputs cleared at sequence 8.
 - [ ] Exercise A selected with B restarted, A selected with A restarted, B selected with
       A restarted, and B selected with B restarted. Verify the survivor stays on air.
       Check the latest applied fields and page on the return, including after Update,
@@ -201,3 +209,6 @@
       Confirm no entrance replay and compare each Engine's native PGM and applied state.
 - [ ] Test Legacy Live layouts, media and timed graphics separately before claiming
       coverage. Verify the returning engine's input and asset bindings and applied timing.
+- [ ] Prove the same position in a running crawl and the same page and elapsed time for
+      automatic sequences after an Engine returns. The .37 checkpoint carries an animation
+      origin; the current managed template renderer covers static HTML and absolute manual pages.

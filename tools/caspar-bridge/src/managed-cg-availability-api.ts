@@ -187,6 +187,10 @@ export class ManagedCgAvailabilityApi {
       return {
         ...endpoint,
         origin: new URL(parsedOrigin).origin,
+        ...(endpoint.requestOrigin !== undefined && {
+          requestOrigin: new URL(managedMemberSchema.shape.apiOrigin.parse(endpoint.requestOrigin))
+            .origin,
+        }),
         engineId: engineId.parse(endpoint.engineId),
         channelCode: managedMemberSchema.shape.channelCode
           .refine((value) => value !== '.' && value !== '..')
@@ -444,14 +448,23 @@ export class ManagedCgAvailabilityApi {
     );
     if (registered === undefined) invalid('The availability Engine was not configured.');
     const bearer = registered.operatorBearer();
-    if (bearer === undefined || bearer === '' || /\s/.test(bearer))
-      throw new ManagedCgAvailabilityApiError(
+    const hasSession = bearer !== undefined && bearer !== '' && !/\s/.test(bearer);
+    // An expired service session can coincide with a long outage. Only a failed read
+    // of the same Engine establishes unreachability. Any response still requires sign-in.
+    const probe =
+      !hasSession &&
+      registered.requestOrigin !== undefined &&
+      route === 'owner' &&
+      body === undefined;
+    const needSession = () =>
+      new ManagedCgAvailabilityApiError(
         'The availability Engine needs an operator session.',
         'refused',
       );
+    if (!hasSession && !probe) throw needSession();
     const url = new URL(
       '/api/v2/channels/' + encodeURIComponent(registered.channelCode) + '/external-cg/' + route,
-      registered.origin,
+      registered.requestOrigin ?? registered.origin,
     );
     const request = typeof body === 'object' ? serializeRequest(body) : body;
     let response: Response;
@@ -459,7 +472,7 @@ export class ManagedCgAvailabilityApi {
       response = await this.#fetch(url, {
         method: body === undefined ? 'GET' : 'POST',
         headers: {
-          Authorization: 'Bearer ' + bearer,
+          ...(hasSession && { Authorization: 'Bearer ' + bearer }),
           ...(request !== undefined && { 'Content-Type': 'application/json' }),
         },
         ...(request !== undefined && { body: request }),
@@ -476,6 +489,7 @@ export class ManagedCgAvailabilityApi {
         'unavailable',
       );
     }
+    if (!hasSession) throw needSession();
     const value: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
       const error = errorSchema.safeParse(value);

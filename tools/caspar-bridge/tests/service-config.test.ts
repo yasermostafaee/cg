@@ -34,6 +34,67 @@ function configFile(body: string): string {
 }
 
 describe('the file', () => {
+  const managedCg = {
+    groupId: 'station-cg',
+    channel: 1,
+    members: [
+      {
+        engineId: 'engine-a',
+        origin: 'http://192.0.2.10:8080/',
+        channelCode: 'main',
+        nativeChannel: 1,
+      },
+      {
+        engineId: 'engine-b',
+        origin: 'http://192.0.2.20:8080',
+        channelCode: 'reserve',
+        nativeChannel: 8,
+      },
+    ],
+  } as const;
+
+  it('preserves the managed channel and ordered members through an ordinary service update', () => {
+    const playoutAddress = 'http://127.0.0.1:8080';
+    const file = configFile(JSON.stringify({ playoutAddress, managedCg }));
+    const loaded = loadServiceConfig(file);
+    expect(loaded.config.managedCg).toEqual({
+      ...managedCg,
+      members: [
+        { ...managedCg.members[0], origin: 'http://192.0.2.10:8080' },
+        managedCg.members[1],
+      ],
+    });
+    expect(serviceFlags(loaded)).toMatchObject({
+      auth: 'playout',
+      'playout-address': playoutAddress,
+      'bridge-session-path': path.join(path.dirname(file), '.cg-runtime', 'bridge-session.json'),
+    });
+    expect(writeServiceConfig(file, { controlPort: 5290 }).managedCg).toEqual(
+      loaded.config.managedCg,
+    );
+    expect(() => writeServiceConfig(file, { mode: 'standalone' })).toThrow(/"managedCg"/);
+    expect(loadServiceConfig(file).config.managedCg).toEqual(loaded.config.managedCg);
+  });
+
+  it.each([
+    [managedCg.members[0]],
+    [...managedCg.members, managedCg.members[1]],
+    [managedCg.members[0], { ...managedCg.members[1], origin: 'http://192.0.2.10:8080' }],
+    [managedCg.members[0], { ...managedCg.members[1], engineId: 'ENGINE-A' }],
+    [managedCg.members[0], { ...managedCg.members[1], origin: 'http://user@192.0.2.20:8080' }],
+    [managedCg.members[0], { ...managedCg.members[1], origin: 'http://192.0.2.20:8080/api' }],
+    [managedCg.members[0], { ...managedCg.members[1], channelCode: '..' }],
+    [managedCg.members[0], { ...managedCg.members[1], operatorTokenEnv: 'SECRET' }],
+  ])('rejects an unusable managed member list %#', (...members) => {
+    const file = configFile(
+      JSON.stringify({
+        playoutAddress: 'http://127.0.0.1:8080',
+        managedCg: { ...managedCg, members },
+      }),
+    );
+    expect(() => loadServiceConfig(file)).toThrow(/"managedCg.members/);
+  });
+
   it('starts an explicit standalone service with loopback control and no Playout flags', () => {
     const file = configFile('{"mode":"standalone","amcpHost":"192.0.2.10","amcpPort":5257}');
     const flags = serviceFlags(loadServiceConfig(file));

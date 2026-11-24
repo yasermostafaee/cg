@@ -81,6 +81,25 @@ const QUIET = [
   '0',
 ];
 
+const managedCg = {
+  groupId: 'station-cg',
+  channel: 1,
+  members: [
+    {
+      engineId: 'engine-a',
+      origin: 'http://192.0.2.10:8080',
+      channelCode: 'main',
+      nativeChannel: 1,
+    },
+    {
+      engineId: 'engine-b',
+      origin: 'http://192.0.2.20:8080',
+      channelCode: 'reserve',
+      nativeChannel: 8,
+    },
+  ],
+};
+
 describe('a configuration file CG Bridge cannot start from', () => {
   it('🔴 missing: the version line first, then the file named — and nothing written to the home directory', async () => {
     const home = scratch();
@@ -98,6 +117,16 @@ describe('a configuration file CG Bridge cannot start from', () => {
     const run = await runToExit(['--service-config', file], scratch());
     expect(run.code).toBe(1);
     expect(run.out).toContain("UDP 6250 belongs to the Playout's engine");
+  });
+
+  it('applies the managed channel guard when starting through the service configuration', async () => {
+    const file = configIn({ playoutAddress: 'http://127.0.0.1:1', amcpPort: 1, managedCg });
+    const run = await runToExit(['--service-config', file, ...QUIET], scratch());
+    expect(run.code).toBe(1);
+    expect(run.out).toContain(
+      'Installed External CG needs exactly one declared channel matching its configuration.',
+    );
+    expect(run.out).not.toContain('WS listening');
   });
 });
 
@@ -149,6 +178,17 @@ describe('the installer’s one-shots', () => {
     expect(run.out).toMatch(
       process.platform === 'win32' ? /ports free|reserved/ : /could not be read; no verdict/,
     );
+  });
+
+  it('--write-service-config preserves a managed channel when upgrading an installed service', async () => {
+    const file = configIn({ playoutAddress: 'http://127.0.0.1:8080', managedCg });
+    const upgrade = await runToExit(['--write-service-config', file, '--port', '5290'], scratch());
+    expect(upgrade.code, upgrade.out).toBe(0);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+      playoutAddress: 'http://127.0.0.1:8080',
+      managedCg,
+      controlPort: 5290,
+    });
   });
 
   it('--import-state: the newest older state lands in the service’s state home, once', async () => {

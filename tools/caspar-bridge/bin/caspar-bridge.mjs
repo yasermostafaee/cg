@@ -870,6 +870,9 @@ const bridgeOptions = {
     fixedLayers: managedCgLaunch.fixedLayers,
     managedCgPilot: managedCgLaunch.pilot,
   }),
+  ...(serviceConfig?.config.managedCg !== undefined && {
+    managedCgService: serviceConfig.config.managedCg,
+  }),
   reservedLayers,
   reservedLayersPath,
   templatesDir,

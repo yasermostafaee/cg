@@ -364,11 +364,24 @@ surviving output. Record Programme ownership separately from graphics authority.
 
 The .37 DualReady outage tests covered self-contained static HTML in the isolated adapter.
 Earlier .26 managed tests also covered eligible finite manual Cut sequences, including
-bundled Sequence Folder pages. The installed service still needs opt-in activation,
-renewable member-local operator sessions and end-to-end acceptance. Legacy Live layouts,
-media and other timed templates have their own recovery acceptance. Their engine-local
-source and asset bindings and applied timing must be proven before claiming that they
-recover.
+bundled Sequence Folder pages. An installed service can opt a single declared channel in
+using `managedCg` in its protected configuration. A and B use the service's separate
+D1/D2 sessions and CG Control keeps its original authentication. The configured group
+identity, selected Engine and confirmed layout are durable. A read through a reachable
+verified peer during an outage refreshes the stack only after that peer confirms the same
+checkpoint and native application. Explicit source or auth refusal does not change the
+selected Engine.
+
+The authenticated service entry point passed a real .37 test with member-local D1/D2
+sessions. After a Bridge restart and a separate B Core restart, both outputs showed the
+same second page. B had a new Core generation and the saved layout sequence was unchanged.
+All eight deliberate layout submissions went to A, including the final Clear.
+
+Live layouts and media still need proof of engine-local source bindings and
+applied timing. A moving crawl needs an absolute phase within the crawl; a timestamp in
+the Playout checkpoint alone does not prove that the CG runtime uses it. Automatic
+sequences need both their absolute page and the elapsed time on that page. The supported
+manual sequence snapshot stores the absolute zero-based page and confirmed fields.
 
 A fresh session from the lab operator's D1 sign-in read D4 on both .37 engines.
 The managed owner and availability routes returned `cg.channelNotMigrated` both with

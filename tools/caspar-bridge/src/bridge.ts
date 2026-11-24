@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
@@ -296,6 +297,8 @@ import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
 import { startBankBringIn } from './bank-bring-in.js';
 import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import type { ManagedCgPilot } from './managed-cg-pilot.js';
+import { ManagedCgAvailabilityCommands } from './managed-cg-availability-commands.js';
+import { ManagedCgAvailabilityStore } from './managed-cg-availability-store.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
   FixedLayersConfigError,
@@ -383,7 +386,12 @@ import {
   reserveInputPresence,
   sourcePresenceInputsOf,
 } from './source-presence.js';
-import { BackupEngine, backupSessionPath, type BackupEngineOptions } from './backup-engine.js';
+import {
+  BackupEngine,
+  backupEngineAddress,
+  backupSessionPath,
+  type BackupEngineOptions,
+} from './backup-engine.js';
 import { engineState } from './engine-state.js';
 import { CoreGuard, type CoreGuardOptions } from './core-guard.js';
 import { BackupChannels } from './backup-channels.js';
@@ -400,7 +408,13 @@ import {
   readSharedTemplatePackage,
   readSharedTemplateThumbnail,
 } from './shared-template-folder.js';
-import { ServiceConfigSchema, writeServiceConfig } from './service-config.js';
+import {
+  ManagedCgServiceConfigSchema,
+  ServiceConfigSchema,
+  writeServiceConfig,
+  type ManagedCgServiceConfig,
+} from './service-config.js';
+import { isLocalAddress } from './local-address.js';
 import {
   airOf,
   casparJoinOf,
@@ -434,6 +448,8 @@ import {
 export interface BridgeOptions {
   /** Opt-in isolated Playout v2 bridge. Raw AMCP is read-only for this process. */
   managedCgPilot?: ManagedCgPilot;
+  /** Authenticated service opt-in to one declared DualReady channel. */
+  managedCgService?: ManagedCgServiceConfig;
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
   host?: string;
   /** Bind port. Defaults to the browser-safe `DEFAULT_BRIDGE_PORT`. `0` = ephemeral. */
@@ -2338,6 +2354,85 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const reservedLayers =
     reserved !== null && reserved !== undefined ? reservedLayerNumbers(reserved) : [];
   const { banks: fixedBanks, source: fixedBankSource } = resolveFixedBanks(options);
+  const primaryEngineAddress =
+    auth.playout === null
+      ? null
+      : (auth.playout.address ?? new URL(auth.playout.channelsUrl).origin);
+  let managedBackup: BackupEngine | null = null;
+  let managedCg = options.managedCgPilot;
+  const managedService =
+    options.managedCgService === undefined
+      ? undefined
+      : ManagedCgServiceConfigSchema.parse(options.managedCgService);
+  if (managedService !== undefined) {
+    if (fixedBanks.length !== 1 || fixedBanks[0]?.channel !== managedService.channel)
+      throw new Error(
+        'Installed External CG needs exactly one declared channel matching its configuration.',
+      );
+    if (
+      options.requireAuth !== true ||
+      options.bridgeSessionPath === undefined ||
+      bridgeSession === null ||
+      auth.playout === null ||
+      primaryEngineAddress === null ||
+      managedCg !== undefined
+    )
+      throw new Error('Installed External CG requires the authenticated CG Bridge service.');
+    const [a, b] = managedService.members;
+    const primary = new URL(primaryEngineAddress);
+    const advertised = new URL(a.origin);
+    const sameLocalEngine =
+      isLoopbackCasparHost(primary.hostname) &&
+      isLocalAddress(advertised.hostname) &&
+      advertised.protocol === primary.protocol &&
+      advertised.port === primary.port;
+    const backupHost = connection.servers.B?.host;
+    const backupAddress =
+      options.backupPlayoutAddress ?? backupEngineAddress(primary.origin, backupHost);
+    if (
+      a.nativeChannel !== managedService.channel ||
+      (advertised.origin !== primary.origin && !sameLocalEngine) ||
+      new URL(auth.playout.tokenUrl).origin !== primary.origin ||
+      new URL(auth.playout.refreshUrl).origin !== primary.origin ||
+      backupHost === undefined ||
+      backupAddress === null ||
+      new URL(backupAddress).origin !== b.origin ||
+      b.origin === primary.origin
+    )
+      throw new Error(
+        'Installed External CG members must match the configured Playout engines and channel.',
+      );
+    managedCg = {
+      channel: managedService.channel,
+      commands: new ManagedCgAvailabilityCommands({
+        groupId: managedService.groupId,
+        members: [
+          {
+            ...a,
+            requestOrigin: primary.origin,
+            operatorBearer: () => bridgeSession.accessToken() ?? undefined,
+          },
+          {
+            ...b,
+            requestOrigin: b.origin,
+            operatorBearer: () => {
+              const address = managedBackup?.address();
+              return address != null && new URL(address).origin === b.origin
+                ? (managedBackup?.accessToken() ?? undefined)
+                : undefined;
+            },
+          },
+        ],
+        store: new ManagedCgAvailabilityStore(
+          path.join(
+            path.dirname(options.bridgeSessionPath),
+            'external-cg-availability',
+            createHash('sha256').update(managedService.groupId).digest('hex'),
+          ),
+        ),
+      }),
+    };
+  }
   // R-028 (2.5) — the candidate ceiling must never intersect the reserved playout range:
   // refused HERE at load, and again at every change (`setFixedLayers` reads the same list).
   // A violation throws BEFORE the WebSocket binds — conflicts resolve loudly at startup.
@@ -2500,7 +2595,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
     ...(options.runtimeTuning ?? {}),
-    ...(options.managedCgPilot !== undefined && { managedCgPilot: options.managedCgPilot }),
+    ...(managedCg !== undefined && { managedCgPilot: managedCg }),
   });
   /*
     🔴 `CENTRAL-BRIDGE-01` (D12, rule 11) — a take on a channel the Playout reports `unlicensed` is
@@ -2552,10 +2647,6 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     D11 below, its D4, its license and its AMCP introduction. With no session path (a development bridge)
     there is no backup session, and the backup is read by nothing: today's empty boxes, with their reason.
   */
-  const primaryEngineAddress =
-    auth.playout === null
-      ? null
-      : (auth.playout.address ?? new URL(auth.playout.channelsUrl).origin);
   const backupEngine =
     playoutAuth === null || auth.playout === null || primaryEngineAddress === null
       ? null
@@ -2572,6 +2663,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           sessionFetch: playoutFetchForSession,
           ...(options.backupEngineOptions ?? {}),
         });
+  if (managedService !== undefined) managedBackup = backupEngine;
   backupEngine?.start();
   const backupMedia =
     backupEngine === null
@@ -4189,6 +4281,36 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   */
   const stack =
     options.stackPath === undefined ? null : await restoreOwnStack(runtime, options.stackPath);
+  const watchManagedSessions = () => {
+    if (managedService === undefined) return () => undefined;
+    let hadPrimary = bridgeSession?.accessToken() != null;
+    let hadBackup = backupEngine?.accessToken() != null;
+    let stopped = false;
+    let refresh = Promise.resolve();
+    const requestRefresh = (): void => {
+      refresh = refresh
+        .then(() => (stopped ? undefined : runtime.refreshManagedState()))
+        .catch((error: unknown) => {
+          process.stderr.write(`[caspar-bridge] External CG row refresh: ${String(error)}\n`);
+        });
+    };
+    const refreshOnSignIn = (): void => {
+      const hasPrimary = bridgeSession?.accessToken() != null;
+      const hasBackup = backupEngine?.accessToken() != null;
+      if ((hasPrimary && !hadPrimary) || (hasBackup && !hadBackup)) requestRefresh();
+      hadPrimary = hasPrimary;
+      hadBackup = hasBackup;
+    };
+    const stopPrimary = bridgeSession?.onChanged(refreshOnSignIn);
+    const stopBackup = backupEngine?.onChanged(refreshOnSignIn);
+    if (hadPrimary || hadBackup) requestRefresh();
+    return () => {
+      stopped = true;
+      stopPrimary?.();
+      stopBackup?.();
+    };
+  };
+  const stopManagedSessionWatch = watchManagedSessions();
 
   /*
     🔴 `CENTRAL-BRIDGE-01` (D9) — ONE PORT, ONE `http.Server`: the control socket's upgrade AND
@@ -4882,6 +5004,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // process open; clearing it is what keeps a test suite from leaving one per bridge.
       playoutAuth?.dispose();
       // `CENTRAL-BRIDGE-01` (D7) — and the bridge's own session refresh.
+      stopManagedSessionWatch();
       bridgeSession?.dispose();
       backupEngine?.dispose();
       stopBackupMonitorReset();

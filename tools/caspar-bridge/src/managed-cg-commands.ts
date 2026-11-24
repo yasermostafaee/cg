@@ -19,7 +19,10 @@ import { playoutFetch } from './playout-http.js';
 
 /** The verified station mapping and the operator's session on this particular Engine. */
 export interface ManagedCgEndpoint {
+  /** The origin recorded in Playout's verified group membership. */
   readonly origin: string;
+  /** Installed DualReady can reach its local Engine through the authenticated loopback address. */
+  readonly requestOrigin?: string;
   readonly engineId: string;
   readonly channelCode: string;
   readonly nativeChannel: number;

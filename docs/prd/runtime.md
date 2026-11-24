@@ -5279,6 +5279,11 @@ other Engine is absent and use Playout's complete checkpoint for recovery.
 - WHEN an eligible finite manual cut sequence shows a page THEN Next uses the absolute
   page in Playout's applied layout, including after a restart or owner transfer. The last page
   holds and Stop returns the sequence to its first page.
+- WHEN an installed Bridge opts one declared channel into DualReady THEN its configured
+  Engine sessions remain independent and a confirmed returning member restores the
+  same applied text, picture or manual page without replaying the entrance.
+- WHEN a timed crawl or automatic sequence is eligible for recovery THEN verify its
+  exact applied playback phase on the returning member, including its active page where applicable.
 - WHEN a Sequence Folder uses a single finite manual Cut sequence with its pictures bundled
   in the export THEN Previous and Go to page change the same confirmed absolute page on
   Playout. The pilot uses the bundled pictures and leaves preview navigation local.

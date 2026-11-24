@@ -7628,6 +7628,19 @@ export class CasparRuntime {
     this.#markDirty(itemId);
   }
 
+  /** Refresh retained rows when an installed Engine session comes back. */
+  async refreshManagedState(): Promise<void> {
+    const managed = this.#managedCg;
+    if (managed === undefined || this.#managedBusy) return;
+    this.#managedBusy = true;
+    try {
+      await managed.stack.recoverPending().catch(() => undefined);
+      await this.#refreshManagedRows();
+    } finally {
+      this.#managedBusy = false;
+    }
+  }
+
   async #refreshManagedRows(): Promise<void> {
     const pilot = this.#managedCg;
     if (pilot === undefined) return;
@@ -10751,7 +10764,7 @@ export class CasparRuntime {
     if (this.#managedCg !== undefined) {
       return {
         ok: false,
-        message: 'The External CG pilot uses a fixed channel and layer bank.',
+        message: 'External CG uses a fixed channel and layer bank.',
       };
     }
     // A profile replaces the destination's entire shortcut settings, including absent fields.
@@ -25450,7 +25463,7 @@ export class CasparRuntime {
     if (this.#managedCg !== undefined) {
       return {
         ok: false,
-        message: 'Connection settings are fixed by the External CG pilot configuration.',
+        message: 'Connection settings are fixed by the External CG configuration.',
       };
     }
     // 0. SERIALIZE (fix-setconfig-serve-restart) — two applies interleaving

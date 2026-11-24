@@ -144,21 +144,24 @@ export class ManagedCgAvailabilityCommands {
       const local = this.#store.read();
       if (local.pending !== null)
         throw new Error('Resolve the pending managed CG command before reading row state.');
-      const observed = await this.#api.observe(this.#currentMember(local));
-      this.#verifyCheckpoint(local, observed.status);
-      if (local.committed === null && observed.status.committedSequence === 0) {
-        await this.#confirmSnapshot(observed);
-        return [];
-      }
-      if (
-        local.committed === null ||
-        observed.status.committedSequence !== local.committed.intent.sequence ||
-        !confirmedReplica(observed.status, local.committed.intent)
-      ) {
-        throw new Error('Playout has not confirmed the current DualReady layout.');
-      }
-      await this.#confirmSnapshot(observed, local.committed.intent);
-      return structuredClone(local.committed.intent.layout);
+      // A surviving replica can attest to the durable layout without taking command authority.
+      return this.#withReachableMember(local, async (member) => {
+        const observed = await this.#api.observe(member);
+        this.#verifyCheckpoint(local, observed.status);
+        if (local.committed === null && observed.status.committedSequence === 0) {
+          await this.#confirmSnapshot(observed);
+          return [];
+        }
+        if (
+          local.committed === null ||
+          observed.status.committedSequence !== local.committed.intent.sequence ||
+          !confirmedReplica(observed.status, local.committed.intent)
+        ) {
+          throw new Error('Playout has not confirmed the current DualReady layout.');
+        }
+        await this.#confirmSnapshot(observed, local.committed.intent);
+        return structuredClone(local.committed.intent.layout);
+      });
     });
   }
 
@@ -269,17 +272,23 @@ export class ManagedCgAvailabilityCommands {
       throw new Error('The DualReady Engine reports a different controller or selection.');
   }
 
-  async #selectTarget(local: ManagedCgAvailabilityState): Promise<Target> {
+  async #withReachableMember<T>(
+    local: ManagedCgAvailabilityState,
+    read: (member: ManagedCgEndpoint) => Promise<T>,
+  ): Promise<T> {
     const member = this.#currentMember(local);
-    let observed: Observation;
     try {
-      observed = await this.#api.observe(member);
+      return await read(member);
     } catch (error) {
       if (!networkUnavailable(error) || local.selected === null) throw error;
       const reserve = this.#members.find(({ engineId }) => engineId !== member.engineId);
       if (reserve === undefined) throw error;
-      observed = await this.#api.observe(reserve);
+      return read(reserve);
     }
+  }
+
+  async #selectTarget(local: ManagedCgAvailabilityState): Promise<Target> {
+    const observed = await this.#withReachableMember(local, (member) => this.#api.observe(member));
     const { endpoint, owner, status } = observed;
     this.#verifyCheckpoint(local, status);
     let reviewed = local.selected;
