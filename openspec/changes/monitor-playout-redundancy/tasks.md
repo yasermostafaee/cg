@@ -114,8 +114,13 @@
       Playout restored sequence 4 with the updated graphic on B, then restored sequence 5
       with the layer cleared. Both members matched the confirmed request hash on both returns,
       and Bridge sent zero additional layout writes during recovery.
-- [ ] Exercise the opposite outage direction, native restart of the selected Engine,
-      acknowledgement loss and a replacement after a receipt retention gap on a real .37 pair.
+- [x] Stop the selected A Engine and its Core on the licensed .37 pair. On 2026-11-24,
+      Bridge selected B at epoch 2 under the same controller. B accepted Update, Stop and
+      Play while A was offline. After A restarted, Playout restored sequence 4 on A without
+      another Bridge write. The next Update still went to B. Clear went to B while A was
+      offline again, and both programme returns stayed cleared at sequence 6 after A returned.
+- [ ] Exercise an in-place native restart on the selected Engine, acknowledgement loss and
+      a replacement after a receipt retention gap on a real .37 pair.
 - [ ] Verify explicit adoption of a reviewed migrated checkpoint separately from the fresh pilot.
 - [ ] Verify installed-service activation and credential renewal separately.
 
