@@ -213,6 +213,58 @@ test('🔴 `Playback` sits on the field’s line, hangs its panel from itself, a
   await expect(button).toBeFocused();
 });
 
+test('keeps the Loop checkbox beside its label in all three interface languages', async ({
+  app,
+}) => {
+  const { page } = app;
+  await registerTemplate(page);
+  const row = await app.loadTemplate(TPL);
+  await app.selectLayerRow(row);
+  await app.setTemplateDefault('l-2', { media: 'کلیپ معرفی', search: 'کلیپ' });
+
+  const playback = page
+    .getByRole('complementary', { name: /^(Inspector|ویژگی‌ها|لوحة الخصائص)$/ })
+    .locator(`[data-media-playback="${CLIP}"]`);
+  const panel = page.locator(`[data-media-playback-panel="${CLIP}"]`);
+  const loopLabel = panel.locator('[data-media-loop] label');
+  const languages = [
+    { locale: 'en', label: 'Loop', direction: 'ltr' },
+    { locale: 'fa', label: 'تکرار', direction: 'rtl' },
+    { locale: 'ar', label: 'تكرار', direction: 'rtl' },
+  ];
+  for (const { locale, label, direction } of languages) {
+    if (locale !== 'en') {
+      await page
+        .getByRole('button', {
+          name: /^(Open Station setup|باز کردن تنظیمات ایستگاه|فتح إعداد المحطة)$/,
+        })
+        .click();
+      const settings = page.getByRole('dialog');
+      await settings.getByRole('tab', { name: /^(General|عمومی|عام)$/ }).click();
+      await settings.locator('#cg-interface-language').selectOption(locale);
+      await settings
+        .getByRole('button', { name: /^(بستن|إغلاق)$/, exact: true })
+        .last()
+        .click();
+    }
+
+    await playback.click();
+    await expect(panel).toHaveCSS('direction', direction);
+    await expect(loopLabel).toHaveText(label);
+    const checkbox = panel.getByRole('checkbox', { name: label, exact: true });
+    const [word, check] = await Promise.all([box(loopLabel), box(checkbox)]);
+    const gap =
+      direction === 'ltr' ? check.x - (word.x + word.width) : word.x - (check.x + check.width);
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThanOrEqual(16);
+    const wasChecked = await checkbox.isChecked();
+    await loopLabel.click();
+    await expect(checkbox).toBeChecked({ checked: !wasChecked });
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+  }
+});
+
 test('🔴 in Source defaults, a bound clip carries `Playback` too — a panel over the dialog, closed alone', async ({
   app,
 }) => {

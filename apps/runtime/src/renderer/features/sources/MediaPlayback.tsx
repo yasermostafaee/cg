@@ -114,7 +114,7 @@ export function MediaPlaybackControl({
             <h3 className="cg-playback__title">
               <IsolatedName>{entry.name}</IsolatedName>
             </h3>
-            <div className="cg-playback__row" data-media-loop="">
+            <div className="cg-playback__row cg-playback__row--loop" data-media-loop="">
               <label className="cg-playback__label" htmlFor={loopId}>
                 {localizeUi('Loop')}
               </label>

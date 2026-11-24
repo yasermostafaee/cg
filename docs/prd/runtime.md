@@ -4198,6 +4198,8 @@ air, a viewer, another channel's operator and a locked console. WHEN the server 
 no number is shown. A live-input plate's hold, release and wire are byte-identical to before.
 **The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
 checkbox; a clip on air across the upgrade gets its transport record at its next take.
+The Playback popover places the Loop checkbox next to its label at the start of the row
+in all three interface languages. See `openspec/changes/compact-media-loop-control/`.
 **The owner's real-video check — PASSED (2026-09-29):** on `pnpm dev:station --fake --caspar
 127.0.0.1:5250` against his own CasparCG ([[P-058]], task 5.4 of the archived `dev-local-caspar`), real
 clips load, and he then asked for the archive. Recorded by `CLIENT-TEST-RELEASE-01` (v1) B5.

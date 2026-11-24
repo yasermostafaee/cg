@@ -10094,6 +10094,10 @@ input[type='checkbox']:disabled:checked {
   justify-content: space-between;
   gap: var(--r-space-3);
 }
+.cg-playback__row--loop {
+  justify-content: flex-start;
+  gap: var(--r-space-2);
+}
 .cg-playback__label {
   color: var(--r-text-secondary);
   font-size: var(--r-text-sm);
