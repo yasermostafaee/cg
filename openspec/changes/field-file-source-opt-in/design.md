@@ -130,6 +130,16 @@ uses.
 | Runtime Inspector, granted field    | "From file…" button             | unchanged, in every respect                            |
 | Runtime Inspector, `number` field   | nothing                         | nothing                                                |
 
-The granted field's behaviour is **bit-for-bit today's**: same control, same split defaults, same
-delimiter picker, same reload semantics, same list-footer placement. This change moves a gate; it
-does not touch the feature behind it.
+The file-source grant gives the field access to the existing chooser, split defaults, delimiter
+picker, reload and list-footer placement.
+
+### File picker user activation
+
+The From file button resolves the File System Access API from the triggering button's document
+window. It invokes the picker directly from the click before awaiting any work. In Windows, a
+docked Inspector can have its own WebView, so the window that received the click owns that gesture
+even when the Inspector appears inside the main window. Each attempt uses the current Inspector
+window.
+
+Selecting a file enters the normal permission, read and attachment flow. Cancelling preserves the
+current attachment and field value and leaves the operator free to open the picker again.

@@ -318,3 +318,135 @@ test('R-129 floats and redocks stable panel documents with one selection, draft 
     await page.evaluate(() => (window as unknown as ProbeWindow).floatingWindowProbe.playoutWrites),
   ).toBe(0);
 });
+
+test('R-018 opens the file picker from the docked and floating Inspector window', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await armMockRuntime(page);
+  const documents = await openPanelDocuments(page);
+  const layers = documents.get('layers')!;
+  const inspector = documents.get('inspector')!;
+  const names = ['docked-headlines.txt', 'floating-headlines.txt'];
+  const cancelled = 'Inspector file picker cancelled';
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: () => {
+        document.body.dataset['filePickerCalled'] = 'true';
+        throw new Error('The picker ran in the main window');
+      },
+    });
+  });
+  await inspector.evaluate(
+    async ({ names, cancelled }) => {
+      const directory = await navigator.storage.getDirectory();
+      const handles = await Promise.all(
+        names.map(async (name) => {
+          const handle = await directory.getFileHandle(name, { create: true });
+          const writer = await handle.createWritable();
+          await writer.write('First headline|Second headline');
+          await writer.close();
+          return handle;
+        }),
+      );
+      const calls: { owner: boolean; trusted: boolean; active: boolean }[] = [];
+      let trusted = false;
+      document.addEventListener(
+        'click',
+        (event) => {
+          trusted = event.isTrusted;
+        },
+        true,
+      );
+      Object.defineProperty(window, 'showOpenFilePicker', {
+        configurable: true,
+        value: async function (this: Window) {
+          calls.push({
+            owner: this === window,
+            trusted,
+            active: navigator.userActivation.isActive,
+          });
+          document.body.dataset['filePickerCalls'] = JSON.stringify(calls);
+          if (calls.length % 2 === 1) throw new DOMException(cancelled, 'AbortError');
+          return [handles[calls.length / 2 - 1]];
+        },
+      });
+    },
+    { names, cancelled },
+  );
+
+  const loaded = await page.evaluate(async () => {
+    const templateId = 'floating-inspector-file-picker';
+    await window.cg.templates.import({
+      template: {
+        templateId,
+        name: 'Floating Inspector headlines',
+        sourceFileName: 'floating-inspector-headlines.vcg',
+        templateType: 'crawl',
+        fields: [
+          {
+            id: 'headlines',
+            label: 'Headlines',
+            type: 'list',
+            required: false,
+            default: [{ id: 'default', text: 'Original headline' }],
+            allowFileSource: true,
+          },
+        ],
+      },
+      html: '<!doctype html><html><body>Floating Inspector headlines</body></html>',
+    });
+    return window.cg.fixedLayers.load({
+      channel: 1,
+      layer: 84,
+      itemId: 'floating-inspector-file-picker-item',
+      templateId,
+      fields: { headlines: [{ id: 'default', text: 'Original headline' }] },
+    });
+  });
+  expect(loaded.accepted).toBe(true);
+  await layers.locator('[data-layer="84"] [data-row-body]').click();
+  await expect.poll(() => placement(page, 'inspector')).toBeNull();
+  const pick = inspector.getByRole('button', { name: 'Load headlines from file' });
+  const calls = inspector.locator('body');
+  const expectedCall = { owner: true, trusted: true, active: true };
+  await pick.click();
+  await expect(calls).toHaveAttribute('data-file-picker-calls', JSON.stringify([expectedCall]));
+  await pick.click();
+  await expect(inspector.locator('.cg-file-chip__name')).toHaveText(names[0]!);
+
+  await inspector.getByRole('button', { name: /^Float / }).click();
+  await expect
+    .poll(() => placement(page, 'inspector'))
+    .toMatchObject({ width: expect.any(Number) });
+  await inspector.getByRole('button', { name: 'Detach headlines file source' }).click();
+  await pick.click();
+  await expect(calls).toHaveAttribute(
+    'data-file-picker-calls',
+    JSON.stringify(Array(3).fill(expectedCall)),
+  );
+  await pick.click();
+  await expect(inspector.locator('.cg-file-chip__name')).toHaveText(names[1]!);
+  await expect(calls).toHaveAttribute(
+    'data-file-picker-calls',
+    JSON.stringify(Array(4).fill(expectedCall)),
+  );
+
+  await inspector.getByRole('button', { name: /^Exit floating / }).click();
+  await expect.poll(() => placement(page, 'inspector')).toBeNull();
+  await expect(inspector.locator('.cg-file-chip__name')).toHaveText(names[1]!);
+  await inspector.getByRole('button', { name: 'Detach headlines file source' }).click();
+  await pick.click();
+  await expect(calls).toHaveAttribute(
+    'data-file-picker-calls',
+    JSON.stringify(Array(5).fill(expectedCall)),
+  );
+  await expect(page.locator('body')).not.toHaveAttribute('data-file-picker-called', 'true');
+  await expect(page.getByText(cancelled)).toHaveCount(0);
+  await expect(inspector.getByText(cancelled)).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as unknown as ProbeWindow).floatingWindowProbe.playoutWrites),
+  ).toBe(0);
+});

@@ -21,6 +21,7 @@ import { buildStructuredRowsXlsx } from '@cg/vcg-format';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { panelWindow, usePanelDocument } from '../../ui/PanelDocument.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import type { FieldPath } from './draftStore.js';
 import { DEFAULT_DELIMITER } from './delimiterStore.js';
@@ -140,6 +141,7 @@ export function FromFileControl({
   lockFile?: boolean;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const pickerWindow = panelWindow(usePanelDocument());
   const sourceVersion = useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const [previewOpen, setPreviewOpen] = useState(false);
   /*
@@ -154,7 +156,7 @@ export function FromFileControl({
   const appliedFields = item.fields;
   const state = fromFileState(itemId, path);
   const lockedPath = lockFile ? authoredPath : undefined;
-  const supported = fileSourceSupported();
+  const supported = fileSourceSupported(pickerWindow);
   const pathKey = JSON.stringify(path);
   const structured = kind === 'list' && itemFields !== undefined && itemFields.length > 0;
   const currentSchemaSignature = structured ? JSON.stringify({ itemFields, maxItems }) : undefined;
@@ -245,7 +247,8 @@ export function FromFileControl({
   const choose = async (): Promise<void> => {
     let source;
     try {
-      source = await pickTextFileSource(window, { includeExcel: structured });
+      // The operator's activation belongs to this Inspector's WebView, even when it is docked.
+      source = await pickTextFileSource(pickerWindow, { includeExcel: structured });
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : String(err));
       return;

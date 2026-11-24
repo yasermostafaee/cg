@@ -80,6 +80,11 @@
       ],
       "fixes": [
         {
+          "fa": "دکمهٔ «از فایل…» در پنل ویژگی‌ها، چه متصل و چه شناور، پنجرهٔ انتخاب فایل را باز می‌کند. لغو انتخاب، فایل پیوست و مقدار فعلی فیلد را حفظ می‌کند.",
+          "en": "From file opens the file picker from either a docked or floating Inspector. Cancelling the picker keeps the current attachment and field value.",
+          "ar": "يفتح زر «من ملف…» نافذة اختيار الملفات من لوحة الخصائص المثبتة أو العائمة. يحافظ إلغاء الاختيار على الملف المرفق وقيمة الحقل الحالية."
+        },
+        {
           "fa": "در نمای شبکه و فهرست منابع زندهٔ تنظیمات ایستگاه، برچسب «خودکار» حذف شد. فرمت مشخص ورودی همچنان به‌صورت فقط‌خواندنی نمایش داده می‌شود.",
           "en": "Station setup omits Auto format labels in the Live sources grid and list. A specific input format is shown as read-only information.",
           "ar": "تُحذف تسمية التنسيق «تلقائي» في عرضَي الشبكة والقائمة للمصادر المباشرة في إعداد المحطة. يظهر تنسيق المدخل المحدد للقراءة فقط."

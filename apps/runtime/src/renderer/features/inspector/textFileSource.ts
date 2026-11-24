@@ -170,7 +170,7 @@ export async function pickTextFileSource(
   if (picker === undefined) throw new Error(FILE_SOURCE_UNSUPPORTED_MESSAGE);
   let handles: FileSystemFileHandle[];
   try {
-    handles = await picker({
+    handles = await picker.call(w, {
       types: [
         {
           description: 'Text and structured data',
@@ -190,8 +190,9 @@ export async function pickTextFileSource(
       multiple: false,
     });
   } catch (err) {
-    // Cancelling the dialog rejects with an AbortError — that is not a failure.
-    if (err instanceof DOMException && err.name === 'AbortError') return null;
+    // AbortError may come from a detached document's own DOMException constructor.
+    if (typeof err === 'object' && err !== null && 'name' in err && err.name === 'AbortError')
+      return null;
     throw err;
   }
   const handle = handles[0];

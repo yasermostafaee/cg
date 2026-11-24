@@ -37,6 +37,8 @@ length limits and its validation pattern.
   change with a real hazard).
 - **DEFAULT OFF** for fields authored before the flag existed, under the `P-031` compatibility
   floor. See `design.md` §2.
+- Open the operator's file picker in the Inspector window that received the click, including
+  docked and floating Inspectors.
 
 ## Impact
 

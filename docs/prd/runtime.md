@@ -856,6 +856,11 @@ the separators inside the text and the whole file IS the content, fed verbatim; 
 discrete items is OUR optional convenience.
 **Acceptance:**
 
+- WHEN the operator clicks From file on a granted field THEN the file picker opens from the
+  Inspector that received the click, whether it is docked or floating. After docking or detaching
+  the Inspector, the next click opens the picker from its current window.
+- WHEN the operator cancels the picker THEN the field keeps its current value and file
+  attachment. A later click can open the picker again.
 - WHEN the operator chooses "from file" on a text-type field with split OFF (the DEFAULT) THEN
   the ENTIRE file content becomes the field value verbatim — applied through the normal
   field-update path, so a live item updates exactly as a hand-edited field would

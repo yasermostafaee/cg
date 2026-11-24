@@ -52,12 +52,19 @@ field without the grant.
   grant **THEN** the Inspector renders that field's normal editor and no from-file control —
   no button, no chip, no split row
 
-#### Scenario: A granted field behaves exactly as every eligible field did before
+#### Scenario: A granted field offers file source controls
 
 - **WHEN** the template declares a text / multiline / list field WITH the grant **THEN** the
-  from-file control renders and behaves identically to the pre-opt-in affordance: pick, stage,
-  reload, split defaults, delimiter picker, list-footer placement and the unsupported-browser
-  degrade are all unchanged
+  Inspector offers the file picker, draft staging, reload, the split options and delimiter
+  picker for applicable fields
+
+#### Scenario: Open the picker in the current Inspector window
+
+- **WHEN** the operator clicks From file in a docked or floating Inspector
+- **THEN** the picker opens from the window that received the click
+- **AND** after docking or detaching the Inspector, each later attempt uses its current window
+- **WHEN** the operator cancels the picker
+- **THEN** the field keeps its current value and attachment and another attempt can open the picker
 
 #### Scenario: A kind that cannot take file content is never granted
 

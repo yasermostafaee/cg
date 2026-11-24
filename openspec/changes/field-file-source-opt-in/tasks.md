@@ -111,3 +111,11 @@
       `live-source-layers.spec.ts`, a PANIC assertion belonging to `add-multibox-audio` that
       encoded a rule `09eb9760` had deleted (see that change's `tasks.md` 8.7). Named here so the
       red run in this commit's history is not mistaken for a defect in the file-source grant.
+
+## 8. File picker in docked and floating Inspectors
+
+- [x] Verify that From file calls the picker in the Inspector's current window and can reopen
+      it while docked and detached. Chromium and isolated native WebView2 accepted trusted
+      clicks with active user gestures using an intercepted picker.
+- [x] Verify that cancelling the picker makes no change, and redocking keeps the attachment.
+- [ ] Record the carrying Linux Playwright result.
