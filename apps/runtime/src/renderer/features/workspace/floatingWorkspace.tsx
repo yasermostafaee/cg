@@ -251,7 +251,7 @@ export function FloatingWorkspaceProvider({
               redock: (panel) => {
                 layout.setFloatingPanel(panel, null);
                 if (layout.focus !== 'none') layout.setFocus('none');
-                if (panel === 'pgm' || panel === 'pvw') layout.setMonitorsShown(true);
+                if (panel === 'pgm' || panel === 'pvw') layout.setMonitorsShown(true, panel);
               },
               toggleMaximized: (panel) => {
                 const placement = layout.floatingPanels[panel];

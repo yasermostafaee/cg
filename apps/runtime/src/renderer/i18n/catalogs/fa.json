@@ -1118,6 +1118,7 @@
     "MISMATCH — every graphic on this channel is mis-placed": "عدم تطابق؛ جای تمام گرافیک‌های این کانال اشتباه است",
     "Mode": "حالت",
     "Monitor order": "ترتیب مانیتورها",
+    "Monitor visibility": "نمایش مانیتورها",
     "Monitor volume": "بلندی صدای مانیتور",
     "Monitor volume {percent}% · this console only": "بلندی صدای مانیتور {percent}٪ · همین کنسول",
     "More frames on bottom": "قاب‌های بیشتر در پایین",

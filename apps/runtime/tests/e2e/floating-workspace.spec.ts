@@ -88,6 +88,80 @@ async function placement(page: Page, panel: FloatingPanelId) {
   return (await arrangement(page, panel))?.placement;
 }
 
+test('R-129 shows and hides each docked monitor independently or together', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await armMockRuntime(page);
+  const documents = await openPanelDocuments(page);
+  const header = page.locator('[data-app-header]');
+  const monitorButton = (name: string) => header.getByRole('button', { name, exact: true });
+  const dock = (panel: FloatingPanelId) => page.locator(`[data-floating-dock="${panel}"]`);
+  const layersHeight = async () => (await dock('layers').boundingBox())?.height ?? 0;
+  const monitorWidth = async (panel: 'pgm' | 'pvw') =>
+    (await dock(panel).boundingBox())?.width ?? 0;
+  const expectDockedMonitors = async (pvw: boolean, pgm: boolean) => {
+    await expect
+      .poll(async () => {
+        const [preview, programme] = await Promise.all([
+          arrangement(page, 'pvw'),
+          arrangement(page, 'pgm'),
+        ]);
+        return [preview?.visible, programme?.visible];
+      })
+      .toEqual([pvw, pgm]);
+  };
+
+  await expectDockedMonitors(false, false);
+  const fullLayersHeight = await layersHeight();
+  expect(fullLayersHeight).toBeGreaterThan(0);
+
+  await monitorButton('Show PVW monitor').click();
+  await expectDockedMonitors(true, false);
+  await expect(dock('pgm')).toHaveCount(0);
+  const previewOnlyWidth = await monitorWidth('pvw');
+  expect(previewOnlyWidth).toBeGreaterThan(0);
+  await expect.poll(layersHeight).toBeLessThan(fullLayersHeight);
+
+  const pvw = documents.get('pvw')!;
+  await pvw.getByRole('button', { name: 'Show PREVIEW (PVW) fullscreen', exact: true }).click();
+  await expect(header).toHaveCount(0);
+  await expectDockedMonitors(true, false);
+  await pvw.getByRole('button', { name: 'Exit fullscreen PREVIEW (PVW)', exact: true }).click();
+  await expectDockedMonitors(true, false);
+  await expect(monitorButton('Show PGM monitor')).toBeVisible();
+
+  // The aggregate button restores both monitors from a mixed state.
+  await monitorButton('Show monitors').click();
+  await expectDockedMonitors(true, true);
+  await expect.poll(() => monitorWidth('pvw')).toBeLessThan(previewOnlyWidth);
+  const pairedProgrammeWidth = await monitorWidth('pgm');
+  expect(pairedProgrammeWidth).toBeGreaterThan(0);
+
+  await monitorButton('Hide PVW monitor').click();
+  await expectDockedMonitors(false, true);
+  await expect.poll(() => monitorWidth('pgm')).toBeGreaterThan(pairedProgrammeWidth);
+  await monitorButton('Hide PGM monitor').click();
+  await expectDockedMonitors(false, false);
+  await expect.poll(layersHeight).toBeCloseTo(fullLayersHeight, 0);
+
+  await monitorButton('Show PGM monitor').click();
+  await expectDockedMonitors(false, true);
+  const pgm = documents.get('pgm')!;
+  await pgm.getByRole('button', { name: /^Float / }).click();
+  await expect.poll(() => arrangement(page, 'pgm')).toMatchObject({ visible: true, dock: null });
+  await expect(monitorButton('Show PVW monitor')).toBeVisible();
+  await expect(monitorButton('Show monitors')).toHaveCount(0);
+  await pgm.getByRole('button', { name: /^Exit floating / }).click();
+  await expect.poll(() => arrangement(page, 'pgm')).toMatchObject({ placement: null });
+  await expectDockedMonitors(false, true);
+  await monitorButton('Show monitors').click();
+  await expectDockedMonitors(true, true);
+  await monitorButton('Hide monitors').click();
+  await expectDockedMonitors(false, false);
+  expect(
+    await page.evaluate(() => (window as unknown as ProbeWindow).floatingWindowProbe.playoutWrites),
+  ).toBe(0);
+});
+
 test('R-129 the toolbar toggle only controls docked monitors', async ({ page }) => {
   const app = new RuntimeApp(page);
   await page.setViewportSize({ width: 1440, height: 900 });

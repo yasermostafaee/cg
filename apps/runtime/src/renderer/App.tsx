@@ -206,10 +206,8 @@ export function App({
   );
   const layersFloating = nativePanels && layout.floatingPanels.layers !== undefined;
   const inspectorFloating = nativePanels && layout.floatingPanels.inspector !== undefined;
-  const allMonitorsFloating =
-    nativePanels &&
-    layout.floatingPanels.pgm !== undefined &&
-    layout.floatingPanels.pvw !== undefined;
+  const pvwFloating = nativePanels && layout.floatingPanels.pvw !== undefined;
+  const pgmFloating = nativePanels && layout.floatingPanels.pgm !== undefined;
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
   const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
@@ -361,7 +359,7 @@ export function App({
    *
    * Three things stay independent here: which row is SELECTED (`selectedId`, this file),
    * which rows are IN PVW (the bridge's rehearse set, `useRehearse`), and whether the
-   * monitors are SHOWN (`layout.monitorsShown`, the APP HEADER's toggle — `AUDIT-CLOSE-01` B1
+   * monitors are SHOWN (`layout.monitorVisibility`, the APP HEADER's toggles — `AUDIT-CLOSE-01` B1
    * moved it off the Layers bar, and `MONITORS-01` flipped its default). Each is read and
    * written by its own control and by nothing else in this tree — a selection never enters
    * or leaves PVW, a PVW change never selects or deselects, and folding the strip away
@@ -372,11 +370,15 @@ export function App({
    * here: a fullscreen monitor is still the strip, so it shows through a hidden toggle, and
    * a fullscreen Layers list hides the strip as it always did.
    */
-  const monitorsVisible =
-    showWorkspace &&
-    layout.focus !== 'layers' &&
-    (layout.monitorsShown || monitorFocused) &&
-    !allMonitorsFloating;
+  const dockedMonitors = {
+    pvw:
+      !pvwFloating &&
+      (layout.focus === 'pvw' || (layout.focus === 'none' && layout.monitorVisibility.pvw)),
+    pgm:
+      !pgmFloating &&
+      (layout.focus === 'pgm' || (layout.focus === 'none' && layout.monitorVisibility.pgm)),
+  };
+  const monitorsVisible = dockedMonitors.pvw || dockedMonitors.pgm;
   const hasPreviewRows = rehearsals.some(
     ({ channel }) => viewChannel === null || channel === viewChannel,
   );
@@ -688,7 +690,7 @@ export function App({
                         rehearsing, so the preview and the Inspector agree about
                         which graphic the operator is working on. */}
                       <MonitorStrip
-                        visible={monitorsVisible}
+                        dockedMonitors={dockedMonitors}
                         companionMode={monitorCompanionMode}
                         hasSelectedLayer={selected !== null}
                         playoutSignInUrl={

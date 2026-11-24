@@ -25,7 +25,7 @@ import {
 } from './support/stationSetup.js';
 
 /**
- * The shell geometry `AppHeader` reads for its monitors toggle. Only `monitorsShown` and
+ * The shell geometry `AppHeader` reads for its monitors toggle. Only `monitorVisibility` and
  * `setMonitorsShown` are touched by this spec; the rest is the shape the hook returns.
  */
 function headerLayoutStub(): ShellLayout {
@@ -34,7 +34,7 @@ function headerLayoutStub(): ShellLayout {
     monitorPx: 230,
     narrow: false,
     focus: 'none',
-    monitorsShown: true,
+    monitorVisibility: { pvw: true, pgm: true },
     customized: false,
     setInspectorPx: () => undefined,
     setMonitorPx: () => undefined,

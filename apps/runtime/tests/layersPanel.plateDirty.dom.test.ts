@@ -197,7 +197,7 @@ async function renderPanel(): Promise<HTMLDivElement> {
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,
-            monitorsShown: true,
+            monitorVisibility: { pvw: true, pgm: true },
             setMonitorsShown: () => undefined,
           },
           inspectorOpen: false,

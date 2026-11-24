@@ -4,7 +4,9 @@
 - Maximize and restore affect the detached window on its own display. It has no companion modes. The main window keeps the existing companion layouts for docked panels.
 - Selecting the current row with Inspector detached is idempotent. Selecting a different row updates the same Inspector.
 - Exit floating returns the panel to its prior slot. The detached title bar and keyboard close route cannot dismiss the panel independently. Main-window exit owns session shutdown and the cleanup of detached windows.
-- The toolbar toggle controls the docked monitor strip. When one monitor is detached it names the remaining one, and when both are detached it is hidden. Redocking a monitor shows it in the main window.
+- With both monitors docked, the toolbar has a combined action and compact PVW and PGM buttons. The combined action hides both when both are shown and shows both otherwise. Each individual button changes the visibility of its own pane.
+- With one monitor detached, the toolbar names and controls the docked monitor. With both detached, the toolbar omits monitor visibility controls. Exit floating shows the returning pane and preserves its sibling's visibility.
+- Monitor visibility is session-only and starts at the shipped defaults. Maximize and restore use the existing focus behavior, and the visibility actions leave selection and drafts available.
 - Profiles store physical placement, detached bounds and display identity locally. Windows whose old display is missing return to visible desktop space.
 
 ## Native verification

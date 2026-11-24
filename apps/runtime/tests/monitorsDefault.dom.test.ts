@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/renderer/App.js';
 import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
-import { DEFAULT_MONITORS_SHOWN } from '../src/renderer/hooks/useShellLayout.js';
+import { DEFAULT_MONITOR_VISIBILITY } from '../src/renderer/hooks/useShellLayout.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
@@ -145,7 +145,7 @@ afterEach(() => {
 
 describe('MONITORS-01 — the shell boots with the monitors folded away', () => {
   it('renders no monitor strip at boot, and the flag it follows is the shipped default', () => {
-    expect(DEFAULT_MONITORS_SHOWN).toBe(false);
+    expect(DEFAULT_MONITOR_VISIBILITY).toEqual({ pvw: false, pgm: false });
     expect(strip(), 'no monitor strip before the operator asks for one').toBeNull();
   });
 

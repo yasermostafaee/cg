@@ -165,7 +165,7 @@ function panel(): ReturnType<typeof createElement> {
       setFocus: () => undefined,
       reset: () => undefined,
       customized: false,
-      monitorsShown: true,
+      monitorVisibility: { pvw: true, pgm: true },
       setMonitorsShown: () => undefined,
     },
     onUpdate: () => Promise.resolve({ accepted: true }),

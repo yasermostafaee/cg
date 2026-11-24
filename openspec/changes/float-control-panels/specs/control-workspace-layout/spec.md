@@ -16,6 +16,20 @@ CG Control SHALL allow operators to detach PGM, PVW, Layers and Inspector into i
 - **THEN** the existing companion choices remain available for docked companions
 - **AND** each detached companion retains its independent window.
 
+#### Scenario: Show or hide docked monitors separately or together
+
+- **WHEN** both PGM and PVW are docked
+- **THEN** the main toolbar offers one combined control and a separate control for each monitor
+- **AND** either separate control changes the visibility of its own monitor
+- **AND** the combined control hides both when both are visible and shows both when either is hidden
+- **AND** the current selection and drafts stay available and no playout command is sent.
+
+#### Scenario: Start a new session after changing visibility
+
+- **WHEN** the operator starts a new session after showing or hiding individual monitors
+- **THEN** each monitor's visibility setting uses the shipped default for that setting
+- **AND** docked panels follow the workspace's existing focus and placement rules.
+
 #### Scenario: Show or hide the remaining docked monitor
 
 - **WHEN** PGM or PVW is detached
@@ -23,7 +37,9 @@ CG Control SHALL allow operators to detach PGM, PVW, Layers and Inspector into i
 - **AND** operating it leaves the detached monitor visible
 - **WHEN** both monitors are detached
 - **THEN** the main toolbar has no monitor toggle
-- **AND** redocking a monitor shows it and restores the corresponding toggle.
+- **WHEN** a monitor redocks
+- **THEN** it is visible in the main window and the toolbar shows the controls for the docked monitors
+- **AND** the other monitor retains its own visibility.
 
 #### Scenario: Read a toolbar tooltip over docked panels
 

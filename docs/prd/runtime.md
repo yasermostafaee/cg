@@ -3626,6 +3626,9 @@ reconnect. `shellLayout.monitorsShown.dom.test.ts`'s "is NOT persisted" case is 
 of that decision, and `useShellLayout`'s interface note points here. Nothing is implemented by
 this item; it closes as a recorded decision.
 
+R-129 applies this decision to the separate PVW and PGM visibility flags. Both flags use the
+shipped defaults for each new session.
+
 ⚠ **STILL CLOSED, AND STILL THIS ANSWER — but the neighbouring question it was NOT asked has
 since been answered the other way (2026-09-09, `MONITORS-01`; `design.md` §19.2).** This item is
 about PERSISTENCE, and its answer is unchanged: the flag is written by nothing and read from
@@ -5464,7 +5467,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 ## [~] R-129 — Float CG Control panels on a second display — `openspec/changes/float-control-panels/`
 
-**What:** Let the operator detach and redock PGM, PVW, Layers and Inspector as workstation-local windows. Keep a single CG Control session across the workspace. Docked monitors use the companion layouts from R-111. Detached monitors maximize independently on their own display.
+**What:** Let the operator detach and redock PGM, PVW, Layers and Inspector as workstation-local windows. Keep a single CG Control session across the workspace. Give operators individual and combined visibility controls for docked monitors. Docked monitors use the companion layouts from R-111. Detached monitors maximize independently on their own display.
 
 **Acceptance:**
 
@@ -5472,7 +5475,10 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN a detached PGM or PVW is maximized THEN the window contains the monitor and its own controls. Layers and Inspector remain visible in their existing windows and use the same selection and draft.
 - WHEN PGM or PVW is maximized inside the main window THEN the existing R-111 controls remain available for docked companions. A separately detached Layers or Inspector panel retains its existing placement and a single interactive surface.
 - WHEN a main toolbar tooltip overlaps docked panels THEN its full text remains visible above those panels and the tooltip leaves panel controls clickable.
-- WHEN one monitor is detached THEN the main toolbar toggle names and controls the remaining docked monitor. WHEN both are detached THEN the toggle is absent until a monitor redocks.
+- WHEN both monitors are docked THEN the main toolbar offers a combined visibility control and a separate control for each monitor. An individual control changes its own monitor. The combined control hides both when both are visible and shows both when either is hidden.
+- WHEN one monitor is detached THEN the toolbar names and controls the remaining docked monitor. WHEN both are detached THEN monitor visibility controls are absent until a monitor redocks.
+- WHEN PGM or PVW redocks THEN the returning monitor becomes visible in the main window. The other monitor retains its own visibility.
+- WHEN the operator changes monitor visibility THEN the selected row and drafts are preserved and no playout command is sent. Monitor visibility is session-only and follows the shipped defaults on a new session.
 - WHEN Inspector is detached and the operator clicks the already selected row again THEN the row remains selected and Inspector stays open. Selecting a different row updates that same Inspector.
 - WHEN the operator changes window or companion layout THEN active preview and monitor sound retain their state. No duplicate input or output preview is opened and no playout action is sent as a result of a layout change.
 - WHEN the operator chooses Exit floating THEN the same panel returns to its previous place in the main window, including its current state.

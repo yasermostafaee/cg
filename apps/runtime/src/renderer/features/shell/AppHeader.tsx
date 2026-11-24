@@ -15,6 +15,7 @@ const singleMonitorLabels = {
   pgm: { show: 'Show PGM monitor', hide: 'Hide PGM monitor' },
   pvw: { show: 'Show PVW monitor', hide: 'Hide PVW monitor' },
 } as const;
+const monitorControls = ['pvw', 'pgm'] as const;
 
 /**
  * 🔴 `AUDIT-CLOSE-01` B1 — THE APP HEADER, WHICH THE REFERENCE DRAWS AND THIS APP DID NOT.
@@ -80,10 +81,14 @@ export function AppHeader({
   const pgmFloating = floatingMonitors?.pgm !== undefined;
   const pvwFloating = floatingMonitors?.pvw !== undefined;
   const dockedMonitor = pgmFloating ? 'pvw' : pvwFloating ? 'pgm' : null;
+  const { pgm, pvw } = layout.monitorVisibility;
+  const allDockedShown =
+    dockedMonitor === null ? pgm && pvw : layout.monitorVisibility[dockedMonitor];
+  const anyDockedShown = (pgm && !pgmFloating) || (pvw && !pvwFloating);
   const singleMonitorLabel =
     dockedMonitor === null
       ? null
-      : localizeUi(singleMonitorLabels[dockedMonitor][layout.monitorsShown ? 'hide' : 'show']);
+      : localizeUi(singleMonitorLabels[dockedMonitor][allDockedShown ? 'hide' : 'show']);
 
   return (
     <header className="cg-app-header" data-app-header="">
@@ -133,37 +138,52 @@ export function AppHeader({
         </span>
       )}
       {/*
-        🔴 SHOW / HIDE THE MONITORS — moved off the Layers bar, where Phase 5 put it under
-        the argument this component's header quotes. Same flag, same names, same
-        `aria-expanded` / `aria-controls`: only the placement moved, and it moved to the
-        place the reference draws it.
-
-        The toggle must remain discoverable when a docked monitor is hidden, including at
-        startup and on narrow screens. It only goes away when both monitors are detached.
+        Show or hide the docked monitors together, with separate controls when both are docked.
+        The controls stay available while their panels are hidden.
       */}
       {!(pgmFloating && pvwFloating) && (
-        <Button
-          variant="ghost"
-          aria-label={
-            singleMonitorLabel ??
-            localizeUi(layout.monitorsShown ? 'Hide monitors' : 'Show monitors')
-          }
-          aria-expanded={layout.monitorsShown}
-          aria-controls="monitor-strip"
-          title={
-            singleMonitorLabel ??
-            (layout.monitorsShown
-              ? localizeUi('Fold PREVIEW and PROGRAM away — the layer list takes the height')
-              : localizeUi('Bring PREVIEW and PROGRAM back above the layer list'))
-          }
-          onClick={() => {
-            layout.setMonitorsShown(!layout.monitorsShown);
-          }}
+        <div
+          className="cg-app-header__monitors"
+          role="group"
+          aria-label={localizeUi('Monitor visibility')}
         >
-          <Icon icon={layout.monitorsShown ? MonitorOff : Monitor} />
-          {singleMonitorLabel?.toUpperCase() ??
-            localizeUi(layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS')}
-        </Button>
+          <Button
+            variant="ghost"
+            aria-label={
+              singleMonitorLabel ?? localizeUi(allDockedShown ? 'Hide monitors' : 'Show monitors')
+            }
+            aria-expanded={anyDockedShown}
+            aria-controls="monitor-strip"
+            title={
+              singleMonitorLabel ??
+              (allDockedShown
+                ? localizeUi('Fold PREVIEW and PROGRAM away — the layer list takes the height')
+                : localizeUi('Bring PREVIEW and PROGRAM back above the layer list'))
+            }
+            onClick={() => layout.setMonitorsShown(!allDockedShown, dockedMonitor ?? undefined)}
+          >
+            <Icon icon={allDockedShown ? MonitorOff : Monitor} />
+            {singleMonitorLabel?.toUpperCase() ??
+              localizeUi(allDockedShown ? 'HIDE MONITORS' : 'SHOW MONITORS')}
+          </Button>
+          {dockedMonitor === null &&
+            monitorControls.map((monitor) => {
+              const shown = layout.monitorVisibility[monitor];
+              const label = localizeUi(singleMonitorLabels[monitor][shown ? 'hide' : 'show']);
+              return (
+                <Button
+                  key={monitor}
+                  variant="ghost"
+                  active={shown}
+                  aria-label={label}
+                  title={label}
+                  onClick={() => layout.setMonitorsShown(!shown, monitor)}
+                >
+                  {monitor.toUpperCase()}
+                </Button>
+              );
+            })}
+        </div>
       )}
       {/*
         R-108 — TEMPLATES IS NOW A REAL HEADER DOOR. The earlier design rejected it because a

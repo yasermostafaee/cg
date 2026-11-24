@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import {
   DEFAULT_INSPECTOR_PX,
   DEFAULT_MONITOR_PX,
-  DEFAULT_MONITORS_SHOWN,
+  DEFAULT_MONITOR_VISIBILITY,
   DEFAULT_WORKSPACE_POSITIONS,
   type ConfigurableShellLayout,
 } from './useShellLayout.js';
@@ -67,7 +67,7 @@ const INERT: ConfigurableShellLayout = {
   // no provider there is no shell to give a panel.
   narrow: true,
   // The hook's own default, imported for the same reason the two sizes above are.
-  monitorsShown: DEFAULT_MONITORS_SHOWN,
+  monitorVisibility: DEFAULT_MONITOR_VISIBILITY,
   positions: DEFAULT_WORKSPACE_POSITIONS,
   uiProfiles: [],
   setPositions: () => undefined,

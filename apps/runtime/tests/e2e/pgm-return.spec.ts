@@ -118,7 +118,7 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     The owner's path in ONE station boot — the runtime suite's CI budget is shared (P-038), so the
     live and stall scenarios ride one page rather than paying for two.
   */
-  test('hidden pulls nothing; SHOW MONITORS shows the live picture; a stall hides it; hiding releases it within 2 s', async ({
+  test('hidden pulls nothing; SHOW MONITORS shows the live picture; a stall hides it; hiding PGM releases it within 2 s', async ({
     page,
   }) => {
     const f = await startFeed();
@@ -140,8 +140,8 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
       .poll(() => picture(page).evaluate((img: HTMLImageElement) => img.naturalWidth))
       .toBe(64);
     // …through the one door: the bridge's control port, with the ticket the socket was given.
-    const src = await picture(page).getAttribute('src');
-    expect(src ?? '').toMatch(
+    const src = (await picture(page).getAttribute('src')) ?? '';
+    expect(src).toMatch(
       new RegExp(
         `^http://127\\.0\\.0\\.1:${String((bridge as BridgeHandle).port)}/pgm/1\\?ticket=`,
       ),
@@ -151,6 +151,17 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     expect(f.connections[0]?.received.toString('latin1')).toBe(
       `GET / HTTP/1.1\r\nHost: ${STATION_HOST}\r\n\r\n`,
     );
+
+    // Changing the docked PVW pane must keep the same PGM picture and upstream stream.
+    await page.getByRole('button', { name: 'Hide PVW monitor', exact: true }).click();
+    await expect(page.locator('[data-pvw-controls]')).toBeHidden();
+    await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live');
+    await expect(picture(page)).toHaveAttribute('src', src);
+    await page.getByRole('button', { name: 'Show PVW monitor', exact: true }).click();
+    await expect(page.locator('[data-pvw-controls]')).toBeVisible();
+    await expect(picture(page)).toHaveAttribute('src', src);
+    expect(f.openCount()).toBe(1);
+    expect(f.connections).toHaveLength(1);
 
     // A stall: the picture is hidden and the pane says so — never a frozen frame as if live.
     f.pause();
@@ -167,13 +178,14 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect(picture(page)).toBeVisible();
 
     const hiddenAt = Date.now();
-    await page.getByRole('button', { name: 'Hide monitors' }).click();
+    await page.getByRole('button', { name: 'Hide PGM monitor', exact: true }).click();
     await expect.poll(() => f.openCount(), { timeout: 6000 }).toBe(0);
     const closedAfter = (f.connections[0]?.closedAt ?? Number.POSITIVE_INFINITY) - hiddenAt;
     expect(closedAfter, `the feed closed ${String(closedAfter)} ms after hiding`).toBeLessThan(
       2000,
     );
     expect(f.connections).toHaveLength(1);
+    await expect(page.locator('[data-pvw-controls]')).toBeVisible();
   });
 
   test('no feed reads "No return signal", and the picture appears when the feed comes up', async ({

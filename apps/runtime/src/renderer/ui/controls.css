@@ -84,6 +84,12 @@
   min-width: 0;
 }
 
+.cg-app-header__monitors {
+  display: inline-flex;
+  flex: none;
+  gap: var(--r-space-1);
+}
+
 /*
  * `PVW · N`. A chip, not a badge in the alarm family: rehearse is a browser render and
  * reaches no channel, so it wears the rehearse ink and nothing that reads as air (A12).
@@ -1823,7 +1829,8 @@
 }
 
 /* Engaged panel-header tools such as Pan use the interactive accent. */
-.cg-panel-actions .cg-btn.is-on {
+.cg-panel-actions .cg-btn.is-on,
+.cg-app-header__monitors .cg-btn.is-on {
   background: var(--r-accent);
   border-color: var(--r-accent);
   /* Near-black, like the play tone above and for the same reason: sky is light
@@ -1845,12 +1852,14 @@
   box-shadow: none;
 }
 /* Engaged panel-header tools keep their accent family on hover and press. */
-.cg-panel-actions .cg-btn.is-on:hover:not(:disabled) {
+.cg-panel-actions .cg-btn.is-on:hover:not(:disabled),
+.cg-app-header__monitors .cg-btn.is-on:hover:not(:disabled) {
   background: var(--r-accent-lift);
   border-color: var(--r-accent-lift);
   box-shadow: var(--r-shadow-1);
 }
-.cg-panel-actions .cg-btn.is-on:active:not(:disabled) {
+.cg-panel-actions .cg-btn.is-on:active:not(:disabled),
+.cg-app-header__monitors .cg-btn.is-on:active:not(:disabled) {
   background: var(--r-accent-strong);
   border-color: var(--r-accent-strong);
   box-shadow: none;

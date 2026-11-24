@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_INSPECTOR_PX,
   DEFAULT_MONITOR_PX,
-  DEFAULT_MONITORS_SHOWN,
+  DEFAULT_MONITOR_VISIBILITY,
   DEFAULT_WORKSPACE_POSITIONS,
   useShellLayout,
   type ConfigurableShellLayout,
@@ -15,7 +15,7 @@ import type { FloatingPanelPlacement } from '../src/shared/floating-panels.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
 /**
- * `RUNTIME-REDESIGN-01` PHASE 5 — the shell's `monitorsShown` flag: its own axis (fullscreen
+ * `RUNTIME-REDESIGN-01` PHASE 5 — the shell's `monitorVisibility` flag: its own axis (fullscreen
  * focus and the sizes are untouched by it), returned to the default by `reset()`, counted as
  * a customisation so the reset control appears, and NEVER persisted — the phase's constraint
  * is no persisted key, file or shape change, and `cg.runtime.shell-layout.v1` keeps its
@@ -25,7 +25,7 @@ import { installMemoryStorage } from './support/localStorage.js';
  *
  * ── 🔴 `MONITORS-01`, 2026-09-09 — THE DEFAULT MOVED; THE PERSISTENCE RULE DID NOT ─────
  *
- * The boot state is now HIDDEN (`DEFAULT_MONITORS_SHOWN`), because neither box was confidence monitoring — PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local browser
+ * The boot state is now HIDDEN (`DEFAULT_MONITOR_VISIBILITY`), because neither box was confidence monitoring — PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local browser
  * render of the rehearsal (`R-022`, nothing reaches CasparCG). See `design.md` §19.
  *
  * ⚠ THE ASSERTIONS BELOW ARE WRITTEN AGAINST THE CONSTANT, NOT AGAINST `false`, and that is
@@ -107,9 +107,9 @@ describe('local workspace settings', () => {
     });
     expect(layout().positions).toEqual(reversed);
     expect(layout().inspectorPx).toBe(370);
-    expect(layout().monitorsShown).toBe(true);
+    expect(layout().monitorVisibility).toEqual({ pvw: true, pgm: true });
     const stored: unknown = JSON.parse(storage.getItem(KEY) ?? '{}');
-    expect(stored).not.toHaveProperty('monitorsShown');
+    expect(stored).not.toHaveProperty('monitorVisibility');
     expect(stored).toMatchObject({
       positions: reversed,
       uiProfiles: [{ name: 'Gallery', positions: reversed }],
@@ -117,7 +117,7 @@ describe('local workspace settings', () => {
 
     await reload();
     expect(layout().positions).toEqual(reversed);
-    expect(layout().monitorsShown).toBe(DEFAULT_MONITORS_SHOWN);
+    expect(layout().monitorVisibility).toEqual(DEFAULT_MONITOR_VISIBILITY);
     await act(async () => layout().reset());
     expect(layout().positions).toEqual(DEFAULT_WORKSPACE_POSITIONS);
     expect(layout().uiProfiles.map(({ name }) => name)).toEqual(['Gallery']);
@@ -230,16 +230,16 @@ describe('local workspace settings', () => {
   });
 });
 
-describe('useShellLayout — monitorsShown', () => {
+describe('useShellLayout — monitorVisibility', () => {
   it('boots with the monitors HIDDEN — the decision, spelled', () => {
     // The one literal in this file. `MONITORS-01`: the strip is a rehearsal/preview surface,
     // not confidence monitoring, so it does not take 247.2 px of the layer list unasked.
-    expect(DEFAULT_MONITORS_SHOWN).toBe(false);
-    expect(layout().monitorsShown).toBe(false);
+    expect(DEFAULT_MONITOR_VISIBILITY).toEqual({ pvw: false, pgm: false });
+    expect(layout().monitorVisibility).toEqual({ pvw: false, pgm: false });
   });
 
   it('boots at the shipped default, and the sizes are the reference’s rendered ones', () => {
-    expect(layout().monitorsShown).toBe(DEFAULT_MONITORS_SHOWN);
+    expect(layout().monitorVisibility).toEqual(DEFAULT_MONITOR_VISIBILITY);
     expect(layout().customized).toBe(false);
     expect(DEFAULT_INSPECTOR_PX).toBe(396);
     expect(DEFAULT_MONITOR_PX).toBe(230);
@@ -247,11 +247,15 @@ describe('useShellLayout — monitorsShown', () => {
     expect(layout().monitorPx).toBe(230);
   });
 
-  it('toggling flips the flag alone — focus and sizes stay — and counts as customised', async () => {
+  it('changes each monitor separately and both together while keeping focus and sizes', async () => {
     await act(async () => {
-      layout().setMonitorsShown(!DEFAULT_MONITORS_SHOWN);
+      layout().setMonitorsShown(true, 'pgm');
     });
-    expect(layout().monitorsShown).toBe(!DEFAULT_MONITORS_SHOWN);
+    expect(layout().monitorVisibility).toEqual({ pvw: false, pgm: true });
+    await act(async () => layout().setMonitorsShown(true, 'pvw'));
+    expect(layout().monitorVisibility).toEqual({ pvw: true, pgm: true });
+    await act(async () => layout().setMonitorsShown(false, 'pgm'));
+    expect(layout().monitorVisibility).toEqual({ pvw: true, pgm: false });
     expect(layout().focus).toBe('none');
     expect(layout().inspectorPx).toBe(DEFAULT_INSPECTOR_PX);
     expect(layout().monitorPx).toBe(DEFAULT_MONITOR_PX);
@@ -262,7 +266,7 @@ describe('useShellLayout — monitorsShown', () => {
     // A13 / `R-060`, unchanged by the default's move — asserted in the direction the operator
     // can actually take from the boot state.
     await act(async () => {
-      layout().setMonitorsShown(!DEFAULT_MONITORS_SHOWN);
+      layout().setMonitorsShown(true);
     });
     expect(storage.getItem(KEY)).toBeNull();
     // A size write still carries exactly the shape it always did — and the instrument is
@@ -281,23 +285,23 @@ describe('useShellLayout — monitorsShown', () => {
 
   it('reset() returns the monitors to the shipped default with everything else', async () => {
     await act(async () => {
-      layout().setMonitorsShown(!DEFAULT_MONITORS_SHOWN);
+      layout().setMonitorsShown(true);
       layout().setInspectorPx(400);
     });
-    expect(layout().monitorsShown).toBe(!DEFAULT_MONITORS_SHOWN);
+    expect(layout().monitorVisibility).toEqual({ pvw: true, pgm: true });
     await act(async () => {
       layout().reset();
     });
-    expect(layout().monitorsShown).toBe(DEFAULT_MONITORS_SHOWN);
+    expect(layout().monitorVisibility).toEqual(DEFAULT_MONITOR_VISIBILITY);
     expect(layout().inspectorPx).toBe(DEFAULT_INSPECTOR_PX);
     expect(layout().customized).toBe(false);
   });
 
   it('a reload starts at the DEFAULT whatever the last session did — it is session state', async () => {
     await act(async () => {
-      layout().setMonitorsShown(!DEFAULT_MONITORS_SHOWN);
+      layout().setMonitorsShown(true, 'pvw');
     });
     await reload();
-    expect(layout().monitorsShown).toBe(DEFAULT_MONITORS_SHOWN);
+    expect(layout().monitorVisibility).toEqual(DEFAULT_MONITOR_VISIBILITY);
   });
 });

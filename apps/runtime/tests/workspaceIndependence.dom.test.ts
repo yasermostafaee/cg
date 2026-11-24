@@ -96,7 +96,7 @@ beforeEach(async () => {
   expect(row(ROW_B).getAttribute('data-item-id')).toBe('item-ind-b');
   /*
     🔴 `MONITORS-01` — the console now boots with the strip FOLDED AWAY
-    (`DEFAULT_MONITORS_SHOWN`; `design.md` §19), so every pair below opens it first. What this
+    (`DEFAULT_MONITOR_VISIBILITY`; `design.md` §19), so every pair below opens it first. What this
     file proves — the three axes are independent — is untouched by which way the default
     points, so the state each test was written against is established here rather than each
     test's assertions being inverted, which would turn six coupling proofs into six others.

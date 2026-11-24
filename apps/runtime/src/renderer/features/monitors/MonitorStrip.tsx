@@ -1,6 +1,7 @@
 import { useUiText } from '../../i18n/locale.js';
 import { backupChannelLineText, type PgmEngine } from '@cg/shared-ipc';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
+import type { MonitorVisibility } from '../../hooks/useShellLayout.js';
 import { useBackupChannels } from '../../hooks/useBackupChannels.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useChannelAir, useChannelBankState } from '../channels/useSelectedChannel.js';
@@ -25,7 +26,7 @@ import { Columns3, Monitor, PanelBottom } from 'lucide-react';
 export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 
 interface Props {
-  visible: boolean;
+  dockedMonitors: MonitorVisibility;
   companionMode: MonitorCompanionMode;
   hasSelectedLayer: boolean;
   playoutSignInUrl?: string | null | undefined;
@@ -42,13 +43,11 @@ interface Props {
  * without remounting either panel. The choice uses physical orientation in both
  * interface languages because monitor placement is a hardware convention.
  *
- * When one of the two is taken FULLSCREEN the strip shows only that one. The
- * strip reads the focus itself rather than making the shell special-case a
- * monitor: the shell's job is "the workspace is fullscreen-ing something", and
- * which box that is belongs here.
+ * The shell supplies which monitors are visible in the dock, including fullscreen.
+ * Floating displays remain active regardless of dock visibility.
  */
 export function MonitorStrip({
-  visible: stripVisible,
+  dockedMonitors: { pvw: dockPvw, pgm: dockPgm },
   companionMode,
   hasSelectedLayer,
   playoutSignInUrl,
@@ -77,8 +76,6 @@ export function MonitorStrip({
   const { items } = useStackSnapshot();
   // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
   const onAirRows = airTally(onChannel(items, viewChannel)).onAir;
-  const dockPvw = stripVisible && focus !== 'pgm' && !pvwFloating;
-  const dockPgm = stripVisible && focus !== 'pvw' && !pgmFloating;
   const showPvw = dockPvw || pvwFloating;
   const showPgm = dockPgm || pgmFloating;
   /*

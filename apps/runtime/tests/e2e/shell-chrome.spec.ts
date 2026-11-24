@@ -169,6 +169,14 @@ test('§B4 — the console boots with the monitors folded, and says so in the he
   await expect(page.getByRole('button', { name: 'Hide monitors' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'PREVIEW (PVW)' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'PROGRAM (PGM)' })).toBeVisible();
+
+  await page.setViewportSize({ width: 760, height: 800 });
+  const group = page.getByRole('group', { name: 'Monitor visibility', exact: true });
+  const toggles = group.getByRole('button');
+  await expect(toggles).toHaveCount(3);
+  for (const toggle of await toggles.all()) {
+    await expect(toggle).toBeInViewport({ ratio: 1 });
+  }
 });
 
 test('§B — the chrome above the first data row, and how many rows fit', async ({ app }) => {

@@ -1118,6 +1118,7 @@
     "MISMATCH — every graphic on this channel is mis-placed": "عدم تطابق. ستظهر جميع رسومات هذه القناة في مواضع خاطئة.",
     "Mode": "الوضع",
     "Monitor order": "ترتيب الشاشات",
+    "Monitor visibility": "عرض الشاشات",
     "Monitor volume": "مستوى صوت الشاشة",
     "Monitor volume {percent}% · this console only": "مستوى صوت الشاشة {percent}% · هذا الجهاز فقط",
     "More frames on bottom": "إطارات أكثر في الأسفل",

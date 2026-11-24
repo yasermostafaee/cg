@@ -11,6 +11,7 @@
 - [x] Keep the same panel documents, preview iframe, selected layer and drafts across layout changes.
       Windows Chromium verified zero playout writes. The Windows shell exercised media continuity.
 - [x] Keep detached monitors independent and exercise the docked companion modes in Windows Chromium.
+- [x] Add independent session visibility for PVW and PGM and retain the combined toolbar action.
 - [x] Persist floating placement and restore size in local UI profiles. The Windows shell verified
       recovery into the available work area when a saved display was absent.
 
@@ -19,7 +20,13 @@
 - [x] Test selecting the same row and a different row with Inspector detached in Windows Chromium.
 - [x] Verify main toolbar tooltips stay above intersecting docked panels in Chromium and WebView2.
       The native smoke covered hover, keyboard focus, Escape, click-through and font loading in RTL.
-- [x] Verify toolbar labels and visibility for one or two detached monitors, including redock.
-      Windows Chromium covered both monitor roles and verified that the detached window stays visible.
+- [x] Verify the individual and combined toolbar actions with both monitors docked.
+      Windows Edge covered the mixed state, fullscreen and restore, a 760 px toolbar and zero
+      playout commands. The local programme-return test kept its connection while PVW toggled and
+      released it when PGM was hidden.
+- [x] Recheck visibility with one or two detached monitors. Windows Edge covered both roles and
+      redocking while the other monitor was hidden. The shell layout tests covered session defaults.
+      A separate WebView2 host with the mock bridge confirmed the window states and localized
+      toolbar labels in English, Persian and Arabic on one display.
 - [ ] Verify the packaged app on two physical displays with different scaling.
 - [ ] Record the carrying Linux Playwright result.
