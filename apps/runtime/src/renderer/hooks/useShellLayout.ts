@@ -183,9 +183,8 @@ export interface ShellLayout {
    * authoritative picture on screen is the wrong trade. The approved reference defaults it
    * hidden for the same reason.
    *
-   * ⚠ WHAT DOES NOT CHANGE: the toggle is unconditionally present in the app header, in
-   * words as well as a glyph, so the console can never be in a state where the operator
-   * cannot tell the monitors exist (`AppHeader.tsx`; `shell-chrome.spec.ts` §B4).
+   * The app header names the monitors it can show or hide. The toggle remains available
+   * while at least one monitor belongs to the main window (`AppHeader.tsx`).
    */
   monitorsShown: boolean;
   setInspectorPx: (px: number) => void;

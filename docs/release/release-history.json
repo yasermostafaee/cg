@@ -80,6 +80,11 @@
       ],
       "fixes": [
         {
+          "fa": "اگر یک مانیتور شناور باشد، دکمهٔ نوار بالا فقط مانیتور باقی‌مانده در پنجرهٔ اصلی را با نام خودش نشان می‌دهد یا پنهان می‌کند. با شناور شدن هر دو، دکمه پنهان می‌شود و با بازگشت یکی دوباره ظاهر می‌شود.",
+          "en": "With one monitor floating, the toolbar toggle names and controls the remaining docked monitor. With both monitors floating, the toggle is hidden until one docks again.",
+          "ar": "عند فصل شاشة واحدة، يذكر زر الشريط العلوي اسم الشاشة المتبقية في النافذة الرئيسية ويتحكم في إظهارها وإخفائها. وعند فصل الشاشتين، يختفي الزر حتى تعود إحداهما."
+        },
+        {
           "fa": "تولتیپ دکمه‌های نوار بالای CG Control روی پنل‌های متصل کامل دیده می‌شود.",
           "en": "CG Control's top toolbar tooltips remain fully visible over docked panels.",
           "ar": "تظهر تلميحات أزرار الشريط العلوي في CG Control كاملةً فوق اللوحات المثبتة."

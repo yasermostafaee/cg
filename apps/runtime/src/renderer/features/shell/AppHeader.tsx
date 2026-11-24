@@ -9,6 +9,12 @@ import type { ChannelSignal } from '../channels/channelSignals.js';
 import { EveryChannelPanic } from '../layers/EveryChannelPanic.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
+import { useFloatingWorkspace } from '../workspace/floatingWorkspace.js';
+
+const singleMonitorLabels = {
+  pgm: { show: 'Show PGM monitor', hide: 'Hide PGM monitor' },
+  pvw: { show: 'Show PVW monitor', hide: 'Hide PVW monitor' },
+} as const;
 
 /**
  * 🔴 `AUDIT-CLOSE-01` B1 — THE APP HEADER, WHICH THE REFERENCE DRAWS AND THIS APP DID NOT.
@@ -70,6 +76,14 @@ export function AppHeader({
   const localizeUi = useUiText();
   const engine = useEngineName();
   const rehearsals = useRehearse();
+  const floatingMonitors = useFloatingWorkspace()?.placements;
+  const pgmFloating = floatingMonitors?.pgm !== undefined;
+  const pvwFloating = floatingMonitors?.pvw !== undefined;
+  const dockedMonitor = pgmFloating ? 'pvw' : pvwFloating ? 'pgm' : null;
+  const singleMonitorLabel =
+    dockedMonitor === null
+      ? null
+      : localizeUi(singleMonitorLabels[dockedMonitor][layout.monitorsShown ? 'hide' : 'show']);
 
   return (
     <header className="cg-app-header" data-app-header="">
@@ -124,32 +138,33 @@ export function AppHeader({
         `aria-expanded` / `aria-controls`: only the placement moved, and it moved to the
         place the reference draws it.
 
-        🔴 `MONITORS-01` — AND IT IS UNCONDITIONAL, WHICH IS NOW LOAD-BEARING. The strip is
-        folded away when the console boots (`DEFAULT_MONITORS_SHOWN`), so this button is the
-        ONLY thing on screen that says the monitors exist at all. It therefore renders in
-        every state — no `rehearsals.length` gate like `PVW · N` above it, no narrow-mode
-        drop — and it carries the WORD as well as the glyph, because a lone glyph on a bar
-        the operator has never opened is not a statement that a surface is there. Asserted
-        in `shell-chrome.spec.ts` §B4 and `monitorsDefault.dom.test.ts`; do not make it
-        conditional, and do not reduce it to an icon to save width.
+        The toggle must remain discoverable when a docked monitor is hidden, including at
+        startup and on narrow screens. It only goes away when both monitors are detached.
       */}
-      <Button
-        variant="ghost"
-        aria-label={localizeUi(layout.monitorsShown ? 'Hide monitors' : 'Show monitors')}
-        aria-expanded={layout.monitorsShown}
-        aria-controls="monitor-strip"
-        title={
-          layout.monitorsShown
-            ? localizeUi('Fold PREVIEW and PROGRAM away — the layer list takes the height')
-            : localizeUi('Bring PREVIEW and PROGRAM back above the layer list')
-        }
-        onClick={() => {
-          layout.setMonitorsShown(!layout.monitorsShown);
-        }}
-      >
-        <Icon icon={layout.monitorsShown ? MonitorOff : Monitor} />
-        {localizeUi(layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS')}
-      </Button>
+      {!(pgmFloating && pvwFloating) && (
+        <Button
+          variant="ghost"
+          aria-label={
+            singleMonitorLabel ??
+            localizeUi(layout.monitorsShown ? 'Hide monitors' : 'Show monitors')
+          }
+          aria-expanded={layout.monitorsShown}
+          aria-controls="monitor-strip"
+          title={
+            singleMonitorLabel ??
+            (layout.monitorsShown
+              ? localizeUi('Fold PREVIEW and PROGRAM away — the layer list takes the height')
+              : localizeUi('Bring PREVIEW and PROGRAM back above the layer list'))
+          }
+          onClick={() => {
+            layout.setMonitorsShown(!layout.monitorsShown);
+          }}
+        >
+          <Icon icon={layout.monitorsShown ? MonitorOff : Monitor} />
+          {singleMonitorLabel?.toUpperCase() ??
+            localizeUi(layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS')}
+        </Button>
+      )}
       {/*
         R-108 — TEMPLATES IS NOW A REAL HEADER DOOR. The earlier design rejected it because a
         header could not name which row a Load should land on. Reload changed the requirement:

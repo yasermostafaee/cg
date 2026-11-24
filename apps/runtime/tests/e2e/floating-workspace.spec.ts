@@ -77,12 +77,67 @@ async function openPanelDocuments(page: Page): Promise<Map<FloatingPanelId, Page
   return panels;
 }
 
-async function placement(page: Page, panel: FloatingPanelId) {
+async function arrangement(page: Page, panel: FloatingPanelId) {
   return page.evaluate(
-    (id) => (window as unknown as ProbeWindow).floatingWindowProbe.latest[id]?.placement,
+    (id) => (window as unknown as ProbeWindow).floatingWindowProbe.latest[id],
     panel,
   );
 }
+
+async function placement(page: Page, panel: FloatingPanelId) {
+  return (await arrangement(page, panel))?.placement;
+}
+
+test('R-129 the toolbar toggle only controls docked monitors', async ({ page }) => {
+  const app = new RuntimeApp(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await armMockRuntime(page);
+  const documents = await openPanelDocuments(page);
+  const pgm = documents.get('pgm')!;
+  const pvw = documents.get('pvw')!;
+  await app.showMonitors();
+
+  await pgm.getByRole('button', { name: /^Float / }).click();
+  await expect
+    .poll(() => arrangement(page, 'pgm'))
+    .toMatchObject({ visible: true, dock: null, placement: { width: expect.any(Number) } });
+  const floatingPgm = await arrangement(page, 'pgm');
+  const hidePvw = page.getByRole('button', { name: 'Hide PVW monitor', exact: true });
+  const showPvw = page.getByRole('button', { name: 'Show PVW monitor', exact: true });
+  await expect(hidePvw).toHaveAttribute('aria-expanded', 'true');
+  await hidePvw.click();
+  await expect(showPvw).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(() => arrangement(page, 'pvw')).toMatchObject({ visible: false });
+  expect(await arrangement(page, 'pgm')).toEqual(floatingPgm);
+  await showPvw.click();
+  await expect.poll(() => arrangement(page, 'pvw')).toMatchObject({ visible: true });
+
+  await pvw.getByRole('button', { name: /^Float / }).click();
+  await expect
+    .poll(() => arrangement(page, 'pvw'))
+    .toMatchObject({ visible: true, dock: null, placement: { width: expect.any(Number) } });
+  const floatingPvw = await arrangement(page, 'pvw');
+  await expect(
+    page.getByRole('button', { name: /^(Show|Hide) ((PGM|PVW) monitor|monitors)$/ }),
+  ).toHaveCount(0);
+  expect(await arrangement(page, 'pgm')).toEqual(floatingPgm);
+
+  await pgm.getByRole('button', { name: /^Exit floating / }).click();
+  const hidePgm = page.getByRole('button', { name: 'Hide PGM monitor', exact: true });
+  const showPgm = page.getByRole('button', { name: 'Show PGM monitor', exact: true });
+  await hidePgm.click();
+  await expect(showPgm).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(() => arrangement(page, 'pgm')).toMatchObject({ visible: false });
+  expect(await arrangement(page, 'pvw')).toEqual(floatingPvw);
+  await showPgm.click();
+  await expect.poll(() => arrangement(page, 'pgm')).toMatchObject({ visible: true });
+
+  await pvw.getByRole('button', { name: /^Exit floating / }).click();
+  await expect(page.getByRole('button', { name: 'Hide monitors', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+});
 
 test('R-129 keeps the header tooltip visible across a docked monitor', async ({ page }) => {
   const app = new RuntimeApp(page);
@@ -148,8 +203,11 @@ test('R-129 keeps the header tooltip visible across a docked monitor', async ({ 
   // Move away first so the main document receives a new pointerover even though the
   // native pane is simulated by a separate browser window.
   await page.mouse.move(1, 1);
-  await hideMonitors.hover();
-  await expect(mainTip).toHaveText(title);
+  const hidePvw = page.getByRole('button', { name: 'Hide PVW monitor', exact: true });
+  await expect(hidePvw).toHaveAttribute('title', /\S/);
+  const pvwTitle = (await hidePvw.getAttribute('title'))!;
+  await hidePvw.hover();
+  await expect(mainTip).toHaveText(pvwTitle);
   await expect(dockTip).toHaveCount(0);
 });
 

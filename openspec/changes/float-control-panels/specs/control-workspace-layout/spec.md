@@ -16,6 +16,15 @@ CG Control SHALL allow operators to detach PGM, PVW, Layers and Inspector into i
 - **THEN** the existing companion choices remain available for docked companions
 - **AND** each detached companion retains its independent window.
 
+#### Scenario: Show or hide the remaining docked monitor
+
+- **WHEN** PGM or PVW is detached
+- **THEN** the toolbar toggle names and controls the remaining docked monitor
+- **AND** operating it leaves the detached monitor visible
+- **WHEN** both monitors are detached
+- **THEN** the main toolbar has no monitor toggle
+- **AND** redocking a monitor shows it and restores the corresponding toggle.
+
 #### Scenario: Read a toolbar tooltip over docked panels
 
 - **WHEN** the operator hovers over or keyboard-focuses a main toolbar button whose tooltip crosses the docked panels
