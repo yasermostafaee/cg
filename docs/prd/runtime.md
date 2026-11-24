@@ -5433,3 +5433,23 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN the operator selects a calendar THEN the table, selected event details and date filters all read dates in it. Lunar Hijri applies the station correction.
 - WHEN a valid date filter is entered or picked THEN Bridge receives that local day's Gregorian bounds as UTC instants. Invalid or reversed date ranges issue no filter request.
 - WHEN an event is opened or copied THEN its original UTC stamp, identifiers and audit data remain available.
+
+## [ ] R-129 — Float CG Control panels on a second display — `openspec/changes/float-control-panels/`
+
+**What:** Let the operator detach and redock PGM, PVW, Layers and Inspector as workstation-local windows. Keep a single CG Control session across the workspace. Docked monitors use the companion layouts from R-111. Detached monitors maximize independently on their own display.
+
+**Acceptance:**
+
+- WHEN the operator detaches a panel THEN its window can move to another display and maximize there, and the other panels remain available in the main window.
+- WHEN a detached PGM or PVW is maximized THEN the window contains the monitor and its own controls. Layers and Inspector remain visible in their existing windows and use the same selection and draft.
+- WHEN PGM or PVW is maximized inside the main window THEN the existing R-111 controls remain available for docked companions. A separately detached Layers or Inspector panel retains its existing placement and a single interactive surface.
+- WHEN Inspector is detached and the operator clicks the already selected row again THEN the row remains selected and Inspector stays open. Selecting a different row updates that same Inspector.
+- WHEN the operator changes window or companion layout THEN active preview and monitor sound retain their state. No duplicate input or output preview is opened and no playout action is sent as a result of a layout change.
+- WHEN the operator chooses Exit floating THEN the same panel returns to its previous place in the main window, including its current state.
+- Detached windows offer Exit floating as the only action that dismisses them while CG Control is running. A system close request such as Alt+F4 leaves the panel available. Closing CG Control through the main window retains the existing close behavior and ends the whole session.
+- WHEN a local UI profile is saved or restored THEN it includes detached panels' positions and sizes. A window returns to a visible display when its previous display is disconnected.
+- Verify docked and detached maximize and restore, repeated and changed row selections, editable drafts, return signals, preview and audio, Exit floating, the native close guard and display removal in the packaged Windows application with two displays.
+
+**Prototype evidence:** In Chromium, moving an existing preview iframe to a separate document
+created a new browsing context and lost its running state. The native prototype must demonstrate
+playback continuity across detach and redock before this behavior is enabled.
