@@ -1329,10 +1329,6 @@ export function LiveLayoutEditor({
                     }}
                   />
                 </div>
-                <LiveLayoutEditorEffects
-                  effects={layout.effects}
-                  onChange={(effects) => setLayout((current) => ({ ...current, effects }))}
-                />
               </div>
             </TabPanel>
           </div>
@@ -1738,6 +1734,10 @@ export function LiveLayoutEditor({
                     />
                   </div>
                 )}
+                <LiveLayoutEditorEffects
+                  effects={layout.effects}
+                  onChange={(effects) => setLayout((current) => ({ ...current, effects }))}
+                />
               </section>
             </TabPanel>
           </div>

@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 it.each(['empty', 'absent'] as const)(
-  'the Live Layout editor uses one independently verified B file poster after %s reads, then prefers moving recovery',
+  'the Live Layout editor uses one independently verified B file poster after %s reads',
   async (state) => {
     const f = fixture();
     if (state === 'absent') {
@@ -152,7 +152,8 @@ it.each(['empty', 'absent'] as const)(
       expect(f.mediaThumbnail).toHaveBeenCalledTimes(1);
       f.pvw.mockResolvedValue({ frames: [picture] });
       await advance(500);
-      expect(shown.get(media)).toEqual(picture);
+      for (const [request] of f.pvw.mock.calls) expect(request.sourceIds).not.toContain(media);
+      expect(shown.get(media)?.jpegBase64).toBe(jpegBase64);
       expect(f.mediaThumbnail).toHaveBeenCalledTimes(1);
     } finally {
       act(() => root.unmount());
@@ -162,26 +163,23 @@ it.each(['empty', 'absent'] as const)(
   },
 );
 
-it.each(['pvw', 'snapshot'] as const)(
-  'does not request a file poster while a permitted %s already supplies a picture',
-  async (provider) => {
-    const f = fixture();
-    f[provider === 'pvw' ? 'pvw' : 'thumbnails'].mockResolvedValue({ frames: [picture] });
-    function Consumer(): null {
-      usePvwSourceFrames(1, [media], true, provider === 'pvw' ? 'editor' : 'stage');
-      return null;
-    }
-    const root = createRoot(document.createElement('div'));
-    try {
-      act(() => root.render(createElement(Consumer)));
-      await act(async () => await vi.advanceTimersByTimeAsync(10_000));
-      expect(f.mediaThumbnail).not.toHaveBeenCalled();
-    } finally {
-      act(() => root.unmount());
-      await act(async () => await vi.advanceTimersByTimeAsync(500));
-    }
-  },
-);
+it('does not request another file poster while a snapshot already supplies a picture', async () => {
+  const f = fixture();
+  f.thumbnails.mockResolvedValue({ frames: [picture] });
+  function Consumer(): null {
+    usePvwSourceFrames(1, [media], true, 'stage');
+    return null;
+  }
+  const root = createRoot(document.createElement('div'));
+  try {
+    act(() => root.render(createElement(Consumer)));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
+    expect(f.mediaThumbnail).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    await act(async () => await vi.advanceTimersByTimeAsync(500));
+  }
+});
 
 it('keeps a verified still in PVW without opening a live lease for its assigned clip', async () => {
   const f = fixture();

@@ -1,6 +1,6 @@
 import { useUiText } from '../../i18n/locale.js';
 import { useId } from 'react';
-import { ArrowLeftRight, ChevronDown, Maximize2, Sparkles } from 'lucide-react';
+import { ArrowLeftRight, Maximize2, Sparkles } from 'lucide-react';
 import {
   FRAME_TRANSITION_MAX_MS,
   FRAME_TRANSITION_MIN_MS,
@@ -16,6 +16,7 @@ import { Icon } from '../../ui/Icon.js';
 import { PresetPlateDirectionControl } from '../inspector/FrameEffectControls.js';
 import { SelectInput } from '../../ui/SelectInput.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
+import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
 import './live-layout-effects.css';
 
 const motions: Record<FrameTransition['motion'], string> = {
@@ -52,11 +53,7 @@ export function LiveLayoutEditorEffects({
 
   return (
     <details className="cg-live-layout-effects">
-      <summary>
-        <Icon icon={Sparkles} size={16} />
-        <span>{localizeUi('Layout effects')}</span>
-        <Icon icon={ChevronDown} size={14} />
-      </summary>
+      <LiveLayoutEditorSectionHeading icon={Sparkles} label={localizeUi('Layout effects')} />
       <div className="cg-live-layout-effect-grid">
         <fieldset className="cg-live-layout-effect-controls">
           <legend>

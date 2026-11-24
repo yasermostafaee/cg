@@ -59,4 +59,5 @@
 - [x] Reuse the PVW plate player for eligible video in the live-layout editor.
 - [x] Add a browser scenario for manual Play, Pause and Reset.
 - [x] Windows Chromium verified manual Play, Pause and Reset in the editor with no automatic playback or Take.
+- [x] Verify a mixed NDI and media preset uses separate preview transports, and Layout effects opens from the Plate tab. Windows Chromium passed.
 - [ ] Record the Linux E2E run.

@@ -547,7 +547,8 @@
 }
 
 .cg-live-layout-title-style > summary,
-.cg-live-layout-frame-options > summary {
+.cg-live-layout-frame-options > summary,
+.cg-live-layout-effects > summary {
   width: fit-content;
   padding: 0.3rem 0;
   color: var(--r-text);
@@ -559,18 +560,6 @@
 .cg-live-layout-title-fields,
 .cg-live-layout-frame-mask-values {
   padding-bottom: 0.35rem;
-}
-
-.cg-live-layout-effects {
-  border-top: 1px solid var(--r-border-soft);
-  padding-top: 0.6rem;
-}
-
-.cg-live-layout-effects > summary {
-  color: var(--r-text);
-  font-size: var(--r-text-md);
-  font-weight: 650;
-  cursor: pointer;
 }
 
 .cg-live-layout-fields > .cg-live-layout-frame-field,

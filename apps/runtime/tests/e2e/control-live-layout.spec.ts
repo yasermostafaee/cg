@@ -201,7 +201,20 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
     const removePreset = editor.getByRole('button', { name: 'Delete preset', exact: true });
     await expect(removePreset).toBeDisabled();
     await expect(editor.getByRole('button', { name: 'Start with this preset' })).toBeDisabled();
+    await showLayoutSettings(editor, 'Layout');
+    const effects = editor.getByText('Layout effects', { exact: true });
+    await expect(effects).toBeHidden();
     await showLayoutSettings(editor, 'Plate');
+    await expect(effects).toBeVisible();
+    await effects.click();
+    const motion = editor.getByRole('combobox', { name: 'Motion', exact: true });
+    await expect(motion).toBeVisible();
+    await motion.selectOption('linear');
+    await effects.click();
+    await expect(motion).toBeHidden();
+    await effects.click();
+    await expect(motion).toHaveValue('linear');
+    await effects.click();
     const addPlate = editor.getByRole('button', { name: 'Add plate', exact: true });
     const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
     const presets = editor.getByRole('group', { name: 'Presets', exact: true });
@@ -1013,10 +1026,12 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const sidebarAtStart = await sidebarBounds();
     expect(sidebarAtStart.footerGap).toBeGreaterThanOrEqual(0);
     expect(sidebarAtStart.footerGap).toBeLessThan(24);
+    const effects = editor.getByText('Layout effects', { exact: true });
     await showLayoutSettings(editor, 'Layout');
-    await editor.getByText('Layout effects', { exact: true }).scrollIntoViewIfNeeded();
+    await expect(effects).toBeHidden();
     expect(await sidebarBounds()).toEqual(sidebarAtStart);
     await showLayoutSettings(editor, 'Plate');
+    await expect(effects).toBeVisible();
     await workspace.getByRole('region', { name: 'Layout preview' }).evaluate((node) => {
       node.scrollTop = 0;
     });
@@ -1231,6 +1246,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       dialog.getByRole('button', { name: 'Choose background image or video' });
     await expect(backgroundImageButton(editor)).toHaveAttribute('title', 'panel.png');
     await expect(backgroundImageButton(editor).locator('img')).toBeVisible();
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByText('Layout effects', { exact: true }).click();
     await editor.getByRole('combobox', { name: 'Motion', exact: true }).selectOption('linear');
     await editor.getByLabel('Focus duration (ms)', { exact: true }).fill('1000');

@@ -24,6 +24,10 @@ Use the shared Auto layout calculations. Presets store their own arrangement, me
 ordering and spacing. Selecting a numbered position swaps the two frames in that preset's
 effective order, including while Reverse is enabled. Focus labels live on the shared frame and
 its stable identifier travels on Preview and Programme commands. Transition settings are shared by all presets in the saved layout.
+
+The Plate tab contains the shared Layout effects disclosure. The editor's passive preview
+feeds live inputs and loads media posters. Each video player opens a moving preview for its
+own plate only on request. Switching the plate's source clears that player's lease.
 Cut swaps the already-seated solo plate directly. Fade blends two stationary, full-frame seats
 before committing the target. Both retain the same Return destination.
 

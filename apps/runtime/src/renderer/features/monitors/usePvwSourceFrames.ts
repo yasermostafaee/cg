@@ -108,16 +108,9 @@ class PreviewFeed {
                 .flatMap(({ sourceIds }) => sourceIds),
             ]),
           ].slice(0, MAX_SOURCES);
-    // PVW's media buttons own their playback. The live-preview API opens a producer
-    // for each selector, so a frame bound to a clip only asks it for still pictures.
-    const editorSources = new Set(
-      readers
-        .filter((reader) => reader.channel === channel && reader.mode === 'editor')
-        .flatMap((reader) => reader.sourceIds),
-    );
-    const liveSourceIds = sourceIds.filter(
-      (id) => playoutMediaIdOf(id) === null || editorSources.has(id),
-    );
+    // Plate media playback is explicit in both PVW and the live-layout editor.
+    // The passive feed may get a still, but only live inputs may open a moving preview.
+    const liveSourceIds = sourceIds.filter((id) => playoutMediaIdOf(id) === null);
     const demand =
       channel === undefined
         ? undefined
@@ -144,11 +137,6 @@ class PreviewFeed {
     if (demand !== undefined) this.#posters.setDemand(channel, sourceIds);
     for (const ids of [this.#readCompleted, this.#missingSnapshots])
       for (const id of ids) if (!sourceIds.includes(id)) ids.delete(id);
-    if (demand !== undefined) {
-      for (const id of this.#cache.keys()) {
-        if (playoutMediaIdOf(id) !== null && !editorSources.has(id)) this.#cache.delete(id);
-      }
-    }
     for (const id of sourceIds) if (!liveSourceIds.includes(id)) this.#readCompleted.add(id);
     if (demand !== undefined) this.#publish();
     this.#schedule(0);

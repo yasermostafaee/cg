@@ -293,7 +293,7 @@ function ShotInput({
       ? [seat]
       : livePlateMaskRegions(mask).map((rect) => liveRevealSceneRect(seat, rect));
   const receiver =
-    source?.signal === 'present' ? (source.mediaPicture ?? source.directNdi) : undefined;
+    source?.signal === 'present' ? (source.directNdi ?? source.mediaPicture) : undefined;
   const jpeg = source?.jpegBase64;
   if (receiver === undefined && jpeg === undefined) {
     const label = largestLivePlateMaskRegion(mask);
@@ -325,7 +325,7 @@ function ShotInput({
     receiver === undefined ? (
       <img src={url} alt="" style={style} />
     ) : (
-      <CanvasShotPicture receiver={receiver} style={style} />
+      <CanvasShotPicture key={source?.sourceId} receiver={receiver} style={style} />
     );
   if (mask === undefined && pictureBox === undefined && sourceAspect !== null) {
     const active = source?.geometry?.activeRect ?? { x: 0, y: 0, width: 1, height: 1 };
@@ -757,10 +757,6 @@ export function LiveLayoutEditorPreview({
           const activeShot = visible[id] !== undefined;
           const rect = visible[id] ?? geometry[id] ?? full;
           const pictureKey = pvwPlateMediaKey({ elementId: id, sourceId: sourceId ?? null });
-          const preview =
-            sourceId === undefined
-              ? undefined
-              : (mediaPictures.get(pictureKey) ?? sourceFrames.get(sourceId));
           const source = labelledSource(sourceId);
           const mediaEntry = catalog.sources.find((entry) => entry.id === sourceId)?.media;
           const mediaSource =
@@ -779,6 +775,14 @@ export function LiveLayoutEditorPreview({
                       : { durationMs: source.durationMs }),
                 }
               : undefined;
+          const passive = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
+          const moving = mediaSource === undefined ? undefined : mediaPictures.get(pictureKey);
+          const preview =
+            moving !== undefined && moving.sourceId === sourceId
+              ? moving
+              : passive?.sourceId === sourceId
+                ? passive
+                : undefined;
           const titleHidden = controlLiveLayoutTitleHidden(preset, id, focused !== undefined);
           const borderHidden = controlLiveLayoutBorderHidden(preset, id, focused !== undefined);
           const graphics = controlLiveLayoutFrameAttachments(layout, preset, id);

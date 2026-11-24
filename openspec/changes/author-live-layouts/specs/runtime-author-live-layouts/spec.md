@@ -83,6 +83,8 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 
 #### Scenario: Save shared artwork and effects
 
+- **WHEN** the operator wants to change the layout's shared effects
+- **THEN** the Layout effects disclosure is available in the Plate tab and the choices apply to the whole layout
 - **WHEN** the operator saves a layout with a color, image or video background and effect settings
 - **THEN** the saved template renders the selected background and uses the stored effects across its presets
 
@@ -154,6 +156,12 @@ The live-layout editor preview SHALL offer a Play control on each visible plate 
 eligible video. Its sound SHALL start muted. The plate displays the decoded clip through its
 current crop and mask. Playback, Pause and Reset are local to that plate and send no playout
 command.
+
+#### Scenario: Preview a preset with both NDI and media
+
+- **WHEN** the author opens a preset with a plate assigned to NDI and a plate assigned to a video
+- **THEN** each plate shows its own source and only the video plate offers Play, Pause and Reset
+- **AND** playing, pausing or resetting a video does not replace the NDI picture.
 
 #### Scenario: A plate clip starts only on request and resets to its start
 

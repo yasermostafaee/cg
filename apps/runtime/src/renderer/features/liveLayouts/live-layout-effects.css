@@ -1,28 +1,3 @@
-.cg-live-layout-effects > summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2rem;
-  list-style: none;
-}
-
-.cg-live-layout-effects > summary::-webkit-details-marker {
-  display: none;
-}
-
-.cg-live-layout-effects > summary > svg:first-child {
-  color: var(--r-accent);
-}
-
-.cg-live-layout-effects > summary > svg:last-child {
-  color: var(--r-text-secondary);
-}
-
-.cg-live-layout-effects[open] > summary > svg:last-child {
-  transform: rotate(180deg);
-}
-
 .cg-live-layout-effect-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));

@@ -213,7 +213,9 @@ async function installPlateMediaProof(page: Page) {
     page.evaluate(() => (window as unknown as { plateMediaProof: PreviewProof }).plateMediaProof);
 }
 
-test('New live layout starts and resets video only in the commanded plate', async ({ app }) => {
+test('New live layout separates NDI pictures from explicit plate video playback', async ({
+  app,
+}) => {
   const { page } = app;
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.addInitScript(() => {
@@ -233,6 +235,30 @@ test('New live layout starts and resets video only in the commanded plate', asyn
   });
   await page.reload();
   const readProof = await installPlateMediaProof(page);
+  await page.evaluate(() => {
+    const image = document.createElement('canvas');
+    image.width = 320;
+    image.height = 180;
+    const context = image.getContext('2d')!;
+    context.fillStyle = '#cc154e';
+    context.fillRect(0, 0, image.width, image.height);
+    const jpeg = image.toDataURL('image/jpeg').split(',')[1]!;
+    const picture = Uint8Array.from(atob(jpeg), (byte) => byte.charCodeAt(0));
+    window.cg.sourcePreviews.ndiTargets = async ({ sourceIds }) => ({
+      targets: sourceIds.map((sourceId) =>
+        sourceId === 'in-studio-1'
+          ? { sourceId, kind: 'ndi', senderName: 'STUDIO-PC (Cam 1)', engine: 'A' }
+          : { sourceId, kind: 'other' },
+      ),
+    });
+    window.cg.sourcePreviews.openNdiStream = async (sender, onPacket) => {
+      if (sender !== 'STUDIO-PC (Cam 1)') throw new Error('Unexpected NDI sender');
+      const send = () => onPacket({ kind: 'picture', bytes: picture });
+      send();
+      const timer = window.setInterval(send, 150);
+      return () => window.clearInterval(timer);
+    };
+  });
   await openNewLiveLayout(page);
   const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
   await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
@@ -271,6 +297,32 @@ test('New live layout starts and resets video only in the commanded plate', asyn
   await expect(player).toHaveJSProperty('paused', true);
   await expect(secondPlay).toBeEnabled();
   expect((await readProof()).opens).toHaveLength(1);
+  expect((await readProof()).liveLeases).not.toContain('md-m-clip-001');
+
+  await editor.getByRole('button', { name: 'Edit plate 1', exact: true }).click();
+  await app.chooseSource(editor.getByRole('combobox', { name: 'Plate input' }), {
+    input: 'Studio 1',
+  });
+  const inputPicture = first.locator('.cg-live-layout-shot-picture canvas');
+  const ndiPixels = () =>
+    inputPicture.evaluate((canvas: HTMLCanvasElement) => {
+      const pixel = canvas.getContext('2d')!.getImageData(0, 0, 1, 1).data;
+      return canvas.width === 320 && pixel[0]! > 190 && pixel[1]! < 35 && pixel[2]! > 55;
+    });
+  await expect(first.locator('video')).toHaveCount(0);
+  await expect(firstPlay).toHaveCount(0);
+  await expect(inputPicture).toBeVisible();
+  await expect.poll(ndiPixels).toBe(true);
+  await expect.poll(async () => (await readProof()).closes.length).toBeGreaterThan(0);
+
+  await secondPlay.click();
+  await expect(second.locator('.cg-live-layout-shot-picture canvas')).toBeVisible();
+  await expect
+    .poll(() => second.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime))
+    .toBeGreaterThan(0);
+  expect(await ndiPixels()).toBe(true);
+  await expect(first.locator('video')).toHaveCount(0);
+  expect((await readProof()).opens).toHaveLength(2);
   expect((await readProof()).takes).toBe(0);
 });
 

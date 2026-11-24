@@ -65,7 +65,8 @@
 }
 
 .cg-live-layout-fields > .cg-live-layout-title-style,
-.cg-live-layout-fields > .cg-live-layout-frame-options {
+.cg-live-layout-fields > .cg-live-layout-frame-options,
+.cg-live-layout-frames > .cg-live-layout-effects {
   padding: 0 0.55rem;
   border: 1px solid var(--r-border-soft);
   border-radius: var(--r-radius-sm);
@@ -73,7 +74,8 @@
 }
 
 .cg-live-layout-fields > .cg-live-layout-title-style[open],
-.cg-live-layout-fields > .cg-live-layout-frame-options[open] {
+.cg-live-layout-fields > .cg-live-layout-frame-options[open],
+.cg-live-layout-frames > .cg-live-layout-effects[open] {
   padding-bottom: 0.55rem;
 }
 
