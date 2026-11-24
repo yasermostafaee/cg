@@ -281,23 +281,33 @@ function Bubble({
   useLayoutEffect(() => {
     const el = ref.current;
     if (el === null) return;
-    const b = el.getBoundingClientRect();
-    const vw = view.innerWidth;
-    const vh = view.innerHeight;
-    const left = clamp(tip.cx - b.width / 2, MARGIN, vw - b.width - MARGIN);
-    const above = tip.top - MARGIN - b.height;
-    const top = clamp(
-      above >= MARGIN ? above : tip.bottom + MARGIN,
-      MARGIN,
-      vh - b.height - MARGIN,
-    );
-    setPos({
-      left,
-      top,
-      width: b.width,
-      height: b.height,
-      fontFamily: view.getComputedStyle(el).fontFamily,
-    });
+    const measure = (): void => {
+      const { width, height } = el.getBoundingClientRect();
+      const left = clamp(tip.cx - width / 2, MARGIN, view.innerWidth - width - MARGIN);
+      const above = tip.top - MARGIN - height;
+      const top = clamp(
+        above >= MARGIN ? above : tip.bottom + MARGIN,
+        MARGIN,
+        view.innerHeight - height - MARGIN,
+      );
+      const fontFamily = view.getComputedStyle(el).fontFamily;
+      setPos((previous) =>
+        previous?.left === left &&
+        previous.top === top &&
+        previous.width === width &&
+        previous.height === height &&
+        previous.fontFamily === fontFamily
+          ? previous
+          : { left, top, width, height, fontFamily },
+      );
+    };
+    measure();
+    // A font loaded after the tooltip opens can change its size, especially in RTL.
+    // Keep the same measured rectangle in the main window and the docked copies.
+    if (typeof view.ResizeObserver !== 'function') return;
+    const observer = new view.ResizeObserver(measure);
+    observer.observe(el, { box: 'border-box' });
+    return () => observer.disconnect();
   }, [tip, view]);
 
   const className = tip.fieldValue ? 'cg-tooltip cg-tooltip--value' : 'cg-tooltip';

@@ -130,6 +130,15 @@ test('R-129 keeps the header tooltip visible across a docked monitor', async ({ 
   );
   expect(hit).toBe(true);
 
+  // The source can change its intrinsic size after the first paint, for example
+  // when a font finishes loading. The copy must follow the measured size.
+  await mainTip.evaluate((element) => {
+    element.style.maxWidth = '240px';
+  });
+  await expect
+    .poll(async () => (await dockTip.boundingBox())?.width)
+    .toBeCloseTo((await mainTip.boundingBox())!.width, 1);
+
   await page.keyboard.press('Escape');
   await expect(mainTip).toHaveCount(0);
   await expect(dockTip).toHaveCount(0);
