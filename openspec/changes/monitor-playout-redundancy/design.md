@@ -177,17 +177,6 @@ uses the prepared template and can reach a valid owner when the Bridge alone can
 B. Playout catches up a lagging reserve from the committed layout. If two-member Playout
 quorum is lost, the existing output is retained and new writes are blocked.
 
-The owner requires continued Play, Update, Stop and Clear during a long backup outage.
-The next Playout authority contract must permit one verified owner to advance the durable
-layout while a reserve is absent, prepare bundles on authorized available members, and let
-the reserve fetch the latest complete layout and assets when it joins or returns. Clear
-advances the revision even though the layer then has no entry. A returning old snapshot
-must never resurrect the cleared graphic. A replacement cannot assume write ownership
-before its membership, fence and applied revision are verified. Prolonged outages also
-require checkpoint-based rejoin so the newest complete layout survives journal retention
-and a returning member can recover across a history gap. This requires provider support for an independent voter or equivalent fencing and cannot rely on reachability
-alone. Acceptance covers both complete power-off and a live but isolated peer.
-
 Launch the isolated Bridge with `--managed-cg-pilot <group.json> --state-home <directory>`.
 The profile contains `groupId`, the Control `channel`, and a list of `members` with
 `origin`, `engineId`, `channelCode`, `nativeChannel` and `operatorTokenEnv`. Set each named
@@ -195,6 +184,53 @@ variable to that member's operator session before launch. The profile uses the b
 `<directory>/external-cg-pilot/<groupId>/.cg-runtime/bridge-fixed-layers.json` when present.
 Choose a visible row within the lab group's permitted HTML layers. Use a template server
 address each Engine can reach and a fresh static export from Designer.
+
+## DualReady pilot for Playout .37
+
+The owner requires continued Play, Update, Stop and Clear during a long reserve outage.
+Playout .37 provides an explicit availability-first mode for two Engines. It reports
+`globallyExclusiveOwner: false` even while both Engines are healthy. Each Engine checks its
+local fence. A partition prevents the old Engine from receiving a newer selection, so a
+single Bridge with its durable state coordinates all graphics writes. Playout's ordinary
+Programme and Playlist authority remain separate.
+
+Add `"authorityMode": "dualReady"` to the existing isolated pilot profile and configure
+exactly two Engine endpoints. The first endpoint is the initial target for a fresh, empty
+.37 DualReady group and needs an authorized operator session. Bridge rejects inherited or
+unrecognized checkpoints, ahead sequences and conflicting hashes. Leave the property absent
+or set it to `"quorum"` for the existing default. The pilot requires the same state directory
+for restarts. A missing unselected operator session can be supplied on a later restart
+without losing the selected Engine. Each contacted member still needs its own operator session.
+
+Bridge verifies the configured group and layer ranges from `/owner` and confirms the
+member-local writable permit through `/availability`. It persists its controller UUID and the
+target's selection UUID, epoch and reviewed sequence and hash before `availability/select`.
+The initial pilot requires an empty group. The vendor migration sample inherits sequence 1
+and seeds sequence 2 during its first selection. Adopting that inherited checkpoint requires
+a separate integration step.
+
+Before sending a command, Bridge persists the complete semantic intent, sequence and UUIDv8.
+The layout carries verified template references and absolute recovery metadata. On the
+selected Engine, the availability command prepares and retains the required package. Stop
+records a stopped layer, and Clear removes that layer from the complete layout. An ambiguous
+command keeps its journal reservation. Bridge uses its same-ID receipt or reconciliation.
+An expired receipt directs Bridge to the current checkpoint. Readiness and confirmation refer
+to applied graphics and rendered state, with no assertion about matching video frames.
+
+Normal writes stay on the selected Engine. A transport failure contacting a selected Engine
+allows Bridge to review its configured peer, persist a newer selection epoch and recover the
+same unresolved intent or last confirmed full layout. A previously persisted semantic intent
+retains its sequence, command ID, original epoch, layout and graphic instance. Playout's
+current local fence and selection envelope authorize the recovery and request no entrance replay.
+The selection stays in effect when the peer returns. Playout catches up the returning replica
+from the complete checkpoint and retained assets, including deletions and recovery across
+its receipt retention horizon. Replacement provisioning belongs to the Playout setup protocol.
+
+The vendor's .37 acceptance report records two isolated Engines and native Cores, including
+checkpoint recovery, a complete reserve outage, lost acknowledgement and replacement.
+The received ZIP contains the contract, captured exchanges and test evidence. Acceptance of
+this Bridge pilot still requires the matching .37 binaries and a licensed, isolated Engine
+pair. The installed Bridge service continues on its existing command route.
 
 ## Installed Bridge incident, 2026-11-23
 

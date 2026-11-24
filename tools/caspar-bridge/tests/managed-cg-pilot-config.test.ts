@@ -96,6 +96,23 @@ describe('the isolated managed CG pilot launcher', () => {
       loadManagedCgPilotConfig(file, directory, { ...env, TEST_OPERATOR_B: env.TEST_OPERATOR_A }),
     ).toThrow(/^Managed CG pilot needs a separate operator token for each configured Engine\.$/);
   });
+
+  it('allows DualReady with one operator session and exactly two configured Engines', () => {
+    const { file, directory } = profile({ ...config, authorityMode: 'dualReady' });
+    expect(
+      loadManagedCgPilotConfig(file, directory, { TEST_OPERATOR_A: 'authorized-on-A' }).pilot
+        .channel,
+    ).toBe(config.channel);
+    expect(() => loadManagedCgPilotConfig(file, directory, {})).toThrow('needs an operator token');
+    const invalid = profile({
+      ...config,
+      authorityMode: 'dualReady',
+      members: [alpha, beta, { ...beta, engineId: 'C' }],
+    });
+    expect(() => loadManagedCgPilotConfig(invalid.file, invalid.directory, env)).toThrow(
+      'Invalid managed CG pilot',
+    );
+  });
 });
 
 describe('the real CLI entry point', () => {

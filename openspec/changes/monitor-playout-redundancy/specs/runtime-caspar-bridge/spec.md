@@ -19,10 +19,10 @@ changes, the previous mapping's ticket SHALL open no replacement stream.
 - **WHEN** an engine is discovered on the network but has no verified link to the selected channel
 - **THEN** its programme picture and sound are not added to that channel's return relays
 
-### Requirement: Managed layouts go only to their verified Playout owner
+### Requirement: Quorum managed layouts go only to their verified Playout owner
 
 The managed Bridge executor SHALL submit complete prepared layouts to a verified owner.
-For a configured External CG v2 group, it SHALL query Engines with their own credentials and require one
+For a configured quorum External CG v2 group, it SHALL query Engines with their own credentials and require one
 self-confirmed owner with a current fence, membership and allowed-layer mapping. It SHALL
 persist the original command ID, destination and exact body before posting to that owner.
 Playout is responsible for replication. An unresolved submission SHALL block further group
@@ -48,6 +48,51 @@ writes until a matching terminal decision is recovered for that command.
   and reads or reconciles that command's receipt without submitting a new layout
 - **WHEN** a matching applied or rolled-back decision is verified **THEN** the executor can
   accept the next full layout with fresh ownership and a fresh ID
+
+### Requirement: DualReady layouts use one durable Bridge-selected Engine
+
+The isolated managed pilot SHALL require explicit DualReady mode, two configured Engines
+and one durable Bridge controller. It SHALL use the first configured Engine when starting
+on a verified fresh, empty availability group. Bridge SHALL verify membership and the
+selected Engine's local permit before sending a complete graphics layout. The DualReady
+permit SHALL represent local graphics command authority. Programme or Playlist ownership
+shall continue to come from their existing contract.
+
+#### Scenario: The unselected Engine is absent
+
+- **WHEN** the verified selected Engine is writable and its reserve is unreachable
+- **THEN** Play, Update, Stop and Clear use the selected Engine alone
+- **AND** Bridge persists the complete intent before each command and the full confirmed layout
+  after it settles.
+
+#### Scenario: The selected Engine cannot be contacted
+
+- **WHEN** the selected Engine's availability observation fails at the transport and Bridge has
+  a prior durable selection
+- **THEN** Bridge verifies the other configured Engine and its checkpoint before recording a
+  newer selection epoch
+- **AND** Bridge restores the latest confirmed full layout or retries the same pending command
+  before accepting another layout, retaining its command ID, sequence, original epoch and layout.
+
+#### Scenario: The former selection rejoins
+
+- **WHEN** the previously selected Engine returns
+- **THEN** Bridge keeps its selected Engine and Playout restores the latest full checkpoint and
+  the required assets on the peer
+- **AND** omitted managed layers remain cleared.
+
+#### Scenario: A command result is ambiguous
+
+- **WHEN** a response is lost after Bridge reserves a command or the Engine reports an unresolved
+  native outcome
+- **THEN** Bridge keeps that reservation across restarts and queries or reconciles the same command
+- **AND** any retry retains its semantic intent and uses the reviewed selection's local fence.
+
+#### Scenario: A checkpoint cannot be attributed to the Bridge
+
+- **WHEN** a fresh pilot encounters an existing checkpoint, or an Engine reports a conflicting
+  checkpoint, different controller or a sequence ahead of the durable Bridge state
+- **THEN** Bridge refuses to issue a new layout.
 
 ### Requirement: The static HTML pilot restores the applied template state
 

@@ -5253,7 +5253,9 @@ Send CG commands to the active engine after its external-graphics transfer contr
 The opt-in static HTML pilot routes Control's Play, Update, Stop and Clear through complete,
 prepared channel layouts. It verifies the owner, journals the request and recovers the
 applied template state after a Bridge restart. The static HTML pilot passed on a real licensed
-.26 pair, including the reserve's render before and after ownership transfer.
+.26 pair, including the reserve's render before and after ownership transfer. A separate,
+opt-in .37 DualReady pilot lets one durable Bridge continue graphics operations while the
+other Engine is absent and use Playout's complete checkpoint for recovery.
 
 **Acceptance:**
 
@@ -5261,7 +5263,7 @@ applied template state after a Bridge restart. The static HTML pilot passed on a
 - WHEN Playout confirms a control owner THEN identify that engine and let Follow use its programme audio.
 - WHEN ownership is unknown THEN show no active designation and keep Follow silent.
 - WHEN the operator selects a verified B return or Follow resolves to it THEN the PGM meter shows that return's levels. A return without Playout meter telemetry uses its own stereo PCM peaks. The operator can show or hide the meter independently of listening. While shown, missing data leaves an empty meter scale.
-- WHEN an opt-in channel is served by External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
+- WHEN an opt-in channel uses quorum External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
 - WHEN Core returns the exact External CG v2 migration refusal during legacy Play
   preparation THEN Bridge explains the refusal and keeps the unfinished preparation muted.
 - WHEN both members report the same managed graphics revision but different programme keys
@@ -5276,20 +5278,31 @@ applied template state after a Bridge restart. The static HTML pilot passed on a
   Playout. The pilot uses the bundled pictures and leaves preview navigation local.
 - WHEN the reserve Core restarts with a confirmed manual Cut page THEN Playout restores the
   same page and applied fields to the reserve's programme without a new Bridge layout command.
-- WHEN the reserve is behind on a committed layout THEN it catches up through Playout before
-  handoff. A two-member group that loses a voter keeps its existing output and refuses new
-  managed commands until quorum returns. Play requires all configured template preparations.
+- WHEN a quorum reserve is behind on a committed layout THEN it catches up through Playout
+  before handoff. A two-member quorum group that loses a voter keeps its existing output and
+  refuses new managed commands until quorum returns. Quorum Play requires all configured
+  template preparations.
 - WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
+- WHEN one Bridge uses a fresh, explicitly enabled two-Engine .37 DualReady group and the
+  unselected Engine is absent THEN graphics Play, Update, Stop and Clear use only the selected
+  Engine's verified local permit and preserve the latest full checkpoint.
+- WHEN contact with the selected DualReady Engine is lost THEN Bridge may select the other
+  configured Engine after verifying its reported checkpoint. Bridge restores the last confirmed
+  layout or retries the exact unresolved intent before accepting the next layout. The selected
+  Engine remains selected when its peer returns. Ambiguous receipts and unrecognized checkpoints
+  block new writes.
+- WHEN a DualReady reserve returns or Playout provisions a replacement THEN Playout brings it
+  to the latest complete layout and retains required assets. A graphic removed by Clear stays
+  removed. Verify the behavior with Bridge and two licensed .37 Engines before station use.
 - WHEN a backup is healthy but a row has media or live inputs unavailable there THEN Layers keeps
   the template name and a short backup status. Inspector expands to show the affected inputs and reasons.
 
-**Required backup-failure behavior, 2026-11-23.** The confirmed owner must remain able to Play,
-Update, Stop and Clear throughout a prolonged reserve outage. The owner stores the full applied
-layout durably, including explicit deletion through absence in the latest revision. A recovered or
-replacement reserve must install that revision and prepare any missing assets before it can take
-control. A stale or partitioned member must reject writes for its obsolete ownership. Playout
-externalcg.26 fixes membership at group creation and requires both voters in a two-member group.
-Delivering this requirement on two playout machines requires a new Playout authority capability.
+**Backup-failure authority, 2026-11-24.** Playout .37 offers DualReady for availability on two
+Engines. It relies on one durable Bridge controller and reports `globallyExclusiveOwner: false`.
+Each Engine enforces its local permit. An isolated former selection can learn of a newer selection
+when connectivity returns. Programme and Playlist authority keep their own Playout rules.
+The Bridge pilot starts only on a fresh empty DualReady group with its first configured Engine.
+Adopting an inherited checkpoint and activating the installed Bridge service remain separate work.
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 

@@ -82,18 +82,35 @@
       blue and green respectively. Only A received the four Play, Go, Previous and Clear
       layouts. Both members cleared the test layer at revision 24 and A remained owner.
       Edge also verified independent PVW navigation and recovery on a newly selected owner.
-- [ ] Support continuing operations when the reserve Engine is completely absent. The owner
-      must commit Play, Update, Stop and Clear through the outage. A replacement Engine must
-      install only the latest complete snapshot, including cleared layers, before handoff.
-      Playout externalcg.26 has fixed membership and no separate witness or independently
-      verified fencing path for a two-member group. New Engine support is required before this
-      mode can be enabled. Test checkpoint-based rejoin across a journal retention gap.
-      The loopback Bridge tests cover both Clear refusal without quorum and a committed Clear
-      that a lagging reserve applies after recovery.
 - [ ] Integrate editable picture books with replica-safe assets and verify their page recovery
       after a physical Core restart.
 - [ ] Verify the managed export adapter with additional real graphics and collect acceptance
       for masked multi-plate presets, authored outros and physical programme output.
+
+## 3. Playout .37 DualReady pilot
+
+- [x] Review the shipped OpenAPI and captured .37 traffic. The vendor's isolated two-Core
+      evidence covers power-off, late replicas, retention, ambiguous receipts and replacement.
+      Its verification marks actual CG Control/Bridge integration as pending.
+- [x] Add `authorityMode: "dualReady"` to the isolated managed pilot for a fresh two-Engine
+      group. Keep the quorum default and installed service route.
+- [x] Persist controller identity, selection epoch and full pending and confirmed intent, and
+      verify the UUIDv8 against the .37 captured exchanges. Focused store tests cover restart,
+      malformed state and competing writes.
+- [x] Verify the actual pilot entry path against two isolated HTTP fixtures. Exercise Play,
+      Update, Stop and Clear with the reserve unavailable, selected-Engine transport failure,
+      exact intent retry, restart and the unchanged selection after the preferred Engine returns.
+      Verify no raw or parallel dispatch and refuse inherited, conflicting or ahead checkpoints.
+      The Bridge configuration and runtime path passed ten fixture scenarios. The fixture
+      models Playout checkpoint replication. The .37 package supplied 38 matching status and
+      seven matching state responses for contract review. The focused Bridge suites passed 65 tests.
+- [ ] Obtain and verify the matching .37 binaries and a licensed isolated pair. Exercise the
+      real CG Bridge and Control with both programme returns, power-off in each direction,
+      native restart, acknowledgement loss and a replacement after a receipt retention gap.
+      Verify that Clear stays applied on the returning member and record graphic and Programme
+      facts independently.
+- [ ] Verify explicit adoption of a reviewed migrated checkpoint separately from the fresh pilot.
+- [ ] Verify installed-service activation and credential renewal separately.
 
 ## Installed Bridge recovery
 

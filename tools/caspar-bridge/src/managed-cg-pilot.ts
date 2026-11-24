@@ -1,13 +1,16 @@
 import { AmcpTransport } from '@cg/caspar-client';
 import type { ManagedCgCommands } from './managed-cg-commands.js';
+import type { ManagedTemplate } from './managed-cg-contract.js';
 
 /** An isolated process dedicated to one opted-in CG channel. */
 export interface ManagedCgPilot {
   readonly channel: number;
   readonly commands: Pick<
     ManagedCgCommands,
-    'editLayout' | 'prepareTemplate' | 'readAppliedLayout' | 'reconcilePending'
-  >;
+    'editLayout' | 'readAppliedLayout' | 'reconcilePending'
+  > & {
+    prepareTemplate(template: ManagedTemplate): Promise<string | void>;
+  };
 }
 
 // The pilot can observe CasparCG while only Playout can change its stage.
