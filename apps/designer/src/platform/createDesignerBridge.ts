@@ -597,6 +597,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           req.kind,
           req.provenance,
           req.audio,
+          req.upcomingPosterFor,
         ),
       }),
       list: () => assets.list(),

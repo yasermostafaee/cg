@@ -13,9 +13,14 @@ import {
   ShapeElementSchema,
   TextElementSchema,
   TickerElementSchema,
+  UpcomingProgramsElementSchema,
+  UpcomingProgramsSceneEffectSchema,
   VideoElementSchema,
   VideoPlaceholderElementSchema,
   elementDigitsOf,
+  upcomingProgramsPreviewCanStep,
+  upcomingProgramsSceneEffectsOf,
+  upcomingProgramsTransitionOf,
 } from '../src/elements.js';
 
 const baseProps = {
@@ -1097,6 +1102,68 @@ describe('SequenceItem typed union — non-breaking widening (D-083)', () => {
   });
   it('rejects an item that is neither (no text, no compositionId)', () => {
     expect(() => SequenceItemSchema.parse({ id: 'x' })).toThrow();
+  });
+});
+
+describe('Upcoming Programs rehearsal', () => {
+  it('keeps legacy projects and Next effects independent of entrance and exit effects', () => {
+    const legacy = UpcomingProgramsElementSchema.parse({
+      ...baseProps,
+      type: 'upcomingPrograms',
+      layout: 'carousel',
+      transitionIn: 'fade-right',
+      transitionOut: 'left',
+      transitionMs: 720,
+    });
+    const next = upcomingProgramsTransitionOf(legacy);
+
+    expect(legacy.entranceEffect).toBeUndefined();
+    expect(legacy.exitEffect).toBeUndefined();
+    expect(upcomingProgramsSceneEffectsOf(legacy)).toEqual({
+      entrance: { edge: 'none', durationMs: 350 },
+      exit: { edge: 'none', durationMs: 350 },
+    });
+    expect(next).toMatchObject({
+      transitionIn: 'fade-right',
+      transitionOut: 'left',
+      transitionMs: 720,
+    });
+
+    const configured = UpcomingProgramsElementSchema.parse({
+      ...legacy,
+      entranceEffect: { edge: 'top' },
+      exitEffect: { edge: 'fade', durationMs: 950 },
+    });
+    expect(upcomingProgramsSceneEffectsOf(configured)).toEqual({
+      entrance: { edge: 'top', durationMs: 350 },
+      exit: { edge: 'fade', durationMs: 950 },
+    });
+    expect(upcomingProgramsTransitionOf(configured)).toEqual(next);
+  });
+
+  it.each([0, -200, 25.5, Infinity])('rejects invalid scene effect duration %s', (durationMs) => {
+    expect(UpcomingProgramsSceneEffectSchema.safeParse({ edge: 'fade', durationMs }).success).toBe(
+      false,
+    );
+  });
+
+  it('preserves local media identity and permits finishing a manual one-item pass', () => {
+    const sampleItems = [
+      { id: 'sample-1', title: 'Programme', mediaAssetId: 'sample-video', mediaKind: 'video' },
+    ];
+    const element = UpcomingProgramsElementSchema.parse({
+      ...baseProps,
+      type: 'upcomingPrograms',
+      layout: 'sequence',
+      advance: 'manual',
+      repeat: 1,
+      sampleItems,
+    });
+    expect(element.sampleItems).toEqual(sampleItems);
+    expect(upcomingProgramsPreviewCanStep(element)).toBe(true);
+    expect(upcomingProgramsPreviewCanStep({ ...element, repeat: 'infinite' })).toBe(false);
+    expect(upcomingProgramsPreviewCanStep({ ...element, layout: 'grid' })).toBe(false);
+    expect(upcomingProgramsPreviewCanStep({ ...element, sampleItems: [] })).toBe(false);
   });
 });
 

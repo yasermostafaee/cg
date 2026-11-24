@@ -1,4 +1,9 @@
-import { compositionInstancesOf, type Element, type Scene } from '@cg/shared-schema';
+import {
+  compositionInstancesOf,
+  upcomingProgramsDrivesHold,
+  type Element,
+  type Scene,
+} from '@cg/shared-schema';
 import {
   effectiveMode,
   PreviewCountdownTimingRow,
@@ -170,6 +175,7 @@ function hasAnyContentIn(doc: { layers: Scene['layers'] }, scene: Scene): boolea
       if (
         (el.type === 'ticker' ||
           el.type === 'sequence' ||
+          (el.type === 'upcomingPrograms' && upcomingProgramsDrivesHold(el)) ||
           (el.type === 'clock' && el.mode === 'countdown')) &&
         // B-034 — a HIDDEN content element is inert (not offered as content-driven in the preview).
         el.visible !== false

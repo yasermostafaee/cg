@@ -291,6 +291,14 @@ shared item-node factory (bidi-isolated per `direction`); registered as
 The pending stage and prepared Sequence pages are composited at zero opacity until their reveal.
 Row motion can explicitly set descendant visibility, so visibility alone cannot gate a subtree.
 
+An `upcomingPrograms` element builds its own card region. In Designer authoring surfaces,
+`showUpcomingProgramsSampleItems` enables its persisted sample titles and airtimes.
+Paged layouts reuse the runtime sequence clock and step dispatch, with authored card
+layout managed by the Upcoming Programs renderer. Card dimensions use scene pixels and the title,
+airtime and media regions use fractions of the card. The preview frame visualizes the authored
+media aperture. The sequence driver handles authored page transitions and repeat counts. Output
+boot excludes sample rows.
+
 A `repeater` element builds as the clipped outer box, registered as
 `{ element, host, depth, visited }` on `scope.repeaters` (the build-context
 guards travel with it so runtime row stamping keeps the cycle/depth limits).

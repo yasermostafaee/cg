@@ -51,6 +51,10 @@ _editing affordances_ (selection frame, handles, guides) and translates pointer
 gestures into **store mutations**, which flow back to the iframe as a
 `scene-replace` postMessage (rAF-throttled so a 60 Hz drag never floods it).
 
+The Designer iframe explicitly enables Upcoming Programs sample rows at boot. Its canvas
+and Rehearse use one card renderer from the template runtime. Layout changes travel in the
+scene stream alongside the element transform.
+
 `CanvasArea` owns the zoom (0.1–4×, Ctrl+wheel + buttons + auto-fit), hand-pan
 (scrolls the container), and the pinned rulers + draggable guides. It stays
 edit-surface only — the per-composition Preview / Export triggers (D-086 Phase B)

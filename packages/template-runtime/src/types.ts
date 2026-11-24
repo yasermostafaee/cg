@@ -17,6 +17,8 @@ import type {
   TickerElement,
   VideoElement,
   AudioElement,
+  UpcomingProgramsElement,
+  UpcomingProgramsSampleItem,
 } from '@cg/shared-schema';
 
 /**
@@ -229,6 +231,9 @@ export interface TemplateRuntime {
    */
   showSequenceItem?(elementId: string, index: number): void;
 
+  /** Designer rehearsal only: listen to the currently focused program sample. */
+  setUpcomingProgramsPreviewAudio?(enabled: boolean): void;
+
   /**
    * Paint every animated element at the given frame, without starting an
    * rAF loop. Used by Designer's timeline scrubber (M12.2) to preview a
@@ -307,6 +312,9 @@ export interface RuntimeBootOptions {
    * `'output'`, the safe direction.
    */
   mode?: RenderMode;
+
+  /** Designer-only rehearsal data. Ignored unless mode is 'author'. */
+  showUpcomingProgramsSampleItems?: boolean;
 
   /**
    * D-201 — output-only page split. `background` removes elements explicitly marked for the
@@ -585,6 +593,8 @@ export interface FieldScope {
   clocks: ClockEntry[];
   /** D-029 — sequence elements rendered directly in this scope (host boxes). */
   sequences: SequenceEntry[];
+  /** Program cards with resolved rehearsal data, including their optional hold drivers. */
+  upcomingPrograms: UpcomingProgramsEntry[];
   /** D-030 — repeater elements rendered directly in this scope (host boxes). */
   repeaters: RepeaterEntry[];
   /** D-125 — Lottie elements rendered directly in this scope (mount containers). */
@@ -675,6 +685,12 @@ export interface SequenceEntry {
   depth: number;
   /** D-083 — composition ids on the build path (the cycle guard for comp-item rendering). */
   visited: ReadonlySet<string>;
+}
+
+export interface UpcomingProgramsEntry {
+  element: UpcomingProgramsElement;
+  items: readonly UpcomingProgramsSampleItem[];
+  host: HTMLElement;
 }
 
 /** D-030 — one built repeater: element config + host box + the build-context guards. */

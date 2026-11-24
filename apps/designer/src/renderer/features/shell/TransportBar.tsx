@@ -67,7 +67,10 @@ export function TransportBar({ scene }: Props): JSX.Element {
   */
   const soundMuted = useDesignerSelector((st) => st.soundMuted);
   const hasSound = useMemo(() => hasSoundEffects(scene, scene.compositions), [scene]);
-  const canNext = useMemo(() => hasNextStep(scene, scene.compositions), [scene]);
+  const canNext = useMemo(
+    () => hasNextStep(scene, scene.compositions, { showUpcomingProgramsSampleItems: true }),
+    [scene],
+  );
   useEffect(
     () => () => {
       sendCanvasPlayoutCommand('stop');

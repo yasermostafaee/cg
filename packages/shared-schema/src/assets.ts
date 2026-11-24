@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IdSchema } from './primitives.js';
 
 /**
  * Asset metadata — the DOMAIN shape of an imported project asset.
@@ -166,6 +167,8 @@ export const AssetMetaSchema = z.object({
   provenance: VideoProvenanceSchema.optional(),
   /** `D-165` — a sound's measurements (`kind: 'audio'` only). */
   audio: AudioInfoSchema.optional(),
+  /** The source video asset ID for a generated Upcoming Programs poster. */
+  upcomingPosterFor: IdSchema.optional(),
 });
 
 export type AssetMeta = z.infer<typeof AssetMetaSchema>;

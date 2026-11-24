@@ -29,6 +29,10 @@ import {
   readCgControl,
   sequenceStepsByOperator,
   stripCgControl,
+  upcomingProgramsCanStep,
+  upcomingProgramsDrivesHold,
+  upcomingProgramsSceneEffectsOf,
+  upcomingProgramsUsesPagination,
   managedResumePlan,
   CG_MANAGED_BOOK_RESUME_RUNTIME_VERSION,
   CG_MANAGED_SEQUENCE_RESUME_RUNTIME_VERSION,
@@ -41,6 +45,7 @@ import {
   type LiveMaskPlacement,
   type Look,
   type SequenceElement,
+  type UpcomingProgramsElement,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import { itemsInDigits } from './typed-digits.js';
@@ -62,6 +67,10 @@ import { animateFocusArtwork } from './focus-artwork.js';
 import { createFramePlacementRenderer } from './frame-placement.js';
 import { createMaskPlacementRenderer } from './mask-placement.js';
 import { LookMediaPark } from './look-media.js';
+import {
+  createUpcomingProgramsDriver,
+  syncUpcomingProgramsPreviewAudio,
+} from './upcoming-programs.js';
 import {
   pagedRepeaterItems,
   pagedRepeaterSequenceOf,
@@ -193,12 +202,23 @@ interface ContentDriver {
  * driver can actually paint those Outro keyframes. Its page-turn `transitionOut` remains a
  * separate, Sequence-owned operation.
  */
-function sequenceHasAuthoredFrameOutro(source: LifecycleSource, element: SequenceElement): boolean {
+function hasAuthoredContentFrameOutro(
+  source: LifecycleSource,
+  element: Pick<SequenceElement, 'animation'>,
+): boolean {
   const active = activeRangeOf(source);
   const outPoint = source.lifecycle?.outPoint;
   if (outPoint === undefined || outPoint >= active.out) return false;
   return Object.values(element.animation?.tracks ?? {}).some((track) =>
     track?.keyframes.some((keyframe) => keyframe.frame > outPoint && keyframe.frame <= active.out),
+  );
+}
+
+function upcomingProgramsUsesContentVisibility(element: UpcomingProgramsElement): boolean {
+  return (
+    upcomingProgramsUsesPagination(element) ||
+    upcomingProgramsDrivesHold(element) ||
+    upcomingProgramsSceneEffectsOf(element).entrance.edge !== 'none'
   );
 }
 
@@ -418,6 +438,8 @@ function scopeHasEffectiveHoldDrivers(
   for (const c of scope.clocks)
     if (c.element.mode === 'countdown' && drives(c.element)) return true;
   for (const sq of scope.sequences) if (drives(sq.element)) return true;
+  for (const { element } of scope.upcomingPrograms)
+    if (overrides?.[element.id] ?? upcomingProgramsDrivesHold(element)) return true;
   // D-125 §D2.1 — a Lottie is a driver ONLY when it OPTED IN (`=== true`, the INVERSE
   // default), so it can't be folded into `drives()` above. Without this a composition
   // whose only hold driver is an opted-in Lottie would fall back to `timed` (B-032) and
@@ -584,6 +606,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const managedPlan =
     mode === 'output' && outputPass === 'full' ? managedResumePlan(scene) : undefined;
   if (managedPlan !== undefined) scene = managedPlan.scene;
+  const showUpcomingProgramsSampleItems =
+    mode === 'author' && options.showUpcomingProgramsSampleItems === true;
   const onOutputPosition = mode === 'output' ? options.onOutputPosition : undefined;
   let editCountdowns = mode === 'author' && options.editCountdowns === true;
   // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
@@ -645,7 +669,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     outputPass === 'full' ? undefined : liveForegroundKeys(scene),
     frameArtworkKeys,
     canRenderPresetEffects ? presetDepartureKeys : undefined,
+    showUpcomingProgramsSampleItems,
   );
+  let upcomingProgramsPreviewAudioEnabled = false;
+  let upcomingProgramsPreviewAudioRunning = false;
+  const syncUpcomingAudio = (): void => {
+    if (showUpcomingProgramsSampleItems) {
+      syncUpcomingProgramsPreviewAudio(
+        built.container,
+        upcomingProgramsPreviewAudioEnabled && upcomingProgramsPreviewAudioRunning,
+      );
+    }
+  };
+  const silenceUpcomingAudio = (): void => {
+    upcomingProgramsPreviewAudioRunning = false;
+    syncUpcomingAudio();
+  };
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
   const authoredBorders =
@@ -1018,6 +1057,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // exit settles the whole template's state/visibility once per exit.
   const rootOnExitStart = (): void => {
     if (machine.state === 'on-air' || machine.state === 'playing') {
+      silenceUpcomingAudio();
       presetEffectId = undefined;
       cancelFrameTransition();
       machine.transition('exiting');
@@ -1059,6 +1099,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // Every wired subtree, in wiring order (the static tree first; repeater rows
   // join per stamp). The runtime-level cascades iterate this set.
   const subtrees = new Set<WiredSubtree>();
+  const cuttableUpcomingOutros = new WeakMap<ElementOutroDriver, () => void>();
+  let upcomingOutrosCut = false;
 
   /**
    * D-030 — wire ONE scope subtree: instantiate its drivers (tickers with
@@ -1393,6 +1435,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             doc,
             mode,
             paintEditorBackdrop,
+            showUpcomingProgramsSampleItems,
           );
           if (built === null) {
             // Missing / over-deep / cyclic reference ⇒ an empty grid-cell box.
@@ -1541,7 +1584,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         if (!sequenceStepsByOperator(s.element)) operatorFixed.add(driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
-        const frameOutro = sequenceHasAuthoredFrameOutro(scope.source, s.element);
+        const frameOutro = hasAuthoredContentFrameOutro(scope.source, s.element);
         if (s.element.visible !== false && frameOutro) {
           // D-199 — this host closes on the composition frame clock. Excluding it from Stop's
           // blanket hide is what lets ordinary opacity/position/scale keyframes remain visible.
@@ -1579,6 +1622,49 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         }
         return driver;
       });
+      const holdUpcomingPrograms: ContentDriver[] = [];
+      const staticUpcomingPrograms: SequenceDriver[] = [];
+      for (const { element, host, items } of scope.upcomingPrograms) {
+        const paged = upcomingProgramsUsesPagination(element);
+        const drivesHold = upcomingProgramsDrivesHold(element);
+        const frameOutro = hasAuthoredContentFrameOutro(scope.source, element);
+        const effectOutro = upcomingProgramsSceneEffectsOf(element).exit.edge !== 'none';
+        const driver = createUpcomingProgramsDriver(
+          host,
+          element,
+          items,
+          options.clock,
+          options.assetUrls,
+          syncUpcomingAudio,
+          drivesHold || frameOutro,
+          showUpcomingProgramsSampleItems,
+        );
+        if (upcomingProgramsUsesContentVisibility(element) || effectOutro) {
+          host.dataset['cgContent'] = 'upcomingPrograms';
+        }
+        if (frameOutro) host.dataset['cgOutro'] = 'upcoming-programs-frame';
+        if (effectOutro) {
+          if (!frameOutro) host.dataset['cgOutro'] = 'upcoming-programs-effect';
+          scopeOutroLotties.push(driver);
+          cuttableUpcomingOutros.set(driver, () => driver.cutOutro(frameOutro));
+        }
+        sequences.push(driver);
+        scopeSequences.push(driver);
+        if (!paged) staticUpcomingPrograms.push(driver);
+        if (!upcomingProgramsCanStep(element, items.length)) operatorFixed.add(driver);
+        lookMediaPark.register({ node: host, driver, parkable: !drivesHold });
+        const content = {
+          id: element.id,
+          drivesHold,
+          whenComplete: (): Promise<void> => {
+            // Static cards have a duration only when a content-driven hold waits for them.
+            if (!paged) driver.setAdvance('auto');
+            return driver.whenComplete();
+          },
+        };
+        contentDrivers.push(content);
+        if (drivesHold) holdUpcomingPrograms.push(content);
+      }
 
       // D-125 — Lottie drivers. The scene-builder registered the mount container; here
       // we resolve the parsed `animationData` from `options.lottieAssets`, mount the
@@ -2142,6 +2228,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           c.reset();
           c.start();
         }
+        for (const s of staticUpcomingPrograms) s.setAdvance('manual');
         for (const s of scopeSequences) {
           s.reset();
           s.start();
@@ -2155,12 +2242,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         holdTickers.length > 0 ||
         holdCountdowns.length > 0 ||
         holdSequences.length > 0 ||
+        holdUpcomingPrograms.length > 0 ||
         holdLotties.length > 0 ||
         holdVideos.length > 0
           ? Promise.all([
               ...holdTickers.map((t) => t.whenComplete()),
               ...holdCountdowns.map((c) => c.whenComplete()),
               ...holdSequences.map((s) => s.whenComplete()),
+              ...holdUpcomingPrograms.map((s) => s.whenComplete()),
               // D-125 §D6.3 — only OPTED-IN (`drivesHold === true`) Lotties are in this
               // array: a freeze Lottie completes at `introEnd`, an idle-loop one never does.
               ...holdLotties.map((l) => l.whenComplete()),
@@ -2275,6 +2364,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const t of scope.tickers) collectContentHost(t.element);
       for (const c of scope.clocks) collectContentHost(c.element);
       for (const sq of scope.sequences) collectContentHost(sq.element);
+      for (const { element } of scope.upcomingPrograms) {
+        if (upcomingProgramsUsesContentVisibility(element)) collectContentHost(element);
+      }
       const applyContentGateAtFrame = (frame: number): void => {
         const started = frame >= holdEntry;
         for (const g of contentGates) {
@@ -2603,6 +2695,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             doc,
             mode,
             paintEditorBackdrop,
+            showUpcomingProgramsSampleItems,
           );
           return rows.map((row, i) => {
             // 🔴 D-064 — a row is stamped at every bound-list change, after the page-wide
@@ -3171,8 +3264,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * owning an outro segment, a held page with an element-owned exit, or a Sequence carrying
    * ordinary frame keyframes after Out point). Hiding those roots would erase their authored exit.
    */
-  const fadeableContentRoots = (): HTMLElement[] =>
-    contentRoots().filter((n) => n.closest('[data-cg-outro]') === null);
+  const fadeableContentRoots = (quickStop = false): HTMLElement[] =>
+    contentRoots().filter((node) => {
+      const ownOutro = node.closest('[data-cg-outro]');
+      return (
+        ownOutro === null ||
+        (quickStop && ownOutro === node && node.dataset['cgOutro'] === 'upcoming-programs-effect')
+      );
+    });
   /**
    * D-125 §D6.2 — THE ELEMENT-OUTRO REGISTRY. Every `LottieDriver` that owns an outro and
    * is reachable through VISIBLE scopes, walked over the wiring tree (root scope + nested
@@ -3245,6 +3344,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const playElementOutrosOnce = (drivers: readonly ElementOutroDriver[]): Promise<void> | null => {
     const waits: Promise<void>[] = [];
     for (const d of drivers) {
+      if (upcomingOutrosCut && cuttableUpcomingOutros.has(d)) continue;
       let entry = outroLedger.get(d);
       if (entry === undefined) {
         const rec: { promise: Promise<void>; done: boolean } = {
@@ -3382,7 +3482,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     });
   };
   const hideContentNow = (): void => {
-    for (const n of fadeableContentRoots()) {
+    for (const n of fadeableContentRoots(true)) {
       saveExitStyles(n);
       n.style.transition = '';
       n.style.opacity = '0';
@@ -3554,8 +3654,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // mark, so this run's exit (auto or operator) plays them again — exactly once.
       for (const watchdog of outroWatchdogs) watchdog.cancel();
       outroLedger.clear();
+      upcomingOutrosCut = false;
       restoreContent();
       machine.transition('on-air');
+      upcomingProgramsPreviewAudioRunning = true;
       // D-030 — repeaters re-stamp FIRST: the row COUNT comes from the
       // CURRENT effective items (a retained pre-play update() included),
       // and the fresh row subtrees join `subtrees` before the per-kind
@@ -3917,6 +4019,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       presetEffectId = undefined;
       cancelFrameTransition();
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+      silenceUpcomingAudio();
       // D-105 — QUICK exit: remove the content IMMEDIATELY (before the background
       // moves), then play the background outro and settle cleared. Lifecycle scenes
       // play the OUT [outPoint → active.out]; absent lifecycle settles instantly.
@@ -3924,6 +4027,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-026 — each nested instance plays its OWN outro in cascade.
       const gen = ++exitGen;
       pendingExitOutro = false;
+      const outros = collectElementOutros();
+      upcomingOutrosCut = true;
+      for (const outro of outros) cuttableUpcomingOutros.get(outro)?.();
       // D-125 §D6.2 — an ELEMENT that owns its outro still plays it on stop(): the
       // acceptance is that BOTH stop() and out() play the Lottie outro. Everything else
       // still hard-hides immediately (the quick exit is unchanged for non-owning content).
@@ -3938,7 +4044,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // flight from an AUTO-exit is awaited, never re-driven (no double-play); a null
       // gate (no owners, or all done) keeps stop()'s SYNCHRONOUS hide → background
       // ordering exactly as before.
-      const outroGate = playElementOutrosOnce(collectElementOutros());
+      const outroGate = playElementOutrosOnce(outros);
       if (outroGate !== null) {
         await outroGate;
         // Superseded mid-outro by a play()/stop()/out() — that command owns the scene now.
@@ -3959,6 +4065,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       presetEffectId = undefined;
       cancelFrameTransition();
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+      silenceUpcomingAudio();
       // D-105 — COORDINATED animated exit: fade the content off FIRST, await it,
       // then (unless a stop()/play()/out() superseded this exit during the fade)
       // play the background outro and settle cleared — the background never closes
@@ -4057,6 +4164,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) {
         for (const s of sub.sequences) if (sequenceElementOf.get(s) === elementId) s.goTo(index);
       }
+    },
+
+    setUpcomingProgramsPreviewAudio(enabled: boolean): void {
+      if (!showUpcomingProgramsSampleItems || machine.state === 'removed') return;
+      upcomingProgramsPreviewAudioEnabled = enabled;
+      syncUpcomingAudio();
     },
 
     remove(): void {

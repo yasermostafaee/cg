@@ -10,6 +10,8 @@ import {
   pathVisualBBox,
   repeaterRowLimit,
   sequencePictureFit,
+  upcomingProgramsPreviewItems,
+  upcomingProgramsPreparedItems,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import type {
@@ -32,6 +34,7 @@ import type {
   Stroke,
   TextElement,
   TickerElement,
+  UpcomingProgramsElement,
   ImageElement,
   ShapeElement,
   Transform,
@@ -49,6 +52,7 @@ import { populateTickerStaticRow } from './ticker-driver.js';
 import { itemsInDigits, stampTypedDigits } from './typed-digits.js';
 import { drawPlateMaskClip } from './mask-placement.js';
 import { PLATE_EDGES_MOTION_RATIO } from './frame-placement.js';
+import { renderUpcomingProgramsPage } from './upcoming-programs.js';
 import {
   hasStepCountdown,
   STEP_EL_DATASET,
@@ -100,6 +104,7 @@ interface BuildCtx {
    * surface above it suppressed.
    */
   paintEditorBackdrop: boolean;
+  showUpcomingProgramsSampleItems: boolean;
   foregroundKeys?: ReadonlySet<string> | undefined;
   frameArtworkKeys?: ReadonlySet<string> | undefined;
   presetDepartureKeys?: ReadonlySet<string> | undefined;
@@ -119,6 +124,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     tickers: [],
     clocks: [],
     sequences: [],
+    upcomingPrograms: [],
     repeaters: [],
     lotties: [],
     videos: [],
@@ -162,6 +168,7 @@ export function buildScene(
   foregroundKeys?: ReadonlySet<string>,
   frameArtworkKeys?: ReadonlySet<string>,
   presetDepartureKeys?: ReadonlySet<string>,
+  showUpcomingProgramsSampleItems = false,
 ): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
@@ -193,6 +200,7 @@ export function buildScene(
     resolutionWidth: scene.resolution.width,
     mode,
     paintEditorBackdrop,
+    showUpcomingProgramsSampleItems: mode === 'author' && showUpcomingProgramsSampleItems,
     foregroundKeys,
     frameArtworkKeys,
     presetDepartureKeys,
@@ -392,6 +400,8 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildSequence(element, ctx);
     case 'repeater':
       return buildRepeater(element, ctx);
+    case 'upcomingPrograms':
+      return buildUpcomingPrograms(element, ctx);
     case 'image':
       return buildImage(element, ctx.doc);
     case 'shape':
@@ -420,6 +430,33 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       // D-165 — a sound: never painted; registered so createRuntime attaches an AudioDriver.
       return buildAudio(element, ctx);
   }
+}
+
+function buildUpcomingPrograms(element: UpcomingProgramsElement, ctx: BuildCtx): HTMLElement {
+  const host = ctx.doc.createElement('div');
+  host.dataset['cgElementId'] = element.id;
+  host.dataset['cgUpcomingLayout'] = element.layout;
+  applyBaseStyles(host, element.transform, element.opacity, element.visible, element.filter);
+  host.style.overflow = 'hidden';
+  const items = ctx.showUpcomingProgramsSampleItems
+    ? upcomingProgramsPreviewItems(element)
+    : upcomingProgramsPreparedItems(element);
+  if (items.length === 0) return host;
+  host.style.display = element.visible ? 'grid' : 'none';
+  host.appendChild(
+    renderUpcomingProgramsPage(
+      ctx.doc,
+      element,
+      items,
+      0,
+      undefined,
+      ctx.showUpcomingProgramsSampleItems,
+    ),
+  );
+  if (element.visible) {
+    ctx.scope.upcomingPrograms.push({ element, host, items });
+  }
+  return host;
 }
 
 /**
@@ -1092,6 +1129,9 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
         { width: element.transform.size.w, height: element.transform.size.h },
         { depth: ctx.depth, visited: ctx.visited },
         doc,
+        undefined,
+        undefined,
+        ctx.showUpcomingProgramsSampleItems,
       );
       if (built !== null) el.appendChild(built.cell);
     } else if (first.kind === 'image') {
@@ -1220,6 +1260,8 @@ export function buildSequenceCompositionItem(
   mode: RenderMode = 'output',
   // B-134 — the canvas-only axis, threaded for the same reason.
   paintEditorBackdrop = true,
+  // The root has already checked author mode. Static stamps keep their existing visual mode.
+  showUpcomingProgramsSampleItems = false,
 ): SequenceCompositionItemBuild | null {
   const comp = scene.compositions?.find((c) => c.id === compositionId);
   if (
@@ -1275,6 +1317,7 @@ export function buildSequenceCompositionItem(
     resolutionWidth: comp.resolution.width,
     mode,
     paintEditorBackdrop,
+    showUpcomingProgramsSampleItems,
     instancePrefix: '',
   };
   for (const layer of comp.layers) {
@@ -1315,6 +1358,9 @@ function buildRepeater(element: RepeaterElement, ctx: BuildCtx): HTMLElement {
     clampRowCount(element, element.items.length),
     { depth: ctx.depth, visited: ctx.visited },
     ctx.doc,
+    undefined,
+    undefined,
+    ctx.showUpcomingProgramsSampleItems,
   );
   return el;
 }
@@ -1400,6 +1446,8 @@ export function buildRepeaterRows(
   mode: RenderMode = 'output',
   // B-134 — the canvas-only axis, threaded for the same reason.
   paintEditorBackdrop = true,
+  // The root has already checked author mode. Static stamps keep their existing visual mode.
+  showUpcomingProgramsSampleItems = false,
 ): RepeaterRowBuild[] {
   const comp = scene.compositions?.find((c) => c.id === element.compositionId);
   if (
@@ -1477,6 +1525,7 @@ export function buildRepeaterRows(
       resolutionWidth: comp.resolution.width,
       mode,
       paintEditorBackdrop,
+      showUpcomingProgramsSampleItems,
       instancePrefix: '',
     };
     for (const layer of comp.layers) {

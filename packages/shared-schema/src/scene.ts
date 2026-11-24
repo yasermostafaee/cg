@@ -10,7 +10,15 @@ import {
 import { ArrangementsSchema } from './arrangements.js';
 import { LookGroupsSchema } from './looks.js';
 import { ControlLiveLayoutSchema } from './control-live-layout.js';
-import { ElementSchema, sequenceStepsByOperator, type Element } from './elements.js';
+import {
+  ElementSchema,
+  sequenceStepsByOperator,
+  upcomingProgramsCanStep,
+  upcomingProgramsDrivesHold,
+  upcomingProgramsPreparedItems,
+  upcomingProgramsPreviewCanStep,
+  type Element,
+} from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
 import { FrameRangeSchema, type FrameRange } from './animation.js';
@@ -933,8 +941,8 @@ export const TEMPLATE_TIMING_VERSION = 2;
 
 /**
  * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /
- * `sequence` / countdown `clock` (absent `drivesHold` ⇒ drives), or an OPTED-IN media element —
- * `lottie` (D-125) / `video` (D-128), `drivesHold === true` — in its OWN layers OR reachable
+ * `sequence` / countdown `clock` (absent `drivesHold` ⇒ drives), or an opted-in
+ * `lottie` (D-125), `video` (D-128), or `upcomingPrograms` (D-219) in its OWN layers OR reachable
  * through a nested composition instance (recursing containers; cycle-guarded)? A `content-driven`
  * hold with NONE is a zero-length, meaningless hold, so the resolution boundary (this is consumed by
  * the exporter's `buildPlayoutMetadata`, the Designer Playout inspector, and mirrored by the
@@ -948,6 +956,7 @@ export const TEMPLATE_TIMING_VERSION = 2;
 export function hasEffectiveHoldDrivers(
   root: Pick<Scene, 'layers'>,
   compositions: readonly Composition[] | undefined,
+  options?: { upcomingProgramsOutputOnly?: boolean },
 ): boolean {
   const visited = new Set<string>();
   // `overrides` are the per-instance `holdOverrides` governing THIS level's direct content (undefined
@@ -972,6 +981,13 @@ export function hasEffectiveHoldDrivers(
       // the same opt-in), so export metadata, the Playout inspector, and on-air agree.
       if (el.type === 'lottie' || el.type === 'video')
         return el.visible !== false && (overrides?.[el.id] ?? el.drivesHold === true);
+      if (el.type === 'upcomingPrograms')
+        return (
+          el.visible !== false &&
+          (overrides?.[el.id] ?? upcomingProgramsDrivesHold(el)) &&
+          (options?.upcomingProgramsOutputOnly !== true ||
+            upcomingProgramsPreparedItems(el).length > 0)
+        );
       // B-034 — a HIDDEN container / composition instance makes its WHOLE subtree inert: SHORT-CIRCUIT
       // before descending, so a visible driver inside a hidden ancestor is not an effective driver
       // (mirrors render's display:none + the runtime's subtree-skip).
@@ -980,8 +996,11 @@ export function hasEffectiveHoldDrivers(
         if (el.visible === false || visited.has(el.compositionId)) return false;
         visited.add(el.compositionId);
         const comp = compositions?.find((c) => c.id === el.compositionId);
-        // The nested instance's OWN content is governed by its own `holdOverrides` (cascade per level).
-        return comp !== undefined && comp.layers.some((l) => walk(l.children, el.holdOverrides));
+        // Sibling instances of one definition can have different hold overrides.
+        const hasDriver =
+          comp !== undefined && comp.layers.some((l) => walk(l.children, el.holdOverrides));
+        visited.delete(el.compositionId);
+        return hasDriver;
       }
       return false;
     });
@@ -997,11 +1016,10 @@ export function hasEffectiveHoldDrivers(
  * the reverse: an enabled control that can only no-op — the anti-pattern
  * R-021 stage 2b named).
  *
- * True iff a REACHABLE, VISIBLE `sequence` element exists. `next()` dispatches
- * to each scope's sequence drivers and nothing else (`runtime.ts` `dispatchNext`
- * → `scope.sequences`), so a sequence element is precisely what makes a scene
- * steppable — today. When the D-031 authored-steps model joins that dispatch,
- * it joins THIS predicate too.
+ * True when the scene contains a reachable, visible sequence with operator steps enabled.
+ * Prepared Upcoming Programs may also step through their exported programme rows.
+ * Designer can opt in to preview-only rehearsal data.
+ * The runtime dispatches `next()` to each scope's registered sequence drivers.
  *
  * Reachability follows the runtime's own subtree cascade, so all THREE
  * composition reference kinds are walked (the `collectChildCompositionRefs`
@@ -1063,6 +1081,7 @@ export function hasSoundEffects(
 export function hasNextStep(
   root: Pick<Scene, 'layers'>,
   compositions: readonly Composition[] | undefined,
+  options?: { showUpcomingProgramsSampleItems?: boolean },
 ): boolean {
   const visited = new Set<string>();
   const intoComposition = (compositionId: string): boolean => {
@@ -1080,6 +1099,11 @@ export function hasNextStep(
         // list binding supplying them — is what NEXT advances). `D-163` — unless
         // its author said the operator does not step it (it runs by itself).
         return sequenceStepsByOperator(el);
+      }
+      if (el.type === 'upcomingPrograms') {
+        return options?.showUpcomingProgramsSampleItems === true
+          ? upcomingProgramsPreviewCanStep(el)
+          : upcomingProgramsCanStep(el, upcomingProgramsPreparedItems(el).length);
       }
       if (el.type === 'container') return walk(el.children);
       if (el.type === 'composition') return intoComposition(el.compositionId);

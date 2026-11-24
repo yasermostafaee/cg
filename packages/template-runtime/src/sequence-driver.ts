@@ -86,6 +86,8 @@ export interface RenderedSequenceItem {
   pause(): void;
   resume(): void;
   hide(): void;
+  /** A target in the same mounted group can use an in-place turn with the normal playback clock. */
+  transitionTo?(target: SequenceDriverItem): SequenceInPlaceTransition | undefined;
   /** Final owner exit only: finish inner content before the page's own transitionOut. */
   playOutro?(): Promise<void>;
   /** Upper bound of the currently held item's exit, including its own never-strand guard. */
@@ -102,6 +104,11 @@ export interface RenderedSequenceItem {
    * composition). The driver never puts an item on stage before this resolves `true`.
    */
   ready?: Promise<boolean>;
+}
+
+export interface SequenceInPlaceTransition {
+  durationMs: number;
+  paint(progress: number): void;
 }
 
 /** D-083 — builds the node + inner-driver lifecycle for a COMPOSITION item. */
@@ -136,10 +143,19 @@ export interface SequenceDriverOptions {
   transitionTiming: SequenceTiming;
   /** Duration of EACH motion (ms). */
   transitionMs: number;
+  /** Override boundary motion independently from inter-item page turns. */
+  entranceEffect?: { edge: SequenceEdge; durationMs: number };
+  exitEffect?: { edge: SequenceEdge; durationMs: number };
   /** Full passes before completion ('infinite' = until stop()). */
   repeat: number | 'infinite';
+  /** Keep the final page painted after completion so a composition can own its exit. */
+  keepVisibleOnComplete?: boolean;
   /** B-016 — composed `background` for a gradient text colour, applied per item node. */
   glyphGradientCss?: string | undefined;
+  /** Render a static text item's custom page while retaining the sequence's playback controls. */
+  renderText?:
+    | ((item: Extract<SequenceDriverItem, { text: string }>) => RenderedSequenceItem)
+    | undefined;
   /** Authored scene-pixel nudge for text pages, applied after ink fitting. */
   textOffsetY?: number | undefined;
   /**
@@ -204,6 +220,7 @@ export class SequenceDriver {
   private incoming: SequenceDriverItem | null = null;
   private incomingNode: HTMLElement | null = null;
   private incomingHooks: RenderedSequenceItem | null = null;
+  private inPlaceTransition: SequenceInPlaceTransition | undefined;
   /** Opt-in mounted composition pages, keyed by stable sequence-item id. */
   private readonly prepared = new Map<
     string,
@@ -300,7 +317,8 @@ export class SequenceDriver {
     // dwelling. `D-163` (the owner, 2026-10-14): EVERY sequence, infinite ones too — the first item
     // starts "with the chosen effect" as each later one does. A 'none' edge / zero duration still
     // goes straight to dwell.
-    if (this.o.transitionIn !== 'none' && this.o.transitionMs > 0) {
+    const entrance = this.boundaryEffect('entrance');
+    if (entrance.edge !== 'none' && entrance.durationMs > 0) {
       this.enterPhase('entrance');
       this.paintBoundary('entrance');
       this.scheduleIfNeeded();
@@ -419,7 +437,7 @@ export class SequenceDriver {
 
   /**
    * The element-outro seam used by an operator STOP/OUT. The current page leaves with the
-   * sequence's authored transitionOut, but this externally requested exit does not announce a
+   * sequence's effective exit effect, but this externally requested exit does not announce a
    * natural book completion.
    */
   playOutro(): Promise<void> {
@@ -445,7 +463,8 @@ export class SequenceDriver {
   /** The inner content and the page boundary leave sequentially, so their bounds add. */
   outroDurationMs(): number {
     const inner = this.currentHooks?.outroDurationMs?.() ?? 0;
-    const page = this.o.transitionOut === 'none' ? 0 : this.o.transitionMs;
+    const exit = this.boundaryEffect('exit');
+    const page = exit.edge === 'none' ? 0 : exit.durationMs;
     return (Number.isFinite(inner) && inner > 0 ? inner : 0) + page;
   }
 
@@ -522,10 +541,25 @@ export class SequenceDriver {
     this.loadGen += 1;
     this.loadingHooks?.hide();
     this.loadingHooks = null;
+    this.inPlaceTransition = undefined;
     this.pendingIdx = null;
     this.pendingTurns.length = 0;
     // D-083 — tear down the on-screen item's inner drivers (a composition item's clock stops).
     this.teardownPrepared();
+  }
+
+  /** Quick Stop skips boundary motion and leaves any authored frame Outro to its controller. */
+  cutOutro(keepPainted: boolean): void {
+    this.stop();
+    if (this.incomingNode !== null) this.setItemPaint(this.incomingNode, false);
+    if (
+      keepPainted &&
+      this.currentNode !== null &&
+      this.currentNode.style.visibility !== 'hidden'
+    ) {
+      this.currentNode.style.transform = '';
+      this.setItemPaint(this.currentNode, true);
+    }
   }
 
   /**
@@ -700,7 +734,14 @@ export class SequenceDriver {
       // Past the last item of this pass — complete (finite, all passes done)
       // or wrap to item 1 for the next pass.
       if (this.o.repeat !== 'infinite' && this.passesStarted >= this.o.repeat) {
-        // D-116 — play the LAST item's `transitionOut` (it exits to the OUT edge), and signal
+        if (this.o.keepVisibleOnComplete === true) {
+          this.running = false;
+          this.cancelFrame();
+          this.currentHooks?.pause();
+          this.fireComplete();
+          return;
+        }
+        // D-116 — play the last item's exit effect, and signal
         // completion ONLY AFTER that exit finishes — so the parent's content-driven hold ends after
         // the content has left and its outro fires last (D-105 content-first / background-last). A
         // 'none' edge / zero duration hides it immediately. `phase === 'exit'` already in flight ⇒
@@ -719,6 +760,16 @@ export class SequenceDriver {
   private beginTransition(toIdx: number): void {
     const target = this.logical[toIdx];
     if (target === undefined) return;
+    const inPlace = this.currentHooks?.transitionTo?.(target);
+    if (inPlace !== undefined) {
+      this.inPlaceTransition = inPlace;
+      this.current = { ...target };
+      this.enterPhase('transition');
+      this.o.onItemShown?.(toIdx);
+      this.paintTransition();
+      this.scheduleIfNeeded();
+      return;
+    }
     const prepared = this.prepareItem(target);
     const incoming = prepared.item;
     const r = prepared.rendered;
@@ -767,6 +818,13 @@ export class SequenceDriver {
 
   /** Apply the mapper's two poses for the current transition moment. */
   private paintTransition(): void {
+    if (this.inPlaceTransition !== undefined) {
+      const duration = this.inPlaceTransition.durationMs;
+      const progress = duration > 0 ? Math.min(1, this.phaseElapsedMs() / duration) : 1;
+      if (progress >= 1) this.finishTransition();
+      else this.inPlaceTransition.paint(progress);
+      return;
+    }
     const spec = this.transitionSpec();
     const frame = sampleTransition(spec, this.phaseElapsedMs());
     this.applyMix(frame.mix);
@@ -788,6 +846,13 @@ export class SequenceDriver {
   }
 
   private finishTransition(): void {
+    if (this.inPlaceTransition !== undefined) {
+      this.inPlaceTransition.paint(1);
+      this.inPlaceTransition = undefined;
+      this.enterPhase('dwell');
+      this.consumePending();
+      return;
+    }
     this.applyMix(false);
     if (this.currentHooks !== null && this.preparedHooks.has(this.currentHooks)) {
       // Keep the outgoing page's exact DOM and animated-image document alive for later turns. Its
@@ -829,6 +894,7 @@ export class SequenceDriver {
   private rearm(): boolean {
     if (this.destroyed || this.phase === 'idle') return false;
     if (this.running) return true;
+    if (this.completed && this.o.keepVisibleOnComplete === true) return false;
     if (!this.completed || this.stopped) return false;
     this.itemExitGeneration += 1;
     this.resolveItemExit?.();
@@ -884,13 +950,21 @@ export class SequenceDriver {
    * to sequence against, so `timing` is always simultaneous here).
    */
   private boundarySpec(kind: 'entrance' | 'exit'): SequenceTransitionSpec {
+    const entrance = kind === 'entrance';
+    const effect = this.boundaryEffect(kind);
     return {
-      inEdge: kind === 'entrance' ? this.o.transitionIn : 'none',
-      outEdge: kind === 'exit' ? this.o.transitionOut : 'none',
+      inEdge: entrance ? effect.edge : 'none',
+      outEdge: entrance ? 'none' : effect.edge,
       timing: 'simultaneous',
-      transitionMs: this.o.transitionMs,
+      transitionMs: effect.durationMs,
       box: this.box(),
     };
+  }
+
+  private boundaryEffect(kind: 'entrance' | 'exit'): { edge: SequenceEdge; durationMs: number } {
+    return kind === 'entrance'
+      ? (this.o.entranceEffect ?? { edge: this.o.transitionIn, durationMs: this.o.transitionMs })
+      : (this.o.exitEffect ?? { edge: this.o.transitionOut, durationMs: this.o.transitionMs });
   }
 
   /** D-116 — paint one boundary frame: the first item sliding IN, or the last item sliding OUT. */
@@ -1105,6 +1179,9 @@ export class SequenceDriver {
     }
     if (item.kind === 'image' && this.o.renderImage !== undefined) {
       return this.o.renderImage(item);
+    }
+    if (isTextItem(item) && this.o.renderText !== undefined) {
+      return this.o.renderText(item);
     }
     const node = this.makeItemNode();
     // D-083 — a TEXT item shows the operator's per-item field value (non-bound sequence)

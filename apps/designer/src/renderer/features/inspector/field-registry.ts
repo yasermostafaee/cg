@@ -794,6 +794,7 @@ export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor
   clock: [...TRANSFORM, ...TIME_DRIVEN_STYLE, ...FILTER],
   sequence: [...TRANSFORM, ...TIME_DRIVEN_STYLE, ...FILTER],
   repeater: UNIVERSAL_ONLY,
+  upcomingPrograms: UNIVERSAL_ONLY,
   composition: UNIVERSAL_ONLY,
   lottie: UNIVERSAL_ONLY,
   // D-137 — a SUBTRACTION from UNIVERSAL_ONLY, not a copy of it. See

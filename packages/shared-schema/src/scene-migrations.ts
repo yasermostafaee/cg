@@ -1,10 +1,11 @@
-import type {
-  ClockElement,
-  CountdownStep,
-  CountdownSteps,
-  Element,
-  TextElement,
-  ZoneColor,
+import {
+  upcomingProgramsPreparedItems,
+  type ClockElement,
+  type CountdownStep,
+  type CountdownSteps,
+  type Element,
+  type TextElement,
+  type ZoneColor,
 } from './elements.js';
 import type { Composition, Layer, Scene } from './scene.js';
 import { migrateScenePaths } from './path-migration.js';
@@ -280,6 +281,17 @@ export function pruneDanglingLiveRevealMasks(scene: Scene): Scene {
       ? { ...element, revealMask: undefined }
       : element,
   );
+}
+
+/** Retain only eligible rows explicitly authored for output in a broadcast scene. */
+export function withUpcomingProgramsOutputItems(scene: Scene): Scene {
+  return mapSceneElements(scene, (element) => {
+    if (element.type !== 'upcomingPrograms') return element;
+    const sampleItems = upcomingProgramsPreparedItems(element);
+    return sampleItems.length === element.sampleItems?.length
+      ? element
+      : { ...element, sampleItems };
+  });
 }
 
 /** Map every element of the scene (root, compositions, containers), preserving identity. */

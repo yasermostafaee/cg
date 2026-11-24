@@ -67,6 +67,9 @@ export function Modal({
         // itself (its own handler, after this capture listener), and the dialog stays.
         if ((boxRef.current?.querySelector('[role="menu"]') ?? null) !== null) return;
         if (document.querySelector('[data-cg-popover]') !== null) return;
+        // Closing a modal owns this Escape, including when its opener is on the canvas.
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
         return;
       }

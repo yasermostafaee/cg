@@ -5,6 +5,7 @@ import {
   aggregateCompositionFields,
   countdownTargetFieldsOf,
   defaultLookOf,
+  flattenElements,
   lookGroupOf,
   withListLimits,
   defaultNestedValues,
@@ -12,6 +13,7 @@ import {
   outputTranslate,
   resolveDefaultPosition,
   resolveProjectOutputRaster,
+  upcomingProgramsPreviewItems,
   type AggregatedFields,
   type FieldValue,
   type NestedFieldValues,
@@ -36,6 +38,7 @@ import {
   repeaterColumnsByFieldId,
 } from './repeater-columns.js';
 import { PreviewStatus, PreviewTransport } from './PreviewTransport.js';
+import { CheckRow } from '../inspector/DynamicDataSection.js';
 import { parseRehearsalChoice, stepRehearsalChoices } from '../inspector/countdown-steps.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
 import { type TimingOverride } from './PreviewTimingControls.js';
@@ -115,7 +118,7 @@ function dirtyPaths(
  * cascade genuinely reaches.
  */
 function canStepScene(scene: Scene): boolean {
-  return hasNextStep(scene, scene.compositions);
+  return hasNextStep(scene, scene.compositions, { showUpcomingProgramsSampleItems: true });
 }
 
 /**
@@ -450,6 +453,14 @@ export function PreviewModal({
     setRuntimeFrame(scene.activeRange?.in ?? scene.frameRange.in);
     resetElapsed();
   }, [dispatch, resetElapsed, scene.activeRange?.in, scene.frameRange.in, transportReady]);
+  const onOut = useCallback(() => {
+    if (!transportReady) return;
+    dispatch.out();
+    if (paused) {
+      startElapsed(true);
+      setPaused(false);
+    }
+  }, [dispatch, paused, startElapsed, transportReady]);
   const onNext = useCallback(() => {
     if (transportReady) dispatch.next();
   }, [dispatch, transportReady]);
@@ -491,6 +502,32 @@ export function PreviewModal({
   const onToggleSound = useCallback(() => {
     designerStore.setSoundMuted(!soundMutedRef.current);
   }, []);
+  const upcomingPrograms = useMemo(
+    () =>
+      flattenElements(scene).flatMap(({ element, ancestry }) =>
+        element.type === 'upcomingPrograms' &&
+        element.visible !== false &&
+        ancestry.every((ancestor) => ancestor.visible)
+          ? [element]
+          : [],
+      ),
+    [scene],
+  );
+  const hasUpcomingSound = upcomingPrograms.some(
+    (element) =>
+      element.layout !== 'grid' &&
+      element.cardStyle?.media?.visible === true &&
+      upcomingProgramsPreviewItems(element).some(
+        (item) => item.mediaKind === 'video' && item.audioAssetId !== undefined,
+      ),
+  );
+  const [auditionUpcoming, setAuditionUpcoming] = useState(false);
+  const auditionEnabled = hasUpcomingSound && auditionUpcoming && !soundMuted;
+  const auditionUpcomingRef = useRef(false);
+  auditionUpcomingRef.current = auditionEnabled;
+  useEffect(() => {
+    post({ action: 'upcoming-programs-audio', enabled: auditionEnabled });
+  }, [auditionEnabled, post]);
   /*
     `D-141` (design §7.4) / DELTA-RUN-NEXT-VERSION-01-A — the two STEP rehearsal knobs, shown only
     when a countdown has steps: a clock RATE (the page's one clock runs N× faster, so an hour of
@@ -590,6 +627,7 @@ export function PreviewModal({
       post({ action: 'update', fields: appliedRef.current });
       // `D-165` — a freshly booted page starts unmuted; carry the author's switch over.
       post({ action: 'sound-muted', muted: soundMutedRef.current });
+      post({ action: 'upcoming-programs-audio', enabled: auditionUpcomingRef.current });
       // `D-141` — and the zone rehearsal knobs, which a fresh page has forgotten too.
       if (clockRateRef.current > 1) post({ action: 'clock-rate', rate: clockRateRef.current });
       {
@@ -674,10 +712,11 @@ export function PreviewModal({
               onPlay={onPlay}
               onPause={onPause}
               onStop={onStop}
+              onOut={upcomingPrograms.length > 0 ? onOut : undefined}
               onPrevious={onPrevious}
               onNext={onNext}
               onReset={onReset}
-              hasSound={hasSound}
+              hasSound={hasSound || hasUpcomingSound}
               soundMuted={soundMuted}
               onToggleSound={onToggleSound}
               stepChoices={stepChoices}
@@ -686,6 +725,14 @@ export function PreviewModal({
               forcedStep={forcedStep}
               onForceStep={onForceStep}
             />
+            {hasUpcomingSound && (
+              <CheckRow
+                label="Audition focused video"
+                title="Play the focused programme's test sound during Rehearse."
+                checked={auditionUpcoming}
+                onChange={setAuditionUpcoming}
+              />
+            )}
             <details className={s.advanced}>
               <summary>Advanced</summary>
               <div className={s.timingScroll}>

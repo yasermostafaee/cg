@@ -16,6 +16,7 @@ import {
   playoutOf,
   withoutEditorBackdrop,
   withoutEditorOutputRaster,
+  withUpcomingProgramsOutputItems,
   type Element,
   type Scene,
   type TickerElement,
@@ -464,7 +465,7 @@ function buildSingleFileHtml(parts: HtmlParts): string {
   // carries no editor backdrop, so the artifact cannot paint one even if a renderer
   // forgot the mode check.
   const sceneLiteral = JSON.stringify(
-    withoutEditorBackdrop(withoutEditorOutputRaster(scene)),
+    withoutEditorBackdrop(withoutEditorOutputRaster(withUpcomingProgramsOutputItems(scene))),
   ).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
   const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');

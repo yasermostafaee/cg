@@ -30,6 +30,7 @@ import {
 } from './element-changes.js';
 import { ValueRuleSetSchema } from './value-rules.js';
 import { AfterZeroSchema } from './countdown.js';
+import { UpcomingProgramsCardStyleSchema } from './upcoming-programs.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
@@ -873,6 +874,7 @@ export const SequenceEdgeSchema = z.enum([
   'fade-bottom',
   'fade-top',
 ]);
+const SequenceTransitionTimingSchema = z.enum(['simultaneous', 'sequential']);
 
 /**
  * Sequence / now-next element (D-029) — a clipped box that shows ONE item of
@@ -960,7 +962,7 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * `simultaneous` = push (both motions together); `sequential` = the exit
    * completes before the entry begins (total 2 × transitionMs).
    */
-  transitionTiming: z.enum(['simultaneous', 'sequential']).default('simultaneous'),
+  transitionTiming: SequenceTransitionTimingSchema.default('simultaneous'),
   /** Duration of EACH motion (ms). */
   transitionMs: z.number().int().positive().default(400),
   /**
@@ -1071,6 +1073,145 @@ export const RepeaterElementSchema = ElementBaseSchema.extend({
   items: z.array(ListItemSchema).default([]),
 });
 export type RepeaterElement = z.infer<typeof RepeaterElementSchema>;
+
+export const UpcomingProgramsSampleItemSchema = z.object({
+  id: IdSchema,
+  title: z.string(),
+  airtime: z.string().optional(),
+  mediaAssetId: IdSchema.optional(),
+  mediaKind: z.enum(['image', 'video']).optional(),
+  posterAssetId: IdSchema.optional(),
+  audioAssetId: IdSchema.optional(),
+});
+export type UpcomingProgramsSampleItem = z.infer<typeof UpcomingProgramsSampleItemSchema>;
+
+export const UpcomingProgramsSceneEffectSchema = z.object({
+  edge: SequenceEdgeSchema,
+  durationMs: z.number().int().positive().safe().optional(),
+});
+export type UpcomingProgramsSceneEffect = z.infer<typeof UpcomingProgramsSceneEffectSchema>;
+
+export const UpcomingProgramsElementSchema = ElementBaseSchema.extend({
+  type: z.literal('upcomingPrograms'),
+  layout: z.enum(['single', 'grid', 'sequence', 'carousel']).default('single'),
+  visibleCards: z.number().int().positive().safe().default(3),
+  showAirtime: z.boolean().default(true),
+  advance: z.enum(['auto', 'manual']).default('auto'),
+  dwellMs: z.number().int().min(100).safe().default(4000),
+  repeat: z.union([z.literal('infinite'), z.number().int().positive().safe()]).optional(),
+  drivesHold: z.boolean().optional(),
+  cardStyle: UpcomingProgramsCardStyleSchema.optional(),
+  transitionIn: SequenceEdgeSchema.optional(),
+  transitionOut: SequenceEdgeSchema.optional(),
+  transitionTiming: SequenceTransitionTimingSchema.optional(),
+  transitionMs: z.number().int().positive().safe().optional(),
+  entranceEffect: UpcomingProgramsSceneEffectSchema.optional(),
+  exitEffect: UpcomingProgramsSceneEffectSchema.optional(),
+  dataSource: z.enum(['rehearsal', 'prepared']).optional(),
+  // Authored rows are local rehearsal data unless explicitly selected as prepared output.
+  sampleItems: z
+    .array(UpcomingProgramsSampleItemSchema)
+    .superRefine((items, ctx) => {
+      const ids = new Set<string>();
+      items.forEach(({ id }, index) => {
+        if (ids.has(id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index, 'id'],
+            message: 'Sample item ids must be unique',
+          });
+        }
+        ids.add(id);
+      });
+    })
+    .default([]),
+});
+export type UpcomingProgramsElement = z.infer<typeof UpcomingProgramsElementSchema>;
+
+/** An authored programme graphic only participates in content-driven hold when enabled. */
+export function upcomingProgramsDrivesHold(
+  element: Pick<UpcomingProgramsElement, 'drivesHold'>,
+): boolean {
+  return element.drivesHold === true;
+}
+
+export function upcomingProgramsUsesPagination(
+  element: Pick<UpcomingProgramsElement, 'layout'>,
+): boolean {
+  return element.layout === 'sequence' || element.layout === 'carousel';
+}
+
+export function upcomingProgramsRepeatOf(
+  element: Pick<UpcomingProgramsElement, 'repeat'>,
+): NonNullable<UpcomingProgramsElement['repeat']> {
+  return element.repeat ?? 'infinite';
+}
+
+export function upcomingProgramsTransitionOf(
+  element: Pick<
+    UpcomingProgramsElement,
+    'transitionIn' | 'transitionOut' | 'transitionTiming' | 'transitionMs'
+  >,
+): Pick<SequenceElement, 'transitionIn' | 'transitionOut' | 'transitionTiming' | 'transitionMs'> {
+  const transitionIn = element.transitionIn ?? 'none';
+  const transitionOut = element.transitionOut ?? 'none';
+  return {
+    transitionIn,
+    transitionOut,
+    transitionTiming: element.transitionTiming ?? 'simultaneous',
+    transitionMs:
+      element.transitionMs ?? (transitionIn === 'none' && transitionOut === 'none' ? 0 : 400),
+  };
+}
+
+/** Resolve the outer effects independently of the transition between pages. */
+export function upcomingProgramsSceneEffectsOf(
+  element: Pick<UpcomingProgramsElement, 'entranceEffect' | 'exitEffect'>,
+): {
+  entrance: { edge: UpcomingProgramsSceneEffect['edge']; durationMs: number };
+  exit: { edge: UpcomingProgramsSceneEffect['edge']; durationMs: number };
+} {
+  const resolve = (effect: UpcomingProgramsSceneEffect | undefined) => ({
+    edge: effect?.edge ?? 'none',
+    durationMs: effect?.durationMs ?? 350,
+  });
+  return { entrance: resolve(element.entranceEffect), exit: resolve(element.exitEffect) };
+}
+
+/** Preview accepts blank editing rows without turning them into visible cards. */
+export function upcomingProgramsPreviewItems(element: {
+  sampleItems?: readonly UpcomingProgramsSampleItem[] | undefined;
+}): UpcomingProgramsSampleItem[] {
+  return (element.sampleItems ?? []).filter(
+    ({ title, airtime, mediaAssetId, mediaKind }) =>
+      title.trim().length > 0 ||
+      (airtime?.trim().length ?? 0) > 0 ||
+      (mediaAssetId !== undefined && mediaKind !== undefined),
+  );
+}
+
+export function upcomingProgramsPreparedItems(
+  element: Pick<UpcomingProgramsElement, 'dataSource' | 'sampleItems'>,
+): UpcomingProgramsSampleItem[] {
+  return element.dataSource === 'prepared' ? upcomingProgramsPreviewItems(element) : [];
+}
+
+export function upcomingProgramsCanStep(
+  element: Pick<UpcomingProgramsElement, 'layout' | 'advance' | 'repeat'>,
+  itemCount: number,
+): boolean {
+  if (!upcomingProgramsUsesPagination(element)) return false;
+  return (
+    itemCount > 1 ||
+    (itemCount === 1 &&
+      element.advance === 'manual' &&
+      upcomingProgramsRepeatOf(element) !== 'infinite')
+  );
+}
+
+export function upcomingProgramsPreviewCanStep(element: UpcomingProgramsElement): boolean {
+  return upcomingProgramsCanStep(element, upcomingProgramsPreviewItems(element).length);
+}
 
 /**
  * 🔴 `B-106` — **THE ONE reading of a repeater's row limit**: how many rows it may show, or
@@ -1894,6 +2035,7 @@ export type Element =
   | ClockElement
   | SequenceElement
   | RepeaterElement
+  | UpcomingProgramsElement
   | ImageElement
   | ShapeElement
   | PathElement
@@ -1916,6 +2058,7 @@ export type ElementInput =
   | z.input<typeof ClockElementSchema>
   | z.input<typeof SequenceElementSchema>
   | z.input<typeof RepeaterElementSchema>
+  | z.input<typeof UpcomingProgramsElementSchema>
   | z.input<typeof ImageElementSchema>
   | ShapeElement
   | PathElement
@@ -1963,6 +2106,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
     ClockElementSchema,
     SequenceElementSchema,
     RepeaterElementSchema,
+    UpcomingProgramsElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
     PathElementSchema,

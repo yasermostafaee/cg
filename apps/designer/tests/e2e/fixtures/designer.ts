@@ -117,6 +117,7 @@ export class DesignerApp {
       | 'Crawl'
       | 'Clock'
       | 'Sequence'
+      | 'Upcoming Programs'
       | 'Repeater'
       | 'Rectangle'
       | 'Ellipse'
@@ -354,6 +355,11 @@ export class DesignerApp {
   /** D-029 — add a now/next sequence by placing the Sequence tool (auto-selected). */
   async addSequence(pos: { x: number; y: number } = { x: 160, y: 200 }): Promise<void> {
     await this.selectTool('Sequence');
+    await this.canvas.click({ position: pos });
+  }
+
+  async addUpcomingPrograms(pos: { x: number; y: number } = { x: 180, y: 180 }): Promise<void> {
+    await this.selectTool('Upcoming Programs');
     await this.canvas.click({ position: pos });
   }
 

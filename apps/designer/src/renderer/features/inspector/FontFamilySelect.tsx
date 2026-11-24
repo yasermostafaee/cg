@@ -22,10 +22,12 @@ export function FontFamilySelect({
   value,
   onCommit,
   className,
+  ariaLabel = 'Font family',
 }: {
   value: string;
   onCommit: (family: string) => void;
   className?: string | undefined;
+  ariaLabel?: string;
 }): JSX.Element {
   const scene = useDesignerSelector((s) => s.scene);
   const sceneFonts = scene?.fonts ?? [];
@@ -48,7 +50,7 @@ export function FontFamilySelect({
         }
         onCommit(family);
       }}
-      aria-label="Font family"
+      aria-label={ariaLabel}
     >
       {projectFonts.length > 0 && (
         <optgroup label="Project fonts">

@@ -9,6 +9,7 @@ import { ImportingThumb } from './ImportingThumb.js';
 import { useImportPending } from './useImportPending.js';
 import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
+import { hiddenUpcomingPosterAssetIds } from './upcoming-poster-assets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
@@ -166,11 +167,13 @@ export function ProjectAssetsPanel(): JSX.Element {
     };
   }, [addMenu, ctxMenu]);
 
+  const hiddenPosters = useMemo(() => hiddenUpcomingPosterAssetIds(assets, scene), [assets, scene]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q === '') return assets;
-    return assets.filter((a) => a.filename.toLowerCase().includes(q));
-  }, [assets, query]);
+    return assets.filter(
+      (asset) => !hiddenPosters.has(asset.assetId) && asset.filename.toLowerCase().includes(q),
+    );
+  }, [assets, hiddenPosters, query]);
 
   async function importKind(kind: 'image' | 'font' | 'lottie'): Promise<void> {
     setAddMenu(null);

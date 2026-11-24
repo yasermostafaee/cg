@@ -23,6 +23,7 @@ export type DesignerTool =
   | 'clock'
   | 'sequence'
   | 'repeater'
+  | 'upcomingPrograms'
   | 'shape'
   | 'ellipse'
   | 'pen'

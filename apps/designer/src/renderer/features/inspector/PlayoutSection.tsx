@@ -7,6 +7,9 @@ import {
   hasEffectiveHoldDrivers,
   MAX_CONTENT_END_DELAY_MS,
   playoutOf,
+  upcomingProgramsDrivesHold,
+  upcomingProgramsRepeatOf,
+  upcomingProgramsUsesPagination,
   type Composition,
   type Element,
   type HoldBehavior,
@@ -46,7 +49,7 @@ const HOLD_BEHAVIOR_LABELS: Record<HoldBehavior, string> = {
   loop: 'Loop middle',
 };
 
-type ContentKind = 'ticker' | 'sequence' | 'clock' | 'video' | 'lottie';
+type ContentKind = 'ticker' | 'sequence' | 'clock' | 'video' | 'lottie' | 'upcomingPrograms';
 interface ContentHoldItem {
   id: string;
   name: string;
@@ -60,6 +63,18 @@ interface ContentHoldItem {
    * is always finite ⇒ never true.
    */
   infinite: boolean;
+}
+
+function upcomingProgramsHoldItem(
+  el: Extract<Element, { type: 'upcomingPrograms' }>,
+): ContentHoldItem {
+  return {
+    id: el.id,
+    name: el.name,
+    type: el.type,
+    drivesHold: upcomingProgramsDrivesHold(el),
+    infinite: upcomingProgramsUsesPagination(el) && upcomingProgramsRepeatOf(el) === 'infinite',
+  };
 }
 
 /**
@@ -160,6 +175,8 @@ export function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
           drivesHold: el.drivesHold !== false,
           infinite: false,
         });
+      } else if (el.type === 'upcomingPrograms' && el.visible !== false) {
+        out.push(upcomingProgramsHoldItem(el));
       } else if ((el.type === 'video' || el.type === 'lottie') && el.visible !== false) {
         // D-128 — a media element (opt-in drivesHold) is a hold driver too; without this it
         // was ABSENT from the closer list and the "repeats forever" warning (the owner's bug).
@@ -336,6 +353,16 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
             effective += 1;
             if (infinite) effectiveInfinite += 1;
           }
+        } else if (el.type === 'upcomingPrograms' && el.visible !== false) {
+          const item = upcomingProgramsHoldItem(el);
+          const override = overrides?.[el.id];
+          const eff = override ?? item.drivesHold;
+          drivers.push({ ...item, override, effective: eff });
+          eligible += 1;
+          if (eff) {
+            effective += 1;
+            if (item.infinite) effectiveInfinite += 1;
+          }
         } else if ((el.type === 'video' || el.type === 'lottie') && el.visible !== false) {
           // D-128 — a nested media element drives the parent's hold too (opt-in `drivesHold === true`,
           // a `loop` hold is the infinite case). Mirrors the own-content media branch above.
@@ -423,6 +450,7 @@ const TYPE_LABEL: Record<ContentKind, string> = {
   clock: 'countdown',
   video: 'video',
   lottie: 'lottie',
+  upcomingPrograms: 'upcoming programs',
 };
 
 const selectStyle: CSSProperties = {
@@ -1048,8 +1076,8 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
             <InfoTip title="No active hold driver">
               <p>
                 Content-driven remains saved as the template choice. Add or enable a visible crawl,
-                sequence, countdown, eligible nested content, or a Video/Lottie opted in as a hold
-                driver.
+                sequence, countdown, eligible nested content, or opt in an Upcoming Programs, Video
+                or Lottie element.
               </p>
               <p>Until then, playback uses the Timed duration shown below.</p>
             </InfoTip>

@@ -3,6 +3,7 @@ import {
   AudioElementSchema,
   ClockElementSchema,
   CompositionElementSchema,
+  UpcomingProgramsElementSchema,
   type Element,
 } from '../src/elements.js';
 import {
@@ -108,7 +109,6 @@ describe('runtimeShortfallMessage', () => {
 
 describe('authored output reference runtime floor', () => {
   it('rejects older runtimes only when the native reference differs from legacy Full HD', () => {
-    expect(CG_RUNTIME_VERSION).toBe('1.2.12');
     const required = requiredRuntimeVersionForScene({
       layers: [],
       outputReference: { width: 1280, height: 720 },
@@ -143,6 +143,32 @@ describe('CG_RUNTIME_VERSION', () => {
         },
       ],
     });
+
+  it('requires 1.2.13 for the native Upcoming Programs element', () => {
+    const graphic = UpcomingProgramsElementSchema.parse({
+      id: 'upcoming',
+      name: 'Upcoming Programs',
+      type: 'upcomingPrograms',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 900, h: 200 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+    });
+    const required = versionFor(graphic);
+    expect(required).toBe('1.2.13');
+    expect(runtimeShortfall(required, '1.2.12')).toEqual({
+      required: '1.2.13',
+      available: '1.2.12',
+    });
+    expect(runtimeShortfall(required, CG_RUNTIME_VERSION)).toBeNull();
+  });
 
   it('requires the newer renderer only for authored clock and Follow-video behavior', () => {
     const clock = ClockElementSchema.parse({

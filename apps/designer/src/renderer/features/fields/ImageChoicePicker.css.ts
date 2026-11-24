@@ -28,7 +28,7 @@ export const triggerThumb = style({
   color: colors.textMuted,
 });
 
-globalStyle(`${triggerThumb} img`, {
+globalStyle(`${triggerThumb} :is(img, video)`, {
   width: '100%',
   height: '100%',
   objectFit: 'contain',
@@ -52,6 +52,11 @@ export const grid = style({
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
   gap: '0.65rem',
+});
+
+export const emptyMessage = style({
+  marginBlock: '0 0.65rem',
+  color: colors.textMuted,
 });
 
 export const choice = style({
@@ -88,7 +93,7 @@ export const choiceThumb = style({
   color: colors.textMuted,
 });
 
-globalStyle(`${choiceThumb} img`, {
+globalStyle(`${choiceThumb} :is(img, video)`, {
   display: 'block',
   width: '100%',
   height: '100%',

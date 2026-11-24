@@ -1,4 +1,4 @@
-import type { Element, Scene } from '@cg/shared-schema';
+import { upcomingProgramsPreparedItems, type Element, type Scene } from '@cg/shared-schema';
 import { resolveVideoAsset, type VideoAssetSource } from './video-export.js';
 
 /**
@@ -23,12 +23,20 @@ export interface AudioRef {
 export function collectAudioElements(scene: Scene): AudioRef[] {
   const out: AudioRef[] = [];
   const seen = new Set<string>();
+  const add = (key: string, elementId: string, assetId: string): void => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ elementId, assetId });
+  };
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'audio') {
-        if (!seen.has(el.id)) {
-          seen.add(el.id);
-          out.push({ elementId: el.id, assetId: el.assetId });
+        add(el.id, el.id, el.assetId);
+      } else if (el.type === 'upcomingPrograms') {
+        for (const item of upcomingProgramsPreparedItems(el)) {
+          if (item.audioAssetId !== undefined) {
+            add(`${el.id}:upcoming:${item.id}`, el.id, item.audioAssetId);
+          }
         }
       } else if (el.type === 'container') {
         walk(el.children);

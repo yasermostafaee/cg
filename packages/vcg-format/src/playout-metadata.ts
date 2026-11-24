@@ -48,9 +48,11 @@ export function buildPlayoutMetadata(scene: Scene): PlayoutMetadata {
   const playout = playoutOf(scene);
   // B-032 — a content-driven hold with NO effective content drivers is a zero-length hold; resolve
   // it to timed (matching the runtime's `effectivePlayoutFor`) so the baked metadata agrees with
-  // on-air and the authored `holdMs` is honored instead of being silently dropped.
+  // on-air and the authored `holdMs` is honored instead of being silently dropped. Upcoming
+  // Programs only runs with prepared rows in an exported template.
   const holdSource =
-    playout.holdSource === 'content-driven' && !hasEffectiveHoldDrivers(scene, scene.compositions)
+    playout.holdSource === 'content-driven' &&
+    !hasEffectiveHoldDrivers(scene, scene.compositions, { upcomingProgramsOutputOnly: true })
       ? 'timed'
       : playout.holdSource;
   const meta: PlayoutMetadata = { mode: playout.mode };

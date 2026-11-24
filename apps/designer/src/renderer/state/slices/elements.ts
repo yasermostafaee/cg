@@ -126,8 +126,7 @@ function insertElementAt(layerIdx: number, pos: number, el: Element, select: boo
  * nested in containers (the shallow `locate` / `updateElement` only reach a layer's
  * direct children).
  *
- * ALL FIVE flag-carrying kinds: ticker / sequence / clock, AND the two media kinds,
- * `video` / `lottie`. Any other type is left untouched even on an id match.
+ * Supports ticker, sequence, countdown, video, Lottie and Upcoming Programs.
  *
  * 🔴 The media kinds were added late, and the gap they left is the reason this comment
  * now spells the set out. D-128 extended the READ side — `contentHoldElementsOf` LISTS a
@@ -137,7 +136,7 @@ function insertElementAt(layerIdx: number, pos: number, el: Element, select: boo
  *
  * The flag's DEFAULT is inverted between the two groups and this function must not care:
  * it always writes an explicit boolean. Absent ⇒ PARTICIPATES for ticker/sequence/clock;
- * absent ⇒ does NOT participate for media (`=== true` is the opt-in, `scene.ts`). Writing
+ * absent ⇒ does NOT participate for media and Upcoming Programs (`=== true` is the opt-in). Writing
  * an explicit `false` is therefore correct for both, and DELETING the key would be wrong
  * for the first group — it would read back as participating.
  */
@@ -149,7 +148,8 @@ function patchDrivesHold(els: readonly Element[], id: string, drivesHold: boolea
         el.type === 'sequence' ||
         el.type === 'clock' ||
         el.type === 'video' ||
-        el.type === 'lottie')
+        el.type === 'lottie' ||
+        el.type === 'upcomingPrograms')
     ) {
       return { ...el, drivesHold };
     }
@@ -367,11 +367,11 @@ export const elementsSlice = {
   },
 
   /**
-   * D-107 — toggle whether a content element (ticker / sequence / countdown clock)
+   * D-107 — toggle whether a content element
    * DRIVES the composition's content-driven hold. Recurses containers so a grouped
    * content element is reachable too (unlike the shallow `updateElement`). Excluded
    * content (`drivesHold: false`) still renders / animates — it just no longer gates
-   * the hold (the runtime's `ownContentWait` filters to `drivesHold !== false`).
+   * the hold.
    */
   setElementDrivesHold(elementId: string, drivesHold: boolean): void {
     if (current.scene === null) return;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
-import { PlayoutSchema } from '@cg/shared-schema';
+import { PlayoutSchema, UpcomingProgramsElementSchema } from '@cg/shared-schema';
 import { buildPlayoutMetadata } from '../src/playout-metadata.js';
 import { fixtureScene } from './fixtures.js';
 
@@ -98,6 +98,35 @@ function withVideo(base: Scene, drivesHold?: boolean): Scene {
 }
 
 describe('buildPlayoutMetadata', () => {
+  it('only counts eligible prepared Upcoming Programs as an exported hold driver', () => {
+    const [layer] = fixtureScene.layers;
+    if (layer === undefined) throw new Error('Missing project fixture layer');
+    const upcoming = UpcomingProgramsElementSchema.parse({
+      ...layer.children[0],
+      id: 'upcoming',
+      type: 'upcomingPrograms',
+      drivesHold: true,
+      sampleItems: [{ id: 'next', title: 'Upcoming programme' }],
+    });
+    const withUpcoming = (element: typeof upcoming): Scene => ({
+      ...fixtureScene,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 5000 },
+      layers: [{ ...layer, children: [...layer.children, element] }],
+    });
+
+    const rehearsal = buildPlayoutMetadata(withUpcoming(upcoming));
+    expect(rehearsal.holdSource).toBeUndefined();
+    expect(rehearsal.holdMs).toBe(5000);
+
+    const prepared = { ...upcoming, dataSource: 'prepared' as const };
+    expect(buildPlayoutMetadata(withUpcoming(prepared)).holdSource).toBe('content-driven');
+    expect(
+      buildPlayoutMetadata(
+        withUpcoming({ ...prepared, sampleItems: [{ id: 'empty', title: ' ' }] }),
+      ).holdSource,
+    ).toBeUndefined();
+  });
+
   it('D-114 — a scene with no lifecycle (no out-point) exports as static mode', () => {
     // No out-point ⇒ static (preview == export); playoutOf resolves the default to static.
     expect(buildPlayoutMetadata(fixtureScene)).toEqual({ mode: 'static' });

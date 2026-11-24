@@ -42,6 +42,7 @@ import {
   defaultShape,
   defaultText,
   defaultTicker,
+  defaultUpcomingPrograms,
 } from '../../state/element-defaults.js';
 import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
@@ -801,6 +802,12 @@ export function CanvasOverlay({
     if (tool === 'sequence') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultSequence(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'upcomingPrograms') {
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(defaultUpcomingPrograms(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }

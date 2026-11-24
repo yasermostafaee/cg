@@ -156,18 +156,20 @@ globalStyle(`${frameStatus} strong`, {
  */
 export const commands = style({
   display: 'grid',
-  gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
   gap: '0.3rem',
 });
 
 export const command = style({
   width: '100%',
-  gridColumn: 'span 2',
+  gridColumn: 'span 4',
 });
+
+export const commandWithOut = style([command, { gridColumn: 'span 3' }]);
 
 /** Previous / Next — the step pair, half the row each. */
 export const step = style({
-  gridColumn: 'span 3',
+  gridColumn: 'span 6',
 });
 
 /**

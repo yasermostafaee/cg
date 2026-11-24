@@ -25,18 +25,36 @@ export function digitsWord(digits: FieldDigits): string {
  * Designer is this component; none spells the words itself.
  */
 export function DigitsField<T extends FieldDigits>({
+  label = 'digits',
   value,
   options,
   onCommit,
+  inherit,
 }: {
+  label?: string;
   value: T;
   /** The schema's own list — `FieldDigitsSchema.options` or `NumberFieldDigitsSchema.options`. */
   options: readonly T[];
   onCommit: (digits: T) => void;
+  inherit?: { active: boolean; onCommit: () => void } | undefined;
 }): JSX.Element {
+  if (inherit !== undefined) {
+    return (
+      <SelectField
+        label={label}
+        value={inherit.active ? 'inherit' : value}
+        options={['inherit', ...options]}
+        labels={['Inherit', ...options.map(digitsWord)]}
+        onCommit={(digits) => {
+          if (digits === 'inherit') inherit.onCommit();
+          else onCommit(digits);
+        }}
+      />
+    );
+  }
   return (
     <SelectField
-      label="digits"
+      label={label}
       value={value}
       options={options}
       labels={options.map(digitsWord)}

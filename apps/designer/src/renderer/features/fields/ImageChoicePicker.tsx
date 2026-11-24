@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Image as ImageIcon } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Film, Image as ImageIcon } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
@@ -9,6 +9,8 @@ export interface ImageChoice {
   value: string;
   label: string;
   thumbnailUrl?: string;
+  thumbnail?: ReactNode;
+  kind?: 'image' | 'video';
 }
 
 interface Props {
@@ -16,6 +18,9 @@ interface Props {
   choices: readonly ImageChoice[];
   label: string;
   onChange: (value: string) => void;
+  dialogTitle?: string;
+  emptyMessage?: string;
+  disabled?: boolean;
   emptyLabel?: string;
   emptyThumbnailUrl?: string | undefined;
   currentThumbnailUrl?: string | undefined;
@@ -23,12 +28,15 @@ interface Props {
   currentLabel?: string;
 }
 
-/** Compact selected-picture button backed by a visual grid, never a filename-only combo. */
+/** Compact selected-media button backed by a visual grid. */
 export function ImageChoicePicker({
   value,
   choices,
   label,
   onChange,
+  dialogTitle,
+  emptyMessage,
+  disabled = false,
   emptyLabel = 'No picture selected',
   emptyThumbnailUrl,
   currentThumbnailUrl,
@@ -36,7 +44,7 @@ export function ImageChoicePicker({
   currentLabel = 'Current uploaded picture',
 }: Props): JSX.Element {
   const [open, setOpen] = useState(false);
-  const options = useMemo(() => {
+  const options = useMemo<readonly ImageChoice[]>(() => {
     if (value === '' || choices.some((choice) => choice.value === value)) return choices;
     return [
       {
@@ -58,11 +66,14 @@ export function ImageChoicePicker({
         className={s.trigger}
         aria-label={label}
         title={selected?.label ?? emptyLabel}
+        disabled={disabled}
         onClick={() => setOpen(true)}
       >
         <span className={s.triggerThumb} aria-hidden="true">
           {selectedThumbnail === undefined ? (
-            <Icon icon={ImageIcon} size={16} />
+            (selected?.thumbnail ?? (
+              <Icon icon={selected?.kind === 'video' ? Film : ImageIcon} size={16} />
+            ))
           ) : (
             <img src={selectedThumbnail} alt="" />
           )}
@@ -72,13 +83,16 @@ export function ImageChoicePicker({
       </Button>
       {open && (
         <Modal
-          title={`Choose picture · ${label}`}
-          ariaLabel={`Choose picture for ${label}`}
+          title={dialogTitle ?? `Choose picture · ${label}`}
+          ariaLabel={dialogTitle ?? `Choose picture for ${label}`}
           width="min(760px, 94vw)"
           maxHeight="88vh"
           onClose={() => setOpen(false)}
           footer={<ModalButton onClick={() => setOpen(false)}>Close</ModalButton>}
         >
+          {choices.length === 0 && emptyMessage !== undefined && (
+            <p className={s.emptyMessage}>{emptyMessage}</p>
+          )}
           <div className={s.grid}>
             {allowEmpty && (
               <Button
@@ -86,6 +100,7 @@ export function ImageChoicePicker({
                 className={s.choice}
                 selected={value === ''}
                 aria-pressed={value === ''}
+                disabled={disabled}
                 onClick={() => {
                   onChange('');
                   setOpen(false);
@@ -108,6 +123,7 @@ export function ImageChoicePicker({
                 className={s.choice}
                 selected={choice.value === value}
                 aria-pressed={choice.value === value}
+                disabled={disabled}
                 title={choice.label}
                 onClick={() => {
                   onChange(choice.value);
@@ -116,7 +132,9 @@ export function ImageChoicePicker({
               >
                 <span className={s.choiceThumb} aria-hidden="true">
                   {choice.thumbnailUrl === undefined ? (
-                    <Icon icon={ImageIcon} size={22} />
+                    (choice.thumbnail ?? (
+                      <Icon icon={choice.kind === 'video' ? Film : ImageIcon} size={22} />
+                    ))
                   ) : (
                     <img src={choice.thumbnailUrl} alt="" loading="lazy" />
                   )}

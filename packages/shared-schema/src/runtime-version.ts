@@ -56,16 +56,27 @@ import { REFERENCE_FRAME, type Scene } from './scene.js';
  * 1.2.7 applies per-instance frame art and masked input variants.
  * 1.2.11 applies input fit and crop overrides for shared plates in each preset.
  * 1.2.12 applies an authored output reference independently of composition dimensions.
+ * 1.2.13 adds the Upcoming Programs scene element.
  */
-export const CG_RUNTIME_VERSION = '1.2.12';
+export const CG_RUNTIME_VERSION = '1.2.13';
 export const OUTPUT_REFERENCE_RUNTIME_VERSION = '1.2.12';
 export const LIVE_PRESET_FIT_RUNTIME_VERSION = '1.2.11';
+const UPCOMING_PROGRAMS_RUNTIME_VERSION = '1.2.13';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
   scene: Pick<Scene, 'layers' | 'compositions' | 'lookGroups' | 'outputReference'>,
   requiresLivePlatePaintOrder = false,
 ): string {
+  const compositions = [scene, ...(scene.compositions ?? [])];
+  const hasElement = (matches: (element: Element) => boolean): boolean => {
+    const visit = (element: Element): boolean =>
+      matches(element) || (element.type === 'container' && element.children.some(visit));
+    return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
+  };
+  if (hasElement((element) => element.type === 'upcomingPrograms'))
+    return UPCOMING_PROGRAMS_RUNTIME_VERSION;
+
   if (
     scene.outputReference !== undefined &&
     (scene.outputReference.width !== REFERENCE_FRAME.width ||
@@ -81,12 +92,6 @@ export function requiredRuntimeVersionForScene(
     )
   )
     return LIVE_PRESET_FIT_RUNTIME_VERSION;
-  const compositions = [scene, ...(scene.compositions ?? [])];
-  const hasElement = (matches: (element: Element) => boolean): boolean => {
-    const visit = (element: Element): boolean =>
-      matches(element) || (element.type === 'container' && element.children.some(visit));
-    return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
-  };
   if (
     hasElement(
       (element) => element.type === 'video-placeholder' && element.allowOperatorCrop !== undefined,

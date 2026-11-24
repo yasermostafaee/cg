@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import {
   ArrowDownUp,
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   Circle,
@@ -391,6 +392,8 @@ export function layerTypeIcon(element: Element, isLook = false): LucideIcon {
       return ArrowDownUp;
     case 'repeater':
       return Rows3;
+    case 'upcomingPrograms':
+      return CalendarClock;
     case 'lottie':
       return Film;
     case 'video-placeholder':
@@ -665,6 +668,7 @@ const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   clock: '#7E22CE', // dark purple (D-075)
   sequence: '#EF4444', // red (D-075; shares video-placeholder's red — acceptable)
   repeater: '#10B981', // emerald — data-driven rows
+  upcomingPrograms: '#38BDF8',
   path: '#14B8A6', // teal — D-109 bézier path (matches the shape `path` color)
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet

@@ -483,7 +483,7 @@ describe('Playout — D-028 holdSource axis + legacy normalization', () => {
   });
 });
 
-describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () => {
+describe('hasEffectiveHoldDrivers for opt-in elements', () => {
   // D-128 (c) — a video drives the hold ONLY when opted in (`drivesHold === true`), the inverse
   // of ticker/clock/sequence. This predicate is the RESOLUTION BOUNDARY shared by the exporter's
   // `buildPlayoutMetadata` and the Designer Playout inspector; the runtime mirrors it per scope.
@@ -497,6 +497,14 @@ describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () 
     type: 'video' as const,
     assetId: 'asset-v1',
     durationMs: 4000,
+    ...over,
+  });
+
+  const upcoming = (over: Record<string, unknown> = {}) => ({
+    ...baseElProps,
+    id: 'upcoming',
+    name: 'Upcoming Programs',
+    type: 'upcomingPrograms',
     ...over,
   });
 
@@ -526,7 +534,19 @@ describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () 
     expect(hasEffectiveHoldDrivers(s, s.compositions)).toBe(false);
   });
 
-  it('D-112 — per-instance holdOverrides govern a NESTED video (force-include / force-exclude)', () => {
+  it.each(['single', 'grid', 'sequence', 'carousel'])(
+    'counts visible opted-in Upcoming Programs in %s layout',
+    (layout) => {
+      const included = sceneWith([upcoming({ layout, drivesHold: true })]);
+      expect(hasEffectiveHoldDrivers(included, included.compositions)).toBe(true);
+      const hidden = sceneWith([upcoming({ layout, drivesHold: true, visible: false })]);
+      expect(hasEffectiveHoldDrivers(hidden, hidden.compositions)).toBe(false);
+      const unconfigured = sceneWith([upcoming({ layout })]);
+      expect(hasEffectiveHoldDrivers(unconfigured, unconfigured.compositions)).toBe(false);
+    },
+  );
+
+  it('D-112 — checks per-instance holdOverrides for each visible nested copy', () => {
     const comp = (child: unknown) => ({
       id: 'c1',
       name: 'Comp',
@@ -558,5 +578,11 @@ describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () 
     // Force-exclude: an opted-in nested video is excluded by the instance override.
     const excluded = sceneWith([instance({ v1: false })], [comp(video({ drivesHold: true }))]);
     expect(hasEffectiveHoldDrivers(excluded, excluded.compositions)).toBe(false);
+
+    const mixed = sceneWith(
+      [instance({ upcoming: false }), { ...instance({ upcoming: true }), id: 'inst-2' }],
+      [comp(upcoming())],
+    );
+    expect(hasEffectiveHoldDrivers(mixed, mixed.compositions)).toBe(true);
   });
 });

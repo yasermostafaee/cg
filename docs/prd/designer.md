@@ -7032,3 +7032,114 @@ Rehearse. Keep the elapsed readout available while stopped.
 - WHEN a source has no matching solo preset THEN the Inspector still offers creation and links the new editable solo to that source. Undo removes the preset and its link together.
 
 **Change:** `openspec/changes/author-designer-focus-effects/`. Each numbered Focus shortcut can use an existing or freshly created single-plate preset carrying the same source key.
+
+## [~] D-219 — Author and play Upcoming Programs ⟨priority: high — owner, 2026-11-24⟩ — `openspec/changes/add-upcoming-programs/`
+
+**What:** Add Upcoming Programs as a native Designer element. CG Control can air a list prepared in
+Designer, edit a list for the current show, or use the active Playout playlist with display overrides.
+The same presentation can run as a full-screen playlist item or over a running programme.
+
+**Why:** A channel can promote its next programmes with the right titles, airtimes and media even
+when the rundown changes close to transmission.
+
+**Acceptance:**
+
+- WHEN a designer adds Upcoming Programs THEN its dedicated Inspector authors Single, Side by side,
+  Sequential or Carousel, with controls for airtime, visible card capacity and page advance where applicable.
+- WHEN the designer edits the card design THEN every card in that element uses its authored size,
+  background and border, with separate Carousel focus styling. The title, airtime and photo/video frame
+  have their own positions and sizes. Title and airtime style, including font size and color, is
+  independently adjustable. Designer can show the photo/video frame with a safe preview placeholder.
+- WHEN titles or airtimes include Persian text, Latin text or numbers by themselves THEN each region
+  follows its own Auto, RTL or LTR direction and stays at the authored alignment. Focused title and
+  airtime settings can be styled independently. Unset focused settings inherit from their ordinary card.
+- WHEN the author chooses Keyboard, Persian, Latin or Arabic-Indic in Digits THEN title and airtime
+  each use their own display choice. The focused roles can Inherit or override those settings.
+  Stored titles and airtimes keep their original text and digits.
+- WHEN the author chooses Fixed Carousel focus THEN focus stays in its chosen Start, Center or End
+  slot as programmes advance. With Across cards, focus moves over the same stationary cards in
+  programme order and the Next effect runs when the group changes. Focus move duration controls
+  the scale and opacity animation within a group.
+- WHEN the author enables Allow overlap THEN the focused Carousel card can extend over its
+  neighbours and appear above them while their positions stay fixed. The setting works with both
+  focus behaviours and starts disabled.
+- WHEN the designer creates a new Upcoming Programs element THEN it starts with an updated
+  broadcast card design and seven editable English sample titles and airtimes. The established
+  Carousel placement and timing defaults apply. Opening saved projects preserves their styles and
+  rows, including a deliberately empty list.
+- WHEN a new sample has no selected media THEN it can show Designer's generated artwork in
+  Rehearsal. Selecting Prepared hides the built-in artwork until the author assigns real media.
+- WHEN the author styles the Media frame THEN its border color, width, radius and letterbox
+  background are adjustable independently of the card border. A zero media border width hides
+  the media border. The media frame keeps its authored position, size and fit. The appearance
+  survives save and export.
+- WHEN the author lays out Side by side or Carousel cards THEN their spacing can stay Auto or use
+  a Fixed gap in scene pixels, including zero. Side by side and fixed Carousel without overlap
+  measure visible card edges. Across cards and Carousel with overlap measure the stationary slots.
+  The layout fits the available bounds and the saved setting survives export.
+- WHEN the author sets Vertical alignment to Top, Center or Bottom THEN each Side by side or Carousel
+  row lines up its cards on the chosen edge or center, including with a larger overlapping focus
+  card. Fixed-height Side by side also aligns the entire row group in the available height. New
+  elements start at Center. An older fixed-height Side by side element with the setting absent
+  keeps Top, which the Inspector displays.
+- WHEN a Sequential or Carousel element changes pages THEN it uses the authored Next effect and
+  duration for manual and automatic advance. The effect settings are saved with the element.
+- WHEN an Upcoming Programs graphic first appears THEN every visible card enters as a group using
+  the independently authored Entrance effect and duration. Page turns and focus moves retain their
+  own timing. New defaults and existing elements without these settings start with the group effects
+  disabled.
+- WHEN the operator uses normal Out or a finite run ends THEN the visible group uses its independently
+  authored Exit effect and duration once. Designer Rehearse offers both Out and quick Stop. The
+  composition's authored Outro follows its normal lifecycle.
+- WHEN the designer sets Repeat for Sequential or Carousel THEN rehearsal loops through the selected
+  list indefinitely or completes the configured number of full passes. The authored setting stays
+  with the element and the full-screen playlist slot keeps its own duration.
+- WHEN the designer includes Upcoming Programs in Content-driven Hold and its finite run finishes THEN
+  the whole composition plays its authored Outro after its other enabled drivers and any Exit delay.
+  Single and Side by side finish after one Dwell. Sequential and Carousel finish after their configured passes.
+- WHEN the included list repeats indefinitely THEN the graphic remains in Hold until the operator takes
+  it Out or the scheduled window ends. Existing templates retain their previous Hold settings until the author opts in.
+- WHEN the designer previews the element without a playlist THEN seven sample programmes exercise the
+  layouts and timed or manual navigation in browser rehearsal. The author can add, remove or reorder
+  test entries, enter titles and times, and choose Project images or videos. Rehearse displays the chosen
+  media in the authored frame.
+- WHEN a card displays video THEN motion is limited to the active Single or Sequential card or the
+  focused Carousel card. Side by side and surrounding Carousel cards show the poster generated from
+  the selected video. A decoded frame or text fallback covers missing posters. During a transition
+  the outgoing card's video and sound stop as soon as focus moves.
+- WHEN the author opens the Test media picker THEN it lists the project's existing images and videos
+  in a modal. Choosing a video assigns it and generates a reusable poster linked to the conformed
+  clip. Project Assets and the picker show the video as one item with that poster as its thumbnail.
+  A generated poster appears on its own only when the project uses it independently. The empty
+  picker points to the normal Project Assets import workflow. Cancelling preserves the assignment.
+- WHEN the author assigns a Project Sound as Test sound and enables Audition focused video in Designer
+  THEN Rehearse can play that sound with the playing focused video in Single, Sequential or Carousel.
+  Audition begins off, Side by side stays silent, and the sound ends on pause, focus change or Out.
+- WHEN the designer exports without a Prepared source THEN the package retains design and timing and
+  omits private rehearsal rows and their sole-use assets. The default creation preset carries no approval to air.
+- WHEN the designer explicitly prepares rows for air THEN the package includes those selected titles,
+  airtimes and approved media, including generated video posters, so the prebuilt show can use them directly.
+- WHEN the operator selects Prepared, Manual or Playout in CG Control THEN the graphic uses the selected
+  source. The operator can stage changes to prepared values or replace them with a manual list and
+  explicitly apply a ready update to an active graphic. Edits on a stopped row wait for Take.
+- WHEN an operator selects an eligible count of future programmes THEN the graphic uses Playout order and
+  keeps the selected count independent of per-page capacity, the current page and the highlighted card.
+- WHEN an operator sets an event's display title or airtime THEN the override stays with that occurrence
+  through schedule changes, can be cleared independently and leaves the source playlist metadata intact.
+- WHEN a card uses a photo or video THEN the current focus determines what must be ready for motion
+  before display. Other frames use ready stills. A video can use an approved excerpt of the programme
+  or a separate promo, with a poster or text-only fallback when unavailable.
+- WHEN a graphic uses promo audio THEN the selected role and mix policy can make the focused clip
+  audible while keeping the other cards silent. Preview listening leaves programme audio and mixer levels unchanged.
+- WHEN the operator previews and takes Upcoming Programs as a secondary event THEN it appears over the
+  playing picture within the host event's window. Page navigation operates inside the graphic.
+- WHEN Playout schedules Upcoming Programs as a primary event THEN it occupies a full-screen playlist row
+  with its own duration and hands the output to the next playlist item at the scheduled boundary. A prepared
+  video asset is available for stations that can schedule clips but cannot schedule dynamic graphics primaries.
+- WHEN a feed or asset changes close to transmission THEN the operator can verify the exact prepared revision
+  and readiness of each configured output. A take uses one prepared set, and an unavailable set follows the configured
+  fallback without displaying stale schedule data, samples, a blank picture or unrequested audio.
+
+**Notes:** Designer authoring covers card design, page and group effects, repeat, Content-driven Outro,
+rehearsal data, local sound and explicit preparation for output. CG Control data changes, live Playout
+integration, engine media and audio readiness, and both air paths retain their own acceptance stages.

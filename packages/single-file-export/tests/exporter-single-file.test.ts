@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { UpcomingProgramsElementSchema } from '@cg/shared-schema';
 import type { Scene } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 import { ExporterSingleFile } from '../src/exporter-single-file.js';
@@ -674,6 +675,108 @@ describe('ExporterSingleFile — D-128 Phase 5 video inlining', () => {
   }
 
   const expectedDataUri = `data:video/webm;base64,${btoa(String.fromCharCode(...videoBytes))}`;
+
+  it('strips Upcoming Programs test data and inlines a shared clip only for its video element', async () => {
+    const scene = sceneWithVideos('vid-1');
+    const graphic = UpcomingProgramsElementSchema.parse({
+      ...videoEl('upcoming', 'unused'),
+      type: 'upcomingPrograms',
+      repeat: 2,
+      layout: 'sequence',
+      sampleItems: [
+        {
+          id: 'test-1',
+          title: 'Rehearsal only',
+          airtime: 'Test airtime',
+          mediaAssetId: 'vid-test',
+          mediaKind: 'video',
+          audioAssetId: 'sound-test',
+        },
+        { id: 'test-2', title: 'Shared clip', mediaAssetId: 'vid-1', mediaKind: 'video' },
+      ],
+    });
+    scene.layers[0]!.children.push(graphic);
+    const { html, issues } = await videoExporter().produce(scene);
+    const literal = /var scene = (.*);/.exec(html)?.[1];
+    if (literal === undefined) throw new Error('Missing embedded scene');
+    const embedded = JSON.parse(literal) as Scene;
+
+    expect(embedded.layers[0]?.children[1]).toMatchObject({
+      type: 'upcomingPrograms',
+      layout: 'sequence',
+      repeat: 2,
+      sampleItems: [],
+    });
+    expect(graphic.sampleItems).toHaveLength(2);
+    expect(html).toContain(`"vid-1":"${expectedDataUri}"`);
+    expect(html).not.toContain('vid-test');
+    expect(html).not.toContain('sound-test');
+    expect(issues.filter((issue) => issue.code === 'missing-asset')).toEqual([]);
+  });
+
+  it('inlines all explicit prepared row media and leaves a separate rehearsal graphic empty', async () => {
+    const extraAssets = new Map<string, AssetMeta>([
+      [
+        'poster',
+        {
+          assetId: 'poster',
+          kind: 'image',
+          filename: 'poster.png',
+          sha256: 'b'.repeat(64),
+          byteSize: 4,
+          workingPath: 'poster.png',
+        },
+      ],
+      [
+        'sound',
+        {
+          assetId: 'sound',
+          kind: 'audio',
+          filename: 'sound.wav',
+          sha256: 'c'.repeat(64),
+          byteSize: 4,
+          workingPath: 'sound.wav',
+        },
+      ],
+    ]);
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const exporter = videoExporter({
+      get: async (id) => extraAssets.get(id) ?? videoAssetSource.get(id),
+      bytes: async (id) => (extraAssets.has(id) ? bytes : videoAssetSource.bytes(id)),
+    });
+    const prepared = UpcomingProgramsElementSchema.parse({
+      ...videoEl('prepared', 'unused'),
+      type: 'upcomingPrograms',
+      dataSource: 'prepared',
+      sampleItems: [
+        { id: 'p', title: 'Prepared poster', mediaKind: 'image', mediaAssetId: 'poster' },
+        {
+          id: 'v',
+          title: 'Prepared video',
+          mediaKind: 'video',
+          mediaAssetId: 'vid-1',
+          audioAssetId: 'sound',
+        },
+      ],
+    });
+    const scene = sceneWithVideos();
+    scene.layers[0]!.children.push(prepared, {
+      ...prepared,
+      id: 'rehearsal',
+      dataSource: 'rehearsal',
+      sampleItems: [
+        { id: 'local', title: 'Rehearsal only', mediaKind: 'video', mediaAssetId: 'vid-local' },
+      ],
+    });
+    const { html } = await exporter.produce(scene);
+    expect(html).toContain('Prepared poster');
+    expect(html).toContain('Prepared video');
+    expect(html).toContain('"poster":"data:image/png;base64,AQIDBA=="');
+    expect(html).toContain(`"vid-1":"${expectedDataUri}"`);
+    expect(html).toContain('"sound":"data:audio/wav;base64,AQIDBA=="');
+    expect(html).not.toContain('Rehearsal only');
+    expect(html).not.toContain('vid-local');
+  });
 
   it('inlines the stored bytes as a data:video/webm URI in the assetUrls map — zero external refs', async () => {
     const { html, issues } = await videoExporter().produce(sceneWithVideos('vid-1'));

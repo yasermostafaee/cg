@@ -25,6 +25,7 @@ import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
+import { UpcomingProgramsSection } from './UpcomingProgramsSection.js';
 import { ElementStepsSection } from './CountdownStepsSection.js';
 import { ValueRulesSection } from './ValueRulesSection.js';
 import * as s from './InspectorPanel.css.js';
@@ -177,6 +178,7 @@ function ElementInspector({
       {(element.type === 'video-placeholder' || element.type === 'composition') && (
         <SinglePlateArrange element={element} />
       )}
+      {element.type === 'upcomingPrograms' && <UpcomingProgramsSection element={element} />}
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
       <LiveForegroundSection element={element} scene={scene} />
       {hasDynamicData ? (

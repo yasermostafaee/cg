@@ -1,6 +1,24 @@
 import type { Scene } from '@cg/shared-schema';
 import { attachRobustVideoPoster } from '../shared/video-poster.js';
 import { previewCheckerboard } from '../shared/preview-checkerboard.js';
+import { DEFAULT_UPCOMING_PROGRAMS_ITEMS } from '../shared/upcoming-programs-samples.js';
+import citiesAfterDark from './upcoming-programs-artwork/cities-after-dark.webp';
+import coastlineStories from './upcoming-programs-artwork/coastline-stories.webp';
+import intoTheWild from './upcoming-programs-artwork/into-the-wild.webp';
+import morningEdition from './upcoming-programs-artwork/morning-edition.webp';
+import nightReport from './upcoming-programs-artwork/night-report.webp';
+import studioSessions from './upcoming-programs-artwork/studio-sessions.webp';
+import theLongView from './upcoming-programs-artwork/the-long-view.webp';
+
+const upcomingArtworkUrls: Readonly<Record<string, string>> = {
+  'program-1': nightReport,
+  'program-2': citiesAfterDark,
+  'program-3': intoTheWild,
+  'program-4': theLongView,
+  'program-5': studioSessions,
+  'program-6': coastlineStories,
+  'program-7': morningEdition,
+};
 
 export interface PreviewOptions {
   cgJs: string;
@@ -117,6 +135,21 @@ export class Preview {
     const cgJsLottieUrl = this.#cgJsLottieUrl;
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
+    const upcomingArtworkJson = JSON.stringify(
+      DEFAULT_UPCOMING_PROGRAMS_ITEMS.flatMap(({ id, title }) => {
+        const url = upcomingArtworkUrls[id];
+        return url === undefined
+          ? []
+          : [
+              {
+                id,
+                title,
+                assetId: `upcoming-preview/${id}`,
+                url: new URL(url, import.meta.url).href,
+              },
+            ];
+      }),
+    ).replace(/</g, '\\u003c');
     // D-087 — the canvas reveals its hydrated authoring frame. The broadcast
     // Preview modal keeps the runtime's pending state until play().
     const revealOnLoad = !broadcast;
@@ -293,6 +326,7 @@ export class Preview {
         // once before positioning its requested frame.
         let lifecycleActive = false;
         let lifecyclePaused = false;
+        let auditionUpcoming = false;
         // Dedicated Preview commands wait for a Reset rebuild, while the Canvas keeps its
         // existing coalesced authoring path. A Reset invalidates older pending transport/data.
         let previewCommandQueue = Promise.resolve();
@@ -312,11 +346,41 @@ export class Preview {
         // retain this map so a later host asset-urls message must mutate it rather
         // than replace it; otherwise a dynamic image field would resolve against the
         // empty map captured at boot even though static images were repaired by the DOM walk.
-        const assetUrls = {};
+        const upcomingArtwork = ${upcomingArtworkJson};
+        const upcomingArtworkAssets = Object.fromEntries(
+          upcomingArtwork.map(({ assetId, url }) => [assetId, url]),
+        );
+        const assetUrls = { ...upcomingArtworkAssets };
         function replaceAssetUrls(next) {
           for (const id in assetUrls) delete assetUrls[id];
-          if (!next || typeof next !== 'object') return;
-          for (const id in next) assetUrls[id] = next[id];
+          Object.assign(assetUrls, upcomingArtworkAssets, next);
+        }
+        // Use stock stills for the matching starter rows inside Designer. Project Assets,
+        // Prepared in Designer, and saved scene data keep the actual author-selected media.
+        function withUpcomingArtwork(scene) {
+          function decorateDocument(doc) {
+            return {
+              ...doc,
+              layers: doc.layers.map((layer) => ({
+                ...layer,
+                children: layer.children.map((element) => {
+                  if (element.type !== 'upcomingPrograms' || element.dataSource === 'prepared') {
+                    return element;
+                  }
+                  const sampleItems = element.sampleItems.map((item) => {
+                    if (item.mediaAssetId !== undefined) return item;
+                    const art = upcomingArtwork.find(({ id, title }) => id === item.id && title === item.title);
+                    return art ? { ...item, mediaAssetId: art.assetId, mediaKind: 'image' } : item;
+                  });
+                  return { ...element, sampleItems };
+                }),
+              })),
+            };
+          }
+          return {
+            ...decorateDocument(scene),
+            compositions: scene.compositions?.map(decorateDocument),
+          };
         }
         // D-128 Phase 3 — LIVE <video> nodes kept ACROSS scene rebuilds, keyed by
         // element id. A transform-only change (drag/resize/rotate/opacity) posts a
@@ -506,6 +570,11 @@ export class Preview {
             const id = node.dataset && node.dataset.cgAssetId;
             if (!id) return;
             const url = assetUrls[id];
+            if (node.hasAttribute('data-cg-upcoming-media-source')) {
+              if (url && node.getAttribute('src') !== url) node.src = url;
+              else if (!url) node.removeAttribute('src');
+              return;
+            }
             if (tag === 'AUDIO') {
               if (url && node.getAttribute('src') !== url) node.src = url;
               return;
@@ -725,7 +794,7 @@ export class Preview {
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
             rehearsalTime = rehearsalClock(clockRate);
-            runtime = createRuntime(scene, {
+            runtime = createRuntime(withUpcomingArtwork(scene), {
               // D-137 §9 — this ONE document serves BOTH authoring surfaces: the
               // editor canvas (authoring=true) and the Preview modal
               // (broadcast=true). Both are 'author': the modal previews what the
@@ -737,6 +806,7 @@ export class Preview {
               // is why that is its own option below rather than another render-mode
               // value: the modal needs 'author' (live fallbacks) and no backdrop at once.
               mode: 'author',
+              showUpcomingProgramsSampleItems: true,
               // B-134 — canvas paints the editor backdrop; the Preview modal does not.
               paintEditorBackdrop: PAINT_EDITOR_BACKDROP,
               // Only the idle main Canvas exposes expired countdowns for editing. Preview and
@@ -760,6 +830,7 @@ export class Preview {
               // Hold playback deliberately separates it from the composition cursor.
               onRootElementFrames: postRootElementFrames,
             });
+            runtime.setUpcomingProgramsPreviewAudio?.(auditionUpcoming);
             installCasparGlobals(runtime);
             // Session Z — the runtime's OWN diagnostics reach the parent console on the
             // same channel. An invariant break such as 'lifecycle.play-not-on-air' is the
@@ -1325,6 +1396,9 @@ export class Preview {
                 // D-165 — the Preview's sound switch: the page's own runtime mutes every sound it
                 // makes (the same switch CG Control's PVW uses). Takes effect on sounds playing now.
                 if (typeof setSoundMuted === 'function') setSoundMuted(msg.muted === true);
+              } else if (msg.action === 'upcoming-programs-audio') {
+                auditionUpcoming = !PAINT_EDITOR_BACKDROP && msg.enabled === true;
+                runtime?.setUpcomingProgramsPreviewAudio?.(auditionUpcoming);
               } else if (msg.action === 'clock-rate') {
                 // D-141 — a new rehearsal rate takes a fresh runtime (the clock is a boot
                 // option), so it rebuilds — and only when the rate actually changed.

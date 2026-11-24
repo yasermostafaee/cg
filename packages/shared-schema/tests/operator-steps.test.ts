@@ -3,6 +3,7 @@ import {
   hasNextStep,
   pageListsOf,
   SequenceElementSchema,
+  UpcomingProgramsElementSchema,
   sequenceStepsByOperator,
   type Scene,
 } from '../src/index.js';
@@ -79,6 +80,26 @@ describe('D-163 — hasNextStep reads it', () => {
       hasNextStep(scene([sequence('clocks', { operatorSteps: false }), sequence('news')]), []),
     ).toBe(true);
     expect(hasNextStep(scene([sequence('news')]), [])).toBe(true);
+  });
+});
+
+describe('Upcoming Programs steps', () => {
+  it('only advertises Next in output when the author explicitly prepared eligible rows', () => {
+    const graphic = UpcomingProgramsElementSchema.parse({
+      ...sequence('upcoming'),
+      type: 'upcomingPrograms',
+      layout: 'carousel',
+      sampleItems: [
+        { id: 'first', title: 'First programme' },
+        { id: 'second', title: 'Second programme' },
+      ],
+    });
+    expect(hasNextStep(scene([graphic]), [])).toBe(false);
+    expect(hasNextStep(scene([graphic]), [], { showUpcomingProgramsSampleItems: true })).toBe(true);
+    expect(hasNextStep(scene([{ ...graphic, dataSource: 'prepared' }]), [])).toBe(true);
+    expect(hasNextStep(scene([{ ...graphic, dataSource: 'prepared', layout: 'single' }]), [])).toBe(
+      false,
+    );
   });
 });
 

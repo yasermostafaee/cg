@@ -173,6 +173,57 @@ describe('B-104 — assets survive a restart because the package carries them', 
     expect(await assets.list()).toHaveLength(3);
   });
 
+  it('publishes a generated poster with its source video identity and restores it on reopen', async () => {
+    const scene = baseScene('proj-poster');
+    const authoring = new AssetStore(new MemoryWorkspace());
+    authoring.setActiveProject(scene.id);
+    const video = await authoring.importBytes(WEBM, 'clip.webm', 'video');
+    const published: string[] = [];
+    const unsubscribe = authoring.imported.subscribe(({ upcomingPosterFor }) => {
+      if (upcomingPosterFor !== undefined) published.push(upcomingPosterFor);
+    });
+    const poster = await authoring.importBytes(
+      PNG,
+      'clip-poster.png',
+      'image',
+      undefined,
+      undefined,
+      video.assetId,
+    );
+    unsubscribe();
+    expect(published).toEqual([video.assetId]);
+
+    const { index, files } = await authoring.exportForPackage();
+    const bytes = await packProject({ scene, index, files, savedAt: SAVED_AT });
+    const reopened = new AssetStore(new MemoryWorkspace());
+    reopened.setActiveProject(scene.id);
+    const doc = await readProjectDocument(bytes);
+    await reopened.adoptFromPackage(doc.index, doc.files);
+
+    expect((await reopened.get(poster.assetId))?.upcomingPosterFor).toBe(video.assetId);
+    expect(await reopened.bytes(poster.assetId)).toEqual(PNG);
+    expect((await reopened.get(video.assetId))?.upcomingPosterFor).toBeUndefined();
+  });
+
+  it('dedupes a generated poster against an existing ordinary image without hiding the image', async () => {
+    const store = new AssetStore(new MemoryWorkspace());
+    store.setActiveProject('duplicate-poster');
+    const video = await store.importBytes(WEBM, 'clip.webm', 'video');
+    const existing = await store.importBytes(PNG, 'ordinary.png', 'image');
+    const poster = await store.importBytes(
+      PNG,
+      'clip-poster.png',
+      'image',
+      undefined,
+      undefined,
+      video.assetId,
+    );
+
+    expect(poster).toEqual(existing);
+    expect((await store.get(existing.assetId))?.upcomingPosterFor).toBeUndefined();
+    expect(await store.list()).toHaveLength(2);
+  });
+
   it('the pre-package form is REFUSED — the control that proves the test can fail', async () => {
     // The old control opened a bare scene JSON and showed it carried no assets. P-031
     // retired that read path, so the control is now the refusal itself: the pre-package

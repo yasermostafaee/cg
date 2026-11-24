@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowDownUp,
+  CalendarClock,
   Circle,
   Clock,
   Hand,
@@ -57,6 +58,7 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'sequence', label: 'Sequence', icon: ArrowDownUp },
   { id: 'clock', label: 'Clock', icon: Clock },
   { id: 'repeater', label: 'Repeater', icon: Rows3 },
+  { id: 'upcomingPrograms', label: 'Upcoming Programs', icon: CalendarClock },
 ];
 
 const COMPACT_DIRECT_TOOLS = new Set<DesignerTool>(['cursor', 'hand']);

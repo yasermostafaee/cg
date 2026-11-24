@@ -13,11 +13,13 @@ import type {
   TextElement,
   TickerElement,
   Transform,
+  UpcomingProgramsElement,
   VideoElement,
   AudioElement,
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { pathVisualBBox } from '@cg/shared-schema';
+import { DEFAULT_UPCOMING_PROGRAMS_ITEMS } from '../../shared/upcoming-programs-samples.js';
 
 /**
  * Default element factories — what we drop on the canvas when the
@@ -200,6 +202,79 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     repeat: 'infinite',
     // TEXT-DIGITS-01 — the authored items' digits start on Persian.
     digits: 'persian',
+  };
+}
+
+export function defaultUpcomingPrograms(id: string, x: number, y: number): UpcomingProgramsElement {
+  return {
+    id,
+    name: 'Upcoming Programs',
+    type: 'upcomingPrograms',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 1271, 324),
+    layout: 'carousel',
+    visibleCards: 3,
+    showAirtime: true,
+    advance: 'auto',
+    dwellMs: 4000,
+    repeat: 1,
+    transitionIn: 'left',
+    transitionOut: 'right',
+    transitionTiming: 'simultaneous',
+    cardStyle: {
+      gap: 18,
+      verticalAlign: 'center',
+      background: '#101C2C',
+      focusedBackground: '#10283B',
+      borderColor: '#465E76',
+      focusedBorderColor: '#83E4DD',
+      borderWidth: 2,
+      cornerRadius: 19,
+      title: {
+        rect: { x: 0.058, y: 0.682, width: 0.89, height: 0.16 },
+        color: '#F1F6FC',
+        fontFamily: 'Inter',
+        fontSize: 28,
+        fontWeight: 650,
+        align: 'left',
+        digits: 'latin',
+      },
+      airtime: {
+        rect: { x: 0.058, y: 0.844, width: 0.89, height: 0.1 },
+        color: '#A1C5D7',
+        fontFamily: 'Inter',
+        fontSize: 18,
+        fontWeight: 600,
+        align: 'left',
+        digits: 'latin',
+      },
+      focusedTitle: {
+        color: '#FFFFFF',
+        fontSize: 30,
+        fontWeight: 750,
+      },
+      focusedAirtime: { color: '#B1F5ED', fontWeight: 700, fontSize: 20 },
+      media: {
+        visible: true,
+        rect: { x: 0.038, y: 0.05, width: 0.924, height: 0.6 },
+        fit: 'cover',
+        borderWidth: 1,
+        borderColor: '#365568',
+        cornerRadius: 11,
+        backgroundColor: '#172A3E',
+      },
+      carousel: {
+        focusPosition: 'center',
+        focusedScale: 1.16,
+        unfocusedScale: 0.96,
+        focusedOpacity: 1,
+        unfocusedOpacity: 0.86,
+      },
+    },
+    sampleItems: DEFAULT_UPCOMING_PROGRAMS_ITEMS.map((item) => ({ ...item })),
   };
 }
 

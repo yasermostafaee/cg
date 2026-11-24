@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { UpcomingProgramsElementSchema } from '@cg/shared-schema';
 import type { ProjectAssetEntry, Scene } from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
 import {
@@ -148,6 +149,34 @@ describe('project package — pack/unpack round trip', () => {
 });
 
 describe('project package — the authoring scene survives WHOLE', () => {
+  it('keeps Upcoming Programs test rows and their local asset bytes in a project', async () => {
+    const [layer] = fixtureScene.layers;
+    if (layer === undefined) throw new Error('Missing project fixture layer');
+    const sampleItems = [
+      {
+        id: 'show-test',
+        title: 'برنامهٔ آزمایشی',
+        airtime: 'ساعت ۲',
+        mediaAssetId: imageEntry.assetId,
+        mediaKind: 'image',
+      },
+    ];
+    const graphic = UpcomingProgramsElementSchema.parse({
+      ...layer.children[0],
+      id: 'upcoming',
+      type: 'upcomingPrograms',
+      sampleItems,
+    });
+    const project = await unpackProject(
+      await packFixture({
+        ...fixtureScene,
+        layers: [{ ...layer, children: [...layer.children, graphic] }],
+      }),
+    );
+    expect(project.scene.layers[0]?.children[1]).toMatchObject({ sampleItems });
+    expect(project.files.get(IMAGE_PATH)).toEqual(PNG);
+  });
+
   /**
    * 🔴 The regression this exists for: `pack()` (the `.vcg` exporter) calls
    * `withoutEditorBackdrop` — B-129's fix, and correct for a broadcast artifact.

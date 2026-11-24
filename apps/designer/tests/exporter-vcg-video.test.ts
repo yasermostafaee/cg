@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { unpack } from '@cg/vcg-format';
 import type { AssetMeta } from '@cg/shared-ipc';
+import { ContainerElementSchema, UpcomingProgramsElementSchema } from '@cg/shared-schema';
 import type { Scene } from '@cg/shared-schema';
 import { Exporter, SINGLE_FILE_INLINE_WARN_BYTES } from '../src/platform/Exporter.js';
 import type { AssetStore } from '../src/platform/AssetStore.js';
@@ -116,6 +117,112 @@ function baseScene(children: unknown[], compChildren: unknown[] = []): Scene {
 }
 
 describe('Exporter (.vcg) — D-128 Phase 5 video packaging', () => {
+  it('strips Upcoming Programs test rows and leaves only independently used clips', async () => {
+    const assets = stubAssets(
+      [videoMeta('vid-a', SHA_A, VIDEO_BYTES_A), videoMeta('vid-b', SHA_B, VIDEO_BYTES_B)],
+      { 'vid-a': VIDEO_BYTES_A, 'vid-b': VIDEO_BYTES_B },
+    );
+    const graphic = UpcomingProgramsElementSchema.parse({
+      ...videoElement('upcoming', 'unused'),
+      type: 'upcomingPrograms',
+      layout: 'carousel',
+      sampleItems: [
+        { id: 'a', title: 'Program A', mediaAssetId: 'vid-a', mediaKind: 'video' },
+        {
+          id: 'b',
+          title: 'Program B',
+          mediaAssetId: 'vid-b',
+          mediaKind: 'video',
+          posterAssetId: 'test-only-poster',
+        },
+      ],
+    });
+    const container = ContainerElementSchema.parse({
+      ...videoElement('group', 'unused'),
+      type: 'container',
+      clip: false,
+      children: [graphic],
+    });
+    const authored = baseScene([videoElement('v1', 'vid-a')], [container]);
+    const { vcg } = await makeExporter(assets).produce(authored);
+    const { scene, manifest, files } = await unpack(vcg);
+
+    expect(scene.compositions?.[0]?.layers[0]?.children[0]).toMatchObject({
+      children: [{ type: 'upcomingPrograms', layout: 'carousel', sampleItems: [] }],
+    });
+    expect(graphic.sampleItems).toHaveLength(2);
+    expect(manifest.assetIndex.map(({ id }) => id)).toEqual(['vid-a']);
+    expect(files.get(PATH_A)).toEqual(VIDEO_BYTES_A);
+    expect(files.has(PATH_B)).toBe(false);
+  });
+
+  it('packages images, clips and sounds used only by prepared programme rows', async () => {
+    const pictureBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 12, 34]);
+    const soundBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2]);
+    const posterBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 56, 78]);
+    const posterSha = 'd'.repeat(64);
+    const stored = [
+      videoMeta('clip', SHA_A, VIDEO_BYTES_A),
+      {
+        ...videoMeta('poster', SHA_B, pictureBytes),
+        kind: 'image' as const,
+        filename: 'poster.png',
+      },
+      {
+        ...videoMeta('voice', 'c'.repeat(64), soundBytes),
+        kind: 'audio' as const,
+        filename: 'voice.wav',
+      },
+      {
+        ...videoMeta('clip-poster', posterSha, posterBytes),
+        kind: 'image' as const,
+        filename: 'clip-poster.png',
+      },
+    ];
+    const graphic = UpcomingProgramsElementSchema.parse({
+      ...videoElement('upcoming', 'unused'),
+      type: 'upcomingPrograms',
+      layout: 'carousel',
+      dataSource: 'prepared',
+      sampleItems: [
+        { id: 'poster', title: 'Tonight', mediaAssetId: 'poster', mediaKind: 'image' },
+        {
+          id: 'clip',
+          title: 'Next',
+          mediaAssetId: 'clip',
+          mediaKind: 'video',
+          posterAssetId: 'clip-poster',
+          audioAssetId: 'voice',
+        },
+        { id: 'empty', title: ' ' },
+      ],
+    });
+    const assets = stubAssets(stored, {
+      clip: VIDEO_BYTES_A,
+      poster: pictureBytes,
+      voice: soundBytes,
+      'clip-poster': posterBytes,
+    });
+    const { vcg } = await makeExporter(assets).produce(baseScene([graphic]));
+    const { scene, manifest, files } = await unpack(vcg);
+
+    expect(scene.layers[0]?.children[0]).toMatchObject({
+      type: 'upcomingPrograms',
+      dataSource: 'prepared',
+      sampleItems: graphic.sampleItems.slice(0, 2),
+    });
+    expect(manifest.assetIndex.map(({ kind }) => kind).sort()).toEqual([
+      'audio',
+      'image',
+      'image',
+      'video',
+    ]);
+    expect(files.get(PATH_A)).toEqual(VIDEO_BYTES_A);
+    expect(files.get(`assets/image/${SHA_B}.png`)).toEqual(pictureBytes);
+    expect(files.get(`assets/audio/${'c'.repeat(64)}.wav`)).toEqual(soundBytes);
+    expect(files.get(`assets/image/${posterSha}.png`)).toEqual(posterBytes);
+  });
+
   it('packs the stored WebM bytes VERBATIM under assets/video/ and indexes them (kind video)', async () => {
     const assets = stubAssets([videoMeta('vid-a', SHA_A, VIDEO_BYTES_A)], {
       'vid-a': VIDEO_BYTES_A,

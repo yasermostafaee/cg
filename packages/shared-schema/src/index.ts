@@ -6,6 +6,7 @@ export * from './assets.js';
 export * from './path-points.js';
 export * from './animation.js';
 export * from './elements.js';
+export * from './upcoming-programs.js';
 export * from './element-changes.js';
 export * from './value-rules.js';
 export * from './countdown.js';

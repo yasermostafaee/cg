@@ -103,6 +103,10 @@ the effect.
   child-composition scope per data row through the `wireScopeSubtree`
   factory — count at play, values live; pause-safe item entrance/exit motion uses the shared
   transition sampler and exits join the existing element-outro ledger),
+- **previews Upcoming Programs** using the dedicated authored element. The Designer canvas and
+  Rehearse enable its artwork and sample rows through an explicit boot option. The template
+  runtime reuses the sequence lifecycle for preview paging, and output pages leave sample rows
+  invisible.
 - **positions frame-mapped media at the Designer playhead** — D-135: `tick(frame)`
   reaches every `LottieDriver` AND every `VideoDriver` (`positionAt`), so scrubbing AND
   explicit playhead-only modes animate a Lottie and a `<video>` on the canvas instead of

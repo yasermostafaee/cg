@@ -1,4 +1,4 @@
-import type { Element, Scene } from '@cg/shared-schema';
+import { upcomingProgramsPreparedItems, type Element, type Scene } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 
 /**
@@ -140,6 +140,16 @@ export function collectImageElements(scene: Scene): ImageRef[] {
         // D-180 — row image fields are structured values, not image elements.
         // Their assets still belong to the exported template.
         collectDynamicValue(el.items, el.id, 'items');
+      } else if (el.type === 'upcomingPrograms') {
+        for (const item of upcomingProgramsPreparedItems(el)) {
+          if (item.mediaAssetId === undefined) continue;
+          const key = `${el.id}:upcoming:${item.id}`;
+          if (item.mediaKind === 'image') {
+            addDynamic(key, el.id, item.mediaAssetId);
+          } else if (item.mediaKind === 'video' && item.posterAssetId !== undefined) {
+            addDynamic(key, el.id, item.posterAssetId);
+          }
+        }
       } else if (el.type === 'container') {
         walk(el.children);
       }

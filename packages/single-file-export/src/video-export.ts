@@ -1,4 +1,4 @@
-import type { Element, Scene } from '@cg/shared-schema';
+import { upcomingProgramsPreparedItems, type Element, type Scene } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 
 /**
@@ -34,12 +34,20 @@ export interface VideoRef {
 export function collectVideoElements(scene: Scene): VideoRef[] {
   const out: VideoRef[] = [];
   const seen = new Set<string>();
+  const add = (key: string, elementId: string, assetId: string): void => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ elementId, assetId });
+  };
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'video') {
-        if (!seen.has(el.id)) {
-          seen.add(el.id);
-          out.push({ elementId: el.id, assetId: el.assetId });
+        add(el.id, el.id, el.assetId);
+      } else if (el.type === 'upcomingPrograms') {
+        for (const item of upcomingProgramsPreparedItems(el)) {
+          if (item.mediaKind === 'video' && item.mediaAssetId !== undefined) {
+            add(`${el.id}:upcoming:${item.id}`, el.id, item.mediaAssetId);
+          }
         }
       } else if (el.type === 'container') {
         walk(el.children);

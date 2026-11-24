@@ -3,6 +3,7 @@ import {
   AssetKindSchema,
   AssetMetaSchema,
   AudioInfoSchema,
+  IdSchema,
   VideoProvenanceSchema,
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
@@ -58,6 +59,7 @@ export const AssetsStoreBytesChannel = defineChannel(
     provenance: VideoProvenanceSchema.optional(),
     /** `D-165` — a sound's measurements, taken at import from the stored WAV. */
     audio: AudioInfoSchema.optional(),
+    upcomingPosterFor: IdSchema.optional(),
   }),
   z.object({ asset: AssetMetaSchema }),
 );

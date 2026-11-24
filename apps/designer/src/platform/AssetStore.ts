@@ -121,6 +121,7 @@ export class AssetStore {
     provenance?: VideoProvenance,
     /** `D-165` — a sound's measurements (duration, peak, rate, channels). */
     audio?: AudioInfo,
+    upcomingPosterFor?: AssetMeta['upcomingPosterFor'],
   ): Promise<AssetMeta> {
     if (this.#projectId === null) {
       throw new Error('Cannot import an asset before a project is active');
@@ -146,6 +147,7 @@ export class AssetStore {
       workingPath,
       ...(provenance !== undefined ? { provenance } : {}),
       ...(audio !== undefined ? { audio } : {}),
+      ...(kind === 'image' && upcomingPosterFor !== undefined ? { upcomingPosterFor } : {}),
     };
     this.#index.set(meta.assetId, meta);
     await this.#persistIndex();

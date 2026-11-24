@@ -1,4 +1,5 @@
 import {
+  LogOut,
   Pause,
   Play,
   RotateCcw,
@@ -23,6 +24,7 @@ import * as s from './PreviewTransport.css.js';
  * - **Pause** → `pause()` (freezes intro / hold countdown / outro).
  * - **Stop** → `stop()` (D-105 — the quick clear: remove the content immediately,
  *   then close the background; settles cleared).
+ * - **Out** → `out()` (the coordinated content and composition exit).
  * - **Previous** / **Next** → `previous()` / `next()` (step a paginated template or a
  *   book — `D-163`). Disabled when the composition has a single step. They share the
  *   row below the three primary commands, half each, so all five stay inside the panel.
@@ -43,6 +45,7 @@ export function PreviewTransport({
   onPlay,
   onPause,
   onStop,
+  onOut,
   onPrevious,
   onNext,
   onReset,
@@ -66,6 +69,7 @@ export function PreviewTransport({
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
+  onOut?: (() => void) | undefined;
   onPrevious: () => void;
   onNext: () => void;
   onReset: () => void;
@@ -85,11 +89,12 @@ export function PreviewTransport({
   forcedStep?: string;
   onForceStep?: (value: string) => void;
 }): JSX.Element {
+  const primary = onOut === undefined ? s.command : s.commandWithOut;
   return (
     <div className={s.bar}>
       <div className={s.commands} role="group" aria-label="Playout commands">
         <Button
-          className={s.command}
+          className={primary}
           onClick={onPlay}
           disabled={!ready}
           title={ready ? undefined : 'Preview loading'}
@@ -98,7 +103,7 @@ export function PreviewTransport({
           {paused ? 'Resume' : 'Play'}
         </Button>
         <Button
-          className={s.command}
+          className={primary}
           onClick={onPause}
           aria-disabled={!ready || paused}
           disabled={!ready || paused}
@@ -108,7 +113,7 @@ export function PreviewTransport({
           Pause
         </Button>
         <Button
-          className={s.command}
+          className={primary}
           onClick={onStop}
           disabled={!ready}
           title={ready ? 'Stop and clear' : 'Preview loading'}
@@ -116,6 +121,17 @@ export function PreviewTransport({
           <Icon icon={Square} size={16} />
           Stop
         </Button>
+        {onOut !== undefined && (
+          <Button
+            className={primary}
+            onClick={onOut}
+            disabled={!ready}
+            title={ready ? 'Play the animated exit' : 'Preview loading'}
+          >
+            <Icon icon={LogOut} size={16} />
+            Out
+          </Button>
+        )}
         <Button
           className={`${s.command} ${s.step}`}
           onClick={onPrevious}
