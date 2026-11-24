@@ -113,7 +113,6 @@ export function InputEffectControls({
             <NumericInput
               id={durationId}
               className="cg-field"
-              dir="ltr"
               allow="digits"
               scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
               value={typedDuration ?? String(durationMs)}

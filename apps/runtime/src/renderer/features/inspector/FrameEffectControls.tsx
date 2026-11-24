@@ -151,7 +151,6 @@ export function FrameEffectControls({
               <NumericInput
                 id={`${controlId}-duration`}
                 className="cg-field"
-                dir="ltr"
                 allow="digits"
                 scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
                 title={`${String(FRAME_TRANSITION_MIN_MS)}–${String(FRAME_TRANSITION_MAX_MS)} ms`}

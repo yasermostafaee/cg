@@ -157,12 +157,7 @@ export function PositionPicker({
       </h2>
       <div id={controlsId} className="cg-inspector-position__controls" hidden={!open}>
         <div className="cg-inspector-position__placement">
-          <div
-            className="cg-anchor-grid"
-            dir="ltr"
-            role="group"
-            aria-label={localizeUi('Position anchor')}
-          >
+          <div className="cg-anchor-grid" role="group" aria-label={localizeUi('Position anchor')}>
             {ANCHOR_GRID.flat().map((a) => (
               <Button
                 key={a}
@@ -182,7 +177,6 @@ export function PositionPicker({
             <label className="cg-inspector-control-label">
               <span>{localizeUi('Horizontal')}</span>
               <NumericInput
-                dir="ltr"
                 decimal
                 scrub={{ step: 1 }}
                 value={dx}
@@ -194,7 +188,6 @@ export function PositionPicker({
             <label className="cg-inspector-control-label">
               <span>{localizeUi('Vertical')}</span>
               <NumericInput
-                dir="ltr"
                 decimal
                 scrub={{ step: 1 }}
                 value={dy}
