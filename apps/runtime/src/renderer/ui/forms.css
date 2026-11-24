@@ -1,27 +1,11 @@
-/* Portalled forms use the same field tokens as the dialog that opened them. */
-:where([data-modal-size], .cg-popover .cg-form, .cg-inspector-body, .cg-inspector-actions) {
-  --r-field-bg: var(--r-form-card);
-  --r-field-line: var(--r-form-field-line);
-  --r-radius-field: var(--r-radius-md);
-  --r-surface-raised: var(--r-form-card);
-  --r-control-hover-bg: var(--r-form-divider);
-  --r-control-hover-line: var(--r-form-field-line);
-  --r-accent: var(--r-form-primary);
-  --r-accent-strong: var(--r-form-primary);
-  --r-ink-on-accent: var(--r-form-primary-ink);
-  --r-toggle-on-hover: var(--r-form-primary);
-  --r-accent-fill: var(--r-form-selected);
-  --r-text: var(--r-form-text);
-  --r-text-muted: var(--r-form-muted);
-}
-
 :where([data-modal-size], .cg-popover .cg-form, .cg-inspector-body) .cg-btn--secondary {
   background: var(--r-form-card);
   border-color: var(--r-form-field-line);
   color: var(--r-form-text);
 }
 
-:where([data-modal-size], .cg-popover .cg-form, .cg-inspector-body) .cg-btn--secondary:hover:not(:disabled) {
+:where([data-modal-size], .cg-popover .cg-form, .cg-inspector-body)
+  .cg-btn--secondary:hover:not(:disabled) {
   background: var(--r-form-divider);
   filter: none;
 }

@@ -43,8 +43,6 @@ function Tile({ kind }: { kind: 'standalone' | 'direct' | 'inherited' }) {
     engines: ['A', 'B'] as ('A' | 'B')[],
     sources: { studio: { A: 'present' as const, B: 'present' as const } },
   };
-  if (kind === 'direct')
-    return createElement(SourceLabel, { sourceId: source.id, meterChannel: 1, presence });
   if (kind === 'inherited')
     return createElement(ChoiceLabel, {
       choice: { value: '', label: 'Default', names: source.id },
@@ -60,11 +58,18 @@ function Tile({ kind }: { kind: 'standalone' | 'direct' | 'inherited' }) {
       meterChannel: undefined,
       onPreviewEngineChange: (engine) => publish(source.id, engine),
     }),
-    createElement(SourcePresenceBadges, {
-      sourceId: source.id,
-      presence: { engines: ['A', 'B'], sources: { studio: { A: 'present', B: 'present' } } },
-      previewEngine: origins.get(source.id),
-    }),
+    kind === 'direct'
+      ? createElement(SourceLabel, {
+          sourceId: source.id,
+          meterChannel: 1,
+          presence,
+          previewEngine: origins.get(source.id),
+        })
+      : createElement(SourcePresenceBadges, {
+          sourceId: source.id,
+          presence,
+          previewEngine: origins.get(source.id),
+        }),
   );
 }
 afterEach(() => {

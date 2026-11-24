@@ -290,7 +290,7 @@ const BRIDGE_SURFACE: {
     // C-016 — the programme return. The mock has no relay: `feedUrl` is `null`, nothing is watched.
     pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged', 'topology'],
     livePreview: ['start', 'status', 'stop', 'url'],
-    sourcePreviews: ['audioLevels', 'mediaOpen', 'mediaClose', 'pvw', 'thumbnails'],
+    sourcePreviews: ['audioLevels', 'mediaOpen', 'mediaClose', 'ndiTargets', 'pvw', 'thumbnails'],
     playlistGain: ['get', 'set'],
     // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
     // part-A seam): `tests/**` is not typechecked, so the mapped type above

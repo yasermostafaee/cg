@@ -121,12 +121,21 @@ describe('installCasparGlobals', () => {
       },
     );
     const release = withCgControl({}, { frameTransition: null, framePlacements });
-    const focusBackdrop = withCgControl({}, {
-      presetEffectId: 'focus-17',
-      nativeFallbackHold: true,
-      look: 'incoming-backdrop',
-      frameTransition: { authoredPreset: true, durationMs: 400, easing: 'linear', frames: [], hidePresetTitlePlateIds: ['frame-1'] },
-    });
+    const focusBackdrop = withCgControl(
+      {},
+      {
+        presetEffectId: 'focus-17',
+        nativeFallbackHold: true,
+        look: 'incoming-backdrop',
+        frameTransition: {
+          authoredPreset: true,
+          durationMs: 400,
+          easing: 'linear',
+          frames: [],
+          hidePresetTitlePlateIds: ['frame-1'],
+        },
+      },
+    );
     const preset = withCgControl(
       {},
       { look: 'duo', frameTransition: null, framePlacements, presetTransitionCommit: true },

@@ -231,9 +231,9 @@ export function SafeGuideSettings({
                             return;
                         }
                         e.preventDefault();
-                        choices.current
-                          ?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
-                          [next]?.focus({ preventScroll: true });
+                        const radios =
+                          choices.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+                        radios?.[next]?.focus({ preventScroll: true });
                         selectFrame(frames[next]!);
                       }}
                     >

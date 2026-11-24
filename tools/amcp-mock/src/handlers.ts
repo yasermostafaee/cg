@@ -174,7 +174,12 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   */
   if (sub === 'OPACITY') {
     if (args.length === 2) {
-      return { kind: 'ok-line', code: 201, verb: 'MIXER', data: String(ctx.getLayer(slot).opacity) };
+      return {
+        kind: 'ok-line',
+        code: 201,
+        verb: 'MIXER',
+        data: String(ctx.getLayer(slot).opacity),
+      };
     }
     const opacity = Number(args[2]);
     if (args[2] === undefined || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
@@ -185,7 +190,8 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
 
   if (sub === 'FILL' || sub === 'CLIP') {
     if (args.length === 2) {
-      const { x, y, width, height } = sub === 'FILL' ? ctx.getLayer(slot).fill : ctx.getLayer(slot).clip;
+      const { x, y, width, height } =
+        sub === 'FILL' ? ctx.getLayer(slot).fill : ctx.getLayer(slot).clip;
       return { kind: 'ok-line', code: 201, verb: 'MIXER', data: [x, y, width, height].join(' ') };
     }
     const rect = parseMixerRect(args.slice(2));

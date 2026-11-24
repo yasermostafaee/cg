@@ -543,6 +543,7 @@ export function createMockBridge(): RuntimeBridge {
     },
 
     sourcePreviews: {
+      ndiTargets: () => Promise.resolve({ targets: [] }),
       mediaOpen: () => Promise.resolve({ state: 'unsupported' }),
       mediaClose: () => Promise.resolve({ closed: false }),
       audioLevels: () => Promise.resolve({ readings: [] }),

@@ -3727,6 +3727,23 @@ export const sharedVars = {
   '--cg-accent': ACCENT_SKY,
 } as const;
 
+// Portalled forms use the same field tokens as the dialog that opened them.
+const formTheme = `:where([data-modal-size], .cg-popover .cg-form, .cg-inspector-body, .cg-inspector-actions) {
+  --r-field-bg: var(--r-form-card);
+  --r-field-line: var(--r-form-field-line);
+  --r-radius-field: var(--r-radius-md);
+  --r-surface-raised: var(--r-form-card);
+  --r-control-hover-bg: var(--r-form-divider);
+  --r-control-hover-line: var(--r-form-field-line);
+  --r-accent: var(--r-form-primary);
+  --r-accent-strong: var(--r-form-primary);
+  --r-ink-on-accent: var(--r-form-primary-ink);
+  --r-toggle-on-hover: var(--r-form-primary);
+  --r-accent-fill: var(--r-form-selected);
+  --r-text: var(--r-form-text);
+  --r-text-muted: var(--r-form-muted);
+}`;
+
 /**
  * ── STATION-CHROME-01 §1 — HOW THE ONE HOME REACHES THE STYLESHEET ──────────
  *
@@ -3754,7 +3771,7 @@ export function applyThemeVars(root: HTMLElement, doc: Document = root.ownerDocu
   const existing = doc.getElementById(THEME_STYLE_ID);
   const style = existing instanceof HTMLStyleElement ? existing : doc.createElement('style');
   style.id = THEME_STYLE_ID;
-  style.textContent = `:root {\n${body}\n}\n`;
+  style.textContent = `:root {\n${body}\n}\n${formTheme}\n`;
   if (existing === null) doc.head.append(style);
 }
 
