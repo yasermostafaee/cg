@@ -205,6 +205,8 @@ without losing the selected Engine. Each contacted member still needs its own op
 Bridge verifies the configured group and layer ranges from `/owner` and confirms the
 member-local writable permit through `/availability`. It persists its controller UUID and the
 target's selection UUID, epoch and reviewed sequence and hash before `availability/select`.
+If peer catch-up advances the checkpoint before an unconfirmed selection, Bridge checks the
+new checkpoint against its durable state and records a fresh selection epoch for that Engine.
 The initial pilot requires an empty group. The vendor migration sample inherits sequence 1
 and seeds sequence 2 during its first selection. Adopting that inherited checkpoint requires
 a separate integration step.
@@ -214,6 +216,8 @@ The layout carries verified template references and absolute recovery metadata. 
 selected Engine, the availability command prepares and retains the required package. Stop
 records a stopped layer, and Clear removes that layer from the complete layout. An ambiguous
 command keeps its journal reservation. Bridge uses its same-ID receipt or reconciliation.
+Restoring a previously committed layout to a newly selected Engine uses the same receipt
+and reconciliation path before any further edit.
 An expired receipt directs Bridge to the current checkpoint. Readiness and confirmation refer
 to applied graphics and rendered state, with no assertion about matching video frames.
 

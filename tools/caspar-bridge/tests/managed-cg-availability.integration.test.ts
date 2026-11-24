@@ -276,6 +276,60 @@ it('replays the exact pending intent on B when A disappears after a lost respons
   pair.assertFixtureHealthy();
 });
 
+it('reviews a fresh selection if the verified reserve catches up before selection', async () => {
+  const { pair, store, writer } = await lab();
+  const initial = writer();
+  expect(await initial.editLayout(() => [html])).toMatchObject({ status: 'applied' });
+  pair.transferCheckpoint('A', 'B');
+  expect(await initial.editLayout(() => [])).toMatchObject({ status: 'applied' });
+  pair.catchUpOnNextSelection('A', 'B');
+  pair.disconnect('A');
+
+  await expect(writer().editLayout(() => undefined)).rejects.toMatchObject({
+    code: 'cg.targetCheckpointChanged',
+  });
+  expect(store().read().selected?.selection).toMatchObject({ engineId: 'B', epoch: 2 });
+  expect(await writer().editLayout(() => undefined)).toEqual({ status: 'unchanged' });
+  expect(
+    pair.selections.map(({ engine, request }) => [
+      engine,
+      request.selection.epoch,
+      request.expectedSequence,
+    ]),
+  ).toEqual([
+    ['A', 1, 0],
+    ['B', 2, 1],
+    ['B', 3, 2],
+  ]);
+  expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A']);
+  expect(pair.snapshot('B').layers).toEqual([]);
+  pair.assertFixtureHealthy();
+});
+
+it('reconciles an unresolved restore on B with the last committed command ID', async () => {
+  const { pair, store, writer } = await lab();
+  const initial = writer();
+  expect(await initial.editLayout(() => [html])).toMatchObject({ status: 'applied' });
+  pair.transferCheckpoint('A', 'B');
+  expect(await initial.editLayout(() => [])).toMatchObject({ status: 'applied' });
+  const id = store().read().committed?.intent.commandId;
+  pair.disconnect('A');
+  pair.holdNextCommand('B');
+
+  await expect(writer().editLayout(() => undefined)).rejects.toThrow('has not restored');
+  expect(pair.snapshot('B').layers).toEqual([html]);
+  expect(await writer().editLayout(() => undefined)).toEqual({ status: 'unchanged' });
+  expect(pair.requests).toContainEqual({
+    engine: 'B',
+    method: 'POST',
+    route: 'availability/commands/' + id + '/reconcile',
+  });
+  expect(pair.posts.map(({ engine }) => engine)).toEqual(['A', 'A', 'B']);
+  expect(pair.posts[2]?.command).toMatchObject({ commandId: id, sequence: 2, layout: [] });
+  expect(pair.snapshot('B').layers).toEqual([]);
+  pair.assertFixtureHealthy();
+});
+
 it('refuses a newer checkpoint on B when the current target becomes unreachable', async () => {
   const { pair, store, writer } = await lab();
   expect(await writer().editLayout(() => [html])).toMatchObject({ status: 'applied' });

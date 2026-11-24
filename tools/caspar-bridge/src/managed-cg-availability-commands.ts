@@ -169,41 +169,45 @@ export class ManagedCgAvailabilityCommands {
       if (intent === null) return undefined;
       const pending = { status: 'pending', commandId: intent.commandId } as const;
       const target = await this.#selectTarget(local);
-      const { endpoint, owner, status } = target;
       try {
-        const receipt = await this.#api.receipt(endpoint, intent);
-        if (receipt.result !== null) {
-          const result =
-            receipt.result.status === 'prepared' || receipt.result.status === 'unresolved'
-              ? await this.#api.reconcile(endpoint, owner, status, intent)
-              : receipt.result;
-          if (!applied(result, intent)) return pending;
-          // A replicated receipt can exist before the newly selected Core has applied it.
-          const current = await this.#api.observe(endpoint);
-          this.#verifyCheckpoint(target.local, current.status);
-          if (
-            current.status.committedSequence !== intent.sequence ||
-            current.status.committedRequestHash !== result.requestHash ||
-            !confirmedReplica(current.status, intent)
-          )
-            return pending;
-          await this.#confirmSnapshot(current, intent);
-          return this.#settle(target.local, intent, result);
-        }
+        const result = await this.#recoverOnTarget(target, intent);
+        if (result === undefined || !applied(result, intent)) return pending;
+        // A replicated receipt can exist before the newly selected Core has applied it.
+        const current = await this.#api.observe(target.endpoint);
+        this.#verifyCheckpoint(target.local, current.status);
         if (
-          receipt.status === 'expired' ||
-          status.committedSequence >= intent.sequence ||
-          receipt.committedSequence >= intent.sequence
+          current.status.committedSequence !== intent.sequence ||
+          current.status.committedRequestHash !== result.requestHash ||
+          !confirmedReplica(current.status, intent)
         )
           return pending;
-        // A missing receipt is only permission to retry this exact intent on our selected target.
-        const result = await this.#api.post(endpoint, owner, status, intent);
+        await this.#confirmSnapshot(current, intent);
         return this.#settle(target.local, intent, result);
       } catch (error) {
         if (!(error instanceof ManagedCgAvailabilityApiError)) throw error;
         return pending;
       }
     });
+  }
+
+  async #recoverOnTarget(
+    { endpoint, owner, status }: Target,
+    intent: AvailabilityIntent,
+  ): Promise<ManagedResult | undefined> {
+    const receipt = await this.#api.receipt(endpoint, intent);
+    if (receipt.result !== null) {
+      return receipt.result.status === 'prepared' || receipt.result.status === 'unresolved'
+        ? this.#api.reconcile(endpoint, owner, status, intent)
+        : receipt.result;
+    }
+    if (
+      receipt.status === 'expired' ||
+      status.committedSequence >= intent.sequence ||
+      receipt.committedSequence >= intent.sequence
+    )
+      return undefined;
+    // Retry the same full intent on the durable selected target.
+    return this.#api.post(endpoint, owner, status, intent);
   }
 
   async #exclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -279,7 +283,14 @@ export class ManagedCgAvailabilityCommands {
     const { endpoint, owner, status } = observed;
     this.#verifyCheckpoint(local, status);
     let reviewed = local.selected;
-    if (reviewed?.selection.engineId !== endpoint.engineId) {
+    // Peer catch-up can change the reviewed checkpoint before an unconfirmed selection.
+    // Review it again under a new epoch while retaining the command's original intent.
+    if (
+      reviewed?.selection.engineId !== endpoint.engineId ||
+      (status.selection?.selectionId !== reviewed.selection.selectionId &&
+        (status.committedSequence !== reviewed.expectedSequence ||
+          status.committedRequestHash !== reviewed.expectedRequestHash))
+    ) {
       if (!status.readyForSelection)
         throw new Error('The DualReady Engine is not ready for selection.');
       reviewed = {
@@ -296,14 +307,8 @@ export class ManagedCgAvailabilityCommands {
     }
     let permitted = status;
     if (status.selection?.selectionId !== reviewed.selection.selectionId) {
-      if (
-        !status.readyForSelection ||
-        status.committedSequence !== reviewed.expectedSequence ||
-        status.committedRequestHash !== reviewed.expectedRequestHash
-      )
-        throw new Error(
-          'The DualReady checkpoint changed before its saved selection was confirmed.',
-        );
+      if (!status.readyForSelection)
+        throw new Error('The DualReady Engine is not ready for selection.');
       permitted = await this.#api.select(endpoint, owner, status, reviewed.selection);
       this.#verifyCheckpoint(local, permitted);
     }
@@ -318,7 +323,7 @@ export class ManagedCgAvailabilityCommands {
   }
 
   async #restoreBaseline(target: Target): Promise<Target> {
-    const { local, status, endpoint, owner } = target;
+    const { local, status, endpoint } = target;
     const committed = local.committed;
     if (committed === null) {
       await this.#confirmSnapshot(target);
@@ -326,8 +331,12 @@ export class ManagedCgAvailabilityCommands {
     }
     let current = target;
     if (status.committedSequence < committed.intent.sequence) {
-      const result = await this.#api.post(endpoint, owner, status, committed.intent);
-      if (!applied(result, committed.intent) || result.requestHash !== committed.requestHash)
+      const result = await this.#recoverOnTarget(target, committed.intent);
+      if (
+        result === undefined ||
+        !applied(result, committed.intent) ||
+        result.requestHash !== committed.requestHash
+      )
         throw new Error('Playout has not restored the durable layout on the selected Engine.');
       const observed = await this.#api.observe(endpoint);
       this.#verifyCheckpoint(local, observed.status);

@@ -101,9 +101,11 @@
       Update, Stop and Clear with the reserve unavailable, selected-Engine transport failure,
       exact intent retry, restart and the unchanged selection after the preferred Engine returns.
       Verify no raw or parallel dispatch and refuse inherited, conflicting or ahead checkpoints.
-      The Bridge configuration and runtime path passed ten fixture scenarios. The fixture
+      The Bridge configuration and runtime path passed twelve fixture scenarios, including
+      a checkpoint changing during selection and an unresolved restore on the new target.
+      The fixture
       models Playout checkpoint replication. The .37 package supplied 38 matching status and
-      seven matching state responses for contract review. The focused Bridge suites passed 65 tests.
+      seven matching state responses for contract review.
 - [ ] Obtain and verify the matching .37 binaries and a licensed isolated pair. Exercise the
       real CG Bridge and Control with both programme returns, power-off in each direction,
       native restart, acknowledgement loss and a replacement after a receipt retention gap.

@@ -97,6 +97,7 @@ export async function availabilityPair(cleanup: Cleanup) {
   const failures: unknown[] = [];
   const dropReplies = new Set<Engine>();
   const holdCommand = new Set<Engine>();
+  const catchUpBeforeSelection = new Map<Engine, Engine>();
   const generations = { A: randomUUID(), B: randomUUID() };
   const fenceIds = {
     A: { transferId: randomUUID(), leaseId: randomUUID() },
@@ -163,6 +164,11 @@ export async function availabilityPair(cleanup: Cleanup) {
     } satisfies ManagedResult;
     state.receipts.set(result.commandId, result);
     return result;
+  };
+  const transferCheckpoint = (source: Engine, standby: Engine) => {
+    expect(states[standby].snapshot.revision).toBeLessThanOrEqual(states[source].snapshot.revision);
+    states[standby].snapshot = structuredClone(states[source].snapshot);
+    states[standby].selection = structuredClone(states[source].selection);
   };
   const run = async (engine: Engine, req: IncomingMessage, res: ServerResponse) => {
     const state = states[engine];
@@ -240,6 +246,11 @@ export async function availabilityPair(cleanup: Cleanup) {
     if (req.method === 'POST' && route === 'availability/select') {
       const request = await readBody<SelectionRequest>(req);
       selections.push({ engine, request });
+      const source = catchUpBeforeSelection.get(engine);
+      if (source !== undefined) {
+        catchUpBeforeSelection.delete(engine);
+        transferCheckpoint(source, engine);
+      }
       const { selection, expectedSequence, expectedRequestHash } = request;
       expect(selection.engineId).toBe(engine);
       if (
@@ -378,6 +389,8 @@ export async function availabilityPair(cleanup: Cleanup) {
     },
     loseCommandReply: (engine: Engine) => dropReplies.add(engine),
     holdNextCommand: (engine: Engine) => holdCommand.add(engine),
+    catchUpOnNextSelection: (source: Engine, target: Engine) =>
+      catchUpBeforeSelection.set(target, source),
     exposeNewerCheckpoint: (engine: Engine) => {
       const { snapshot } = states[engine];
       states[engine].snapshot = {
@@ -387,12 +400,6 @@ export async function availabilityPair(cleanup: Cleanup) {
         requestHash: 'C'.repeat(64),
       };
     },
-    transferCheckpoint: (source: Engine, standby: Engine) => {
-      expect(states[standby].snapshot.revision).toBeLessThanOrEqual(
-        states[source].snapshot.revision,
-      );
-      states[standby].snapshot = structuredClone(states[source].snapshot);
-      states[standby].selection = structuredClone(states[source].selection);
-    },
+    transferCheckpoint,
   };
 }

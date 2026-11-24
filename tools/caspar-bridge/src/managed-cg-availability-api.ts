@@ -479,10 +479,13 @@ export class ManagedCgAvailabilityApi {
     const value: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
       const error = errorSchema.safeParse(value);
+      const code = error.success ? error.data.error : undefined;
       throw new ManagedCgAvailabilityApiError(
-        'The availability Engine refused the request.',
+        code === 'cg.targetCheckpointChanged'
+          ? 'The DualReady checkpoint changed before its saved selection was confirmed.'
+          : 'The availability Engine refused the request.',
         'refused',
-        error.success ? error.data.error : undefined,
+        code,
         response.status,
       );
     }

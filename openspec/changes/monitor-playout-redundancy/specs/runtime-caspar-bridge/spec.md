@@ -88,6 +88,14 @@ shall continue to come from their existing contract.
 - **THEN** Bridge keeps that reservation across restarts and queries or reconciles the same command
 - **AND** any retry retains its semantic intent and uses the reviewed selection's local fence.
 
+#### Scenario: A reserve catches up during selection or recovery
+
+- **WHEN** a verified checkpoint advances before the reserve accepts selection
+- **THEN** Bridge reviews the new checkpoint against its durable state before retrying selection
+- **WHEN** restoring the last committed layout on that reserve reports an unresolved result
+- **THEN** Bridge reconciles the original command ID and checks the reserve's applied state
+  before accepting a new intent.
+
 #### Scenario: A checkpoint cannot be attributed to the Bridge
 
 - **WHEN** a fresh pilot encounters an existing checkpoint, or an Engine reports a conflicting
