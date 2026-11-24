@@ -25,3 +25,14 @@ Windows Chromium passed all 16 focused scenarios. The Bridge integration test pe
 - [x] Use fixed table columns, compact rows, and an em dash for empty shortcuts.
 - [x] Verify Space recording and dispatch, older Bridge behavior, and measured table layout in Windows Chromium.
 - [ ] Record the carrying Linux Playwright E2E result.
+
+## Session switch and translated shortcut table
+
+- [x] Verify that startup, reload and switching off block assigned keys without changing saved bindings.
+- [x] Verify the inactive shortcut message, its feedback language and editing, overlay and repeat guards.
+      Chromium verified zero takes while Off. A native WebView2 smoke confirmed Persian feedback
+      with English UI in the docked and detached Layers documents.
+- [x] Verify enabled shortcuts, including manual Space, in Chromium.
+- [ ] Verify physical Alt+F4 outside recording in the Windows shell on this revision.
+- [x] Verify translated headings and number-first layout in English, Persian and Arabic in Chromium.
+- [ ] Record the carrying Linux Playwright E2E result for the session switch and table.

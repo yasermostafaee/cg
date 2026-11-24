@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import {
   LAYER_SHORTCUT_VERBS,
@@ -11,11 +11,18 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { LayerShortcutsToggle } from '../layers/LayerShortcutsToggle.js';
 import { layerShortcutChord, layerShortcutLabel } from './layer-shortcuts.js';
 import { useLayerAltF4 } from './useLayerAltF4.js';
 import './LayerShortcutsDialog.css';
 
 const labels = { play: 'Play', next: 'Next', stop: 'Stop', clear: 'Clear' } as const;
+const conflictMessages = {
+  play: '{shortcut} is assigned to Play on layer {layer}.',
+  next: '{shortcut} is assigned to Next on layer {layer}.',
+  stop: '{shortcut} is assigned to Stop on layer {layer}.',
+  clear: '{shortcut} is assigned to Clear on layer {layer}.',
+} as const;
 
 interface ShortcutRow {
   layer: number;
@@ -39,8 +46,8 @@ export function LayerShortcutsDialog({
   onClose: () => void;
   onApply: (shortcuts: LayerShortcutBindings) => Promise<string | null>;
 }): JSX.Element {
-  const translateUi = useUiText();
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
   const verbs = LAYER_SHORTCUT_VERBS.filter((verb) => verb !== 'next' || canAssignNext);
   const [draft, setDraft] = useState<ShortcutDraft>({});
   const [recording, setRecording] = useState<string | null>(null);
@@ -79,13 +86,13 @@ export function LayerShortcutsDialog({
       if (refusal === null) setDraft({});
       setMessage(
         refusal === null
-          ? { role: 'notice', text: 'Layer shortcuts applied.' }
-          : { role: 'refusal', text: refusal },
+          ? { role: 'notice', text: localizeFeedback('Layer shortcuts applied.') }
+          : { role: 'refusal', text: localizeFeedback(refusal) },
       );
     } catch (error) {
       setMessage({
         role: 'refusal',
-        text: error instanceof Error ? error.message : 'Request failed.',
+        text: localizeFeedback(error instanceof Error ? error.message : 'Request failed.'),
       });
     } finally {
       setBusy(false);
@@ -123,11 +130,17 @@ export function LayerShortcutsDialog({
     if (/^(?:Alt|Control|Shift|Meta)(?:Left|Right)$/.test(event.code) || event.repeat) return;
     const chord = layerShortcutChord(event.nativeEvent);
     if (chord === null) {
-      setMessage({ role: 'refusal', text: 'Press a function key or a key combination.' });
+      setMessage({
+        role: 'refusal',
+        text: localizeFeedback('Press a function key or a key combination.'),
+      });
       return;
     }
     if (chord === LAYER_SPACE_SHORTCUT && !canAssignSpace) {
-      setMessage({ role: 'refusal', text: 'Assigning Space requires a newer CG Bridge.' });
+      setMessage({
+        role: 'refusal',
+        text: localizeFeedback('Assigning Space requires a newer CG Bridge.'),
+      });
       return;
     }
     for (const row of rows) {
@@ -138,7 +151,13 @@ export function LayerShortcutsDialog({
       if (conflict !== undefined) {
         setMessage({
           role: 'refusal',
-          text: `${layerShortcutLabel(chord)} is assigned to ${labels[conflict]} on layer ${String(row.layer)}.`,
+          text: localizeFeedback(conflictMessages[conflict], {
+            shortcut:
+              chord === LAYER_SPACE_SHORTCUT
+                ? localizeFeedback('Space')
+                : layerShortcutLabel(chord),
+            layer: row.layer,
+          }),
         });
         return;
       }
@@ -165,6 +184,7 @@ export function LayerShortcutsDialog({
         </>
       }
     >
+      <LayerShortcutsToggle />
       <div className="cg-table-scroll cg-layer-shortcut-scroll">
         <table
           className="cg-table cg-layer-shortcut-table"
@@ -175,7 +195,7 @@ export function LayerShortcutsDialog({
               <th scope="col">{localizeUi('Layer')}</th>
               {verbs.map((verb) => (
                 <th key={verb} scope="col">
-                  {labels[verb]}
+                  {localizeUi(labels[verb])}
                 </th>
               ))}
             </tr>
@@ -184,14 +204,28 @@ export function LayerShortcutsDialog({
             {rows.map((row) => (
               <tr key={row.layer}>
                 <th scope="row" title={row.name}>
-                  <IsolatedName>{row.name}</IsolatedName> <span>· {row.layer}</span>
+                  <span className="cg-layer-shortcut-row-name">
+                    <bdi dir="ltr">{row.layer}</bdi>
+                    <span aria-hidden="true"> · </span>
+                    <IsolatedName className="cg-layer-shortcut-alias" alignWithInterface>
+                      {row.name}
+                    </IsolatedName>
+                  </span>
                 </th>
                 {verbs.map((verb) => {
                   const chord = bindings[row.layer]?.[verb];
                   const key = `${String(row.layer)}:${verb}`;
                   const active = recording === key;
-                  const label = `${labels[verb]} shortcut for layer ${String(row.layer)}`;
-                  const assigned = chord === undefined ? undefined : layerShortcutLabel(chord);
+                  const label = localizeUi('{verb} shortcut for layer {layer}', {
+                    verb: localizeUi(labels[verb]),
+                    layer: row.layer,
+                  });
+                  const assigned =
+                    chord === LAYER_SPACE_SHORTCUT
+                      ? localizeUi('Space')
+                      : chord === undefined
+                        ? undefined
+                        : layerShortcutLabel(chord);
                   return (
                     <td key={verb}>
                       <div className="cg-layer-shortcut-cell">
@@ -203,8 +237,8 @@ export function LayerShortcutsDialog({
                           aria-label={label}
                           aria-description={
                             active
-                              ? translateUi('Press keys to record')
-                              : (assigned ?? translateUi('Unassigned'))
+                              ? localizeUi('Press keys to record')
+                              : (assigned ?? localizeUi('Unassigned'))
                           }
                           aria-pressed={active}
                           title={assigned}
@@ -225,14 +259,22 @@ export function LayerShortcutsDialog({
                             event.stopPropagation();
                           }}
                         >
-                          <span>{active ? translateUi('Press keys…') : (assigned ?? '—')}</span>
+                          <span>
+                            {active ? (
+                              localizeUi('Press keys…')
+                            ) : (
+                              <bdi dir={chord === LAYER_SPACE_SHORTCUT ? 'auto' : 'ltr'}>
+                                {assigned ?? '—'}
+                              </bdi>
+                            )}
+                          </span>
                         </Button>
                         {chord !== undefined && (
                           <Button
                             variant="ghost"
                             className="cg-layer-shortcut-remove"
                             disabled={busy}
-                            aria-label={translateUi('Remove {name}', { name: label })}
+                            aria-label={localizeUi('Remove {name}', { name: label })}
                             onClick={() => setShortcut(row.layer, verb, null)}
                           >
                             <Icon icon={X} size={14} />

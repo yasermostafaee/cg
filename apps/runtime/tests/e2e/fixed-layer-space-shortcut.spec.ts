@@ -1,4 +1,5 @@
 import type { Locator } from '@playwright/test';
+import { CONTROL_LANGUAGE_KEY } from '../../src/renderer/i18n/localePreferences.js';
 import type { RuntimeBridge } from '../../src/shared/runtime-bridge.js';
 import { expect, RuntimeApp, test } from './fixtures/runtime.js';
 
@@ -23,6 +24,7 @@ test('R-023 — Space records, applies and uses the existing row action without 
 }) => {
   await page.setViewportSize(WIDE);
   const dialog = await openShortcuts(app);
+  await expect(dialog.getByText('Space', { exact: true })).toHaveCount(0);
   await expect(cell(dialog, 'Play', 80)).toHaveText('—');
   const play = cell(dialog, 'Play', 96);
   const measure = () =>
@@ -69,13 +71,27 @@ test('R-023 — Space records, applies and uses the existing row action without 
     page.evaluate(
       async () => (await window.cg.stack.snapshot()).find(({ slot }) => slot?.layer === 96)?.status,
     );
+  const toggle = app.layers.getByRole('switch', { name: 'Layer shortcuts', exact: true });
+  const otherRow = app.layerRow(80);
+  await expect(toggle).not.toBeChecked();
+  await otherRow.press('Space');
+  await expect(otherRow).toHaveAttribute('aria-pressed', 'true');
+  expect(await status()).not.toBe('on-air');
+  await otherRow.press('Enter');
+  await expect(otherRow).toHaveAttribute('aria-pressed', 'false');
+
+  await toggle.press('Space');
+  await expect(toggle).toBeChecked();
+  await toggle.press('Space');
+  await expect(toggle).not.toBeChecked();
+  expect(await status()).not.toBe('on-air');
+  await toggle.click();
   const search = app.layers.getByRole('searchbox', { name: 'Find row or template' });
   await search.press('Space');
   await expect(search).toHaveValue(' ');
   expect(await status()).not.toBe('on-air');
   await search.clear();
 
-  const otherRow = app.layerRow(80);
   await otherRow.press('Space');
   await expect(otherRow).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(status).toBe('on-air');
@@ -85,6 +101,70 @@ test('R-023 — Space records, applies and uses the existing row action without 
   await target.press('Space');
   await expect(target).toHaveAttribute('aria-pressed', 'true');
 });
+
+const shortcutLocales = [
+  {
+    locale: 'en',
+    settings: 'Open Station setup',
+    layers: 'Layers',
+    shortcuts: 'Layer shortcuts',
+    headings: ['Layer', 'Play', 'Next', 'Stop', 'Clear'],
+    rtl: false,
+  },
+  {
+    locale: 'fa',
+    settings: 'باز کردن تنظیمات ایستگاه',
+    layers: 'لایه‌ها',
+    shortcuts: 'میانبرهای لایه',
+    headings: ['لایه', 'پخش', 'بعدی', 'توقف', 'پاک کردن'],
+    rtl: true,
+  },
+  {
+    locale: 'ar',
+    settings: 'فتح إعداد المحطة',
+    layers: 'الطبقات',
+    shortcuts: 'اختصارات الطبقات',
+    headings: ['الطبقة', 'تشغيل', 'التالي', 'إيقاف', 'مسح'],
+    rtl: true,
+  },
+];
+
+for (const { locale, settings, layers, shortcuts, headings, rtl } of shortcutLocales) {
+  test(`R-023 — ${locale} shortcut headings and layer numbers follow the interface reading order`, async ({
+    app,
+  }) => {
+    const { page } = app;
+    await page.setViewportSize(WIDE);
+    await page.evaluate(
+      ({ key, locale }) => localStorage.setItem(key, JSON.stringify({ interface: locale })),
+      { key: CONTROL_LANGUAGE_KEY, locale },
+    );
+    await page.reload();
+    await page.getByRole('button', { name: settings, exact: true }).click();
+    await page.getByRole('dialog').getByRole('tab', { name: layers, exact: true }).click();
+    await page.getByRole('button', { name: `${shortcuts}…`, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: shortcuts, exact: true });
+    await expect(dialog.getByRole('columnheader')).toHaveText(headings);
+    await expect(dialog.getByRole('switch', { name: shortcuts, exact: true })).not.toBeChecked();
+
+    for (const [layer, alias] of [
+      ['99', 'DEBATE'],
+      ['83', 'میانبرنامه روی انتن'],
+    ] as const) {
+      const rowHeader = dialog.getByRole('rowheader').filter({ hasText: alias });
+      const parts = rowHeader.locator('bdi');
+      await expect(parts).toHaveText([layer, alias]);
+      const measure = (part: Locator) =>
+        part.evaluate((element) => {
+          const { left, right } = element.getBoundingClientRect();
+          return { left, right };
+        });
+      const [number, name] = await Promise.all([measure(parts.nth(0)), measure(parts.nth(1))]);
+      if (rtl) expect(number.left).toBeGreaterThan(name.right);
+      else expect(number.right).toBeLessThan(name.left);
+    }
+  });
+}
 
 test('R-023 — a console connected to a Bridge without Space support can still record function keys', async ({
   page,

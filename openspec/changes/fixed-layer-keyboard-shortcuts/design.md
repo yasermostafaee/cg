@@ -1,4 +1,4 @@
-# Fixed layer Next shortcut
+# Fixed layer keyboard shortcuts
 
 The Next binding clicks the row's existing Next button. That button already chooses between a
 template step and a book page and handles permission, air state, limits and in-flight commands.
@@ -9,10 +9,24 @@ maps for conflict and layer checks. Older consoles can read the bank and change 
 Omitting the Next map in a bank update keeps its existing bindings. An empty map clears them.
 
 An unconfigured bank uses function-key defaults for the intersection of its range with layers
-88–99. An explicitly saved map, even if empty, takes precedence. The shortcut dialog applies its
-map against the published bank so edits to row names and visibility still belong to the Layers tab.
+88–99. Space is available for deliberate assignment, and any existing saved binding remains valid.
+An explicitly saved map, even if empty, takes precedence. The shortcut dialog applies its map
+against the published bank so edits to row names and visibility still belong to the Layers tab.
+
+The Layers toolbar and the shortcut dialog share an in-memory enable switch. It uses the layer
+visibility switch treatment and starts off on each launch, reload or change of operator. A switch change applies
+immediately across the main and detached panels. The switch state is separate from assignment
+drafts and saved bank settings. The shortcut dialog isolates aliases and numbers so the number
+precedes the name in both reading directions.
+
+While off, an assigned key press that reaches the workspace and passes the editing, overlay,
+and repeat guards shows feedback directing the operator to Layer shortcuts in the Layers toolbar.
+This path only emits feedback. The key follows normal workspace handling. The message uses the
+feedback language.
 
 The Windows shell lets function-key events reach the console before WebView2 applies its browser
-shortcuts. It forwards F10 before Windows opens a menu. It reserves Alt+F4 while the selected channel
-can use that binding or a shortcut is being recorded. The renderer checks focus, dialog state and
-row availability. The window's close controls still use the existing close confirmation.
+shortcuts. It forwards F10 before Windows opens a menu. It reserves Alt+F4 while shortcuts are
+enabled and the selected channel can use that binding, or while a shortcut is being recorded.
+With shortcuts off, Alt+F4 follows the normal Windows close and confirmation path outside
+recording. A key handled by the operating system does not reach the workspace notice handler.
+The renderer checks focus, dialog state and row availability.

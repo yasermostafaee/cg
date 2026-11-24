@@ -1038,10 +1038,11 @@ touches renderer surfaces → `gate:e2e` owed at implementation time.
 
 ## [~] R-023 — per-fixed-layer keyboard shortcuts (Play / Next / Stop / Clear; PAUSE recon-first) ⟨priority: medium⟩ — `openspec/changes/fixed-layer-keyboard-shortcuts/`
 
-**What:** Operator keys per FIXED layer (depends on [[R-021]]): e.g. F1 = Play layer 1,
-Shift+F1 = Stop layer 1. A management modal lists the fixed layers (with aliases), captures key
-combos per verb, prevents conflicts, and persists in the same install config as the fixed
-layers.
+**What:** Operator keys per fixed layer (depends on [[R-021]]). For example, the defaults for
+layer 99 are F1 for Play and Ctrl+F1 for Stop. A management dialog lists the fixed layers,
+captures key combinations per action, prevents conflicts, and saves bindings with the fixed layers.
+The operator enables shortcuts for the current console session from Layers or the shortcuts dialog.
+Both switches use the same on and off treatment as the layer visibility switches.
 
 The keyboard configuration is available when CG Bridge advertises shortcut storage. A shortcut
 targets the active channel and uses the same guard and confirmation as the layer button.
@@ -1051,22 +1052,29 @@ a row — this is the Cinegy operating rhythm the fixed layers exist for.
 
 - WHEN the management modal is used THEN shortcuts are assignable per fixed layer for Play,
   Next, Stop (graceful) and Clear. Next is offered when the Bridge can store its binding.
-- WHEN the operator presses Next THEN the same guarded row action advances a template step or
-  a book page, including when the row is filtered out.
+- WHEN shortcuts are enabled and the operator presses an assigned Next key THEN the same guarded
+  row action advances a template step or a book page, including when the row is filtered out.
 - WHEN a combo is assigned THEN conflicts are prevented at assignment time — a combo can bind
   once
 - WHEN the Bridge supports Space THEN an admin can assign the physical Space key to Play, Next,
-  Stop or Clear. When the assigned action can run, Space triggers it once per press.
+  Stop or Clear. With shortcuts enabled and the assigned action available, Space triggers it once
+  per press.
 - WHEN an admin records a shortcut THEN the shortcut table keeps its row and column sizes. Empty
   cells show an em dash, and narrow windows can scroll the table horizontally.
 - WHEN a channel has no saved assignments THEN layers 99 through 88 default to F1 through F12
   for Play, Ctrl+F1 through Ctrl+F12 for Stop, Shift+F1 through Shift+F12 for Clear, and
-  Alt+F1 through Alt+F12 for Next. Other layers start unassigned.
+  Alt+F1 through Alt+F12 for Next. Space is unassigned by default. Other layers start unassigned.
 - WHEN an admin presses Apply in Layer shortcuts THEN its draft is saved immediately. Revert
   restores the last applied assignments. Pending visibility and name edits are independent.
 - WHEN focus is in any text input THEN shortcuts are inert
-- WHEN the app restarts THEN combos survive (config-persisted)
-- WHEN the modal lists layers THEN it shows aliases, not bare numbers
+- WHEN the console opens or restarts THEN shortcuts are off. Saved combinations remain configured.
+- WHEN the operator turns shortcuts off THEN assigned keys invoke no layer action in any workspace
+  window, including a detached panel. The layer action buttons remain available.
+- WHEN shortcuts are off and the operator presses an assigned key outside an editor or an open
+  overlay THEN a message in the feedback language points to the Layer shortcuts switch in the
+  Layers toolbar. Holding the key produces no repeated notices.
+- WHEN the modal lists layers THEN each number comes before its name in the interface's reading
+  direction, and the action headings use the interface language.
 
 **Notes:** The existing R-028 Next button already advances steps and the R-100 book button turns
 pages. The shortcut invokes that same control. PAUSE is still recon-first for html producers. Combos

@@ -24,8 +24,10 @@ import { feedback } from '../../i18n/locale.js';
 import { getRefusal, onRefusal, raiseRefusal } from './refusalStore.js';
 
 type Listener = (message: string) => void;
+type NoticeListener = (message: string, owner: Document) => void;
 
 const successListeners = new Set<Listener>();
+const noticeListeners = new Set<NoticeListener>();
 
 /**
  * Subscribe to REFUSALS as they are raised.
@@ -86,6 +88,18 @@ export function reportCommandError(
 /** Emit a command-success message to all subscribers. */
 export function reportCommandSuccess(message: string): void {
   for (const listener of [...successListeners]) listener(message);
+}
+
+/** A transient explanation of a local state, including the document that should show it. */
+export function onCommandNotice(listener: NoticeListener): () => void {
+  noticeListeners.add(listener);
+  return () => {
+    noticeListeners.delete(listener);
+  };
+}
+
+export function reportCommandNotice(message: string, owner: Document): void {
+  for (const listener of noticeListeners) listener(message, owner);
 }
 
 /**

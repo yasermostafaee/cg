@@ -80,6 +80,11 @@
       ],
       "fixes": [
         {
+          "fa": "میانبرهای لایه در آغاز هر نشست CG Control خاموش‌اند. فشردن یک میانبر در این حالت، محل روشن‌کردن آن را در نوار لایه‌ها نشان می‌دهد. Space پیش‌فرض تعریف نشده و می‌توان آن را دستی اختصاص داد. عنوان ستون‌ها ترجمه شده و شمارهٔ لایه پیش از نام آن می‌آید.",
+          "en": "Layer shortcuts start off in every CG Control session. Pressing an assigned key while off points to the switch in the Layers toolbar. Space starts unassigned and can be bound manually. The shortcut table uses translated headings and shows the layer number before its name.",
+          "ar": "تبدأ كل جلسة في CG Control واختصارات الطبقات معطّلة. عند ضغط مفتاح معيّن في هذه الحالة، تظهر رسالة توضح موضع مفتاح التشغيل في شريط الطبقات. مفتاح المسافة غير معيّن افتراضيًا ويمكن تعيينه يدويًا. تظهر عناوين الأعمدة بلغة الواجهة ويظهر رقم الطبقة قبل اسمها."
+        },
+        {
           "fa": "اگر یک مانیتور شناور باشد، دکمهٔ نوار بالا فقط مانیتور باقی‌مانده در پنجرهٔ اصلی را با نام خودش نشان می‌دهد یا پنهان می‌کند. با شناور شدن هر دو، دکمه پنهان می‌شود و با بازگشت یکی دوباره ظاهر می‌شود.",
           "en": "With one monitor floating, the toolbar toggle names and controls the remaining docked monitor. With both monitors floating, the toggle is hidden until one docks again.",
           "ar": "عند فصل شاشة واحدة، يذكر زر الشريط العلوي اسم الشاشة المتبقية في النافذة الرئيسية ويتحكم في إظهارها وإخفائها. وعند فصل الشاشتين، يختفي الزر حتى تعود إحداهما."

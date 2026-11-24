@@ -1,9 +1,10 @@
 import { localeDirection, useFeedbackText, useLanguages } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Check, Info } from 'lucide-react';
 import { cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
-import { onCommandSuccess } from './commandFeedback.js';
+import { onCommandNotice, onCommandSuccess } from './commandFeedback.js';
 
 /*
   `RUNTIME-REDESIGN-01` Phase 9 — the reference's `.global-toast` as rendered (`TOAST_PX` in the
@@ -49,6 +50,12 @@ const styles = {
     color: cssVars['--r-toast-ok-ink'],
     border: `1px solid ${cssVars['--r-toast-ok-line']}`,
   },
+  notice: {
+    background: cssVars['--r-surface-raised'],
+    color: cssVars['--r-text'],
+    border: `1px solid ${cssVars['--r-border-strong']}`,
+    pointerEvents: 'none' as const,
+  },
 } as const;
 
 /*
@@ -86,16 +93,13 @@ const DISMISS_MS = 3200;
   says both halves. See `LayerRow`'s `load`.
 */
 
-interface Feedback {
-  message: string;
-}
+type Feedback =
+  | { kind: 'success'; message: string }
+  | { kind: 'notice'; message: string; owner: Document };
 
 /**
- * Transient, accessible feedback surface for operator actions (C-001). Errors
- * (rejected commands) render red; successes (a completed local action, e.g.
- * "Imported X") render green. Both come from `commandFeedback` — the single
- * mechanism that replaced inline messages pinned into a row/panel. Last-write
- * wins; auto-dismisses.
+ * Transient feedback for completed actions and explanations of local state.
+ * Command refusals use their own persistent banner.
  */
 export function CommandToast(): JSX.Element | null {
   const message = useFeedbackText();
@@ -104,38 +108,36 @@ export function CommandToast(): JSX.Element | null {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribeSuccess = onCommandSuccess((message) => {
-      setFeedback({ message });
+    const show = (next: Feedback): void => {
+      setFeedback(next);
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => setFeedback(null), DISMISS_MS);
-    });
+    };
+    const unsubscribeSuccess = onCommandSuccess((message) => show({ kind: 'success', message }));
+    const unsubscribeNotice = onCommandNotice((message, owner) =>
+      show({ kind: 'notice', message, owner }),
+    );
     return () => {
       if (timer !== null) clearTimeout(timer);
       unsubscribeSuccess();
+      unsubscribeNotice();
     };
   }, []);
 
   if (feedback === null) return null;
-  return (
-    // R-006 — named, because `role="alert"` is no longer unique: the connection banner is
-    // deliberately an alert too ("nothing can reach air" IS an alert). Callers that mean
-    // THIS toast must be able to say so — and error vs success are separately addressable.
+  const toast = (
     <div
-      style={{ ...styles.base, ...styles.success }}
+      style={{ ...styles.base, ...styles[feedback.kind] }}
       dir={localeDirection(feedbackLanguage)}
       role="status"
       aria-live="polite"
-      aria-label={message('Command success')}
+      aria-label={message(feedback.kind === 'success' ? 'Command success' : 'Command notice')}
     >
-      {/*
-        The reference draws a mint check beside the line (`.global-toast svg{width:17px}`).
-        Ours draws the check on the OK half and a warning triangle on the refusal half — the
-        reference has no refusal toast to copy, and a check beside a failure would be the
-        icon contradicting the sentence. Both are decorative: the `aria-label` on the region
-        already says which kind this is, and the message says what happened.
-      */}
-      <Icon icon={Check} size={TOAST_ICON_PX} />
+      <Icon icon={feedback.kind === 'success' ? Check : Info} size={TOAST_ICON_PX} />
       <span>{message(feedback.message)}</span>
     </div>
   );
+  return feedback.kind === 'notice' && feedback.owner !== document
+    ? createPortal(toast, feedback.owner.body)
+    : toast;
 }

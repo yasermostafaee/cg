@@ -70,6 +70,8 @@ import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { LayerProfiles } from './LayerProfiles.js';
+import { LayerShortcutsToggle } from './LayerShortcutsToggle.js';
+import { useLayerShortcutSession } from './layerShortcutSession.js';
 import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
@@ -343,6 +345,7 @@ export function LayersPanel({
   // console-side answer; every operator control in this panel reads it (golden rule 6).
   const canOperate = useCanOperate();
   const capabilities = useAuthCapabilities();
+  const shortcutsEnabled = useLayerShortcutSession()?.enabled === true;
   /*
     `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
 
@@ -1392,7 +1395,7 @@ export function LayersPanel({
   );
 
   const renderHiddenShortcutRows = (): JSX.Element | null => {
-    if (!selectedHeld || !listReady || bank === null) return null;
+    if (!shortcutsEnabled || !selectedHeld || !listReady || bank === null) return null;
     const shortcutsByLayer = effectiveLayerShortcutBindings(
       bank,
       capabilities?.fixedLayerNextShortcut === true,
@@ -1480,6 +1483,7 @@ export function LayersPanel({
       }
       actions={
         <>
+          {canOperate && capabilities?.fixedLayerShortcuts === true && <LayerShortcutsToggle />}
           {canOperate && capabilities?.layerProfiles === true && listReady && bank !== null && (
             <LayerProfiles key={bank.channel} bank={bank} snapshot={items} />
           )}

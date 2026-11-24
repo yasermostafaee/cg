@@ -34,6 +34,7 @@ import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedA
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { NO_FILTER, type LayerFilter } from './features/layers/layerFilter.js';
 import { useLayerShortcuts } from './features/layers/useLayerShortcuts.js';
+import { LayerShortcutSessionProvider } from './features/layers/layerShortcutSession.js';
 import {
   FloatingPanelSlot,
   FloatingPanelSurface,
@@ -879,7 +880,7 @@ export function App({
           layout={layout}
           sessionCovered={lockCovers || setupPhase !== null}
         >
-          {shell}
+          <LayerShortcutSessionProvider>{shell}</LayerShortcutSessionProvider>
         </FloatingWorkspaceProvider>
       </EngineNameContext.Provider>
     </LiveInputCheckProvider>

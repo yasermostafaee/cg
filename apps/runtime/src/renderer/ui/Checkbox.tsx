@@ -24,6 +24,7 @@ export function Checkbox({
   disabled?: boolean | undefined;
   id?: string | undefined;
   className?: string | undefined;
+  role?: 'switch' | undefined;
   'aria-label'?: string | undefined;
   'aria-describedby'?: string | undefined;
   'data-channel-box'?: string | undefined;

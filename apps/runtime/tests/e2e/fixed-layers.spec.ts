@@ -350,6 +350,9 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
       page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.nextShortcuts?.['82']),
     )
     .toBe('Alt+Shift+F6');
+  const shortcutsSwitch = dialog.getByRole('switch', { name: 'Layer shortcuts', exact: true });
+  await expect(shortcutsSwitch).not.toBeChecked();
+  await shortcutsSwitch.click();
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(rowName).toHaveValue('Unapplied row name');
   expect(
@@ -357,6 +360,9 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   ).not.toBe('Unapplied row name');
   await page.getByRole('button', { name: 'Revert candidate layer edits' }).click();
   await app.closeStationSetup();
+  await expect(
+    app.layers.getByRole('switch', { name: 'Layer shortcuts', exact: true }),
+  ).toBeChecked();
 
   const templateId = 'tpl-shortcut-book';
   await app.importVcg('shortcut-book.vcg', await buildBookVcg(templateId), 82);
@@ -418,6 +424,7 @@ test('R-023 — default shortcuts operate a filtered layer without adding visibl
   const { page } = app;
   // The fixture's ticker is ready on layer 96, the default target for F4.
   await expect(app.layerRow(96).getByRole('button', { name: 'PLAY', exact: true })).toBeEnabled();
+  await app.layers.getByRole('switch', { name: 'Layer shortcuts', exact: true }).click();
   const search = app.layers.getByRole('searchbox', { name: 'Find row or template' });
   await search.fill('no rows match this');
   // The three occupied or blocked fixture rows stay visible through the filter.
@@ -441,6 +448,59 @@ test('R-023 — default shortcuts operate a filtered layer without adding visibl
   const confirm = page.getByRole('dialog', { name: /^Clear / });
   await expect(confirm).toBeVisible();
   await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+});
+
+test('R-023 — F1 cannot send a take until the operator enables shortcuts for this session', async ({
+  app,
+  page,
+}) => {
+  const toggle = app.layers.getByRole('switch', { name: 'Layer shortcuts', exact: true });
+  const layer = app.layerRow(99);
+  const play = layer.getByRole('button', { name: 'PLAY', exact: true });
+  const stop = layer.getByRole('button', { name: 'STOP', exact: true });
+  const shortcutsOff = page.getByText(
+    'Layer shortcuts are off. Turn them on in the Layers toolbar → Layer shortcuts.',
+    { exact: true },
+  );
+
+  // The fixture starts with layer 99 playing. Stop it manually so F1 has an available target.
+  await stop.click();
+  await expect(play).toBeEnabled();
+  const takes = await page.evaluateHandle(() => {
+    const requests: string[] = [];
+    const take = window.cg.stack.take;
+    window.cg.stack.take = (request) => {
+      requests.push(request.itemId);
+      return take(request);
+    };
+    return requests;
+  });
+  await expect(toggle).not.toBeChecked();
+  await page.keyboard.down('F1');
+  await expect(shortcutsOff).toBeVisible();
+  await page.keyboard.down('F1');
+  await page.keyboard.up('F1');
+  await expect(shortcutsOff).toHaveCount(1);
+  expect(await takes.jsonValue()).toEqual([]);
+  await expect(play).toBeEnabled();
+
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await page.keyboard.press('F1');
+  await expect.poll(() => takes.jsonValue()).toEqual(['item-looks']);
+  await expect(stop).toBeEnabled();
+  await stop.click();
+  await expect(play).toBeEnabled();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await page.keyboard.press('F1');
+  expect(await takes.jsonValue()).toEqual(['item-looks']);
+  await expect(play).toBeEnabled();
+
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await page.reload();
+  await expect(toggle).not.toBeChecked();
 });
 
 test('B-421: import+load selects the exact row, and the template stays available for reuse', async ({
