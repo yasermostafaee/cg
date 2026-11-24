@@ -5373,9 +5373,13 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN Station setup shows an assigned graphic THEN the template name is aligned with the table direction, and the tooltip uses its display name. The visibility switch knob stays on its track in both RTL positions.
 - WHEN the operator reads the first action column in Layers THEN the localized heading names both Load and Remove and the button names its available action.
 - WHEN the operator opens Layers, Station setup, the Inspector or a removal confirmation THEN generated layer names agree across views in the current language and custom names stay as entered.
-- WHEN the operator opens the source picker THEN its title is centered and A/B indicators stay beside each thumbnail in the Inputs and Media lists.
+- WHEN the operator opens the source picker THEN its title is centered and A/B indicators stay beside thumbnails in the Inputs and Media lists and at the end of each Media grid caption (the left edge in RTL).
 - WHEN the operator hovers a source preview THEN its status and tooltip are localized. The source lists label the catalogue server independently of the picture or audio provider, and the A/B indicators stay beside the picker chevron in Inspector and source defaults.
 - WHEN the operator reads the Channel tab in Persian or Arabic THEN the dimensions and frame-rate units keep their technical order, and the video and output explanations are localized.
+- WHEN a title, status, tooltip or feedback sentence in Persian or Arabic starts with a Latin name THEN that name leads from the right and retains the order of its letters. The message direction comes from the selected feedback language.
+- WHEN the operator opens Station layers THEN column labels and descriptions follow the interface direction, with separate isolation for authored values and technical identifiers.
+- WHEN the PGM status strip wraps THEN audio controls remain flush with its right edge in English and its left edge in Persian or Arabic.
+- WHEN a preset is selected in the Inspector THEN it has the standard button shape and its selected color remains visible.
 - WHEN Advanced or an Inspector section is collapsed THEN its chevron points left in RTL and right in English. When expanded it points down.
 - WHEN a Persian operator views an inherited preset input THEN the generated label uses «پیشفرض» and keeps the source name as authored.
 - WHEN a developer edits a translation value before building THEN CG Control bundles the updated catalog. The root README links to the catalog source files.
@@ -5398,6 +5402,8 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 - WHEN the editor preview first shows a video THEN it stays paused until that plate's Play is pressed.
 - WHEN Reset is pressed after playback then only that video's local preview returns to the start and pauses.
+- WHEN a preset contains both an NDI input and a video THEN each plate displays only its assigned source. Video preview transport appears only on the video plate.
+- WHEN the operator opens the Plate tab THEN the Layout effects disclosure is available there and its choices apply across the layout.
 
 ## [~] R-126 — Group everyday CG Control settings in General ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/organize-control-general-settings/`
 

@@ -1,4 +1,4 @@
-import { useFeedbackText, useUiText } from '../../i18n/locale.js';
+import { useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -15,7 +15,6 @@ export function SharedFilesSection({
   report: (message: ModalMessage | null) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const presentMessage = useFeedbackText();
   const admin = useHoldsStationAdmin();
   const [stored, setStored] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -48,7 +47,7 @@ export function SharedFilesSection({
       setStored(result.path);
       setDraft(result.path);
       const message = result.message ?? (checking ? 'CG Bridge can read this folder.' : undefined);
-      report(message === undefined ? null : { role: 'notice', text: presentMessage(message) });
+      report(message === undefined ? null : { role: 'notice', text: message });
     }
     return {
       accepted: result.ok,

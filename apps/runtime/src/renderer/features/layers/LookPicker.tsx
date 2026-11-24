@@ -301,7 +301,7 @@ export function LookPicker({
         title={
           starting
             ? translateUi('Selecting a preset chooses the first preset taken on air.')
-            : IMMEDIATE_TITLE
+            : translateUi(IMMEDIATE_TITLE)
         }
       >
         {preview ? translateUi('PVW LOOK') : 'PGM'}{' '}
@@ -354,7 +354,7 @@ export function LookPicker({
                 translateUi('{look} · {count} {plates}', {
                   look: look.label,
                   count: String(count),
-                  plates: count === 1 ? 'plate' : 'plates',
+                  plates: translateUi(count === 1 ? 'plate' : 'plates'),
                 })
               }
               /*

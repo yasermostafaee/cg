@@ -161,13 +161,6 @@ function outputRows(check: ChannelOutputCheck): OutputRow[] {
   });
 }
 
-/** The configured output's own words — the kind, and the device it declares, as `missingWords` spells them. */
-function configuredWords(declared: DeclaredConsumer): string {
-  return declared.device === undefined
-    ? declared.kind
-    : `${declared.kind} (device ${declared.device})`;
-}
-
 function OutputTable({ rows }: { rows: readonly OutputRow[] }): JSX.Element {
   const localizeUi = useUiText();
   return (
@@ -195,7 +188,14 @@ function OutputTable({ rows }: { rows: readonly OutputRow[] }): JSX.Element {
                 <td>
                   <span className="cg-output-name">
                     <Icon icon={kindIcon(row.declared.kind)} size={STATION_SETUP_PX.outputIcon} />
-                    {configuredWords(row.declared)}
+                    {row.declared.device === undefined ? (
+                      <bdi>{row.declared.kind}</bdi>
+                    ) : (
+                      localizeUi('{kind} (device {device})', {
+                        kind: row.declared.kind,
+                        device: row.declared.device,
+                      })
+                    )}
                   </span>
                 </td>
                 <td>

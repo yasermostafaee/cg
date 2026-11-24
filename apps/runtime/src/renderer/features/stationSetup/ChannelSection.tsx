@@ -246,17 +246,11 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
           </div>
         </dl>
       </section>
-      {/* The reference folds the "why read only" paragraph under a summary; the app's own
-          sentence goes there unchanged. */}
       <details className="cg-setup-details">
         <summary>{localizeUi('Why is the video format read only?')}</summary>
         <p>
           {localizeUi(
-            'The console needs this because plate geometry, the rehearsal preview and the on-air position boxes are computed in channel pixels. It is',
-          )}{' '}
-          <b>{localizeUi('not')}</b>{' '}
-          {localizeUi(
-            'typed here: the server owns the value, and a second place to set it would be a second source of truth — a wrong one moves every graphic without raising an error. If the console and the channel disagree, the mismatch banner says so.',
+            'The Playout Engine sets the channel format. CG Control uses it to position graphics in preview and on air. A warning appears if its resolution differs from the server’s.',
           )}
         </p>
       </details>

@@ -1,5 +1,5 @@
 import { feedback, useUiText } from '../../i18n/locale.js';
-import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
+import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import type { OrphanLayer, PlayoutLayerState } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -192,7 +192,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
    * menu's LENGTH varies by row, so `menuLast` keeps REMOVE last in both shapes.
    */
   const engine = useEngineName();
-  const clearRefusal = casparRefusalReason(linkDown, casparReach, engine);
+  const clearRefusal = casparRefusalReason(linkDown, casparReach);
 
   /**
    * Clear ONE playout layer.
@@ -215,7 +215,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
       layer: layer.layer,
     });
     if (res.ok) return { accepted: true };
-    reportCommandError(playoutClearRefusal(res.reason, res.observedProducer));
+    reportCommandError(playoutClearRefusal(res.reason, res.observedProducer, feedback));
     return { accepted: false, cancelled: true };
   };
 
@@ -279,9 +279,12 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
     // graphic they meant to remove is still on air.
     if (refused > 0) {
       reportCommandError(
-        `Cleared ${String(cleared)} of ${String(results.length)} playout layer(s) — ` +
-          `${String(refused)} refused and ${refused === 1 ? 'is' : 'are'} still on air. ` +
-          `Check the rows for the reason.`,
+        feedback(
+          refused === 1
+            ? 'Cleared {cleared} of {total} playout layers — {refused} refused and is still on air. Check the rows for the reason.'
+            : 'Cleared {cleared} of {total} playout layers — {refused} refused and are still on air. Check the rows for the reason.',
+          { cleared, total: results.length, refused },
+        ),
       );
     } else if (cleared > 0) {
       reportCommandSuccess(
@@ -315,7 +318,9 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
             run={clearAll}
             onError={reportCommandError}
             disabled={clearRefusal !== undefined}
-            {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
+            {...(clearRefusal !== undefined
+              ? { title: localizeEngineWording(clearRefusal, engine, localizeUi) }
+              : {})}
             aria-label={localizeUi('Clear all {count} clearable playout layers', {
               count: String(clearable.length),
             })}
@@ -326,13 +331,15 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
       </div>
       <div style={styles.list}>
         {layers.map((layer) => {
-          const state = stationLayerOccupancy(layer, linkDown);
+          const state = stationLayerOccupancy(layer, linkDown, localizeUi);
           return (
             <div key={layer.layer} style={styles.row} data-playout-layer={String(layer.layer)}>
               <span style={styles.layerNumber}>{String(layer.layer)}</span>
               <div style={styles.body}>
                 <span style={{ ...styles.occupant, color: state.tone }}>{state.occupant}</span>
-                <span style={styles.reason}>{playoutEngineWording(state.detail, engine)}</span>
+                <span style={styles.reason}>
+                  {localizeEngineWording(state.detail, engine, localizeUi)}
+                </span>
               </div>
               {state.clearable ? (
                 <AsyncButton
@@ -340,7 +347,9 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
                   run={() => confirmAndClearOne(layer)}
                   onError={reportCommandError}
                   disabled={clearRefusal !== undefined}
-                  {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
+                  {...(clearRefusal !== undefined
+                    ? { title: localizeEngineWording(clearRefusal, engine, localizeUi) }
+                    : {})}
                   aria-label={localizeUi('Clear playout layer {layer}', {
                     layer: String(layer.layer),
                   })}
@@ -395,11 +404,13 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
           <span
             key={`${String(o.channel)}-${String(o.layer)}`}
             style={styles.groupValue}
-            dir="ltr"
             data-undeclared-layer={String(o.layer)}
           >
-            {localizeUi('Channel')} {String(o.channel)}
-            {localizeUi(', layer')} {String(o.layer)} — {o.producer}
+            {localizeUi('Channel {channel}, layer {layer} — {producer}', {
+              channel: o.channel,
+              layer: o.layer,
+              producer: o.producer,
+            })}
           </span>
         ))}
     </div>
@@ -430,15 +441,18 @@ function StationLayerDeclarations(): JSX.Element {
           <span style={styles.groupValue}>{localizeUi('No reserved Playout layers.')}</span>
         ) : (
           reserved.map(([channel, ls]) => (
-            <span key={channel} style={styles.groupValue} dir="ltr">
-              {localizeUi('Channel')} {String(channel)}: {describeLayerRanges(ls)}
+            <span key={channel} style={styles.groupValue}>
+              {localizeUi('Channel {channel}: {layers}', {
+                channel,
+                layers: describeLayerRanges(ls),
+              })}
             </span>
           ))
         )}
       </div>
       <div style={styles.group} data-live-layer-ledger="">
         <span style={styles.groupTitle}>{localizeUi('Live plate layers')}</span>
-        <span style={styles.groupValue} dir="ltr">
+        <span style={styles.groupValue}>
           {!live.ready
             ? localizeUi('Waiting for Bridge.')
             : live.value.length === 0

@@ -1,4 +1,4 @@
-import { useFeedbackText, useUiText } from '../i18n/locale.js';
+import { localeDirection, useFeedbackText, useLanguages, useUiText } from '../i18n/locale.js';
 import type { CSSProperties, ReactNode } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
@@ -116,9 +116,8 @@ const base: CSSProperties = {
  * consequence of something the operator just did; a standing note about the
  * configuration being edited passes `note` and is not announced.
  *
- * `dir="auto"` on both lines: these strings sit beside Persian content and a
- * bridge's message may itself be Persian, so the paragraph direction follows the
- * text rather than the chrome.
+ * The feedback language sets the paragraph direction even when a translated
+ * message starts with the name of a product or a graphic in Latin script.
  */
 export function Notice({
   /*
@@ -199,6 +198,8 @@ export function Notice({
 }): JSX.Element {
   const presentMessage = useFeedbackText();
   const presentText = useUiText();
+  const { feedback } = useLanguages();
+  const messageDirection = localeDirection(feedback);
   const dismissable = onDismiss !== undefined;
   /*
     A mark or a title makes the box a ROW with a column inside it, exactly as a dismiss does —
@@ -240,13 +241,16 @@ export function Notice({
           style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}
         >
           {title !== undefined && (
-            <strong dir="auto" style={{ fontWeight: 600 }}>
+            <strong dir={messageDirection} style={{ fontWeight: 600 }}>
               {presentMessage(title)}
             </strong>
           )}
-          <span dir="auto">{presentMessage(text)}</span>
+          <span dir={messageDirection}>{presentMessage(text)}</span>
           {detail !== undefined && detail !== '' && (
-            <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
+            <span
+              dir={messageDirection}
+              style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}
+            >
               {detail}
             </span>
           )}
@@ -272,9 +276,12 @@ export function Notice({
         </span>
       ) : (
         <>
-          <span dir="auto">{presentMessage(text)}</span>
+          <span dir={messageDirection}>{presentMessage(text)}</span>
           {detail !== undefined && detail !== '' && (
-            <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
+            <span
+              dir={messageDirection}
+              style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}
+            >
               {detail}
             </span>
           )}

@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import {
   useCallback,
   useEffect,
@@ -290,6 +290,7 @@ function MediaPreviewTransport({
   fullscreenToggle,
 }: PreviewTransport & { fullscreenToggle: ReactNode }): JSX.Element {
   const localizeUi = useUiText();
+  const { interface: interfaceLanguage } = useLanguages();
   const elapsed = formatMediaDuration(Math.floor(positionMs / 1_000) * 1_000);
   const total = durationMs > 0 ? formatMediaDuration(durationMs) : '–:––';
   const played = seekEndMs > 0 ? Math.min(100, Math.max(0, (positionMs / seekEndMs) * 100)) : 0;
@@ -315,7 +316,11 @@ function MediaPreviewTransport({
         {fullscreenToggle}
       </div>
       {message && (
-        <span className="cg-source-media-preview__status" role="status" dir="auto">
+        <span
+          className="cg-source-media-preview__status"
+          role="status"
+          dir={localeDirection(interfaceLanguage)}
+        >
           {localizeUi(message)}
         </span>
       )}

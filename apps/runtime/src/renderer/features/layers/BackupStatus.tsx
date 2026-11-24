@@ -104,7 +104,7 @@ function BackupDetails({
                         {plate !== undefined && `${plate} · `}
                         <IsolatedName>{name}</IsolatedName>
                       </strong>
-                      <span>{MEDIA_ISSUES[reason].reason}</span>
+                      <span>{localizeUi(MEDIA_ISSUES[reason].reason)}</span>
                     </li>
                   );
                 })}
@@ -116,7 +116,7 @@ function BackupDetails({
               </p>
             )}
             {Array.from(new Set(clips.map(({ reason }) => reason)), (reason) => (
-              <p key={reason}>{MEDIA_ISSUES[reason].next}</p>
+              <p key={reason}>{localizeUi(MEDIA_ISSUES[reason].next)}</p>
             ))}
             <Button variant="ghost" onClick={() => setOpen(false)}>
               {localizeUi('Close')}

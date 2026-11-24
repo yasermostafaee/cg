@@ -1,4 +1,4 @@
-import { useFeedbackText } from '../../i18n/locale.js';
+import { localeDirection, useFeedbackText, useLanguages } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { cssVars } from '../../theme.js';
@@ -99,6 +99,7 @@ interface Feedback {
  */
 export function CommandToast(): JSX.Element | null {
   const message = useFeedbackText();
+  const { feedback: feedbackLanguage } = useLanguages();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   useEffect(() => {
@@ -121,6 +122,7 @@ export function CommandToast(): JSX.Element | null {
     // THIS toast must be able to say so — and error vs success are separately addressable.
     <div
       style={{ ...styles.base, ...styles.success }}
+      dir={localeDirection(feedbackLanguage)}
       role="status"
       aria-live="polite"
       aria-label={message('Command success')}
@@ -133,7 +135,7 @@ export function CommandToast(): JSX.Element | null {
         already says which kind this is, and the message says what happened.
       */}
       <Icon icon={Check} size={TOAST_ICON_PX} />
-      <span dir="auto">{message(feedback.message)}</span>
+      <span>{message(feedback.message)}</span>
     </div>
   );
 }

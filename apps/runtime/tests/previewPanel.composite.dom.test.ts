@@ -269,6 +269,7 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
     // `CONSOLE-MATCH-03` §1 — the reference's heading, which names the MECHANISM. The
     // sentence beneath it still carries `R-022`'s "Nothing is sent to CasparCG".
     expect(el.textContent).toContain('No layers on preview');
+    expect(el.textContent).toMatch(/Nothing is sent to (?:CasparCG|APASAI Playout Engine)\./);
   });
 
   /**

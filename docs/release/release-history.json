@@ -75,6 +75,16 @@
       ],
       "fixes": [
         {
+          "fa": "پیش‌نمایش چیدمان زنده، تصویر NDI و مدیا را در قاب‌های مربوط به خودشان نگه می‌دارد. مدیا فقط با دکمهٔ پخش همان قاب شروع می‌شود و افکت‌های چیدمان از تب قاب در دسترس‌اند.",
+          "en": "Live layout preview keeps NDI and media on their assigned plates. Media starts from its own Play control, and Layout effects are available on the Plate tab.",
+          "ar": "تعرض معاينة الترتيب الحي إشارة NDI والوسائط في الإطارات المعيّنة لها. يبدأ تشغيل الوسائط بزر الإطار الخاص بها، وتتوفر تأثيرات الترتيب في تبويب الإطار."
+        },
+        {
+          "fa": "وضعیت‌ها و تولتیپ‌های لایه‌ها در فارسی و عربی کامل‌تر شدند. متن‌ها و پیام‌های ترکیبی از سمت راست خوانده می‌شوند، نشان‌های A/B در نمای شبکهٔ مدیا سمت چپ‌اند و کنترل‌های صدای PGM در انتهای نوار می‌مانند. جداکننده‌های مشخصات کانال و متن راهنمای فرمت هم اصلاح شدند.",
+          "en": "Localize more layer states and tooltips in Persian and Arabic. Set the correct direction for mixed-script copy and feedback, align A/B at the end of media grid captions, anchor PGM audio controls, and fix Channel metric dividers and format help.",
+          "ar": "استُكملت ترجمة حالات الطبقات وتلميحاتها بالفارسية والعربية. رُتّبت النصوص والرسائل المختلطة من اليمين، وثُبّت مؤشرا A/B عند يسار بطاقات الوسائط، وتبقى أدوات صوت PGM عند طرف الشريط. وصُححت فواصل مواصفات القناة وشرح تنسيقها."
+        },
+        {
           "fa": "نام پیش‌فرض لایه‌های عادی و زنده در جدول، تنظیمات و تأیید حذف یکسان است. ترجمه‌های جاافتادهٔ Inspector و قاب‌های زنده تکمیل شدند.",
           "en": "Use consistent default layer names in the Layers table, Settings and remove confirmations. Localize missing Inspector and Live plates text.",
           "ar": "توحّدت الأسماء الافتراضية للطبقات في الجدول والإعدادات ونوافذ تأكيد الإزالة. واستُكملت ترجمة النصوص الناقصة في المفتش واللوحات المباشرة."
@@ -90,9 +100,9 @@
           "ar": "حُفظ ترتيب أبعاد الفيديو ومعدل الإطارات في واجهات RTL، ويظهر المصطلح الإنجليزي لنوع المسح بجانب ترجمته. وتُرجم شرح تحديد المخارج. تشير أسهم الأقسام القابلة للطي في الإعدادات ولوحة الخصائص ومحرر الترتيب الحي إلى الاتجاه الصحيح، وتظهر تسمية المدخلات الموروثة في الإعدادات المسبقة باللغة الفارسية."
         },
         {
-          "fa": "پنل «ویژگی‌ها» دکمه‌های گرد پریست و تیک انتخاب دارد. نشان‌های A/B در انتخاب منبع کنار فلش ثابت‌اند و در فهرست قاب‌های چیدمان زنده هم به‌شکل کوچک و رنگی دیده می‌شوند. نشانی فهرست ورودی‌ها و منشأ پیش‌نمایش جداگانه مشخص‌اند. تولتیپ‌های سیگنال و اتصال به فارسی و عربی ترجمه شدند.",
-          "en": "Inspector uses rounded preset buttons with a selected checkmark. A/B badges stay beside the source control chevron and remain compact in the live layout plate list. The input catalog address and preview origin are identified separately. Input signal and connection tooltips are available in Persian and Arabic.",
-          "ar": "تعرض لوحة الخصائص أزرارًا مستديرة للإعدادات المسبقة، مع علامة صح على الإعداد المحدد. يبقى مؤشرا A وB بجانب سهم اختيار المصدر، ويظهران بحجم صغير وبألوان الحالة في قائمة إطارات الترتيب الحي. يُعرض عنوان خادم قائمة المدخلات ومصدر المعاينة كلٌّ على حدة. وتظهر تلميحات الإشارة والاتصال بالفارسية والعربية."
+          "fa": "پریست انتخاب‌شده در پنل «ویژگی‌ها» با رنگ و تیک مشخص می‌شود. نشان‌های A/B در انتخاب منبع کنار فلش ثابت‌اند و در فهرست قاب‌های چیدمان زنده هم به‌شکل کوچک و رنگی دیده می‌شوند. نشانی فهرست ورودی‌ها و منشأ پیش‌نمایش جداگانه مشخص‌اند. تولتیپ‌های سیگنال و اتصال به فارسی و عربی ترجمه شدند.",
+          "en": "Inspector identifies the selected preset with an accent fill and checkmark. A/B badges stay beside the source control chevron and remain compact in the live layout plate list. The input catalog address and preview origin are identified separately. Input signal and connection tooltips are available in Persian and Arabic.",
+          "ar": "تميّز لوحة الخصائص الإعداد المسبق المحدد بلون وعلامة صح. يبقى مؤشرا A وB بجانب سهم اختيار المصدر، ويظهران بحجم صغير وبألوان الحالة في قائمة إطارات الترتيب الحي. يُعرض عنوان خادم قائمة المدخلات ومصدر المعاينة كلٌّ على حدة. وتظهر تلميحات الإشارة والاتصال بالفارسية والعربية."
         },
         {
           "fa": "در PGM، چیدمان افقی و عمودی در پنل عادی هم اعمال می‌شود. وقتی پنل باریک شود کنترل‌های تصویر و صدا به خط بعد می‌روند. تولتیپ‌های چیدمان به فارسی و عربی در دسترس‌اند.",

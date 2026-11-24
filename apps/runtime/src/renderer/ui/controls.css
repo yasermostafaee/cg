@@ -577,6 +577,7 @@
 
 [data-monitor-pgm-strip] > .cg-pgm-source-controls {
   margin-inline-start: auto;
+  justify-content: flex-end;
 }
 .cg-pvw-template-outlines {
   overflow: hidden;
@@ -7567,14 +7568,14 @@ input[type='checkbox']:disabled:checked {
 }
 
 .cg-video-metric {
-  padding-left: var(--r-video-metric-inset);
-  border-left: 1px solid var(--r-table-rule);
+  padding-inline-start: var(--r-video-metric-inset);
+  border-inline-start: 1px solid var(--r-table-rule);
   min-width: 0;
 }
 
 .cg-video-metric:first-child {
-  padding-left: 0;
-  border-left: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 
 .cg-video-metric > dt {
@@ -10319,7 +10320,6 @@ input[type='checkbox']:disabled:checked {
   white-space: normal;
   line-height: 1.15;
   text-align: center;
-  border-radius: var(--r-radius-full);
 }
 .cg-look-preset__caption {
   display: flex;

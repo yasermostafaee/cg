@@ -16,4 +16,5 @@
 - [x] Verify the localized live-plate audio controls and statuses, maintained A/B picture indicators, and Arabic release history with the chosen interface language.
 - [x] Verify translated connected, unknown, and joining input previews and the identified PGM and preview source in Chromium.
 - [x] Verify the channel card for 1080i, 1080p, 720p and 2160p in both RTL languages.
+- [x] Verify mixed-direction feedback, media grid A/B, Channel dividers, station-layer labels and PGM audio alignment in the carrying browser build. Windows Chromium passed.
 - [ ] Record the carrying Linux Playwright result.

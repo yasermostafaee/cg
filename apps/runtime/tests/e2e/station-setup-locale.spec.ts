@@ -28,6 +28,7 @@ const detail = {
   fa: {
     sources: 'منابع زنده',
     files: 'فایل‌های اشتراکی',
+    general: 'عمومی',
     layers: 'لایه‌ها',
     grid: 'شبکه‌ای',
     list: 'فهرست',
@@ -39,6 +40,9 @@ const detail = {
     reach: 'دسترسی',
     versions: 'نسخه‌ها',
     signIn: 'ورود',
+    formatHelp: 'چرا فرمت ویدئو فقط خواندنی است؟',
+    formatOwner: 'فرمت کانال را موتور پخش تعیین می‌کند.',
+    sharedRead: 'CG Bridge این پوشه را می‌خواند.',
     route: 'مسیر CG Bridge به',
     signingKey: 'کلید امضا',
     locked: 'نمایش قفل است',
@@ -47,6 +51,7 @@ const detail = {
   ar: {
     sources: 'المصادر الحية',
     files: 'الملفات المشتركة',
+    general: 'عام',
     layers: 'الطبقات',
     grid: 'شبكة',
     list: 'قائمة',
@@ -58,6 +63,9 @@ const detail = {
     reach: 'إمكانية الوصول',
     versions: 'الإصدارات',
     signIn: 'تسجيل الدخول',
+    formatHelp: 'لماذا تنسيق الفيديو للقراءة فقط؟',
+    formatOwner: 'يحدّد محرك البث تنسيق القناة.',
+    sharedRead: 'يستطيع CG Bridge قراءة هذا المجلد.',
     route: 'يمر مسار CG Bridge إلى',
     signingKey: 'مفاتيح التوقيع',
     locked: 'العرض مقفل',
@@ -151,6 +159,20 @@ for (const locale of ['fa', 'ar'] as const) {
       locale === 'fa' ? 'با سرور هم‌خوان است' : 'مطابق لإعدادات الخادم',
     );
     await expect(video).not.toContainText('the engine configuration');
+    const metrics = video.locator('.cg-video-metric');
+    await expect(metrics).toHaveCount(5);
+    for (const index of [0, 1, 2, 3, 4]) {
+      const firstInRow = index === 0 || index === 3;
+      const cell = metrics.nth(index);
+      await expect(cell).toHaveCSS('border-right-width', firstInRow ? '0px' : '1px');
+      await expect(cell).toHaveCSS('border-left-width', '0px');
+    }
+    const formatHelp = dialog.locator('details').filter({ hasText: words.formatHelp });
+    await formatHelp.locator('summary').click();
+    const explanation = formatHelp.locator('p');
+    await expect(explanation).toBeVisible();
+    await expect(explanation).toContainText(words.formatOwner);
+    await expect(explanation).not.toContainText(locale === 'fa' ? 'خیر' : 'لا تُكتب هنا');
     const outputHelp = dialog.locator('details').filter({
       hasText: locale === 'fa' ? 'شناسایی خروجی‌ها' : 'طريقة تحديد المخارج',
     });
@@ -207,6 +229,37 @@ for (const locale of ['fa', 'ar'] as const) {
     await expect(
       dialog.getByText('CG Bridge can read this folder.', { exact: true }),
     ).toBeVisible();
+
+    await dialog.getByRole('tab', { name: words.general, exact: true }).click();
+    await dialog.locator('#cg-feedback-language').selectOption(locale);
+    await dialog.getByRole('tab', { name: words.files, exact: true }).click();
+    await dialog.getByRole('button', { name: words.access, exact: true }).click();
+    const sharedRead = dialog.getByText(words.sharedRead, { exact: true });
+    await expect(sharedRead).toBeVisible();
+    await expect(sharedRead).toHaveCSS('direction', 'rtl');
+    if (locale === 'fa') {
+      const positions = await sharedRead.evaluate((el) => {
+        const node = el.firstChild;
+        if (node?.nodeType !== Node.TEXT_NODE) throw new Error('The notice text is missing');
+        const value = node.textContent ?? '';
+        const prefix = 'CG Bridge';
+        const start = value.indexOf(prefix);
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + prefix.length);
+        const bridge = range.getBoundingClientRect();
+        range.setStart(node, start + prefix.length);
+        range.setEnd(node, value.length);
+        return {
+          bridgeLeft: bridge.left,
+          bridgeRight: bridge.right,
+          persianLeft: range.getBoundingClientRect().left,
+          noticeRight: el.getBoundingClientRect().right,
+        };
+      });
+      expect(positions.bridgeLeft).toBeGreaterThan(positions.persianLeft);
+      expect(Math.abs(positions.noticeRight - positions.bridgeRight)).toBeLessThan(2);
+    }
 
     const connection = locale === 'fa' ? /^اتصال/ : /^الاتصال/;
     await dialog.getByRole('tab', { name: connection }).click();

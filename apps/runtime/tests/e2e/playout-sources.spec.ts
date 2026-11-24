@@ -520,10 +520,26 @@ test('centers the source picker header and anchors both lists’ A/B indicators 
     expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(1);
   }
 
-  async function checkPicker(defaults: Locator, rtl: boolean): Promise<void> {
+  async function checkPicker(defaults: Locator, locale: 'en' | 'fa' | 'ar'): Promise<void> {
+    const rtl = locale !== 'en';
+    const copy = {
+      en: {
+        title: 'Choose a source',
+        list: 'Switch to list view',
+        media: /^Media/,
+        cancel: 'Cancel',
+      },
+      fa: { title: 'انتخاب منبع', list: 'تغییر به نمای فهرست', media: /^رسانه/, cancel: 'انصراف' },
+      ar: {
+        title: 'اختر مصدرًا',
+        list: 'التبديل إلى عرض القائمة',
+        media: /^الوسائط/,
+        cancel: 'إلغاء',
+      },
+    }[locale];
     await defaults.locator('[data-defaults-select="l-2"]').click();
     const dialog = page.getByRole('dialog', {
-      name: rtl ? 'انتخاب منبع' : 'Choose a source',
+      name: copy.title,
       exact: true,
     });
     await expect(dialog).toBeVisible();
@@ -540,16 +556,25 @@ test('centers the source picker header and anchors both lists’ A/B indicators 
       });
     });
     for (const offset of offsets) expect(offset).toBeLessThan(1);
-    const listView = rtl ? 'تغییر به نمای فهرست' : 'Switch to list view';
     const inputs = dialog.locator('[data-picker-tab="inputs"]');
-    await inputs.getByRole('button', { name: listView, exact: true }).click();
+    await inputs.getByRole('button', { name: copy.list, exact: true }).click();
     await checkPictures(inputs.locator('.cg-vlist-action-row'), '[data-input-thumbnail]', rtl);
 
-    await dialog.getByRole('tab', { name: rtl ? /^رسانه/ : /^Media/ }).click();
+    await dialog.getByRole('tab', { name: copy.media }).click();
     const media = dialog.locator('[data-picker-tab="media"]');
-    await media.getByRole('button', { name: listView, exact: true }).click();
+    const tile = media.locator('[data-picker-media]').first();
+    const tilePresence = tile.locator('[data-source-presence]');
+    await expect(tilePresence).toBeVisible();
+    const captionOffset = await tilePresence.evaluate((badges, rightToLeft) => {
+      const caption = badges.parentElement?.getBoundingClientRect();
+      if (caption === undefined) throw new Error('Missing media tile caption');
+      const indicator = badges.getBoundingClientRect();
+      return rightToLeft ? indicator.left - caption.left : caption.right - indicator.right;
+    }, rtl);
+    expect(Math.abs(captionOffset)).toBeLessThan(1);
+    await media.getByRole('button', { name: copy.list, exact: true }).click();
     await checkPictures(media.locator('[data-picker-media]'), '.cg-media-thumbnail', rtl);
-    await dialog.getByRole('button', { name: rtl ? 'انصراف' : 'Cancel', exact: true }).click();
+    await dialog.getByRole('button', { name: copy.cancel, exact: true }).click();
   }
 
   async function checkTrailingPresence(field: Locator, rtl: boolean): Promise<void> {
@@ -590,7 +615,7 @@ test('centers the source picker header and anchors both lists’ A/B indicators 
     }
   }
 
-  await checkPicker(englishDefaults, false);
+  await checkPicker(englishDefaults, 'en');
   await app.chooseSource(englishDefaults.locator('[data-defaults-select="l-1"]'), {
     media: 'Clip 001',
     search: 'Clip 001',
@@ -610,11 +635,19 @@ test('centers the source picker header and anchors both lists’ A/B indicators 
   await settings.getByRole('button', { name: 'بستن', exact: true }).last().click();
   await page.locator('[data-open-template-defaults]').click();
   const persianDefaults = page.getByRole('dialog', { name: /^منابع پیشفرض/ });
-  await checkPicker(persianDefaults, true);
+  await checkPicker(persianDefaults, 'fa');
   await checkTrailingPresence(persianDefaults.locator('[data-defaults-select="l-1"]'), true);
   await checkTrailingPresence(persianDefaults.locator('[data-defaults-select="l-2"]'), true);
   await persianDefaults.getByRole('button', { name: 'بستن', exact: true }).click();
   await checkPresetInputFaces(true);
+  await page.getByRole('button', { name: 'باز کردن تنظیمات ایستگاه', exact: true }).click();
+  await settings.getByRole('tab', { name: 'عمومی', exact: true }).click();
+  await settings.locator('#cg-interface-language').selectOption('ar');
+  await settings.getByRole('button', { name: 'إغلاق', exact: true }).last().click();
+  await page.locator('[data-open-template-defaults]').click();
+  const arabicDefaults = page.getByRole('dialog', { name: /^المصادر الافتراضية/ });
+  await checkPicker(arabicDefaults, 'ar');
+  await checkTrailingPresence(arabicDefaults.locator('[data-defaults-select="l-1"]'), true);
 });
 
 for (const copy of [

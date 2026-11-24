@@ -812,9 +812,9 @@ export function PreviewPanel({
             <span style={styles.label}>{localizeUi('No layers on preview')}</span>
             <span style={styles.detail}>
               {localizeUi(
-                'Use ON PVW on one or more loaded rows and their graphics render here, in this browser, with the field values you have typed. Nothing is sent to',
-              )}{' '}
-              {engine}.
+                'Use ON PVW on loaded rows to preview their graphics with the values entered in this console. Nothing is sent to {engine}.',
+                { engine },
+              )}
             </span>
           </div>
         ) : (

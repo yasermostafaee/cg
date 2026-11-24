@@ -114,7 +114,19 @@ export function readPanicReport(
  * `FIELD-FIXES-01` K — a silence control's title while there is nothing to silence: the SAME words
  * the bridge's answer would come back with, so the disabled control and a press say one thing.
  */
-export function nothingToSilence(scope: PanicScope): string {
+export function nothingToSilence(scope: PanicScope, localizeUi?: typeof feedback): string {
+  if (localizeUi !== undefined) {
+    switch (scope.kind) {
+      case 'station':
+        return localizeUi('Nothing to silence — the bridge holds no live plates.');
+      case 'channel':
+        return localizeUi('Nothing to silence — channel {channel} holds no live plates.', {
+          channel: scope.channel,
+        });
+      case 'every':
+        return localizeUi('Nothing to silence — no channel holds a live plate.');
+    }
+  }
   return `Nothing to silence — ${nothingWhere(scope)}.`;
 }
 

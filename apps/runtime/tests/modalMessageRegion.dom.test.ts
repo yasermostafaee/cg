@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FixedSlotState } from '@cg/shared-ipc';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import { Modal, ModalAction } from '../src/renderer/ui/Modal.js';
 import { __resetSourcesForTest } from '../src/renderer/features/sources/sourceStore.js';
 import { __resetDelimitersForTest } from '../src/renderer/features/inspector/delimiterStore.js';
@@ -501,32 +502,27 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
     );
   });
 
-  /**
-   * PERSIAN / RTL — these strings sit beside RTL content, and a bridge's own
-   * message may itself be Persian.
-   *
-   * `dir="auto"` on the message lines, so the paragraph direction follows the
-   * TEXT rather than the chrome: a Persian refusal reads right-to-left with its
-   * full stop in the right place, while an English one beside it is unaffected.
-   * Asserted as the attribute rather than by measuring, because jsdom computes no
-   * layout — the attribute IS the mechanism (`inspector.dirAuto` makes the same
-   * call for the field editors).
-   */
-  it('lets the message direction follow the message, not the chrome', async () => {
-    const dialog = await render(
-      createElement(Modal, {
-        title: 'RTL',
-        onClose: () => undefined,
-        message: {
-          role: 'refusal' as const,
-          text: 'این ردیف اشغال است — ابتدا تمپلیت آن را حذف کنید.',
-          detail: 'لایه ۹۵ یک تمپلیت روی خود دارد.',
-        },
-        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'بستن' }),
-      }),
-    );
-    const lines = [...(dialog.querySelector('[data-notice="refusal"]')?.children ?? [])];
-    expect(lines.length, 'both the rule and the specifics are rendered').toBe(2);
-    for (const line of lines) expect(line.getAttribute('dir')).toBe('auto');
+  it('uses the selected feedback direction for both lines, even with an English prefix', async () => {
+    setLanguage('feedback', 'fa');
+    try {
+      const dialog = await render(
+        createElement(Modal, {
+          title: 'RTL',
+          onClose: () => undefined,
+          message: {
+            role: 'refusal' as const,
+            text: 'CG Bridge can read this folder.',
+            detail: 'لایه ۹۵ یک تمپلیت روی خود دارد.',
+          },
+          footer: createElement(ModalAction, { actionRole: 'cancel', children: 'بستن' }),
+        }),
+      );
+      const lines = [...(dialog.querySelector('[data-notice="refusal"]')?.children ?? [])];
+      expect(lines.length, 'both the rule and the specifics are rendered').toBe(2);
+      for (const line of lines) expect(line.getAttribute('dir')).toBe('rtl');
+      expect(lines[0]?.textContent).toBe('CG Bridge این پوشه را می‌خواند.');
+    } finally {
+      await act(async () => setLanguage('feedback', 'en'));
+    }
   });
 });

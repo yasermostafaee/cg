@@ -1,4 +1,5 @@
 import type { FixedSlotObservation } from '@cg/shared-ipc';
+import type { useUiText } from '../../i18n/locale.js';
 
 /**
  * R-021 stage 2b — what the operator reads for a fixed slot's occupancy.
@@ -20,14 +21,22 @@ import type { FixedSlotObservation } from '@cg/shared-ipc';
  *  - `producer` names the kind verbatim — the wire carries facts, and the kind
  *    is the fact the operator quotes when asking "what is on my layer 72?".
  */
-export function occupancyLabel(observed: FixedSlotObservation, linkDown: boolean): string {
-  if (linkDown) return 'not connected — occupancy unknown';
+export function occupancyLabel(
+  observed: FixedSlotObservation,
+  linkDown: boolean,
+  localizeUi?: ReturnType<typeof useUiText>,
+): string {
+  const t = localizeUi ?? ((source: string) => source);
+  if (linkDown) return t('not connected — occupancy unknown');
   switch (observed.kind) {
     case 'unknown':
-      return 'no signal — occupancy unknown';
+      return t('no signal — occupancy unknown');
     case 'empty':
-      return 'empty';
+      return t('empty');
     case 'producer':
-      return `occupied — ${observed.producer} producer`;
+      return (
+        localizeUi?.('occupied — {producer} producer', { producer: observed.producer }) ??
+        `occupied — ${observed.producer} producer`
+      );
   }
 }

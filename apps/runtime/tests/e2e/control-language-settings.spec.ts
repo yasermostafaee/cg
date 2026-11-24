@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { buildValidVcg, expect, test } from './fixtures/runtime.js';
 
 async function expectLoadRemoveHeader(page: Page, label: string): Promise<void> {
   const heading = page.locator('[data-verb-head]').first();
@@ -37,13 +37,71 @@ test('chooses English chrome and Persian command outcomes independently, and rem
 
   const row = app.layerRow(96);
   await row.getByRole('button', { name: 'PLAY', exact: true }).click();
-  await expect(page.getByRole('status', { name: 'عملیات موفق' })).toContainText('روی آنتن رفت.');
+  const toast = page.getByRole('status', { name: 'عملیات موفق' });
+  await expect(toast).toContainText('روی آنتن رفت.');
+  await expect(toast).toHaveCSS('direction', 'rtl');
+  const tokenPositions = await toast.locator('span').evaluate((message) => {
+    const node = message.firstChild;
+    if (node === null) throw new Error('Missing command text');
+    const text = node.textContent ?? '';
+    const latin = text.search(/[A-Za-z]/);
+    const persian = text.indexOf('روی آنتن رفت');
+    if (latin < 0 || persian < 0) throw new Error('Expected a Latin row name and Persian feedback');
+    const range = document.createRange();
+    const x = (at: number) => {
+      range.setStart(node, at);
+      range.setEnd(node, at + 1);
+      return range.getBoundingClientRect().left;
+    };
+    return { latin: x(latin), persian: x(persian) };
+  });
+  expect(tokenPositions.latin).toBeGreaterThan(tokenPositions.persian);
   await expect(row.getByRole('button', { name: 'STOP', exact: true })).toBeEnabled();
 
   await page.reload();
   await openGeneral(page);
   await expect(page.locator('#cg-interface-language')).toHaveValue('en');
   await expect(page.locator('#cg-feedback-language')).toHaveValue('fa');
+});
+
+test('anchors PGM audio at the end of the strip as the console width and language change', async ({
+  app,
+}) => {
+  const { page } = app;
+  await app.showMonitors();
+  for (const locale of ['en', 'fa', 'ar']) {
+    await openGeneral(page);
+    await page.locator('#cg-interface-language').selectOption(locale);
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^(Close|بستن|إغلاق)$/, exact: true })
+      .last()
+      .click();
+    for (const width of [1440, 850, 650]) {
+      await page.setViewportSize({ width, height: 900 });
+      const group = page.locator('[data-monitor-pgm-strip] > .cg-pgm-source-controls');
+      await expect(group).toBeVisible();
+      const gap = await group.evaluate((controls) => {
+        const strip = controls.parentElement;
+        if (strip === null) throw new Error('Missing PGM status strip');
+        const rect = strip.getBoundingClientRect();
+        const style = getComputedStyle(strip);
+        const boxes = [...controls.children].map((child) => child.getBoundingClientRect());
+        const distance =
+          style.direction === 'rtl'
+            ? Math.min(...boxes.map((box) => box.left)) - rect.left
+            : rect.right - Math.max(...boxes.map((box) => box.right));
+        return distance - Number.parseFloat(style.paddingInlineEnd);
+      });
+      expect(Math.abs(gap)).toBeLessThan(1);
+    }
+    if (locale === 'fa') {
+      await expect(page.locator('[data-monitor-air-count]')).toHaveAttribute(
+        'title',
+        /^تعداد لایه‌های روی آنتن/,
+      );
+    }
+  }
 });
 
 test('keeps English controls when the Play refusal uses Arabic', async ({ app }) => {
@@ -93,6 +151,9 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(identifier).toHaveCSS('direction', 'ltr');
 
   await page.getByRole('dialog').getByRole('button', { name: 'بستن', exact: true }).click();
+  await expect(page.getByRole('img', { name: /^پیش‌نمایش خالی است/ })).toContainText(
+    /نمایش در PVW.*هیچ فرمانی به .+ فرستاده نمی‌شود\./,
+  );
   const row = page.locator('[data-layer="96"]');
   await expect(row).toHaveCSS('direction', 'rtl');
   await expect(row.getByRole('button', { name: 'پخش', exact: true })).toBeVisible();
@@ -112,6 +173,9 @@ test('mirrors settings and layers for Persian and Arabic, and isolates a Latin i
   await expect(page.locator('[data-layer="98"]')).toContainText('محظور');
   await expect(page.locator('[data-layer="99"]')).toContainText('بث محاكى');
   await expect(page.locator('[data-rehearsal-caption]')).toContainText('معاينة');
+  await expect(page.getByRole('img', { name: /^المعاينة خالية/ })).toContainText(
+    /في PVW.*لا يُرسل أي أمر إلى .+\./,
+  );
   await expect(page.locator('[data-pgm-screen]').first()).toContainText('لا توجد إشارة عودة');
   await expect(page.getByTestId('monitor-head-tag')).toContainText('الخرج غير معروف');
   await expect(page.getByText(/صفوف على البث/).first()).toBeVisible();
@@ -173,6 +237,44 @@ test('localizes a layer confirmation without changing the feedback language', as
   await dialog.getByRole('button', { name: 'انصراف', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(row.getByRole('button', { name: 'پاک کردن', exact: true })).toBeEnabled();
+});
+
+test('reads a Latin template name first in RTL remove confirmations', async ({ app }) => {
+  const { page } = app;
+  const id = 'rtl-removal-title';
+  await app.importVcg('ghabb.vcg', await buildValidVcg(id));
+  const layer = await app.loadTemplate(id);
+  for (const locale of ['fa', 'ar']) {
+    await openGeneral(page);
+    await page.locator('#cg-interface-language').selectOption(locale);
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^(بستن|إغلاق)$/, exact: true })
+      .last()
+      .click();
+    await page.locator(`[data-layer="${layer}"] [data-verb-tone="remove"]`).click();
+    const dialog = page.getByRole('dialog', { name: /ghabb/ });
+    const heading = dialog.getByRole('heading');
+    await expect(heading).toHaveCSS('direction', 'rtl');
+    await expect(heading).toHaveText(/^«\u2068ghabb\u2069»/u);
+    const startsAtRight = await heading.evaluate((element) => {
+      const node = element.firstChild;
+      if (node === null) throw new Error('Missing confirmation title');
+      const text = node.textContent ?? '';
+      const latin = text.indexOf('ghabb');
+      const onRtlScript = text.search(/\p{Script=Arabic}/u);
+      if (latin < 0 || onRtlScript < 0) throw new Error('Expected a mixed-script confirmation');
+      const range = document.createRange();
+      const x = (at: number) => {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        return range.getBoundingClientRect().left;
+      };
+      return x(latin) > x(onRtlScript);
+    });
+    expect(startsAtRight).toBe(true);
+    await dialog.getByRole('button', { name: /^(انصراف|إلغاء)$/, exact: true }).click();
+  }
 });
 
 test('keeps both positions of a visibility switch inside the track in RTL', async ({ app }) => {

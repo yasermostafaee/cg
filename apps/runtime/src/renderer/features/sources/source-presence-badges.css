@@ -53,7 +53,13 @@
 .cg-picker-row > .cg-source-presence,
 .cg-setup-source-catalogue .cg-resource__title > .cg-source-presence {
   order: 1;
-  margin-inline-start: auto;
+  margin-left: auto;
+}
+
+/* The badge itself is LTR; use the direction of its caption to place it. */
+:is(.cg-picker-row, .cg-setup-source-catalogue .cg-resource__title):dir(rtl) > .cg-source-presence {
+  margin-right: auto;
+  margin-left: 0;
 }
 
 .cg-picker-row:has(> .cg-source-presence) > .cg-picker-selection-check {

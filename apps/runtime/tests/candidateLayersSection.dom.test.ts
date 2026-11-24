@@ -102,7 +102,7 @@ describe('Station setup — Candidate layers', () => {
     'cannot hide layer 71: it is OCCUPIED (an item or producer is on it) — remove its template ' +
     'first (removal implies clear), then untick';
   const linesOf = (el: Element | null): (string | null)[] =>
-    [...(el?.querySelectorAll('span[dir="auto"]') ?? [])].map((l) => l.textContent);
+    [...(el?.querySelectorAll('span[dir]') ?? [])].map((l) => l.textContent);
 
   it('A5 — an untick refused because the layer cannot be verified reads ONE line naming it, with none of the bridge’s words; control: it is still refused, and the dialog stays open', async () => {
     const stub = stationSetupStub({

@@ -1,6 +1,6 @@
-import { useUiText, feedback } from '../../i18n/locale.js';
+import { feedback, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { templateTypeLabel } from '../library/templateName.js';
-import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
+import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import {
@@ -363,6 +363,7 @@ export function LayerRow({
   onUpdate,
 }: Props): JSX.Element {
   const localizeUi = useUiText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const link = useLink();
   const linkDown = link === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
@@ -418,7 +419,11 @@ export function LayerRow({
   // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
   // rule: with either hop down the switch cannot leave the browser, so an enabled picker
   // would be the appearance of a capability rather than one (see `lookSwitch.ts`).
-  const lookRefusal = casparRefusalReason(linkDown, casparReach, engine);
+  const lookRefusalSource = casparRefusalReason(linkDown, casparReach);
+  const lookRefusal =
+    lookRefusalSource === undefined
+      ? undefined
+      : localizeEngineWording(lookRefusalSource, engine, localizeUi);
   /**
    * Send the switch, and report a refusal where the operator is looking.
    *
@@ -535,12 +540,12 @@ export function LayerRow({
 
   const templateLabel =
     template !== null
-      ? (displayLabel(template) ?? template.templateId)
+      ? (displayLabel(template) ?? localizeUi('Unnamed template'))
       : slot.binding !== null
         ? (displayLabel({
             name: slot.binding.templateName,
             sourceFileName: slot.binding.sourceFileName,
-          }) ?? templateTypeLabel(slot.binding.templateType))
+          }) ?? localizeUi(templateTypeLabel(slot.binding.templateType)))
         : null;
 
   /**
@@ -589,7 +594,7 @@ export function LayerRow({
   // `C-038` — the ONE console-side permission answer; the verbs read it, nothing else does.
   const canOperate = useCanOperate();
   const hasPlates = (template?.liveSources?.sources.length ?? 0) > 0;
-  const liveAudioSummary = item === null ? null : audioSummary(seatedPlates);
+  const liveAudioSummary = item === null ? null : audioSummary(seatedPlates, localizeUi);
   const liveAudioOn = (liveAudioSummary?.audible ?? 0) > 0;
   // `R-100` — the row's book (null unless its template has a page list): the counter and NEXT / PREV.
   const rowBook = bookOf(template, item);
@@ -613,6 +618,7 @@ export function LayerRow({
   };
 
   const actions = layerRowActions({
+    localizeUi,
     // `C-038` — the LAST gate: may this principal press anything on this channel at all?
     canOperate,
     // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
@@ -760,7 +766,7 @@ export function LayerRow({
     const action =
       entry.title === undefined
         ? entry
-        : { ...entry, title: playoutEngineWording(entry.title, engine) };
+        : { ...entry, title: localizeEngineWording(entry.title, engine, localizeUi) };
     // Confirm gates attached at DECLARATION time, so button and menu share them.
     // CLEAR destroys a live producer; REMOVE additionally takes the item off the
     // row. Both name the row and say what reaches air.
@@ -968,6 +974,7 @@ export function LayerRow({
     rehearsing,
     restoreBlocked,
     engineName: engine,
+    localizeUi,
     // R-058 Part A — the bridge's reason for an `error`, which was published on the item all
     // along and read by nothing. See the title note in `rowState`.
     ...(item?.errorCode !== undefined ? { errorCode: item.errorCode } : {}),
@@ -1010,7 +1017,11 @@ export function LayerRow({
    */
   // `DESKTOP-APPS-01-D` h — no `Row N` any more: `#` IS the layer, and saying it twice would be
   // noise at best and, for a custom name, a second number to reconcile.
-  const rowTitle = `${rowName} · ${engine} layer ${layerName}`;
+  const rowTitle = localizeUi('{row} · {engine} layer {layer}', {
+    row: rowName,
+    engine,
+    layer: layerName,
+  });
 
   return (
     <div
@@ -1103,7 +1114,7 @@ export function LayerRow({
       */}
       <span
         style={{ ...styles.state, color: state.color }}
-        title={state.title ?? state.label}
+        title={state.title ?? localizeUi(state.label)}
         aria-label={localizeUi('status {state}', { state: localizeUi(state.label) })}
         /*
           The state's ROLE, as a stable hook.
@@ -1355,7 +1366,7 @@ export function LayerRow({
             title={
               templateLabel === null ? refusalLine.text : `${refusalLine.text} — ${templateLabel}`
             }
-            dir="ltr"
+            dir={feedbackDirection}
           >
             <TakeRefusalText line={refusalLine} />
           </span>
@@ -1371,7 +1382,9 @@ export function LayerRow({
               control cannot describe the row differently.
             */
             title={
-              templateMissing ? `${templateLabel} — ${MISSING_TEMPLATE_REASON}` : templateLabel
+              templateMissing
+                ? `${templateLabel} — ${localizeUi(MISSING_TEMPLATE_REASON)}`
+                : templateLabel
             }
             /*
               🔴 `MODAL-CHROME-10` ADDENDUM B — **NO `dir="auto"` ON THE LINE.** It was here, and
@@ -1456,7 +1469,7 @@ export function LayerRow({
           onAir={state.tone === 'onair'}
           refusal={
             switchingLayout
-              ? 'A preset change is in progress.'
+              ? localizeUi('A preset change is in progress.')
               : legacyPreview
                 ? undefined
                 : lookRefusal

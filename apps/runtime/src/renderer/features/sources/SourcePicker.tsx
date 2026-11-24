@@ -1284,7 +1284,7 @@ function MediaTab({
             </Popover>
           )}
           <InputViewSwitch
-            ariaLabel="Media view"
+            ariaLabel={localizeUi('Media view')}
             view={view}
             onChange={(next) => {
               if (next === view) return;

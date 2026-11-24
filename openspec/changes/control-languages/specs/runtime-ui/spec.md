@@ -35,6 +35,13 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **AND** confirmation prompts and recorded Audit outcomes use the interface language, while operation messages and toasts use the separately selected feedback language
 - **AND** authored names and technical values retain their text and natural direction
 
+#### Scenario: Read a mixed-direction title or action message
+
+- **WHEN** a Persian or Arabic title or feedback message starts with a Latin name
+- **THEN** the paragraph starts at the right and the Latin name retains its letter order
+- **AND** feedback uses its own locale direction even when the interface uses a different direction.
+- **AND** a removal confirmation starts with the exact template name, and the PVW empty state explains that it sends nothing to the Playout Engine.
+
 #### Scenario: Read a template assignment in Stations settings
 
 - **WHEN** a graphic is assigned to a row in the Station setup Layers tab
@@ -64,11 +71,19 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 
 - **WHEN** the operator opens Choose a source in a left-to-right or right-to-left interface
 - **THEN** the title is centered and the A/B indicators align beside the thumbnail for list rows in Inputs and Media.
+- **AND** media grid captions align the indicators at the left edge in Persian and Arabic, with A followed by B from left to right.
 
 #### Scenario: Read channel details in either direction
 
 - **WHEN** the operator reads the Channel tab in Persian or Arabic
 - **THEN** width, height, and frame-rate units retain their technical left-to-right order, and video and output explanations use the interface language. Localized interlaced and progressive scan labels include their respective English terms in parentheses.
+- **AND** dividers are between the metric columns and the format explanation identifies the Playout Engine as the source.
+
+#### Scenario: Read station layer statuses and operate PGM audio
+
+- **WHEN** the console is in Persian or Arabic
+- **THEN** the Station layers table, statuses and tooltips read right to left, while layer identifiers retain their technical order
+- **AND** the audio controls stay at the left end of the PGM bar, including when the controls wrap. In English, they stay at the right end.
 
 #### Scenario: Follow collapsible settings and Inspector sections
 
@@ -79,7 +94,7 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 #### Scenario: Identify the preset selected in Inspector
 
 - **WHEN** the operator selects a preset
-- **THEN** preset choices have a shape distinct from the input fields, and the selected button has an accent and a check mark, and the separate preview and on-air status labels use the interface language.
+- **THEN** both selected and unselected presets use standard button corners. The selected button has an accent and a check mark. The separate preview and on-air status labels use the interface language.
 
 #### Scenario: Read a default preset input in Persian
 

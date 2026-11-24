@@ -1016,15 +1016,11 @@ export function Modal({
             </span>
           )}
           {subtitle === undefined ? (
-            <h2 dir="auto" style={{ ...titleStyle, ...headingPosition }}>
-              {title}
-            </h2>
+            <h2 style={{ ...titleStyle, ...headingPosition }}>{title}</h2>
           ) : (
             <div style={{ ...styles.titleStack, ...headingPosition }}>
-              <h2 dir="auto" style={titleStyle}>
-                {title}
-              </h2>
-              <p dir="auto" style={styles.subtitle} data-modal-subtitle="">
+              <h2 style={titleStyle}>{title}</h2>
+              <p style={styles.subtitle} data-modal-subtitle="">
                 {subtitle}
               </p>
             </div>

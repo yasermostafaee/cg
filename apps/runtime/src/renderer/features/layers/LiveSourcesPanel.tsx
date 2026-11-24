@@ -168,30 +168,31 @@ const SCOPE_NOTE =
  * verb for the channel on screen, and all three carriers name it, in A16's form: the verb phrase,
  * a `·`, the scope.
  */
-function toolbarPanicLabel(channel: number | null): { text: string; name: string; title: string } {
+function toolbarPanicLabel(
+  channel: number | null,
+  t: ReturnType<typeof useUiText>,
+): { text: string; name: string; title: string } {
   if (channel === null) {
     return {
-      text: 'Silence all plates',
-      name:
-        'Silence all boxes on every channel — set every live plate the bridge has seated to ' +
-        'zero, whichever channel it is on',
-      title:
-        'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
-        'drives — not only the channel selected above, and including rows this ' +
-        'console does not show as on air. The pictures stay on air. There is no ' +
-        'un-panic — raise what you need again on its own fader.',
+      text: t('Silence all plates'),
+      name: t(
+        'Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on',
+      ),
+      title: t(
+        'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge drives — not only the channel selected above, and including rows this console does not show as on air. The pictures stay on air. There is no un-panic — raise what you need again on its own fader.',
+      ),
     };
   }
-  const ch = String(channel);
   return {
-    text: `Silence all plates · CH ${ch}`,
-    name:
-      `Silence all boxes on channel ${ch} — set every live plate the bridge has seated on ` +
-      `channel ${ch} to zero`,
-    title:
-      `Set every live plate the bridge has seated on channel ${ch} to zero, including rows ` +
-      'this console does not show as on air. No other channel is touched. The pictures stay ' +
-      'on air. There is no un-panic — raise what you need again on its own fader.',
+    text: t('Silence all plates · CH {channel}', { channel }),
+    name: t(
+      'Silence all boxes on channel {channel} — set every live plate the bridge has seated on channel {channel} to zero',
+      { channel },
+    ),
+    title: t(
+      'Set every live plate the bridge has seated on channel {channel} to zero, including rows this console does not show as on air. No other channel is touched. The pictures stay on air. There is no un-panic — raise what you need again on its own fader.',
+      { channel },
+    ),
   };
 }
 
@@ -284,7 +285,7 @@ export function LiveSourcesPanel({
   const holdsOperator = useHoldsOperatorRole();
   const canOperateChannel = useCanOperate();
   const offersPanic = panicChannel === null ? holdsOperator : canOperateChannel;
-  const panicLabel = toolbarPanicLabel(panicChannel);
+  const panicLabel = toolbarPanicLabel(panicChannel, localizeUi);
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
@@ -320,7 +321,7 @@ export function LiveSourcesPanel({
    * the operator is told by the toast, which is the honest place for a refusal only the bridge
    * can know it must make.
    */
-  const audioRefusal = linkDown ? BRIDGE_DOWN_REASON : undefined;
+  const audioRefusal = linkDown ? localizeUi(BRIDGE_DOWN_REASON) : undefined;
   const plateName = (row: LiveLayerRowView): string =>
     plateLabelOf?.(row.itemId, row.plate) ?? 'Plate';
   const plateSourceName = (row: LiveLayerRowView): string =>
@@ -620,6 +621,7 @@ export function LiveSourcesPanel({
                     panicChannel === null
                       ? { kind: 'station' }
                       : { kind: 'channel', channel: panicChannel },
+                    localizeUi,
                   ))
             }
             className="cg-plate-panic"

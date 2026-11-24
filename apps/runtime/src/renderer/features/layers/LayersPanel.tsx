@@ -1,6 +1,6 @@
 import { feedback, useUiText } from '../../i18n/locale.js';
 import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.js';
-import { useEngineName } from '../../ui/engineWording.js';
+import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { silenceHasTarget } from './panicReport.js';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
@@ -471,8 +471,11 @@ export function LayersPanel({
   // yet. One shared resolution, so the header cannot word a refusal differently
   // from the row verbs refusing for the identical reason.
   const engine = useEngineName();
-  const needsCasparReason =
-    casparRefusalReason(linkDown, casparReach, engine) ?? BRIDGE_DOWN_REASON;
+  const needsCasparReason = localizeEngineWording(
+    casparRefusalReason(linkDown, casparReach) ?? BRIDGE_DOWN_REASON,
+    engine,
+    localizeUi,
+  );
   const [activeTab, setActiveTab] = useState('layers');
   const { confirm, confirmDialog } = useConfirm();
   /**
@@ -1185,7 +1188,12 @@ export function LayersPanel({
         rule.
       */
       ...(liveStranded
-        ? { badge: { tone: 'warn' as const, label: 'A live layer has no row that can reach it' } }
+        ? {
+            badge: {
+              tone: 'warn' as const,
+              label: localizeUi('A live layer has no row that can reach it'),
+            },
+          }
         : {}),
     },
     {
@@ -1197,7 +1205,7 @@ export function LayersPanel({
       // has to be the outer one: with two channels a dot on a shared strip could
       // not say whose reservation it was about.
       ...(playoutOccupied && !linkDown
-        ? { badge: { tone: 'warn' as const, label: 'Something is on a playout layer' } }
+        ? { badge: { tone: 'warn' as const, label: localizeUi('Something is on a playout layer') } }
         : {}),
     },
   ];
@@ -1516,7 +1524,7 @@ export function LayersPanel({
           */}
               {bank !== null && (
                 <span className="cg-bulk-target" data-bulk-target="">
-                  CH {bank.channel}
+                  {localizeUi('CH {channel}', { channel: bank.channel })}
                 </span>
               )}
               <Button
@@ -1884,10 +1892,10 @@ export function LayersPanel({
                       />
                       <span
                         data-layers-awaiting=""
-                        title={AWAITING_PANEL_NOTICE}
+                        title={localizeUi(AWAITING_PANEL_NOTICE)}
                         style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
                       >
-                        {AWAITING_PANEL_NOTICE}
+                        {localizeUi(AWAITING_PANEL_NOTICE)}
                       </span>
                     </>
                   )}

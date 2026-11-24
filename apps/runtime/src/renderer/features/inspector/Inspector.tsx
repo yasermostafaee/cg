@@ -1,5 +1,5 @@
-import { useUiText } from '../../i18n/locale.js';
-import { useEngineName } from '../../ui/engineWording.js';
+import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
+import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
@@ -46,7 +46,7 @@ import { Panel } from '../../ui/Panel.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { writeFieldText } from '../../ui/fieldDigitsInput.js';
-import { templateDisplayName } from '../library/templateName.js';
+import { displayLabel, templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { BackupStatus } from '../layers/BackupStatus.js';
 import { plateLabelOf, takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
@@ -395,6 +395,7 @@ export function Inspector({
   disclosures,
 }: Props): JSX.Element {
   const localizeUi = useUiText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const layerDetailsOpen = disclosures?.layerDetails.open ?? detailsOpen;
   const layerDetailsId = useId();
@@ -421,7 +422,7 @@ export function Inspector({
    * after typing an edit sent him to the wrong machine.
    */
   const engineName = useEngineName();
-  const applyRefusal = casparRefusalReason(linkDown, casparReach, engineName);
+  const applyRefusal = casparRefusalReason(linkDown, casparReach);
   /**
    * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — golden rule 11: the heading names the ROW in
    * the operator's words. Through the one composition (`operatorRowName`, fed by the bank and
@@ -712,11 +713,12 @@ export function Inspector({
   const rawTitle = item.fields['title'];
   const contentTitle = typeof rawTitle === 'string' ? rawTitle.trim() : '';
   const label =
-    resolvedInfo !== null ? templateDisplayName(resolvedInfo) : localizeUi('Unnamed template');
+    (resolvedInfo !== null ? displayLabel(resolvedInfo) : null) ?? localizeUi('Unnamed template');
   // See `templateIdStub`: shown only when another template answers to the same
   // name, so the ordinary heading stays a name and nothing else.
   const ambiguous =
-    resolvedInfo !== null && siblings.filter((t) => templateDisplayName(t) === label).length > 1;
+    resolvedInfo !== null &&
+    siblings.filter((t) => templateDisplayName(t) === templateDisplayName(resolvedInfo)).length > 1;
   /**
    * The ROW's name for the heading — its alias or default (`Layer N` / `Bed N`) when it has a
    * slot in the bank; `operatorRowName`'s own fallback order otherwise (the template, then a
@@ -771,7 +773,7 @@ export function Inspector({
             </button>
             <div className="cg-inspector-identity__names">
               <h3 title={rowName.title} data-inspector-heading="">
-                <IsolatedName>{heading}</IsolatedName>
+                <IsolatedName alignWithInterface>{heading}</IsolatedName>
                 {heading === label && ambiguous && (
                   <span
                     style={styles.titleStub}
@@ -783,8 +785,8 @@ export function Inspector({
                 )}
               </h3>
               {heading !== label && (
-                <div title={item.templateId} data-inspector-template="">
-                  <IsolatedName>{label}</IsolatedName>
+                <div title={label} data-inspector-template="">
+                  <IsolatedName alignWithInterface>{label}</IsolatedName>
                   {ambiguous && (
                     <span
                       style={styles.titleStub}
@@ -806,7 +808,7 @@ export function Inspector({
           >
             {contentTitle !== '' && (
               <div className="cg-inspector-identity__content-title">
-                <IsolatedName>{contentTitle}</IsolatedName>
+                <IsolatedName alignWithInterface>{contentTitle}</IsolatedName>
               </div>
             )}
             <div className="cg-meta-chips">
@@ -828,7 +830,7 @@ export function Inspector({
           heading's name. It stands until the bridge withdraws it (the row taken, or cleared).
         */}
         {item.takeRefusal !== undefined && (
-          <p style={styles.refusal} data-inspector-take-refusal="" dir="ltr">
+          <p style={styles.refusal} data-inspector-take-refusal="" dir={feedbackDirection}>
             <TakeRefusalText
               line={takeRefusalLine(heading, item.takeRefusal, {
                 // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
@@ -1072,7 +1074,9 @@ export function Inspector({
                 : localizeUi('Apply staged edits')
             }
             disabled={applyRefusal !== undefined}
-            {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}
+            {...(applyRefusal !== undefined
+              ? { title: localizeEngineWording(applyRefusal, engineName, localizeUi) }
+              : {})}
             run={() => onApply(itemId)}
             onError={() => undefined}
             data-inspector-commit={onAir ? 'on-air' : 'off-air'}
@@ -1240,7 +1244,9 @@ function FieldEditor({
   const isBook = field?.type === 'list' && field.pages === true;
   const label =
     displayLabel ??
-    (isBook && field !== null ? bookTitle(field, bookName) : (field?.label ?? fieldId));
+    (isBook && field !== null
+      ? bookTitle(field, bookName)
+      : (field?.label ?? (fieldId === 'text' ? localizeUi('Text') : fieldId)));
   const inherited = valueAt(inheritedFields, path);
   const baseline = applied === undefined ? inherited : applied;
   const value = effectiveValue(itemId, path, baseline);
@@ -1341,13 +1347,13 @@ function FieldEditor({
           a flex item would flush its own text to the wrong side).
         */}
         <span style={styles.fieldName} data-field-heading={fieldId}>
-          <IsolatedName>{label}</IsolatedName>
+          <IsolatedName alignWithInterface>{label}</IsolatedName>
         </span>
         <FieldDescription label={label} description={field?.description} />
         {dirty && (
           <span
             className="cg-dirty-dot"
-            aria-label={localizeUi('{field} has unapplied edits', { field: fieldId })}
+            aria-label={localizeUi('{field} has unapplied edits', { field: label })}
           >
             ●
           </span>

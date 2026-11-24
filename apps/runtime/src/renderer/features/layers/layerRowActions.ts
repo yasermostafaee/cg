@@ -145,8 +145,11 @@ export const REMOVE_ON_AIR_REASON =
  * the refusal a race or another console's snapshot reaches. `design.md` §29 grammar — the row in
  * the operator's words (`operatorRowName`, passed in as `rowName`), what is true, the way out.
  */
-export function takeOnAirReason(rowName: string): string {
-  return `${rowName} is already on air — take it out first.`;
+export function takeOnAirReason(rowName: string, localize?: typeof feedback): string {
+  return (
+    localize?.('{row} is already on air — take it out first.', { row: rowName }) ??
+    `${rowName} is already on air — take it out first.`
+  );
 }
 
 export interface LayerRowActionDeps {
@@ -173,6 +176,7 @@ export interface LayerRowActionDeps {
    * (golden rule 11) and this file must not grow a second one.
    */
   rowName: string;
+  localizeUi?: typeof feedback;
   /** The real CasparCG layer, for the one sentence that needs it. */
   layerName: string;
   /**
@@ -835,7 +839,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           // A refusal the bridge answered for a row this render did not yet see on air (a race,
           // or another console's take) — said in the row's own name, like the disabled title.
           return res.errorCode === TAKE_ON_AIR_CODE
-            ? { ...res, message: takeOnAirReason(deps.rowName) }
+            ? { ...res, message: takeOnAirReason(deps.rowName, feedback) }
             : res;
         },
         Play,
@@ -845,7 +849,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         : needsCaspar || awaiting
           ? { title: casparVerbReason }
           : takeRefused
-            ? { title: takeOnAirReason(deps.rowName) }
+            ? { title: takeOnAirReason(deps.rowName, deps.localizeUi) }
             : {}),
       tone: 'play',
       // ENGAGED = the state this verb produces is already true, which for PLAY is

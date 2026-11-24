@@ -328,7 +328,11 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
     });
   await expect(two).toHaveAttribute('aria-pressed', 'true');
   await expect(solo).toHaveAttribute('aria-pressed', 'false');
-  await expect(two).toHaveCSS('border-start-start-radius', '9999px');
+  const standardRadius = await two.evaluate((element) =>
+    getComputedStyle(element).getPropertyValue('--r-radius-sm').trim(),
+  );
+  await expect(two).toHaveCSS('border-start-start-radius', standardRadius);
+  await expect(solo).toHaveCSS('border-start-start-radius', standardRadius);
   await expect(two.locator('.lucide-check')).toBeVisible();
   await expect(solo.locator('.lucide-check')).toHaveCount(0);
   const active = await appearance(two);

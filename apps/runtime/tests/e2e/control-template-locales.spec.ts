@@ -183,7 +183,7 @@ for (const strings of locales) {
         ).toHaveValue(strings.defaultPreset);
 
         const headings = editor.locator('.cg-live-layout-section-heading');
-        await expect(headings).toHaveCount(4);
+        await expect(headings).toHaveCount(5);
         for (const heading of await headings.all()) {
           await expect(heading.locator('svg:last-child')).toHaveCSS(
             'transform',
@@ -205,6 +205,8 @@ for (const strings of locales) {
           editor.getByRole('group', { name: strings.margins, exact: true }),
         ).toBeVisible();
         await editor.getByRole('tab', { name: strings.layout, exact: true }).click();
+        await expect(editor.getByText(strings.effects, { exact: true })).toBeHidden();
+        await plateTab.click();
         await editor.getByText(strings.effects, { exact: true }).click();
         await expect(
           editor

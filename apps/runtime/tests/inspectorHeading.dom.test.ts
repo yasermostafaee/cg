@@ -173,13 +173,13 @@ describe('R-061 (a) — the Inspector heading is the selected ROW’s operator n
     expect(b).not.toBe(a);
   });
 
-  it('the template moves to the line beneath, id on hover — what the row carries, not what it is', async () => {
+  it('the template moves to the line beneath with its display name on hover', async () => {
     await selectRow(ROW_A);
     const line = document.querySelector<HTMLElement>(
       '[aria-label="Inspector"] [data-inspector-template]',
     );
     expect(line?.textContent).toContain(await templateLabel());
-    expect(line?.getAttribute('title')).toBe('tpl-heading');
+    expect(line?.getAttribute('title')).toBe(await templateLabel());
     expect(line?.textContent).not.toContain('tpl-heading');
   });
 });

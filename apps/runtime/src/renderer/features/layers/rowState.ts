@@ -19,6 +19,9 @@ import { airStateVisual, badgeTone, colors, readyDetail, type BadgeTone } from '
 import { unverifiedTitle } from '../../ui/airStateWording.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
+import type { useUiText } from '../../i18n/locale.js';
+
+type LocalizeUi = ReturnType<typeof useUiText>;
 
 /**
  * THE row's state, as one glanceable triple: ICON + COLOUR + WORD.
@@ -232,6 +235,7 @@ export interface RowStateInput {
    */
   errorLine?: string | undefined;
   engineName?: string | undefined;
+  localizeUi?: LocalizeUi | undefined;
   /**
    * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
@@ -266,10 +270,16 @@ export interface RowStateInput {
  * — so the column and the tooltip cannot come to say different things about the
  * same layer.
  */
-function withWire(explanation: string | undefined, wire: string, engineName: string): string {
-  return explanation === undefined
-    ? `${engineName} reports: ${wire}.`
-    : `${explanation} ${engineName} reports: ${wire}.`;
+function withWire(
+  explanation: string | undefined,
+  wire: string,
+  engineName: string,
+  localizeUi: LocalizeUi | undefined,
+): string {
+  const report =
+    localizeUi?.('{engine} reports: {observation}.', { engine: engineName, observation: wire }) ??
+    `${engineName} reports: ${wire}.`;
+  return explanation === undefined ? report : `${explanation} ${report}`;
 }
 
 /**
@@ -332,8 +342,10 @@ export function rowState({
   errorCode,
   errorLine,
   engineName = 'CasparCG',
+  localizeUi,
 }: RowStateInput): RowStateVisual {
-  const wire = occupancyLabel(observed, linkDown);
+  const t = localizeUi ?? ((source: string) => source);
+  const wire = occupancyLabel(observed, linkDown, localizeUi);
   /**
    * §4 — NOTHING ABOUT A BOUND ROW'S LAYER IS CONFIRMABLE RIGHT NOW.
    *
@@ -372,8 +384,11 @@ export function rowState({
       label: 'EMPTY',
       tone: 'idle',
       title:
-        'Nothing is loaded on this row. LOAD binds a template to it; PLAY puts that ' +
-        `template on the ${engineName} layer.`,
+        localizeUi?.(
+          'Nothing is loaded on this row. LOAD binds a template to it; PLAY puts that template on the {engine} layer.',
+          { engine: engineName },
+        ) ??
+        `Nothing is loaded on this row. LOAD binds a template to it; PLAY puts that template on the ${engineName} layer.`,
     };
   }
 
@@ -403,9 +418,9 @@ export function rowState({
       label: 'LOADING',
       tone: 'idle',
       transient: true,
-      title:
-        'This row has a template bound, but the stack has not arrived from the bridge yet. ' +
-        'It fills in as soon as the bridge answers — this is not an empty row.',
+      title: t(
+        'This row has a template bound, but the stack has not arrived from the bridge yet. It fills in as soon as the bridge answers — this is not an empty row.',
+      ),
     };
   }
 
@@ -445,12 +460,12 @@ export function rowState({
       label: 'BLOCKED',
       tone: 'attention',
       title: withWire(
-        'BLOCKED — this row’s layer is held by a producer that is not ours, so the bridge ' +
-          'restored the item WITHOUT touching the layer: nothing was cleared and nothing was ' +
-          'put on air. It stays here waiting. CLEAR the layer and then PLAY when you are sure ' +
-          'the layer is yours to take — or it clears itself the moment that producer leaves.',
+        t(
+          'BLOCKED — this row’s layer is held by a producer that is not ours, so the bridge restored the item WITHOUT touching the layer: nothing was cleared and nothing was put on air. It stays here waiting. CLEAR the layer and then PLAY when you are sure the layer is yours to take — or it clears itself the moment that producer leaves.',
+        ),
         wire,
         engineName,
+        localizeUi,
       ),
     };
   }
@@ -501,10 +516,12 @@ export function rowState({
         away. Saying them twice made the row's version the one nobody finished.
       */
       title: withWire(
-        'On PVW: rendering in PREVIEW inside this browser. PLAY to air is refused while it is, ' +
-          'and the layer is held ready and muted.',
+        t(
+          'On PVW: rendering in PREVIEW inside this browser. PLAY to air is refused while it is, and the layer is held ready and muted.',
+        ),
         wire,
         engineName,
+        localizeUi,
       ),
     };
   }
@@ -580,16 +597,19 @@ export function rowState({
       status === 'error' && errorLine !== undefined
         ? errorLine
         : playoutEngineWording(
-            status === 'unverified'
-              ? unverifiedTitle(oscBlind, linkDown)
-              : status === 'error'
-                ? (errorCodeMessage(errorCode) ??
-                  'CasparCG did not accept this row, and reported no reason.')
-                : (readyDetail(status) ?? ''),
+            t(
+              status === 'unverified'
+                ? unverifiedTitle(oscBlind, linkDown)
+                : status === 'error'
+                  ? (errorCodeMessage(errorCode) ??
+                    'CasparCG did not accept this row, and reported no reason.')
+                  : (readyDetail(status) ?? ''),
+            ),
             engineName,
           ) || undefined,
       wire,
       engineName,
+      localizeUi,
     ),
     ...(tone === 'transient' ? { transient: true } : {}),
   };

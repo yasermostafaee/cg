@@ -482,7 +482,10 @@ export interface AudioSummary {
  * suppressed by `plates.length === 0`, not by `shown === 0`): an all-held row with something
  * armed has a real thing to say.
  */
-export function audioSummary(plates: readonly RowPlateAudio[]): AudioSummary | null {
+export function audioSummary(
+  plates: readonly RowPlateAudio[],
+  localizeUi?: typeof translateAudioSummary,
+): AudioSummary | null {
   // Deduplicated by plate id: a fill+key pair puts the same `sourceId` on TWO ledger records,
   // and counting both would double every keyed guest.
   const unique = [...new Map(plates.map((p) => [p.plateId, p])).values()];
@@ -500,11 +503,17 @@ export function audioSummary(plates: readonly RowPlateAudio[]): AudioSummary | n
     shown++;
     if (verdict.audible) audible++;
   }
+  const t = localizeUi ?? translateAudioSummary;
   const label =
-    `audio ${String(audible)}/${String(shown)}` +
-    // Only when non-zero: an ordinary row must not carry a permanent `· 0 armed`.
-    (armedHidden > 0 ? ` · ${String(armedHidden)} armed` : '');
-  return { audible, shown, armedHidden, label, detail: summaryDetail(audible, shown, armedHidden) };
+    t('audio {audible}/{shown}', { audible, shown }) +
+    (armedHidden > 0 ? ` · ${t('{count} armed', { count: armedHidden })}` : '');
+  return {
+    audible,
+    shown,
+    armedHidden,
+    label,
+    detail: summaryDetail(audible, shown, armedHidden, t),
+  };
 }
 
 /**
@@ -518,21 +527,45 @@ export function audioSummary(plates: readonly RowPlateAudio[]): AudioSummary | n
  * FOR, and says out loud that it is not a measurement — rather than leaving a reader to infer
  * which of the two they are looking at.
  */
-function summaryDetail(audible: number, shown: number, armedHidden: number): string {
+function summaryDetail(
+  audible: number,
+  shown: number,
+  armedHidden: number,
+  t: typeof translateAudioSummary,
+): string {
   const head =
     shown === 0
-      ? 'This look shows no live plates.'
-      : `Sound is asked for on ${String(audible)} of the ${String(shown)} live ` +
-        `${shown === 1 ? 'plate' : 'plates'} this look shows.`;
+      ? t('This look shows no live plates.')
+      : t(
+          shown === 1
+            ? 'Sound is asked for on {audible} of the {shown} live plate this look shows.'
+            : 'Sound is asked for on {audible} of the {shown} live plates this look shows.',
+          { audible, shown },
+        );
   const waiting =
     armedHidden === 0
       ? ''
-      : ` ${String(armedHidden)} more ${armedHidden === 1 ? 'is' : 'are'} armed but hidden by ` +
-        `this look — ${armedHidden === 1 ? 'it becomes' : 'they become'} audible on switching ` +
-        `to a look that shows ${armedHidden === 1 ? 'it' : 'them'}.`;
-  return (
-    `${head}${waiting} Nothing here measures the output — this is what the console asked for. ` +
-    `Open LIVE PLATES, or this row's audio dialog, to change it.`
+      : ' ' +
+        t(
+          armedHidden === 1
+            ? '{count} more is armed but hidden by this look — it becomes audible on switching to a look that shows it.'
+            : '{count} more are armed but hidden by this look — they become audible on switching to a look that shows them.',
+          { count: armedHidden },
+        );
+  return [
+    head + waiting,
+    t(
+      "Nothing here measures the output — this is what the console asked for. Open LIVE PLATES, or this row's audio dialog, to change it.",
+    ),
+  ].join(' ');
+}
+
+function translateAudioSummary(
+  source: string,
+  values: Readonly<Record<string, number>> = {},
+): string {
+  return source.replace(/\{([A-Za-z]+)\}/g, (token, key: string) =>
+    Object.hasOwn(values, key) ? String(values[key]) : token,
   );
 }
 

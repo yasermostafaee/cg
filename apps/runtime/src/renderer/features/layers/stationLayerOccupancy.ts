@@ -1,5 +1,6 @@
 import { isInCgBands, type PlayoutLayerState } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
+import type { useUiText } from '../../i18n/locale.js';
 
 /**
  * R-028 part B — the PLAYOUT tab's gate, as pure functions.
@@ -46,10 +47,12 @@ export interface StationLayerOccupancyView {
 export function stationLayerOccupancy(
   layer: PlayoutLayerState,
   linkDown: boolean,
+  localizeUi?: ReturnType<typeof useUiText>,
 ): StationLayerOccupancyView {
+  const t = localizeUi ?? ((source: string) => source);
   if (linkDown) {
     return {
-      occupant: 'Unknown',
+      occupant: t('Unknown'),
       detail: 'Not connected to the bridge — what is on this layer cannot be checked.',
       clearable: false,
       tone: colors.textMuted,
@@ -57,7 +60,7 @@ export function stationLayerOccupancy(
   }
   if (layer.observed.kind === 'unknown') {
     return {
-      occupant: 'Unknown',
+      occupant: t('Unknown'),
       detail:
         'No signal from CasparCG for this layer — occupancy cannot be verified, so it is not treated as empty and cannot be cleared.',
       clearable: false,
@@ -66,7 +69,7 @@ export function stationLayerOccupancy(
   }
   if (layer.observed.kind === 'empty') {
     return {
-      occupant: 'Empty',
+      occupant: t('Empty'),
       detail: 'Nothing on this layer.',
       clearable: false,
       tone: colors.textMuted,
@@ -75,7 +78,8 @@ export function stationLayerOccupancy(
   const producer = layer.observed.producer;
   if (producer !== 'html') {
     return {
-      occupant: `${producer} — not a graphic`,
+      occupant:
+        localizeUi?.('{producer} — not a graphic', { producer }) ?? `${producer} — not a graphic`,
       detail:
         `This is not an html template (a video, feed or other producer). It cannot be cleared ` +
         `from here: clearing a live video or channel feed is exactly what reserving these ` +
@@ -86,14 +90,14 @@ export function stationLayerOccupancy(
   }
   if (!isInCgBands(layer.layer)) {
     return {
-      occupant: 'Graphic on air (html)',
+      occupant: t('Graphic on air (html)'),
       detail: 'The playout system’s own layer (below 50) — only the playout side can clear it.',
       clearable: false,
       tone: colors.onAir,
     };
   }
   return {
-    occupant: 'Graphic on air (html)',
+    occupant: t('Graphic on air (html)'),
     detail:
       'A playout graphic. Clearing takes it off air immediately — it belongs to the playout system, not to this console.',
     clearable: true,
@@ -129,22 +133,36 @@ export function hasStationLayerOccupant(layers: readonly PlayoutLayerState[]): b
 }
 
 /** Operator wording for a bridge-side refusal of a playout clear. */
-export function playoutClearRefusal(reason: string | undefined, observedProducer?: string): string {
+export function playoutClearRefusal(
+  reason: string | undefined,
+  observedProducer?: string,
+  localizeFeedback?: ReturnType<typeof useUiText>,
+): string {
+  const t = localizeFeedback ?? ((source: string) => source);
   if (reason === 'not-html') {
     const kind =
-      observedProducer !== undefined ? `a ${observedProducer} producer` : 'not a graphic';
-    return `Refused — that layer carries ${kind}, not an html template. Only playout graphics can be cleared from here.`;
+      observedProducer !== undefined
+        ? (localizeFeedback?.('a {producer} producer', { producer: observedProducer }) ??
+          `a ${observedProducer} producer`)
+        : t('not a graphic');
+    return (
+      localizeFeedback?.(
+        'Refused — that layer carries {kind}, not an html template. Only playout graphics can be cleared from here.',
+        { kind },
+      ) ??
+      `Refused — that layer carries ${kind}, not an html template. Only playout graphics can be cleared from here.`
+    );
   }
   if (reason === 'unknown-occupancy') {
-    return 'Refused — what is on that layer cannot be verified right now, so it was left alone.';
+    return t('Refused — what is on that layer cannot be verified right now, so it was left alone.');
   }
   if (reason === 'already-empty') {
     // The opposite statement from `unknown-occupancy`, and it must read that
     // way: the bridge LOOKED and found nothing, rather than being unable to see.
-    return 'That layer is already empty — nothing was sent.';
+    return t('That layer is already empty — nothing was sent.');
   }
   if (reason === 'not-reserved') {
-    return 'Refused — that layer is not a declared playout layer.';
+    return t('Refused — that layer is not a declared playout layer.');
   }
   if (reason === 'amcp-error') {
     /*
@@ -159,7 +177,9 @@ export function playoutClearRefusal(reason: string | undefined, observedProducer
       What IS certain is the part the operator must act on: the layer may still be
       on air. That is said; the mechanism is not guessed at.
     */
-    return 'The clear failed, and the reason was not reported — it is not known whether CasparCG refused it or it never arrived. The layer may still be on air.';
+    return t(
+      'The clear failed, and the reason was not reported — it is not known whether CasparCG refused it or it never arrived. The layer may still be on air.',
+    );
   }
-  return 'Not accepted.';
+  return t('Not accepted.');
 }

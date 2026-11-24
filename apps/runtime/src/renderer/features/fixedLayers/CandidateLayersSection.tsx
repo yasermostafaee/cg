@@ -213,17 +213,21 @@ function NoBank(): JSX.Element {
   return (
     <div style={styles.needsConfig} data-candidate-layers-unconfigured="">
       <span>
-        This station has no candidate layers, so the Layers list has no rows and nothing can be
-        loaded. The channel and the layer range are fixed at install and cannot be set from here —
-        they live in the bridge&rsquo;s fixed-layers config file, and the bridge reads it once at
-        startup.
+        {localizeUi(
+          'This station has no candidate layers, so the Layers list has no rows and nothing can be loaded. The channel and the layer range are fixed at install and cannot be set from here — they live in the bridge’s fixed-layers config file, and the bridge reads it once at startup.',
+        )}
       </span>
       <span>
-        {localizeUi('Create')} <code>bridge-fixed-layers.json</code> in the bridge&rsquo;s config
-        directory (<code>~/.cg-runtime/</code> {localizeUi('by default, or wherever')}{' '}
-        <code>--fixed-layers-path</code> points) and restart the bridge:
+        {localizeUi(
+          'Create {file} in the bridge’s config directory ({directory} by default, or wherever {option} points) and restart the bridge:',
+          {
+            file: 'bridge-fixed-layers.json',
+            directory: '~/.cg-runtime/',
+            option: '--fixed-layers-path',
+          },
+        )}
       </span>
-      <div style={styles.code}>
+      <div style={styles.code} dir="ltr">
         {`{
   "channel": 1,
   "start": 70,
@@ -232,10 +236,10 @@ function NoBank(): JSX.Element {
 }`}
       </div>
       <span>
-        <strong>{localizeUi('start')}</strong> {localizeUi('is the first layer and')}{' '}
-        <strong>{localizeUi('count')}</strong> how many follow it. The range must not overlap the
-        playout system&rsquo;s reserved layers or the dynamic ranges, and the bridge refuses to
-        start if it does — naming both ranges, so a clash is quick to fix.
+        {localizeUi(
+          '{start} is the first layer and {count} how many follow it. The range must not overlap the playout system’s reserved layers or the dynamic ranges, and the bridge refuses to start if it does — naming both ranges, so a clash is quick to fix.',
+          { start: 'start', count: 'count' },
+        )}
       </span>
       <span>
         {localizeUi(
@@ -289,12 +293,9 @@ export function CandidateLayersHelper(): JSX.Element {
     <details className="cg-setup-details" data-layers-helper="">
       <summary>{localizeUi('Visibility and layer safety')}</summary>
       <p>
-        Hiding a row removes it from the Layers panel only — the layer stays fenced from automatic
-        allocation, and nothing on it is touched. An occupied row cannot be hidden: remove its
-        template first, which clears the layer. A row whose occupancy cannot be verified is refused
-        too, by the bridge, because unknown is never treated as empty. The channel, the first layer
-        and the count are fixed at install; edit the bridge&rsquo;s fixed-layers config and restart
-        it to change them.
+        {localizeUi(
+          'Hiding a row removes it from the Layers panel only — the layer stays fenced from automatic allocation, and nothing on it is touched. An occupied row cannot be hidden: remove its template first, which clears the layer. A row whose occupancy cannot be verified is refused too, by the bridge, because unknown is never treated as empty. The channel, the first layer and the count are fixed at install; edit the bridge’s fixed-layers config and restart it to change them.',
+        )}
       </p>
     </details>
   );
