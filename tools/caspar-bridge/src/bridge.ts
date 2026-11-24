@@ -3136,18 +3136,28 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           options.pgmReturn?.readTopology,
         );
   const primaryPgmHost = hostIsOursFor(playoutName, () => [runtime.config().servers.A.host]);
-  function programmeCodeFor(channel: number): string | null {
+  function programmeCodeFor(channel: number): string | null | undefined {
     if (!runtime.isDeclaredChannel(channel)) return null;
-    const rows = playoutCatalogue
-      ?.rows()
-      ?.filter((row) => row.casparChannel === channel && primaryPgmHost(row.casparHost));
-    return rows?.length === 1 ? (rows[0]?.id ?? null) : null;
+    const rows = playoutCatalogue?.rows();
+    // A failed D4 read cannot admit a new binding or revoke an existing verified return.
+    if (rows == null) return undefined;
+    const matches = rows.filter(
+      (row) => row.casparChannel === channel && primaryPgmHost(row.casparHost),
+    );
+    return matches.length === 1 ? (matches[0]?.id ?? null) : null;
   }
   function checkProgrammeChannels(): void {
     pgmMonitors?.retainChannels(programmeCodeFor);
   }
   const stopProgrammeCatalogueCheck = playoutCatalogue?.onChanged(checkProgrammeChannels);
-  const stopProgrammeConfigCheck = runtime.configChanged.subscribe(checkProgrammeChannels);
+  let programmePrimaryHost = runtime.config().servers.A.host;
+  const stopProgrammeConfigCheck = runtime.configChanged.subscribe((config) => {
+    if (config.servers.A.host !== programmePrimaryHost) {
+      programmePrimaryHost = config.servers.A.host;
+      pgmMonitors?.retainChannels(() => null);
+    }
+    checkProgrammeChannels();
+  });
   const stopProgrammeBankCheck = runtime.fixedConfigChanged.subscribe(checkProgrammeChannels);
   async function readProgrammeTopology(channel: number): Promise<PgmTopology | null> {
     if (pgmMonitors === null) return null;
@@ -3640,7 +3650,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           const mappedSender = sourceNdiTarget(sourceId, 'B', matches);
           const local = matches[0]!;
           const isReserve = (row: { casparHost: string; casparChannel: number }) =>
-            row.casparChannel === reserveChannel && hostJoinsStation(row.casparHost, [serverB.host]);
+            row.casparChannel === reserveChannel &&
+            hostJoinsStation(row.casparHost, [serverB.host]);
           if (
             mappedSender.kind !== 'ndi' ||
             mappedSender.senderName !== input.producer.source ||

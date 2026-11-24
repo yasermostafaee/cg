@@ -1,6 +1,10 @@
 import { expect, it, vi } from 'vitest';
 import { PgmTopologySchema, type PgmTopology, type TicketPath } from '@cg/shared-ipc';
-import type { PlayoutPgmMember } from '../src/playout-pgm-topology.js';
+import type {
+  PlayoutPgmMember,
+  PlayoutPgmTopology,
+  PlayoutPgmTopologyOptions,
+} from '../src/playout-pgm-topology.js';
 import { openClient } from './support/auth-harness.js';
 import { startFakePlayout } from './support/fake-playout.js';
 import { startFakePgmFeed } from './support/fake-pgm-feed.js';
@@ -135,5 +139,140 @@ it('scopes topology and every physical return ticket to the authorized logical c
     );
   } finally {
     watching.abort();
+  }
+});
+
+it('keeps the reserve return available to an authenticated console after the primary D4 stops answering', async () => {
+  const playout = track(await startFakePlayout(), (p) => p.stop());
+  const feed = track(await startFakePgmFeed({ fps: 24 }), (p) => p.stop());
+  let primaryOffline = false;
+  const readTopology = vi.fn(
+    (
+      url: URL,
+      code: string,
+      options?: PlayoutPgmTopologyOptions,
+    ): Promise<PlayoutPgmTopology | null> => {
+      if (primaryOffline) {
+        const previous = options?.previous;
+        if (previous?.recovery === undefined) return Promise.resolve(null);
+        return Promise.resolve({
+          ...previous,
+          activeMemberKey: null,
+          degraded: true,
+          members: previous.members.map((peer) =>
+            peer.key === url.origin ? { ...peer, physicalChannel: null, pgmHost: null } : peer,
+          ),
+        });
+      }
+      const primary = {
+        key: url.origin,
+        channelCode: code,
+        name: 'Primary',
+        physicalChannel: 1,
+        pgmHost: '127.0.0.1',
+      };
+      const reserve = {
+        key: 'http://reserve.test:8080',
+        channelCode: 'backup-b',
+        name: 'Reserve',
+        physicalChannel: 7,
+        pgmHost: '127.0.0.1',
+      };
+      const aliases = new Set([url.origin]);
+      return Promise.resolve({
+        members: [primary, reserve],
+        activeMemberKey: primary.key,
+        recovery: {
+          primary,
+          primaryAliases: aliases,
+          master: { origin: url, channelCode: code },
+          masterAliases: aliases,
+          peers: [reserve],
+        },
+      });
+    },
+  );
+  const portFor = vi.fn(() => feed.port);
+  const rig = await twoChannelRig({
+    bridge: {
+      playout: {
+        auth: 'playout',
+        issuer: playout.issuer,
+        jwksUrl: playout.jwksUrl,
+        tokenUrl: playout.tokenUrl,
+        refreshUrl: playout.refreshUrl,
+        revokedUrl: playout.revokedUrl,
+        channelsUrl: playout.channelsUrl,
+      },
+      pgmReturn: { portFor, readTopology },
+    },
+  });
+  const operator = await openClient(rig.handle);
+  expect(
+    (await operator.authenticate('sign-in', (await playout.issueToken({ user: 'operator' })).token))
+      .error,
+  ).toBeUndefined();
+  const catalogue = rig.handle.playoutCatalogue;
+  if (catalogue === null) throw new Error('Missing authenticated D4 reader');
+  await catalogue.refresh();
+  expect(catalogue.rows()).not.toBeNull();
+  const initial = await operator.ask('initial-topology', 'pgmReturn.topology', { channel: 1 });
+  expect(initial.error).toBeUndefined();
+  const topology = PgmTopologySchema.parse(initial.payload);
+  const reserve = topology.members.find(({ engine }) => engine === 'B');
+  if (reserve === undefined) throw new Error('Missing B return');
+  expect(topology.active).toBe('A');
+  expect(reserve.physicalChannel).toBe(7);
+
+  const watching = new AbortController();
+  const watchReserve = async (id: string) => {
+    const ticket = await operator.ask(id, 'pgmReturn.ticket', {
+      channel: 1,
+      engine: 'B',
+      resourceKey: reserve.resourceKey,
+    });
+    expect(ticket.error).toBeUndefined();
+    const { path } = ticket.payload as TicketPath;
+    const picture = await fetch('http://127.0.0.1:' + String(rig.handle.port) + path, {
+      signal: watching.signal,
+    });
+    expect(picture.status).toBe(200);
+    const reader = picture.body?.getReader();
+    if (reader === undefined) throw new Error('Missing B stream');
+    expect((await reader.read()).done).toBe(false);
+  };
+
+  const now = Date.now.bind(Date);
+  const clock = vi.spyOn(Date, 'now').mockImplementation(now);
+  try {
+    await watchReserve('picture-before-outage');
+    expect(feed.openCount()).toBe(1);
+    const frames = feed.connections[0]?.framesSent ?? 0;
+
+    await playout.goOffline();
+    primaryOffline = true;
+    clock.mockImplementation(() => now() + 5_001);
+    await catalogue.refresh();
+    expect(catalogue.rows()).toBeNull();
+    const outage = await operator.ask('outage-topology', 'pgmReturn.topology', { channel: 1 });
+    expect(outage.error).toBeUndefined();
+    expect(PgmTopologySchema.parse(outage.payload)).toMatchObject({
+      channel: 1,
+      active: null,
+      members: [{ engine: 'A', physicalChannel: null }, reserve],
+    });
+    expect(portFor.mock.calls).toEqual([[7]]);
+    expect(feed.openCount()).toBe(1);
+    await watchReserve('picture-during-outage');
+    await waitUntil(
+      () => (feed.connections[0]?.framesSent ?? 0) > frames,
+      'the original reserve connection to continue sending frames',
+    );
+    expect(feed.connections).toHaveLength(1);
+    expect(feed.openCount()).toBe(1);
+    expect(portFor.mock.calls).toEqual([[7]]);
+  } finally {
+    watching.abort();
+    clock.mockRestore();
   }
 });

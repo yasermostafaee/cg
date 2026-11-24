@@ -5262,6 +5262,9 @@ other Engine is absent and use Playout's complete checkpoint for recovery.
 - WHEN the channel has four linked engines THEN Programme can show their named returns in a two-by-two grid.
 - WHEN Playout confirms a control owner THEN identify that engine and let Follow use its programme audio.
 - WHEN ownership is unknown THEN show no active designation and keep Follow silent.
+- WHEN the configured Playout stops responding THEN keep each previously linked PGM return
+  available as long as its own Engine can still verify the same channel and output. Keep
+  the operator's explicit picture and sound selection available independently of the owner.
 - WHEN the operator selects a verified B return or Follow resolves to it THEN the PGM meter shows that return's levels. A return without Playout meter telemetry uses its own stereo PCM peaks. The operator can show or hide the meter independently of listening. While shown, missing data leaves an empty meter scale.
 - WHEN an opt-in channel uses quorum External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
 - WHEN Core returns the exact External CG v2 migration refusal during legacy Play

@@ -14,6 +14,11 @@ An authenticated ticket binds the selected logical channel, physical member, str
 the verified mapping's resource key. Mapping changes close old viewers and retire old tickets.
 Return picture and WAV reuse the bridge's separate, demand-driven relays.
 
+An unavailable configured Playout cannot confirm the owner or introduce a new return.
+The Bridge rechecks previously verified linked channel identities on the other engines.
+A fresh reciprocal match on the same physical output renews only that return. A removed
+station channel or a conflicting link revokes the affected mapping and retires its tickets.
+
 The display uses the existing local monitor sound selector. Follow is silent when no active
 owner can be verified. Existing A/B meter streams stay visible when the return's verified
 engine and physical channel match the meter source. If the selected verified return has
@@ -335,3 +340,39 @@ programme/monitor cases passed with distinct readings and correct B/Follow routi
 On the station, programme-gain reads require the corresponding engine's authenticated
 session. Compare equal gain, per-source audio and aligned source material before
 diagnosing level parity on a real output.
+
+## Restore graphics after an installed engine restarts
+
+On the installed 1.2.13 Bridge with Playout .37, both channels still report
+`cg.channelNotMigrated`. Legacy mirroring sends accepted commands to the mapped
+reserve while it is connected. A reserve reconnect invalidates its seat observations.
+The short-outage restore applies only to the same Bridge primary and only within its
+configured window. A graphic missing from a restarted reserve therefore needs another
+operator take under the current Legacy behavior.
+
+Verify recovery with the installed Control and Bridge for all four starting cases.
+With A selected for graphics, restart B and then test a separate restart of A. With B
+selected, restart A and then test a separate restart of B. In each reserve restart,
+the selected engine keeps its current graphic and accepts new operations. If the
+selected engine restarts, verify that the eligible survivor takes graphics commands.
+After either restart, compare native PGM and applied state on both engines. A returning
+engine must show the latest confirmed graphic for every affected layer, with the applied
+fields and absolute page where supported. A layer stopped or cleared during the outage
+must stay stopped or clear. Include an outage longer than the Legacy restore window and
+verify recovery without a manual retake, replay of the entrance or interruption on the
+surviving output. Record Programme ownership separately from graphics authority.
+
+The .37 DualReady outage tests covered self-contained static HTML in the isolated adapter.
+Earlier .26 managed tests also covered eligible finite manual Cut sequences, including
+bundled Sequence Folder pages. The installed service still needs opt-in activation,
+renewable member-local operator sessions and end-to-end acceptance. Legacy Live layouts,
+media and other timed templates have their own recovery acceptance. Their engine-local
+source and asset bindings and applied timing must be proven before claiming that they
+recover.
+
+A fresh session from the lab operator's D1 sign-in read D4 on both .37 engines.
+The managed owner and availability routes returned `cg.channelNotMigrated` both with
+that bearer and without it. This confirms the station still uses Legacy and leaves
+managed permission and renewal unverified. The .37 contract requires an Engine or CG
+operator token with transport, playlist-edit and channel permission for managed writes.
+The production Bridge's read session is a separate credential.

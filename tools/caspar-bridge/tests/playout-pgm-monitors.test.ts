@@ -182,9 +182,17 @@ describe('PlayoutPgmMonitors', () => {
   it('opens the physical feed only for a viewer, shares it and closes both viewers on remap', async () => {
     const initial = peer('Alpha', logicalChannel);
     const backup = peer('Bravo', 11);
+    const recovery = {
+      primary: initial,
+      primaryAliases: new Set([origin.origin]),
+      master: { origin, channelCode: initial.channelCode },
+      masterAliases: new Set([origin.origin]),
+      peers: [backup],
+    };
     let topology: PlayoutPgmTopology | null = {
       members: [initial, backup],
       activeMemberKey: initial.key,
+      recovery,
     };
     const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const feed = await startFakePgmFeed({ fps: 24 });
@@ -230,7 +238,25 @@ describe('PlayoutPgmMonitors', () => {
         { channel: logicalChannel, engine: 'B', resourceKey: before.resourceKey, state: 'live' },
       ]);
 
+      // The authenticated catalogue temporarily loses A. A fresh reciprocal B
+      // proof keeps both existing viewers and the same ticket resource alive.
       clock.mockReturnValue(6_000);
+      monitors.retainChannels(() => undefined);
+      topology = {
+        members: [{ ...initial, physicalChannel: null, pgmHost: null }, backup],
+        activeMemberKey: null,
+        degraded: true,
+        recovery,
+      };
+      const degraded = await monitors.topology(logicalChannel);
+      expect(degraded?.active).toBeNull();
+      expect(degraded?.members[0]?.physicalChannel).toBeNull();
+      expect(degraded?.members[1]).toEqual(before);
+      expect((await firstStream.read()).done).toBe(false);
+      expect((await secondStream.read()).done).toBe(false);
+      expect(feed.connections).toHaveLength(1);
+
+      clock.mockReturnValue(11_000);
       topology = { members: [initial, { ...backup, physicalChannel: 12 }], activeMemberKey: null };
       const remapped = await monitors.topology(logicalChannel, code);
       const after = remapped?.members.find(({ engine }) => engine === 'B');
@@ -264,7 +290,7 @@ describe('PlayoutPgmMonitors', () => {
       expect(feed.audioOpenCount()).toBe(1);
 
       // A ticket lookup reaches the deadline before the real-time timer in this test.
-      clock.mockReturnValue(21_000);
+      clock.mockReturnValue(26_000);
       expect((await view(after.resourceKey)).status).toBe(404);
       expect((await view(after.resourceKey, true)).status).toBe(404);
       await Promise.all(

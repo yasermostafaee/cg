@@ -13,7 +13,7 @@ import {
   pgmChannelInFirewallRule,
   type PgmReturnRelayOptions,
 } from './pgm-return.js';
-import { readPlayoutPgmTopology } from './playout-pgm-topology.js';
+import { readPlayoutPgmTopology, type PlayoutPgmTopology } from './playout-pgm-topology.js';
 
 type PeerReader = typeof readPlayoutPgmTopology;
 type RelayOptions = Pick<PgmReturnRelayOptions, 'portFor' | 'tuning'>;
@@ -34,6 +34,7 @@ interface ChannelMonitors {
   readonly slots: Map<string, PgmEngine>;
   readonly sources: Map<string, Source>;
   topology: PgmTopology | null;
+  previous?: PlayoutPgmTopology;
   nextRead: number;
   expiresAt?: number;
   expiryTimer?: ReturnType<typeof setTimeout>;
@@ -55,14 +56,15 @@ export class PlayoutPgmMonitors {
     readonly readPeers: PeerReader = readPlayoutPgmTopology,
   ) {}
 
-  async topology(channel: number, code: string): Promise<PgmTopology | null> {
+  async topology(channel: number, code?: string): Promise<PgmTopology | null> {
     if (this.#shutdown.signal.aborted) return null;
     let state = this.#channels.get(channel);
-    if (state !== undefined && state.code !== code) {
+    if (state !== undefined && code !== undefined && state.code !== code) {
       this.clear(channel);
       state = undefined;
     }
     if (state === undefined) {
+      if (code === undefined) return null;
       state = {
         code,
         generation: 0,
@@ -73,6 +75,7 @@ export class PlayoutPgmMonitors {
       };
       this.#channels.set(channel, state);
     }
+    if (code === undefined && state.previous === undefined) return state.topology;
     this.#expireIfDue(state);
     if (state.pending !== undefined) return state.pending;
     if (Date.now() < state.nextRead) return state.topology;
@@ -90,17 +93,19 @@ export class PlayoutPgmMonitors {
     this.#markUnavailable(state);
   }
 
-  retainChannels(codeFor: (channel: number) => string | null): void {
+  retainChannels(codeFor: (channel: number) => string | null | undefined): void {
     for (const [channel, state] of this.#channels) {
       const code = codeFor(channel);
       if (code === null) this.unavailableFor(channel);
-      else if (code !== state.code) this.clear(channel);
+      else if (code !== undefined && code !== state.code) this.clear(channel);
     }
   }
 
   unavailableFor(channel: number): PgmTopology | null {
     const state = this.#channels.get(channel);
-    return state === undefined ? null : this.#invalidate(state);
+    if (state === undefined) return null;
+    delete state.previous;
+    return this.#invalidate(state);
   }
 
   #invalidate(state: ChannelMonitors): PgmTopology | null {
@@ -214,14 +219,21 @@ export class PlayoutPgmMonitors {
   ): Promise<PgmTopology | null> {
     const result = await this.readPeers(this.origin, state.code, {
       signal: this.#shutdown.signal,
+      ...(state.previous === undefined ? {} : { previous: state.previous }),
     }).catch(() => null);
     if (this.#shutdown.signal.aborted || this.#channels.get(channel) !== state) return null;
     this.#expireIfDue(state);
     if (state.generation !== generation) return state.topology;
     state.nextRead = Date.now() + REFRESH_MS;
-    if (result === null || result.members[0]?.physicalChannel !== channel) {
+    const primaryChannel =
+      result?.degraded === true
+        ? result.recovery?.primary.physicalChannel
+        : result?.members[0]?.physicalChannel;
+    if (result === null || primaryChannel !== channel) {
+      delete state.previous;
       return this.#markUnavailable(state);
     }
+    state.previous = result;
 
     const currentKeys = new Set(result.members.map((member) => member.key));
     const taken = new Set(
@@ -238,7 +250,7 @@ export class PlayoutPgmMonitors {
       }
       taken.add(engine);
       state.slots.set(peer.key, engine);
-      if (peer.key === result.activeMemberKey) active = engine;
+      if (result.degraded !== true && peer.key === result.activeMemberKey) active = engine;
       const physicalChannel = peer.physicalChannel;
       if (
         physicalChannel === null ||

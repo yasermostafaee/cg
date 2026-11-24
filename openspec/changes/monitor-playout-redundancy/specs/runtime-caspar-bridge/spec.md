@@ -19,6 +19,17 @@ changes, the previous mapping's ticket SHALL open no replacement stream.
 - **WHEN** an engine is discovered on the network but has no verified link to the selected channel
 - **THEN** its programme picture and sound are not added to that channel's return relays
 
+#### Scenario: The configured Playout stops responding
+
+- **WHEN** a declared channel already has verified linked returns and its configured Playout
+  is temporarily unavailable
+- **THEN** the Bridge SHALL continue to verify the previously known links and physical outputs
+  directly on their own Engines
+- **AND** a freshly verified, unchanged return SHALL keep its picture and sound resource
+  while the configured Playout is unavailable
+- **AND** the unconfirmed owner SHALL be reported as unknown
+- **AND** a channel removal, conflicting mapping or withdrawn link SHALL revoke its former return
+
 ### Requirement: Quorum managed layouts go only to their verified Playout owner
 
 The managed Bridge executor SHALL submit complete prepared layouts to a verified owner.

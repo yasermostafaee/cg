@@ -645,6 +645,103 @@ test('without a channel mapping, reserve controls stay visible and B is a black 
   );
 });
 
+test('a linked reserve keeps its picture and manual sound when the main Engine is unavailable', async ({
+  page,
+}) => {
+  const primary = await startFakePgmFeed({ fps: 10, audioPath: '/sound' });
+  const backup = await startFakePgmFeed({ fps: 10, audioPath: '/sound' });
+  const members: PgmTopology['members'] = [
+    { engine: 'A', name: 'Main', physicalChannel: 1, resourceKey: 'main-1', meterEngine: 'A' },
+    {
+      engine: 'B',
+      name: 'Reserve',
+      physicalChannel: 2,
+      resourceKey: 'reserve-2',
+      meterEngine: 'B',
+    },
+  ];
+  try {
+    await open(page, {
+      backupChannel: 2,
+      topology: { channel: 1, members, active: 'A' },
+      feedAddresses: {
+        A: `http://127.0.0.1:${primary.port}`,
+        B: `http://127.0.0.1:${backup.port}`,
+      },
+      statuses: members.map(({ engine, resourceKey }) => ({
+        channel: 1,
+        engine,
+        resourceKey,
+        state: 'live',
+      })),
+    });
+    await page.getByRole('button', { name: 'All', exact: true }).click();
+    const a = page.locator('[data-pgm-screen="A"]');
+    const b = page.locator('[data-pgm-screen="B"]');
+    const bPicture = b.locator('[data-pgm-picture]');
+    const sound = page.getByRole('button', { name: 'Programme sound', exact: true });
+    const source = page.getByLabel('Programme sound source');
+
+    await expect(a).toHaveAttribute('data-pgm-active', '');
+    await expect(bPicture).toHaveCSS('visibility', 'visible');
+    await expect.poll(() => backup.connections[0]?.framesSent ?? 0).toBeGreaterThan(0);
+    const initialBPicture = await bPicture.getAttribute('src');
+    const bConnections = backup.connections.length;
+    await expect(source).toHaveValue('follow');
+    await sound.click();
+    await expect(sound).toHaveAttribute('data-pgm-audio', 'playing');
+    await expect.poll(() => primary.audioOpenCount()).toBe(1);
+
+    await page.evaluate(() => {
+      const state = window as unknown as { programmeTopology: PgmTopology };
+      const topology = state.programmeTopology;
+      state.programmeTopology = {
+        ...topology,
+        active: null,
+        members: topology.members.map((member) =>
+          member.engine === 'A' ? { ...member, physicalChannel: null } : member,
+        ),
+      };
+    });
+    primary.closeOnAccept(true);
+    primary.closeAll();
+
+    await expect(a).toContainText('No return signal', { timeout: 10_000 });
+    await expect(page.locator('[data-pgm-active]')).toHaveCount(0);
+    await expect(source).toHaveValue('follow');
+    await expect(sound).toHaveAttribute('title', 'No active programme sound source');
+    await expect.poll(() => primary.audioOpenCount()).toBe(0);
+    expect(backup.audioOpenCount()).toBe(0);
+    await expect(b).toContainText('B · CH 2');
+    await expect(bPicture).toHaveCSS('visibility', 'visible');
+    expect(await bPicture.getAttribute('src')).toBe(initialBPicture);
+    const framesAtOutage = backup.connections[0]?.framesSent ?? 0;
+    await expect.poll(() => backup.connections[0]?.framesSent ?? 0).toBeGreaterThan(framesAtOutage);
+    expect(backup.connections).toHaveLength(bConnections);
+
+    await source.selectOption('B');
+    await expect(sound).toHaveAttribute('data-pgm-audio', 'playing');
+    await expect.poll(() => backup.audioOpenCount()).toBe(1);
+    await expect(page.locator('[data-pgm-active]')).toHaveCount(0);
+
+    primary.closeOnAccept(false);
+    await page.evaluate(
+      (restored) => {
+        (window as unknown as { programmeTopology: PgmTopology }).programmeTopology = restored;
+      },
+      { channel: 1, members, active: 'A' } satisfies PgmTopology,
+    );
+    await expect(a).toHaveAttribute('data-pgm-active', '', { timeout: 10_000 });
+    await expect.poll(() => primary.openCount()).toBe(1);
+    await expect(bPicture).toHaveCSS('visibility', 'visible');
+    expect(await bPicture.getAttribute('src')).toBe(initialBPicture);
+    expect(backup.connections).toHaveLength(bConnections);
+    expect(backup.audioOpenCount()).toBe(1);
+  } finally {
+    await Promise.all([primary.stop(), backup.stop()]);
+  }
+});
+
 test('four named programme returns share a 2x2 view and one selected sound stream', async ({
   page,
 }) => {

@@ -14,6 +14,16 @@
 - [x] Verify B and Follow use the selected engine meter or its authenticated PCM peaks.
       Windows Chromium covers distinct stereo peaks, show/hide persistence, the unresolved
       owner case, and one reader while toggling the speaker and the meter.
+- [x] Reproduce the installed PGM return failure on the licensed .37 pair. During A Engine
+      stop, B continued to send JPEG frames directly while installed Bridge 1.2.13 marked both
+      return mappings unavailable.
+- [x] Verify the surviving return through the candidate Bridge on the real .37 pair during
+      all four active-role and Core-restart combinations. Separately restart A's Windows
+      Playout service with B active. All nine candidate samples carried a B frame using
+      the same resource while the installed Bridge returned no B picture.
+- [x] Verify the Control display retains the B picture connection across A's outage.
+      Windows Edge covers unknown ownership, silent Follow, manual B audio and A recovery.
+- [ ] Repeat the service-outage test with the candidate installed as the CG Bridge service.
 
 ## 2. Commands to the active engine
 
@@ -139,6 +149,8 @@
       Logo and Live layout on A. Stop returned both rows to Ready.
 - [ ] Independently verify Programme mappings, playlist and runtime keys, and actual A/B
       returns after recovery. Compare assigned inputs and media separately when keys match.
+      In the 2026-11-24 Core restart matrix, the two programme frames showed different
+      positions within the same scheduled item, despite matching playlist and runtime keys.
 - [ ] Verify supported managed graphics through an installed Bridge service using approved
       template delivery and separate Engine sessions before station adoption.
 
@@ -167,3 +179,25 @@
 - [x] Verify each PGM meter is bound to its actual engine and source in Chromium.
 - [ ] Compare measured A/B PGM levels with deterministic aligned media and equal
       programme settings on a real engine pair.
+
+## Installed graphics recovery after an engine restart
+
+- [x] Reproduce the installed graphics recovery gap with static HTML on CH 1, layer 99
+      across four native Core restarts on the .37 pair on 2026-11-24. A restored the graphic
+      after its own short restart with either Engine active at the start. B lost the graphic
+      after its own restart in both roles. A retained it and B's programme video returned.
+      The configured Bridge primary stayed A independently of Playout's programme role.
+
+- [x] Record the .37 installed behavior. Both channels returned
+      `cg.channelNotMigrated`. The Legacy reserve reconnect has no automatic replay of
+      the active row. D1 operator sessions read D4, while the unmigrated managed routes
+      cannot establish their write permission.
+- [ ] Verify service opt-in and member-local operator session renewal on migrated test
+      channels with the installed Bridge and Control.
+- [ ] Exercise A selected with B restarted, A selected with A restarted, B selected with
+      A restarted, and B selected with B restarted. Verify the survivor stays on air.
+      Check the latest applied fields and page on the return, including after Update,
+      Stop and Clear while a peer was down beyond the Legacy quick recovery window.
+      Confirm no entrance replay and compare each Engine's native PGM and applied state.
+- [ ] Test Legacy Live layouts, media and timed graphics separately before claiming
+      coverage. Verify the returning engine's input and asset bindings and applied timing.

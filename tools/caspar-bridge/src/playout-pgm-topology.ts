@@ -5,6 +5,8 @@ import { pinnedIPv4, playoutFetch } from './playout-http.js';
 
 const MAX_RESERVES = 3;
 const READ_TIMEOUT_MS = 5_000;
+const CHECK_KNOWN_PEERS_AFTER_MS = 2_000;
+const UNREACHABLE = Symbol('Playout topology endpoint is unreachable');
 
 const ChannelCodeSchema = z
   .string()
@@ -50,6 +52,14 @@ interface Member {
   readonly channel: Channel | null;
 }
 
+interface ProgrammeRecovery {
+  readonly primary: PlayoutPgmMember;
+  readonly primaryAliases: ReadonlySet<string>;
+  readonly master: Pick<Member, 'origin' | 'channelCode'>;
+  readonly masterAliases: ReadonlySet<string>;
+  readonly peers: readonly PlayoutPgmMember[];
+}
+
 export interface PlayoutPgmMember {
   /** The normalized API origin. This identity does not change with the active role. */
   readonly key: string;
@@ -64,12 +74,16 @@ export interface PlayoutPgmTopology {
   readonly members: readonly PlayoutPgmMember[];
   /** Display only. Never an authority to send a command. */
   readonly activeMemberKey: string | null;
+  /** Previously verified identities used only to re-check readable peers during an outage. */
+  readonly recovery?: ProgrammeRecovery;
+  readonly degraded?: true;
 }
 
 export interface PlayoutPgmTopologyOptions {
   readonly fetchImpl?: typeof playoutFetch;
   readonly resolveIPv4?: typeof pinnedIPv4;
   readonly signal?: AbortSignal;
+  readonly previous?: PlayoutPgmTopology;
 }
 
 /** Endpoints advertised in link/discovery rows must be origins, never userinfo or other paths. */
@@ -159,7 +173,7 @@ function isPeerAddress(address: string): boolean {
 
 function describesMaster(
   mirrorOf: Channel['mirrorOf'],
-  master: Member,
+  master: Pick<Member, 'origin' | 'channelCode'>,
   masterAliases: ReadonlySet<string>,
 ): boolean {
   if (mirrorOf == null || mirrorOf.masterCode !== master.channelCode) return false;
@@ -182,6 +196,25 @@ function programmeOf(
   return sameHost
     ? { pgmHost: member.origin.hostname, physicalChannel: output.channelNumber }
     : { pgmHost: null, physicalChannel: null };
+}
+
+function confirmsRecoveryLink(row: Channel, address: URL, recovery: ProgrammeRecovery): boolean {
+  if (address.origin !== recovery.master.origin.origin)
+    return (
+      (row.role == null || row.role === 'slave') &&
+      describesMaster(row.mirrorOf, recovery.master, recovery.masterAliases)
+    );
+  if (row.mirrorOf !== null || row.role === 'slave') return false;
+  const linksToPrimary = row.slaves.flatMap((value) => {
+    const link = LinkSchema.safeParse(value);
+    const peer = link.success ? linkedOrigin(link.data.host, address) : null;
+    return link.success && peer !== null && recovery.primaryAliases.has(peer.origin)
+      ? [link.data]
+      : [];
+  });
+  return (
+    linksToPrimary.length === 1 && linksToPrimary[0]?.remoteCode === recovery.primary.channelCode
+  );
 }
 
 /** A peer's control response must identify a proven member, never a discovered bystander. */
@@ -251,14 +284,17 @@ export async function readPlayoutPgmTopology(
 
   const fetcher = options.fetchImpl ?? playoutFetch;
   const resolveIPv4 = options.resolveIPv4 ?? pinnedIPv4;
-  const timeout = AbortSignal.timeout(READ_TIMEOUT_MS);
-  const signal =
-    options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
-  const get = async (address: URL, path: string): Promise<unknown> => {
-    if (signal.aborted) return null;
+  const cancelled = (): boolean => options.signal?.aborted === true;
+  const readSignal = (): AbortSignal => {
+    const timeout = AbortSignal.timeout(READ_TIMEOUT_MS);
+    return options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+  };
+  const signal = readSignal();
+  const get = async (address: URL, path: string, signal: AbortSignal): Promise<unknown> => {
+    if (signal.aborted) return UNREACHABLE;
     let cancel: () => void = () => undefined;
-    const aborted = new Promise<null>((resolve) => {
-      cancel = () => resolve(null);
+    const aborted = new Promise<typeof UNREACHABLE>((resolve) => {
+      cancel = () => resolve(UNREACHABLE);
       signal.addEventListener('abort', cancel, { once: true });
     });
     const read = async (): Promise<unknown> => {
@@ -266,30 +302,99 @@ export async function readPlayoutPgmTopology(
         const ip = await resolveIPv4(address.hostname);
         if (ip === null || !isPeerAddress(ip)) return null;
       }
-      if (signal.aborted) return null;
+      if (signal.aborted) return UNREACHABLE;
       const response = await fetcher(new URL(path, address), {
         method: 'GET',
         redirect: 'error',
         signal,
       });
-      return response.ok && !response.redirected ? ((await response.json()) as unknown) : null;
+      if (response.redirected) return null;
+      if (response.status >= 500) return UNREACHABLE;
+      if (!response.ok) return null;
+      return (await response.json().catch(() => null)) as unknown;
     };
     try {
       return await Promise.race([read(), aborted]);
     } catch {
-      return null;
+      return UNREACHABLE;
     } finally {
       signal.removeEventListener('abort', cancel);
     }
   };
-  const channelsAt = (address: URL): Promise<unknown> => get(address, '/api/v1/channels');
+  const channelsAt = (address: URL, budget = signal): Promise<unknown> =>
+    get(address, '/api/v1/channels', budget);
   const discoverAt = async (address: URL): Promise<Discovery> =>
-    discoveryOf(await get(address, '/api/v1/discovery/peers'));
+    discoveryOf(await get(address, '/api/v1/discovery/peers', signal));
+  const previous = options.previous;
+  const prior = previous?.recovery;
+  const recovery =
+    prior?.primary.key === initialOrigin.origin && prior.primary.channelCode === code.data
+      ? prior
+      : undefined;
+  const knownPeerReads = new Map<string, Promise<unknown>>();
+  let peerBudget: AbortSignal | undefined;
+  const readKnownPeer = (address: URL): Promise<unknown> => {
+    const pending = knownPeerReads.get(address.origin);
+    if (pending !== undefined) return pending;
+    peerBudget ??= readSignal();
+    const read = channelsAt(address, peerBudget);
+    knownPeerReads.set(address.origin, read);
+    return read;
+  };
 
+  async function recoverPeers(
+    eligible: readonly PlayoutPgmMember[] | undefined = recovery?.peers,
+  ): Promise<PlayoutPgmTopology | null> {
+    if (previous === undefined || recovery === undefined || eligible === undefined || cancelled())
+      return null;
+
+    // An unavailable configured endpoint cannot renew a mapping. Use a separate deadline
+    // to ask each already verified peer about its exact channel and return.
+    const checked = await Promise.all(
+      eligible.map(async (peer) => {
+        const address = new URL(peer.key);
+        const rows = await readKnownPeer(address);
+        if (rows === UNREACHABLE) return { peer, keep: true, available: false };
+        const row = channelOf(rows, peer.channelCode);
+        const output = programmeOf(
+          { origin: address, channelCode: peer.channelCode, channel: row },
+          new Set([peer.key]),
+        );
+        const verified =
+          row !== null &&
+          confirmsRecoveryLink(row, address, recovery) &&
+          output.pgmHost === peer.pgmHost &&
+          output.physicalChannel === peer.physicalChannel;
+        return { peer, keep: verified, available: verified };
+      }),
+    );
+    if (cancelled()) return null;
+    const available = new Map(
+      checked.filter(({ available }) => available).map(({ peer }) => [peer.key, peer]),
+    );
+    return {
+      members: previous.members.map(
+        (peer) => available.get(peer.key) ?? { ...peer, physicalChannel: null, pgmHost: null },
+      ),
+      activeMemberKey: null,
+      recovery: { ...recovery, peers: checked.filter(({ keep }) => keep).map(({ peer }) => peer) },
+      degraded: true,
+    };
+  }
+
+  // Normally discovery completes before these reads start. A slow or unreachable configured
+  // Engine must not use up the known peers' separate deadline before they can be checked.
+  const earlyPeerCheck =
+    recovery !== undefined && recovery.peers.length > 0
+      ? setTimeout(() => {
+          for (const peer of recovery.peers) void readKnownPeer(new URL(peer.key));
+        }, CHECK_KNOWN_PEERS_AFTER_MS).unref()
+      : undefined;
   const [initialRows, initialDiscovery] = await Promise.all([
     channelsAt(initialOrigin),
     discoverAt(initialOrigin),
-  ]);
+  ]).finally(() => clearTimeout(earlyPeerCheck));
+  if (initialRows === UNREACHABLE) return recoverPeers();
   const initialChannel = channelOf(initialRows, code.data);
   if (initialChannel === null) return null;
   const initial: Member = {
@@ -354,11 +459,29 @@ export async function readPlayoutPgmTopology(
     ...(initialReserve === undefined ? [] : [initialReserve]),
     ...reserveCandidates.filter((entry) => entry !== initialReserve),
   ].slice(0, MAX_RESERVES);
+  if (
+    initialChannel.primaryOutput === null &&
+    recovery !== undefined &&
+    recovery.master.origin.origin === master.origin.origin &&
+    recovery.master.channelCode === master.channelCode
+  ) {
+    const eligible = recovery.peers.filter(
+      (peer) =>
+        (peer.key === master.origin.origin && peer.channelCode === master.channelCode) ||
+        selectedReserves.some(
+          (link) => link.origin.origin === peer.key && link.channelCode === peer.channelCode,
+        ),
+    );
+    return recoverPeers(eligible);
+  }
   const reserves = await Promise.all(
     selectedReserves.map(async (link): Promise<Member> => {
       if (link === initialReserve) return initial;
       const remote = masterDiscovery.has(link.origin.origin)
-        ? channelOf(await channelsAt(link.origin), link.channelCode)
+        ? channelOf(
+            await (knownPeerReads.get(link.origin.origin) ?? channelsAt(link.origin)),
+            link.channelCode,
+          )
         : null;
       return {
         ...link,
@@ -406,12 +529,25 @@ export async function readPlayoutPgmTopology(
             const response = await get(
               member.origin,
               '/api/v1/channels/' + encodeURIComponent(member.channelCode) + '/redundancy/control',
+              signal,
             );
             const parsed = ControlSchema.safeParse(response);
             return parsed.success && parsed.data.code === member.channelCode ? parsed.data : null;
           }),
         )
       : [];
-  if (signal.aborted && options.signal?.aborted) return null;
-  return { members: result, activeMemberKey: activeMemberKey(members, controls, aliasesOf) };
+  if (cancelled()) return null;
+  const [primary, ...peers] = result;
+  const verifiedPeers = peers.filter(
+    ({ physicalChannel, pgmHost }) => physicalChannel !== null && pgmHost !== null,
+  );
+  const verifiedRecovery =
+    primary?.physicalChannel != null && verifiedPeers.length > 0
+      ? { primary, primaryAliases: initialAliases, master, masterAliases, peers: verifiedPeers }
+      : undefined;
+  return {
+    members: result,
+    activeMemberKey: activeMemberKey(members, controls, aliasesOf),
+    ...(verifiedRecovery === undefined ? {} : { recovery: verifiedRecovery }),
+  };
 }
