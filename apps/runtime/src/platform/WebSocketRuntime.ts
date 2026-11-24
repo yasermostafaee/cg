@@ -198,6 +198,7 @@ import {
   localBridgeState,
   nativePlayoutFetch,
   shellCloseGuard,
+  nativeFloatingPanels,
   shellKeyboardLanguage,
   shellSetLayerAltF4Armed,
   shellOpenCompanySite,
@@ -2768,6 +2769,7 @@ export class WebSocketRuntime implements RuntimeBridge {
    * sends nothing to CG Bridge or CasparCG. A browser has no shell; this then holds nothing.
    */
   readonly closeGuard = shellCloseGuard();
+  readonly floatingPanels = nativeFloatingPanels();
 
   readonly update = {
     request: (req: ChannelRequest<typeof UpdateRequestChannel>) =>

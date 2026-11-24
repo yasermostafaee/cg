@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { panelWindow, usePanelDocument } from './PanelDocument.js';
 
 /**
  * THE Runtime's tooltip — one global mechanism, inherited by every control that
@@ -55,22 +56,23 @@ function overflowsInline(el: Element): boolean {
 }
 
 function clippedFieldValue(field: HTMLElement): string | undefined {
-  if (field instanceof HTMLInputElement) {
+  const view = panelWindow(field.ownerDocument);
+  if (field instanceof view.HTMLInputElement) {
     if (field.type !== 'text' && field.type !== 'search' && field.type !== 'number') return;
     if (field.closest('.cg-password') !== null) return;
     return overflowsInline(field) ? field.value : undefined;
   }
-  if (field instanceof HTMLTextAreaElement) {
+  if (field instanceof view.HTMLTextAreaElement) {
     return overflowsInline(field) || field.scrollHeight > field.clientHeight + 1
       ? field.value
       : undefined;
   }
-  if (field instanceof HTMLSelectElement) {
+  if (field instanceof view.HTMLSelectElement) {
     if (field.multiple || field.size > 1 || field.clientWidth === 0) return;
     const label = field.selectedOptions[0]?.label;
     if (label === undefined || label === '') return;
     const { font, fontSize, paddingInlineStart, paddingInlineEnd, appearance } =
-      window.getComputedStyle(field);
+      view.getComputedStyle(field);
     const canvas = field.ownerDocument.createElement('canvas').getContext('2d');
     if (canvas === null) return;
     canvas.font = font;
@@ -102,6 +104,7 @@ interface Tip {
 }
 
 export function Tooltip(): JSX.Element | null {
+  const view = panelWindow(usePanelDocument());
   const [tip, setTip] = useState<Tip | null>(null);
   const timer = useRef<number | null>(null);
   // The element whose native `title` we blanked, so it can be restored exactly.
@@ -110,7 +113,7 @@ export function Tooltip(): JSX.Element | null {
   useEffect(() => {
     function cancel(): void {
       if (timer.current !== null) {
-        window.clearTimeout(timer.current);
+        view.clearTimeout(timer.current);
         timer.current = null;
       }
     }
@@ -129,10 +132,10 @@ export function Tooltip(): JSX.Element | null {
     function resolve(target: Element | null): TipTarget | null {
       if (target === null) return null;
       const titled = target.closest('[title]');
-      const nativeTitle = titled instanceof HTMLElement ? titled : undefined;
+      const nativeTitle = titled instanceof view.HTMLElement ? titled : undefined;
       const field = target.closest(VALUE_FIELD_SELECTOR);
       if (
-        field instanceof HTMLElement &&
+        field instanceof view.HTMLElement &&
         (nativeTitle === undefined || nativeTitle === field || !field.contains(nativeTitle))
       ) {
         const text = clippedFieldValue(field);
@@ -160,7 +163,7 @@ export function Tooltip(): JSX.Element | null {
         nativeTitle.title = '';
       }
       cancel();
-      timer.current = window.setTimeout(() => {
+      timer.current = view.setTimeout(() => {
         if (!el.isConnected) return;
         const text = fieldValue ? clippedFieldValue(el) : found.text.trim();
         if (text === undefined || text.trim() === '') return;
@@ -176,7 +179,7 @@ export function Tooltip(): JSX.Element | null {
     }
 
     function onOver(e: PointerEvent): void {
-      const found = resolve(e.target as Element | null);
+      const found = resolve(e.target instanceof view.Element ? e.target : null);
       if (found === null) {
         hide();
         return;
@@ -191,7 +194,7 @@ export function Tooltip(): JSX.Element | null {
      */
     function onFocusIn(e: FocusEvent): void {
       const el = e.target;
-      if (!(el instanceof HTMLElement)) return;
+      if (!(el instanceof view.HTMLElement)) return;
       // Only for keyboard focus: a click already focuses the button, and showing
       // a bubble over the control the operator just pressed is noise.
       if (!el.matches(':focus-visible')) return;
@@ -200,32 +203,32 @@ export function Tooltip(): JSX.Element | null {
       show(found);
     }
 
-    window.addEventListener('pointerover', onOver, true);
-    window.addEventListener('pointerout', hide, true);
-    window.addEventListener('pointerdown', hide, true);
-    window.addEventListener('wheel', hide, true);
-    window.addEventListener('input', hide, true);
-    window.addEventListener('change', hide, true);
-    window.addEventListener('focusin', onFocusIn, true);
-    window.addEventListener('focusout', hide, true);
+    view.addEventListener('pointerover', onOver, true);
+    view.addEventListener('pointerout', hide, true);
+    view.addEventListener('pointerdown', hide, true);
+    view.addEventListener('wheel', hide, true);
+    view.addEventListener('input', hide, true);
+    view.addEventListener('change', hide, true);
+    view.addEventListener('focusin', onFocusIn, true);
+    view.addEventListener('focusout', hide, true);
     // Escape dismisses, like every other transient surface in this app.
-    window.addEventListener('keydown', onKeyDown, true);
+    view.addEventListener('keydown', onKeyDown, true);
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === 'Escape') hide();
     }
     return () => {
       hide();
-      window.removeEventListener('pointerover', onOver, true);
-      window.removeEventListener('pointerout', hide, true);
-      window.removeEventListener('pointerdown', hide, true);
-      window.removeEventListener('wheel', hide, true);
-      window.removeEventListener('input', hide, true);
-      window.removeEventListener('change', hide, true);
-      window.removeEventListener('focusin', onFocusIn, true);
-      window.removeEventListener('focusout', hide, true);
-      window.removeEventListener('keydown', onKeyDown, true);
+      view.removeEventListener('pointerover', onOver, true);
+      view.removeEventListener('pointerout', hide, true);
+      view.removeEventListener('pointerdown', hide, true);
+      view.removeEventListener('wheel', hide, true);
+      view.removeEventListener('input', hide, true);
+      view.removeEventListener('change', hide, true);
+      view.removeEventListener('focusin', onFocusIn, true);
+      view.removeEventListener('focusout', hide, true);
+      view.removeEventListener('keydown', onKeyDown, true);
     };
-  }, []);
+  }, [view]);
 
   if (tip === null) return null;
   return <Bubble tip={tip} />;
@@ -238,6 +241,7 @@ export function Tooltip(): JSX.Element | null {
  * any edge is nudged fully on-screen instead of spilling off it.
  */
 function Bubble({ tip }: { tip: Tip }): JSX.Element {
+  const view = panelWindow(usePanelDocument());
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
@@ -245,8 +249,8 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
     const el = ref.current;
     if (el === null) return;
     const b = el.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vw = view.innerWidth;
+    const vh = view.innerHeight;
     const left = clamp(tip.cx - b.width / 2, MARGIN, vw - b.width - MARGIN);
     const above = tip.top - MARGIN - b.height;
     const top = clamp(
@@ -255,7 +259,7 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
       vh - b.height - MARGIN,
     );
     setPos({ left, top });
-  }, [tip]);
+  }, [tip, view]);
 
   return (
     <div

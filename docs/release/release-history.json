@@ -18,6 +18,11 @@
       },
       "features": [
         {
+          "fa": "در CG Control ویندوز، پنل‌های برنامه، پیش‌نمایش، لایه‌ها و ویژگی‌ها پنجرهٔ شناور مستقل دارند. بازگشت به پنجرهٔ اصلی انتخاب لایه، تغییرات اعمال‌نشده و پخش را حفظ می‌کند. پروفایل رابط جای پنجره‌های شناور را ذخیره می‌کند.",
+          "en": "Windows CG Control can float Programme, Preview, Layers and Inspector in separate windows. Docking keeps the selected layer, drafts and running preview. UI profiles save floating window placement.",
+          "ar": "يمكن لـCG Control على Windows فصل لوحات البرنامج والمعاينة والطبقات والخصائص في نوافذ مستقلة. تحافظ إعادتها إلى النافذة الرئيسية على الطبقة المحددة والمسودات والمعاينة الجارية. تحفظ ملفات تعريف الواجهة مواضع النوافذ العائمة."
+        },
+        {
           "fa": "نصاب CG Control با انتخاب فارسی، انگلیسی یا عربی آغاز می‌شود. انتخاب صریح زبان در نصب یا ارتقا، هر دو زبان رابط و پیام‌ها را در اجرای بعدی تعیین می‌کند. تغییرهای بعدی در تنظیمات عمومی حفظ می‌شوند.",
           "en": "CG Control setup starts with English, Persian and Arabic. An explicit selection sets both the interface and feedback languages on the next launch, including upgrades. Later changes in General are remembered.",
           "ar": "يبدأ تثبيت CG Control باختيار الإنجليزية أو الفارسية أو العربية. يحدّد الاختيار الصريح لغة الواجهة ورسائل العمليات عند التشغيل التالي، بما في ذلك بعد الترقية. وتُحفظ التعديلات اللاحقة في الإعدادات العامة."

@@ -15,6 +15,7 @@ import {
   shellOpenCompanySite,
   shellReportsKeyboardLanguage,
   insideCgControl,
+  nativeFloatingPanels,
 } from './desktop.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
@@ -218,6 +219,7 @@ export function createMockBridge(): RuntimeBridge {
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
     openCompanySite: shellOpenCompanySite,
+    floatingPanels: nativeFloatingPanels(),
 
     // `TEXT-DIGITS-01` — the shell is not the bridge: test mode asks the same (absent) shell.
     keyboard: {

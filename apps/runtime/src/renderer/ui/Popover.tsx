@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from './focusTrap.js';
+import { panelWindow, usePanelDocument } from './PanelDocument.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §2.A — **THE ANCHORED PANEL: a surface that hangs from a field and is not
@@ -81,6 +82,8 @@ export function Popover({
   variant = 'default',
   children,
 }: PopoverProps): JSX.Element {
+  const ownerDocument = usePanelDocument();
+  const view = panelWindow(ownerDocument);
   const panel = useRef<HTMLDivElement>(null);
   const anchorAtOpen = useRef<DOMRect | null>(null);
   const [placement, setPlacement] = useState<Placement | null>(null);
@@ -105,8 +108,8 @@ export function Popover({
     if (field === null || el === null) return;
     const rect = field.getBoundingClientRect();
     anchorAtOpen.current = rect;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vw = view.innerWidth;
+    const vh = view.innerHeight;
     const width = Math.min(Math.max(rect.width, minWidth), Math.max(vw - EDGE * 2, 0));
     const left = Math.max(EDGE, Math.min(rect.left, vw - width - EDGE));
     const roomBelow = vh - rect.bottom - GAP - EDGE;
@@ -123,7 +126,7 @@ export function Popover({
       top: above ? Math.max(EDGE, rect.top - GAP - Math.min(wanted, height)) : rect.bottom + GAP,
     });
     // Placed once per open: a re-measure on every render would move the panel under the pointer.
-  }, [anchor, minWidth, maxHeight]);
+  }, [anchor, minWidth, maxHeight, view]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -133,7 +136,7 @@ export function Popover({
       onClose();
     };
     const onScroll = (e: Event): void => {
-      if (e.target instanceof Node && panel.current?.contains(e.target) === true) return;
+      if (e.target instanceof view.Node && panel.current?.contains(e.target) === true) return;
       const field = anchor.current;
       const initial = anchorAtOpen.current;
       const current = field?.getBoundingClientRect();
@@ -151,15 +154,15 @@ export function Popover({
         onClose();
       }
     };
-    document.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onClose);
+    ownerDocument.addEventListener('keydown', onKeyDown, true);
+    view.addEventListener('scroll', onScroll, true);
+    view.addEventListener('resize', onClose);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onClose);
+      ownerDocument.removeEventListener('keydown', onKeyDown, true);
+      view.removeEventListener('scroll', onScroll, true);
+      view.removeEventListener('resize', onClose);
     };
-  }, [anchor, onClose, layer]);
+  }, [anchor, onClose, layer, ownerDocument, view]);
 
   return createPortal(
     <div
@@ -199,6 +202,6 @@ export function Popover({
         {children}
       </div>
     </div>,
-    document.body,
+    ownerDocument.body,
   );
 }

@@ -7,17 +7,25 @@ import {
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useLayerAltF4 } from '../fixedLayers/useLayerAltF4.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
+import { panelWindow } from '../../ui/PanelDocument.js';
 import {
   effectiveLayerShortcutBindings,
   layerShortcutChord,
 } from '../fixedLayers/layer-shortcuts.js';
 
 const editor = 'input, textarea, select, [role="textbox"], [role="combobox"], [role="spinbutton"]';
+const overlay = '[aria-modal="true"], dialog[open], [role="menu"]';
 
-function isEditing(target: EventTarget | null): boolean {
+function isEditing(target: EventTarget | null, owner: Document): boolean {
   return (
-    target instanceof HTMLElement && (target.isContentEditable || target.closest(editor) !== null)
+    target instanceof panelWindow(owner).HTMLElement &&
+    (target.isContentEditable || target.closest(editor) !== null)
   );
+}
+
+interface ShortcutDocuments {
+  event: Document;
+  workspace: readonly Document[];
 }
 
 export function dispatchLayerShortcut(
@@ -25,14 +33,16 @@ export function dispatchLayerShortcut(
   channel: number,
   bindings: LayerShortcutBindings,
   root: Document,
+  documents?: ShortcutDocuments,
 ): boolean {
+  const eventDocument = documents?.event ?? root;
   if (
     event.defaultPrevented ||
     event.repeat ||
     event.isComposing ||
-    isEditing(event.target) ||
-    isEditing(root.activeElement) ||
-    root.querySelector('[aria-modal="true"], dialog[open], [role="menu"]') !== null
+    isEditing(event.target, eventDocument) ||
+    isEditing(eventDocument.activeElement, eventDocument) ||
+    (documents?.workspace ?? [root]).some((owner) => owner.querySelector(overlay) !== null)
   ) {
     return false;
   }
@@ -56,7 +66,14 @@ export function dispatchLayerShortcut(
   return false;
 }
 
-export function useLayerShortcuts(): void {
+/** Read keys in the workspace, but invoke only the canonical layer row's guarded control. */
+export function useLayerShortcuts({
+  layerDocument = document,
+  panelDocuments,
+}: {
+  layerDocument?: Document | undefined;
+  panelDocuments?: readonly Document[] | undefined;
+} = {}): void {
   const { bank, canOperateSelected } = useSelectedChannel();
   const capabilities = useAuthCapabilities();
   const supportsNext = capabilities?.fixedLayerNextShortcut === true;
@@ -75,33 +92,50 @@ export function useLayerShortcuts(): void {
   const channel = bank?.channel;
   useEffect(() => {
     if (bindings === null || channel === undefined) return;
-    let spaceHandled = false;
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.code !== LAYER_SPACE_SHORTCUT)
-        dispatchLayerShortcut(event, channel, bindings, document);
-    };
-    // Space can activate the focused button or select the focused row. Intercept only if the
-    // assigned action is available, and consume that press through key-up.
-    const onSpaceDown = (event: KeyboardEvent): void => {
-      if (event.code !== LAYER_SPACE_SHORTCUT) return;
-      if (!event.repeat) spaceHandled = dispatchLayerShortcut(event, channel, bindings, document);
-      if (!spaceHandled) return;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    const onSpaceUp = (event: KeyboardEvent): void => {
-      if (event.code !== LAYER_SPACE_SHORTCUT || !spaceHandled) return;
-      spaceHandled = false;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keydown', onSpaceDown, true);
-    document.addEventListener('keyup', onSpaceUp, true);
+    const workspace = [...new Set([document, layerDocument, ...(panelDocuments ?? [])])];
+    const unsubscribe = workspace.map((owner) =>
+      listenForLayerKeys(owner, (event) =>
+        dispatchLayerShortcut(event, channel, bindings, layerDocument, {
+          event: owner,
+          workspace,
+        }),
+      ),
+    );
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('keydown', onSpaceDown, true);
-      document.removeEventListener('keyup', onSpaceUp, true);
+      for (const stop of unsubscribe) stop();
     };
-  }, [bindings, channel]);
+  }, [bindings, channel, layerDocument, panelDocuments]);
+}
+
+function listenForLayerKeys(
+  owner: Document,
+  dispatch: (event: KeyboardEvent) => boolean,
+): () => void {
+  let spaceHandled = false;
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.code !== LAYER_SPACE_SHORTCUT) dispatch(event);
+  };
+  // Space can activate the focused button or select the focused row. Intercept only if the
+  // assigned action is available, and consume that press through key-up.
+  const onSpaceDown = (event: KeyboardEvent): void => {
+    if (event.code !== LAYER_SPACE_SHORTCUT) return;
+    if (!event.repeat) spaceHandled = dispatch(event);
+    if (!spaceHandled) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const onSpaceUp = (event: KeyboardEvent): void => {
+    if (event.code !== LAYER_SPACE_SHORTCUT || !spaceHandled) return;
+    spaceHandled = false;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  owner.addEventListener('keydown', onKeyDown);
+  owner.addEventListener('keydown', onSpaceDown, true);
+  owner.addEventListener('keyup', onSpaceUp, true);
+  return () => {
+    owner.removeEventListener('keydown', onKeyDown);
+    owner.removeEventListener('keydown', onSpaceDown, true);
+    owner.removeEventListener('keyup', onSpaceUp, true);
+  };
 }

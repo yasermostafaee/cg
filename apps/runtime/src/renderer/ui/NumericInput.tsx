@@ -198,19 +198,22 @@ export function NumericInput({
         const el = e.currentTarget;
         // Already editing? Let the click place the caret normally — a scrub would
         // hijack an ordinary text interaction.
-        if (document.activeElement === el) return;
+        if (el.ownerDocument.activeElement === el) return;
         e.preventDefault(); // suppress the focus-on-mousedown so a drag is a drag
-        runScrubGesture({
-          startX: e.clientX,
-          value: current,
-          ...scrub,
-          onCommit: emit,
-          // A press that never travelled was a CLICK: focus for typing, which is
-          // what `preventDefault` above would otherwise have swallowed.
-          onEnd: (moved) => {
-            if (!moved) el.focus();
+        runScrubGesture(
+          {
+            startX: e.clientX,
+            value: current,
+            ...scrub,
+            onCommit: emit,
+            // A press that never travelled was a CLICK: focus for typing, which is
+            // what `preventDefault` above would otherwise have swallowed.
+            onEnd: (moved) => {
+              if (!moved) el.focus();
+            },
           },
-        });
+          el.ownerDocument,
+        );
       }}
       onKeyDown={(e) => {
         rest.onKeyDown?.(e);

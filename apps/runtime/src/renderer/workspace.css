@@ -21,7 +21,8 @@ html[dir='rtl'] [data-workspace-monitor-order='pgm-first'] {
   flex-direction: row;
 }
 
-[data-shell-inspector='left'] > aside {
+[data-shell-inspector='left'] > aside,
+[data-shell-inspector='left'] > [data-floating-dock='inspector'] {
   grid-area: 1 / 1;
 }
 
@@ -43,4 +44,42 @@ html[dir='rtl'] [data-workspace-monitor-order='pgm-first'] {
 
 .cg-workspace-profile-actions {
   flex-wrap: wrap;
+}
+
+[data-floating-dock] {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+[data-floating-dock-compact] {
+  flex-basis: auto;
+}
+
+.cg-inspector-overlay > [data-floating-dock] {
+  height: 100%;
+}
+
+#cg-floating-panel-root {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+#cg-floating-panel-root:has(> [data-floating-panel-content='compact']) {
+  height: auto;
+}
+
+[data-floating-panel-content] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-floating-panel-content='full'] {
+  height: 100%;
+}
+
+[data-floating-panel-content='full'] > :is(section, aside) {
+  flex: 1;
 }

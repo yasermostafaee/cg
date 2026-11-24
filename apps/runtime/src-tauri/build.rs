@@ -27,6 +27,9 @@ fn main() {
             "ndi_preview_start",
             "ndi_preview_poll",
             "ndi_preview_stop",
+            "arrange_floating_panel",
+            "read_floating_panel_placement",
+            "dispose_floating_panels",
         ]),
     ))
     .expect("tauri-build failed");

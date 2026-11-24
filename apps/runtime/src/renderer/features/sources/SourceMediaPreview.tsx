@@ -32,6 +32,7 @@ import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { RangeInput } from '../../ui/RangeInput.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
+import { panelWindow, usePanelDocument } from '../../ui/PanelDocument.js';
 import { createMediaThumbnailLoader, type MediaThumbnailLoader } from './MediaThumbnail.js';
 import { formatMediaDuration } from './SourceLabel.js';
 import { subscribeMediaPreviewFrame } from './inputThumbnailDemand.js';
@@ -106,6 +107,8 @@ function MediaPreviewSurface({
   plate?: PlateTransport | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const ownerDocument = usePanelDocument();
+  const view = panelWindow(ownerDocument);
   const surface = useRef<HTMLElement>(null);
   const fullscreenButton = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -130,7 +133,7 @@ function MediaPreviewSurface({
       if (element === null) return;
       const target = event.target;
       if (
-        target instanceof HTMLElement &&
+        target instanceof view.HTMLElement &&
         (target.isContentEditable ||
           target.closest('input:not([type="range"]), textarea, select, [role="textbox"]') !==
             null ||
@@ -143,35 +146,35 @@ function MediaPreviewSurface({
       event.stopPropagation();
       if (!event.repeat) togglePlayback();
     };
-    window.addEventListener('keydown', space, true);
-    return () => window.removeEventListener('keydown', space, true);
-  }, [togglePlayback]);
+    view.addEventListener('keydown', space, true);
+    return () => view.removeEventListener('keydown', space, true);
+  }, [togglePlayback, view]);
 
   useEffect(() => {
     const element = surface.current;
-    if (element === null || !document.fullscreenEnabled) return;
+    if (element === null || !ownerDocument.fullscreenEnabled) return;
     let wasExpanded = false;
     const change = (): void => {
-      const next = document.fullscreenElement === element;
+      const next = ownerDocument.fullscreenElement === element;
       if (next === wasExpanded) return;
       wasExpanded = next;
       setExpanded(next);
       fullscreenButton.current?.focus({ preventScroll: true });
     };
     const escape = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || document.fullscreenElement !== element) return;
+      if (event.key !== 'Escape' || ownerDocument.fullscreenElement !== element) return;
       event.preventDefault();
       // This Escape belongs to the player, so the source picker's dialog stays open.
       event.stopPropagation();
-      void document.exitFullscreen().catch(() => setFullscreenError(true));
+      void ownerDocument.exitFullscreen().catch(() => setFullscreenError(true));
     };
-    document.addEventListener('fullscreenchange', change);
-    window.addEventListener('keydown', escape, true);
+    ownerDocument.addEventListener('fullscreenchange', change);
+    view.addEventListener('keydown', escape, true);
     return () => {
-      document.removeEventListener('fullscreenchange', change);
-      window.removeEventListener('keydown', escape, true);
+      ownerDocument.removeEventListener('fullscreenchange', change);
+      view.removeEventListener('keydown', escape, true);
     };
-  }, []);
+  }, [ownerDocument, view]);
 
   if (plate !== undefined) {
     const action = plate.playing ? 'Pause preview' : 'Play preview';
@@ -223,7 +226,7 @@ function MediaPreviewSurface({
   }
 
   const fullscreenLabel = localizeUi(expanded ? 'Close fullscreen preview' : 'Fullscreen preview');
-  const fullscreenToggle = document.fullscreenEnabled && (
+  const fullscreenToggle = ownerDocument.fullscreenEnabled && (
     <Button
       ref={fullscreenButton}
       variant="icon"
@@ -235,8 +238,8 @@ function MediaPreviewSurface({
         if (element === null) return;
         setFullscreenError(false);
         const request =
-          document.fullscreenElement === element
-            ? document.exitFullscreen()
+          ownerDocument.fullscreenElement === element
+            ? ownerDocument.exitFullscreen()
             : element.requestFullscreen();
         void request.catch(() => setFullscreenError(true));
       }}

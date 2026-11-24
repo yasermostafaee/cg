@@ -16,6 +16,7 @@ import { PlayoutAddressGate } from './features/firstRun/PlayoutAddressGate.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
 import { localeDirection, useLanguages } from './i18n/locale.js';
+import { openFloatingPanelDocuments } from './features/workspace/floatingPanelDocuments.js';
 
 /**
  * Browser entry point. The Electron preload used to inject `window.cg`
@@ -110,12 +111,17 @@ async function boot(): Promise<void> {
   window.cg = bridge;
   // TEXT-DIGITS-01 — the one keyboard-language detector, with the shell's report when there is one.
   const keyboard = window.cg.keyboard;
-  startKeyboardLanguage(document, keyboard.reportsLanguage() ? () => keyboard.language() : null);
   window.__CG_SPLASH__?.phase('STARTING INTERFACE');
+  const floatingDocuments = await openFloatingPanelDocuments(bridge.floatingPanels);
+  startKeyboardLanguage(
+    document,
+    keyboard.reportsLanguage() ? () => keyboard.language() : null,
+    Array.from(floatingDocuments?.panels.values() ?? [], (pane) => pane.root.ownerDocument),
+  );
   root.render(
     <StrictMode>
       <BootComplete>
-        <App />
+        <App floatingDocuments={floatingDocuments} />
       </BootComplete>
     </StrictMode>,
   );

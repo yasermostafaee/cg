@@ -1,6 +1,7 @@
 import { useUiText } from '../i18n/locale.js';
 import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from 'react';
 import { Modal, ModalAction, type ModalMessage } from './Modal.js';
+import { panelWindow } from './PanelDocument.js';
 
 /**
  * `STATION-CHROME-01` §6 — **ONE WAY TO ADD ANYTHING.**
@@ -131,7 +132,8 @@ export function RecordDialog({
           if (e.key !== 'Enter') return;
           // A multi-line field is not a form to submit; nothing here uses one today, and
           // this is what stops the first one that does from losing its newlines.
-          if (e.target instanceof HTMLTextAreaElement) return;
+          if (e.target instanceof panelWindow(e.currentTarget.ownerDocument).HTMLTextAreaElement)
+            return;
           e.preventDefault();
           submit();
         }}

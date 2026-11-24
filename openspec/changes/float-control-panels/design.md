@@ -8,7 +8,19 @@
 
 ## Native verification
 
-The installed shell currently creates only one WebView2 window. In an isolated Chromium prototype,
-moving an active preview iframe into a second window replaced its document and lost its running
-state. Before connecting the production workspace, test the native window, render ownership,
-preview continuity, audio ownership and the close guard in installed CG Control on two displays.
+The main React workspace owns the bridge and renders each panel into a persistent same-origin
+WebView2 document. The shell changes the Win32 parent and frame of that whole window when it
+docks or floats. This keeps the panel's React tree and the preview browsing context mounted.
+Docked geometry uses physical pixels relative to the main client area. Detached geometry uses
+physical restore bounds, maximized state and display identity. The shell clamps restored
+placements to an available work area. Pane commands are available from the main window.
+
+Docked native surfaces yield to main-window dialogs. Full session gates also cover detached
+panes. A docked panel's full dialogs use the main document, while popovers use the triggering
+panel's document. Detached dialogs stay in their own windows. The renderer keeps one shortcut
+dispatcher across all panel documents.
+
+The Windows prototype exercised the same HWND through dock, float, maximize, restore,
+independent close prevention and redock. The preview iframe, WebRTC connection and running
+video and audio survived. Two-display and mixed-DPI verification remain part of the installed
+workspace acceptance.

@@ -35,6 +35,7 @@ import { colors, cssVars, LAYER_ROW_PX } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
+import { usePanelDocument } from '../../ui/PanelDocument.js';
 import { TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import {
   NO_FILTER,
@@ -324,6 +325,7 @@ export function LayersPanel({
   onFilterChange,
 }: Props): JSX.Element {
   const localizeUi = useUiText();
+  const ownerDocument = usePanelDocument();
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
    *
@@ -500,7 +502,7 @@ export function LayersPanel({
   useEffect(() => {
     if (shortcutsOnly) return;
     return onRowFocus((layer) => {
-      const row = document.querySelector<HTMLElement>(
+      const row = ownerDocument.querySelector<HTMLElement>(
         `[data-layer-list] [data-layer="${String(layer)}"]`,
       );
       if (row === null) return;
@@ -513,7 +515,7 @@ export function LayersPanel({
       )?.binding;
       if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
     });
-  }, [slots, bank, onSelectionChange, selectedOnly, shortcutsOnly]);
+  }, [slots, bank, onSelectionChange, selectedOnly, shortcutsOnly, ownerDocument]);
 
   // Template identity for every bound row, joined once for the whole list.
   /*

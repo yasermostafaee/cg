@@ -1,11 +1,12 @@
 import { useUiText } from '../i18n/locale.js';
 import type { CSSProperties, ReactNode } from 'react';
-import { Maximize2, Minimize2, X } from 'lucide-react';
+import { ExternalLink, Maximize2, Minimize2, PanelTop, X } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
 import { Button } from './Button.js';
 import { Icon } from './Icon.js';
 import { useShellLayoutContext } from '../hooks/shellLayoutContext.js';
 import type { PanelId } from '../hooks/useShellLayout.js';
+import { useFloatingWorkspace } from '../features/workspace/floatingWorkspace.js';
 
 /**
  * THE panel primitive: chrome, a header, and — the reason it exists — a
@@ -133,7 +134,20 @@ export function Panel({
 }: Props): JSX.Element {
   const translateUi = useUiText();
   const layout = useShellLayoutContext();
-  const focused = layout.focus === id;
+  const workspace = useFloatingWorkspace();
+  const placement = workspace?.placements[id];
+  const floating = placement !== undefined;
+  const focused = floating ? placement.maximized === true : layout.focus === id;
+  const fullscreenLabel = translateUi(
+    floating
+      ? focused
+        ? 'Restore floating {panel}'
+        : 'Maximize floating {panel}'
+      : focused
+        ? 'Exit fullscreen {panel}'
+        : 'Show {panel} fullscreen',
+    { panel: title },
+  );
 
   return (
     <Root aria-label={ariaLabel ?? title} style={{ ...styles.panel, ...style }}>
@@ -172,21 +186,36 @@ export function Panel({
           */}
           <Button
             variant="icon"
-            aria-label={
-              focused
-                ? translateUi('Exit fullscreen {panel}', { panel: title })
-                : translateUi('Show {panel} fullscreen', { panel: title })
-            }
+            aria-label={fullscreenLabel}
             aria-pressed={focused}
             title={
-              focused
-                ? translateUi('Restore {panel} to the workspace', { panel: title })
-                : translateUi('Give {panel} the whole shell', { panel: title })
+              floating
+                ? fullscreenLabel
+                : focused
+                  ? translateUi('Restore {panel} to the workspace', { panel: title })
+                  : translateUi('Give {panel} the whole shell', { panel: title })
             }
-            onClick={() => layout.setFocus(focused ? 'none' : id)}
+            onClick={() => {
+              if (floating) workspace?.toggleMaximized(id);
+              else layout.setFocus(focused ? 'none' : id);
+            }}
           >
             <Icon icon={focused ? Minimize2 : Maximize2} />
           </Button>
+          {workspace !== null && (
+            <Button
+              variant="icon"
+              aria-label={translateUi(floating ? 'Exit floating {panel}' : 'Float {panel}', {
+                panel: title,
+              })}
+              title={translateUi(floating ? 'Exit floating {panel}' : 'Float {panel}', {
+                panel: title,
+              })}
+              onClick={() => (floating ? workspace.redock(id) : workspace.detach(id))}
+            >
+              <Icon icon={floating ? PanelTop : ExternalLink} />
+            </Button>
+          )}
           {/*
             CLOSE — only for a panel that HAS a closed state (the Inspector). Rendered
             last, so the destructive-ish action is not the one the thumb lands on by
@@ -198,7 +227,7 @@ export function Panel({
             nothing at all. That is handled here rather than in each caller, so no
             caller can forget it.
           */}
-          {onClose !== undefined && (
+          {onClose !== undefined && !floating && (
             <Button
               variant="icon"
               aria-label={translateUi('Close {panel}', { panel: title })}

@@ -61,6 +61,8 @@ const INERT: ConfigurableShellLayout = {
   inspectorPx: DEFAULT_INSPECTOR_PX,
   monitorPx: DEFAULT_MONITOR_PX,
   focus: 'none',
+  floatingPanels: {},
+  setFloatingPanel: () => undefined,
   // `narrow` suppresses the fullscreen control, which is exactly right here: with
   // no provider there is no shell to give a panel.
   narrow: true,
@@ -69,7 +71,7 @@ const INERT: ConfigurableShellLayout = {
   positions: DEFAULT_WORKSPACE_POSITIONS,
   uiProfiles: [],
   setPositions: () => undefined,
-  saveProfile: () => undefined,
+  saveProfile: () => Promise.resolve(),
   loadProfile: () => undefined,
   deleteProfile: () => undefined,
   setInspectorPx: () => undefined,

@@ -6,6 +6,7 @@
  * implementation lives in `src/preload/runtime.preload.ts`; this file is
  * the contract.
  */
+import type { FloatingPanelWindowDoor } from './floating-panel-window.js';
 import type {
   BackupChannelEntriesSetChannel,
   BackupChannelsState,
@@ -372,6 +373,8 @@ export type NdiPreviewPacket =
 
 export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
+  /** Local workstation windows. The browser has no native workspace window host. */
+  readonly floatingPanels?: FloatingPanelWindowDoor | null;
   /** Open the fixed company site through the installed shell. Returns false in a browser. */
   openCompanySite(): boolean;
 

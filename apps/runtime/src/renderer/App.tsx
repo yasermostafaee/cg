@@ -34,6 +34,12 @@ import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedA
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { NO_FILTER, type LayerFilter } from './features/layers/layerFilter.js';
 import { useLayerShortcuts } from './features/layers/useLayerShortcuts.js';
+import {
+  FloatingPanelSlot,
+  FloatingPanelSurface,
+  FloatingWorkspaceProvider,
+} from './features/workspace/floatingWorkspace.js';
+import type { FloatingPanelDocuments } from './features/workspace/floatingPanelDocuments.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
 import { useChannelBankState } from './features/channels/useSelectedChannel.js';
 import { onChannel } from './features/stack/onAir.js';
@@ -108,9 +114,11 @@ const TEXTUAL_INPUT_TYPES = new Set([
 ]);
 
 export function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target instanceof HTMLTextAreaElement) return true;
-  if (target instanceof HTMLInputElement) {
+  const doc = (target as Node | null)?.ownerDocument;
+  const realm = doc?.defaultView ?? globalThis;
+  if (!(target instanceof realm.HTMLElement)) return false;
+  if (target instanceof realm.HTMLTextAreaElement) return true;
+  if (target instanceof realm.HTMLInputElement) {
     // An input with no `type` is a text input.
     return TEXTUAL_INPUT_TYPES.has(target.type === '' ? 'text' : target.type);
   }
@@ -119,12 +127,25 @@ export function isEditable(target: EventTarget | null): boolean {
   return target.isContentEditable === true;
 }
 
-function LayerShortcutsListener(): null {
-  useLayerShortcuts();
+function LayerShortcutsListener({
+  layerDocument,
+  panelDocuments,
+}: {
+  layerDocument?: Document | undefined;
+  panelDocuments: readonly Document[];
+}): null {
+  useLayerShortcuts({
+    ...(layerDocument === undefined ? {} : { layerDocument }),
+    panelDocuments,
+  });
   return null;
 }
 
-export function App(): JSX.Element {
+export function App({
+  floatingDocuments = null,
+}: {
+  floatingDocuments?: FloatingPanelDocuments | null;
+} = {}): JSX.Element {
   const localizeUi = useUiText();
   const items = useStack();
   /*
@@ -177,6 +198,17 @@ export function App(): JSX.Element {
   const [layerFilter, setLayerFilter] = useState<LayerFilter>(NO_FILTER);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
+  const nativePanels = floatingDocuments !== null;
+  const panelDocuments = useMemo(
+    () => Array.from(floatingDocuments?.panels.values() ?? [], (pane) => pane.root.ownerDocument),
+    [floatingDocuments],
+  );
+  const layersFloating = nativePanels && layout.floatingPanels.layers !== undefined;
+  const inspectorFloating = nativePanels && layout.floatingPanels.inspector !== undefined;
+  const allMonitorsFloating =
+    nativePanels &&
+    layout.floatingPanels.pgm !== undefined &&
+    layout.floatingPanels.pvw !== undefined;
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
   const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
@@ -276,9 +308,12 @@ export function App(): JSX.Element {
       if (isEditable(e.target)) return;
       e.preventDefault();
     }
-    window.addEventListener('contextmenu', suppressNativeMenu);
-    return () => window.removeEventListener('contextmenu', suppressNativeMenu);
-  }, []);
+    const views = [window, ...panelDocuments.map((doc) => doc.defaultView)];
+    for (const view of views) view?.addEventListener('contextmenu', suppressNativeMenu);
+    return () => {
+      for (const view of views) view?.removeEventListener('contextmenu', suppressNativeMenu);
+    };
+  }, [panelDocuments]);
 
   // R-034 — pull the station's delimiter list once and stay subscribed. Here
   // rather than in the control that uses it: the list is per-STATION, not per
@@ -336,7 +371,11 @@ export function App(): JSX.Element {
    * here: a fullscreen monitor is still the strip, so it shows through a hidden toggle, and
    * a fullscreen Layers list hides the strip as it always did.
    */
-  const monitorsVisible = layout.focus !== 'layers' && (layout.monitorsShown || monitorFocused);
+  const monitorsVisible =
+    showWorkspace &&
+    layout.focus !== 'layers' &&
+    (layout.monitorsShown || monitorFocused) &&
+    !allMonitorsFloating;
   const hasPreviewRows = rehearsals.some(
     ({ channel }) => viewChannel === null || channel === viewChannel,
   );
@@ -362,12 +401,19 @@ export function App(): JSX.Element {
   const closeInspector = useCallback(() => setSelectedId(null), []);
 
   const showMonitorLayerCompanion =
-    monitorFocused && selected !== null && monitorCompanionMode !== 'monitor';
+    monitorFocused && selected !== null && monitorCompanionMode !== 'monitor' && !layersFloating;
   const showMonitorInspectorCompanion =
-    monitorFocused && selected !== null && monitorCompanionMode === 'layer-inspector';
+    monitorFocused &&
+    selected !== null &&
+    monitorCompanionMode === 'layer-inspector' &&
+    !inspectorFloating;
+  const showMonitorCompanion = showMonitorLayerCompanion || showMonitorInspectorCompanion;
 
   const showInspectorColumn =
-    !layout.narrow && inspectorOpen && (layout.focus === 'none' || layout.focus === 'inspector');
+    !layout.narrow &&
+    inspectorOpen &&
+    !inspectorFloating &&
+    (layout.focus === 'none' || layout.focus === 'inspector');
   /*
    * A CLOSED Inspector gives its width back to the workspace (owner request: the
    * panel is closed when no layer is selected). The divider goes with it — a resize
@@ -375,7 +421,8 @@ export function App(): JSX.Element {
    */
   const inspectorLeft = layout.positions.inspectorSide === 'left';
   const layersAbove = layout.positions.layerPosition === 'above';
-  const splitInspector = !layout.narrow && inspectorOpen && layout.focus === 'none';
+  const splitInspector =
+    !layout.narrow && inspectorOpen && !inspectorFloating && layout.focus === 'none';
   const inspectorWidth = String(layout.inspectorPx) + 'px';
   const shellColumns = splitInspector
     ? inspectorLeft
@@ -383,7 +430,7 @@ export function App(): JSX.Element {
       : 'minmax(0, 1fr) 6px ' + inspectorWidth
     : '1fr';
   const companionColumn = showMonitorInspectorCompanion && inspectorLeft ? '2' : '1';
-  const monitorRow = layersAbove ? '2' : '1';
+  const monitorRow = layersAbove && showMonitorLayerCompanion ? '2' : '1';
 
   const renderLayersPanel = (view: 'layers' | 'companion' | 'shortcuts'): JSX.Element => (
     <LayersPanel
@@ -393,7 +440,9 @@ export function App(): JSX.Element {
       /* `B-235` — the SAME orphan set the strip above renders, so the
          Station layers tab and the strip are one reading, not two. */
       orphans={orphans}
-      onSelectionChange={setSelectedId}
+      onSelectionChange={(id) => {
+        if (id !== null || !inspectorFloating) setSelectedId(id);
+      }}
       selectedId={selectedId}
       independentPreview={capabilities?.independentPreview === true}
       layout={layout}
@@ -433,6 +482,20 @@ export function App(): JSX.Element {
       onDiscard={(id) => clearDraft(id)}
     />
   );
+  const dockLayers = (view: 'layers' | 'companion'): JSX.Element =>
+    nativePanels ? (
+      <FloatingPanelSlot panel="layers" compact={view === 'companion'} />
+    ) : (
+      renderLayersPanel(view)
+    );
+  const dockInspector = (onClose: () => void): JSX.Element =>
+    nativePanels ? <FloatingPanelSlot panel="inspector" /> : renderInspector(onClose);
+  const nativeLayersView =
+    layersFloating || (showWorkspace && !monitorFocused)
+      ? 'layers'
+      : showMonitorLayerCompanion
+        ? 'companion'
+        : 'shortcuts';
 
   const shell = (
     <ShellLayoutProvider layout={layout}>
@@ -515,8 +578,26 @@ export function App(): JSX.Element {
           monitors showing the first one while the tab claimed otherwise.
         */}
         <ChannelScope>
-          <LayerShortcutsListener />
-          {(!showWorkspace || (monitorFocused && !showMonitorLayerCompanion)) &&
+          <LayerShortcutsListener
+            layerDocument={floatingDocuments?.panels.get('layers')?.root.ownerDocument}
+            panelDocuments={panelDocuments}
+          />
+          {nativePanels && (
+            <>
+              <FloatingPanelSurface panel="layers" compact={nativeLayersView === 'companion'}>
+                {renderLayersPanel(nativeLayersView)}
+              </FloatingPanelSurface>
+              <FloatingPanelSurface panel="inspector">
+                {renderInspector(
+                  showMonitorInspectorCompanion
+                    ? () => setMonitorCompanionMode('layer')
+                    : closeInspector,
+                )}
+              </FloatingPanelSurface>
+            </>
+          )}
+          {!nativePanels &&
+            (!showWorkspace || (monitorFocused && !showMonitorLayerCompanion)) &&
             renderLayersPanel('shortcuts')}
           <div
             data-shell-inspector={splitInspector ? layout.positions.inspectorSide : undefined}
@@ -525,25 +606,29 @@ export function App(): JSX.Element {
             {/* R-028 — the Library panel is GONE, not hidden: a template is no
             longer a thing parked in a side panel, so there is no side panel.
             Load lives on the row and does import+load in one action. */}
-            {showWorkspace && (
+            {(showWorkspace || nativePanels) && (
               <section
                 data-workspace-layer-position={layout.positions.layerPosition}
-                data-monitor-companion={showMonitorLayerCompanion ? '' : undefined}
+                data-monitor-companion={showMonitorCompanion ? '' : undefined}
                 style={
-                  showMonitorLayerCompanion
-                    ? {
-                        ...styles.workspace,
-                        display: 'grid',
-                        gridTemplateColumns: showMonitorInspectorCompanion
-                          ? inspectorLeft
-                            ? 'min(42%, clamp(17rem, 25vw, 25rem)) minmax(0, 1fr)'
-                            : 'minmax(0, 1fr) min(42%, clamp(17rem, 25vw, 25rem))'
-                          : 'minmax(0, 1fr)',
-                        gridTemplateRows: layersAbove
-                          ? 'auto minmax(0, 1fr)'
-                          : 'minmax(0, 1fr) auto',
-                      }
-                    : styles.workspace
+                  !showWorkspace
+                    ? { display: 'none' }
+                    : showMonitorCompanion
+                      ? {
+                          ...styles.workspace,
+                          display: 'grid',
+                          gridTemplateColumns: showMonitorInspectorCompanion
+                            ? inspectorLeft
+                              ? 'min(42%, clamp(17rem, 25vw, 25rem)) minmax(0, 1fr)'
+                              : 'minmax(0, 1fr) min(42%, clamp(17rem, 25vw, 25rem))'
+                            : 'minmax(0, 1fr)',
+                          gridTemplateRows: showMonitorLayerCompanion
+                            ? layersAbove
+                              ? 'auto minmax(0, 1fr)'
+                              : 'minmax(0, 1fr) auto'
+                            : 'minmax(0, 1fr)',
+                        }
+                      : styles.workspace
                 }
               >
                 {/* PGM / PREVIEW — reserved in their final positions. Hidden only
@@ -558,7 +643,7 @@ export function App(): JSX.Element {
                 to be down. Neither is "black and labelled NOT CONNECTED".
                 The hidden strip retains local rehearsal pages while PREVIEW has rows.
                 Its picture subscriptions and PROGRAM returns are released while hidden. */}
-                {(monitorsVisible || hasPreviewRows) && (
+                {(monitorsVisible || hasPreviewRows || nativePanels) && (
                   <>
                     <div
                       /* The toggle's `aria-controls` target and the specs' anchor. */
@@ -578,14 +663,14 @@ export function App(): JSX.Element {
                         */
                         !monitorsVisible
                           ? undefined
-                          : monitorFocused
+                          : monitorFocused || layersFloating
                             ? {
                                 display: 'flex',
                                 flex: 1,
                                 minHeight: 0,
                                 minWidth: 0,
                                 overflow: 'hidden',
-                                ...(showMonitorLayerCompanion
+                                ...(showMonitorCompanion
                                   ? { gridColumn: companionColumn, gridRow: monitorRow }
                                   : {}),
                               }
@@ -616,7 +701,7 @@ export function App(): JSX.Element {
                     </div>
                     {/* The ordinary strip is resizable. A maximized monitor gets the
                         space left by its compact companion row. */}
-                    {monitorsVisible && !monitorFocused && (
+                    {monitorsVisible && !monitorFocused && !layersFloating && (
                       <ShellDivider
                         orientation="horizontal"
                         invert={layersAbove}
@@ -644,7 +729,7 @@ export function App(): JSX.Element {
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}
-                    {renderLayersPanel('layers')}
+                    {!layersFloating && dockLayers('layers')}
                   </>
                 )}
                 {showMonitorLayerCompanion && (
@@ -659,7 +744,7 @@ export function App(): JSX.Element {
                       gridRow: layersAbove ? '1' : '2',
                     }}
                   >
-                    {renderLayersPanel('companion')}
+                    {dockLayers('companion')}
                   </div>
                 )}
                 {showMonitorInspectorCompanion && (
@@ -674,7 +759,7 @@ export function App(): JSX.Element {
                       gridRow: '1 / -1',
                     }}
                   >
-                    {renderInspector(() => setMonitorCompanionMode('layer'))}
+                    {dockInspector(() => setMonitorCompanionMode('layer'))}
                   </div>
                 )}
               </section>
@@ -690,7 +775,7 @@ export function App(): JSX.Element {
                 label={localizeUi('Resize the Inspector')}
               />
             )}
-            {showInspectorColumn && renderInspector(closeInspector)}
+            {showInspectorColumn && dockInspector(closeInspector)}
           </div>
         </ChannelScope>
         {/*
@@ -703,7 +788,7 @@ export function App(): JSX.Element {
         state would make the operator work blind. Dismissing is also a single
         action (the backdrop, or the same hamburger).
       */}
-        {layout.narrow && inspectorOpen && !monitorFocused && (
+        {layout.narrow && inspectorOpen && !inspectorFloating && !monitorFocused && (
           <>
             {/* The scrim DESELECTS rather than merely hiding — see `closeInspector`.
                 Dismissing the editor and letting go of the row are one act, so the
@@ -732,7 +817,7 @@ export function App(): JSX.Element {
                 ...(layout.focus === 'inspector' ? { width: '100%' } : {}),
               }}
             >
-              {renderInspector(closeInspector)}
+              {dockInspector(closeInspector)}
             </div>
           </>
         )}
@@ -770,7 +855,9 @@ export function App(): JSX.Element {
         {setupPhase !== null ? (
           <FirstRunScreen phase={setupPhase} signInUrl={capabilities?.signInUrl ?? null} />
         ) : (
-          <SignInOverlay />
+          <div data-native-workspace-gate="">
+            <SignInOverlay />
+          </div>
         )}
         <LockOverlay
           engaged={lockCovers}
@@ -786,7 +873,15 @@ export function App(): JSX.Element {
   );
   return (
     <LiveInputCheckProvider channel={viewChannel} locked={lockCovers}>
-      <EngineNameContext.Provider value={engineName}>{shell}</EngineNameContext.Provider>
+      <EngineNameContext.Provider value={engineName}>
+        <FloatingWorkspaceProvider
+          documents={floatingDocuments}
+          layout={layout}
+          sessionCovered={lockCovers || setupPhase !== null}
+        >
+          {shell}
+        </FloatingWorkspaceProvider>
+      </EngineNameContext.Provider>
     </LiveInputCheckProvider>
   );
 }

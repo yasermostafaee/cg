@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
 import { VARIANT_ACCENT, type ButtonVariant } from './Button.js';
+import { panelWindow, usePanelDocument } from './PanelDocument.js';
 
 /**
  * The Runtime's right-click menu.
@@ -89,6 +90,8 @@ function variantColor(variant: ContextMenuItem['variant']): string | undefined {
 
 export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Element {
   const t = useUiText();
+  const ownerDocument = usePanelDocument();
+  const view = panelWindow(ownerDocument);
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<number | null>(null);
 
@@ -118,9 +121,9 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
       if (next !== undefined) setActive(next);
     }
 
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [onClose, active, enabled]);
+    ownerDocument.addEventListener('keydown', onKeyDown, true);
+    return () => ownerDocument.removeEventListener('keydown', onKeyDown, true);
+  }, [onClose, active, enabled, ownerDocument]);
 
   // The menu is positioned in VIEWPORT coordinates against the row it was opened on, so any
   // scroll (the stack list, the library list, the page) slides that row out from under it and
@@ -131,13 +134,13 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
     function onScroll(): void {
       onClose();
     }
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onScroll);
+    view.addEventListener('scroll', onScroll, true);
+    view.addEventListener('resize', onScroll);
     return () => {
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onScroll);
+      view.removeEventListener('scroll', onScroll, true);
+      view.removeEventListener('resize', onScroll);
     };
-  }, [onClose]);
+  }, [onClose, view]);
 
   // Keep the arrow-key selection actually focused, so Enter/Space land on it.
   useEffect(() => {
@@ -155,8 +158,8 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
 
   // Clamp inside the viewport — a menu opened near the bottom-right edge must not spill off.
   const height = items.length * ITEM_HEIGHT + PADDING;
-  const left = Math.max(EDGE, Math.min(x, window.innerWidth - MENU_WIDTH - EDGE));
-  const top = Math.max(EDGE, Math.min(y, window.innerHeight - height - EDGE));
+  const left = Math.max(EDGE, Math.min(x, view.innerWidth - MENU_WIDTH - EDGE));
+  const top = Math.max(EDGE, Math.min(y, view.innerHeight - height - EDGE));
 
   return createPortal(
     <div
@@ -214,6 +217,6 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
         })}
       </div>
     </div>,
-    document.body,
+    ownerDocument.body,
   );
 }

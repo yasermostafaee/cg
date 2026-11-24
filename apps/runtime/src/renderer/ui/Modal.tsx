@@ -6,6 +6,7 @@ import { useActionRowFit } from '@cg/gesture';
 import { colors, cssVars } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
 import { useFocusTrap } from './focusTrap.js';
+import { PanelDocumentProvider, usePanelModalDocument } from './PanelDocument.js';
 import { ModalLayerContext } from './modalForeground.js';
 import { Icon } from './Icon.js';
 import { Notice, type NoticeRole } from './Notice.js';
@@ -862,6 +863,7 @@ export function Modal({
   layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
   const localizeUi = useUiText();
+  const ownerDocument = usePanelModalDocument();
   const ref = useRef<HTMLDivElement>(null);
   /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
   const fixed = size === 'fixed';
@@ -899,14 +901,17 @@ export function Modal({
     taken again on every commit.
 
     Splitting them fixes it structurally rather than by tuning a dependency list: the trap
-    arms once (`useFocusTrap`, deps `[enabled]`), and the ESCAPE handler — which moves no
+    arms once per document, and the ESCAPE handler — which moves no
     focus and is therefore free to re-register — keeps reading the latest `onClose`.
 
     ⭐ `data-modal-autofocus` is how a dialog nominates where focus LANDS, resolved INSIDE
     the trap rather than by a competing `autoFocus` attribute. One thing moves focus, so
     there is no race to win: see `usePrompt`, the one caller that needs it.
   */
-  const layer = useFocusTrap(ref, true, { initialFocusSelector: '[data-modal-autofocus]' });
+  const layer = useFocusTrap(ref, true, {
+    document: ownerDocument,
+    initialFocusSelector: '[data-modal-autofocus]',
+  });
   /*
     🔴 `B-319` — THE ACTION ROW KEEPS ITS BUTTONS INSIDE THE DIALOG, for every size and every
     footer variant, because it is the footer that is watched rather than a dialog. One row while
@@ -940,11 +945,11 @@ export function Modal({
       if (!busy) onClose();
     }
 
-    document.addEventListener('keydown', onKeyDown, true);
+    ownerDocument.addEventListener('keydown', onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
+      ownerDocument.removeEventListener('keydown', onKeyDown, true);
     };
-  }, [busy, onClose, layer]);
+  }, [busy, onClose, layer, ownerDocument]);
 
   const content = createPortal(
     <div
@@ -1144,7 +1149,11 @@ export function Modal({
         })()}
       </div>
     </div>,
-    document.body,
+    ownerDocument.body,
   );
-  return <ModalLayerContext.Provider value={layer}>{content}</ModalLayerContext.Provider>;
+  return (
+    <PanelDocumentProvider document={ownerDocument}>
+      <ModalLayerContext.Provider value={layer}>{content}</ModalLayerContext.Provider>
+    </PanelDocumentProvider>
+  );
 }

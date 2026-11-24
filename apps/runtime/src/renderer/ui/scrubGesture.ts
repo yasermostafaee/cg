@@ -1,3 +1,5 @@
+import { panelWindow } from './PanelDocument.js';
+
 /**
  * HORIZONTAL DRAG-TO-ADJUST for a numeric field — the Designer's gesture, in the
  * Runtime.
@@ -36,7 +38,9 @@ export interface ScrubOpts {
  */
 export function runScrubGesture(
   p: ScrubOpts & { startX: number; onEnd?: ((moved: boolean) => void) | undefined },
+  ownerDocument: Document = document,
 ): void {
+  const view = panelWindow(ownerDocument);
   let last = p.value;
   let moved = false;
   const stepSize = p.step ?? 1;
@@ -60,20 +64,20 @@ export function runScrubGesture(
   }
 
   function onUp(): void {
-    window.removeEventListener('pointermove', apply);
-    window.removeEventListener('pointerup', onUp);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
+    view.removeEventListener('pointermove', apply);
+    view.removeEventListener('pointerup', onUp);
+    ownerDocument.body.style.cursor = '';
+    ownerDocument.body.style.userSelect = '';
     p.onEnd?.(moved);
   }
 
   // Hold the resize cursor and suppress text selection for the WHOLE gesture, so
   // it survives the pointer leaving the field — otherwise a drag across the panel
   // selects labels as it goes.
-  document.body.style.cursor = 'ew-resize';
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', apply);
-  window.addEventListener('pointerup', onUp);
+  ownerDocument.body.style.cursor = 'ew-resize';
+  ownerDocument.body.style.userSelect = 'none';
+  view.addEventListener('pointermove', apply);
+  view.addEventListener('pointerup', onUp);
 }
 
 /**

@@ -76,10 +76,14 @@ const BACKING_EMITTERS = [
   'updateChanged',
 ] as const;
 
+// The desktop window host exists only when the native shell supplies it.
+type BrowserBridgeSurface = Omit<RuntimeBridge, 'floatingPanels'>;
 type BridgeMethodName = {
-  [K in keyof RuntimeBridge]: RuntimeBridge[K] extends (...args: never[]) => unknown ? K : never;
-}[keyof RuntimeBridge];
-type BridgeGroupName = Exclude<keyof RuntimeBridge, BridgeMethodName>;
+  [K in keyof BrowserBridgeSurface]: BrowserBridgeSurface[K] extends (...args: never[]) => unknown
+    ? K
+    : never;
+}[keyof BrowserBridgeSurface];
+type BridgeGroupName = Exclude<keyof BrowserBridgeSurface, BridgeMethodName>;
 
 /**
  * The `RuntimeBridge` method tree the SPA is allowed to call. The mapped type
@@ -90,7 +94,7 @@ type BridgeGroupName = Exclude<keyof RuntimeBridge, BridgeMethodName>;
  */
 const BRIDGE_SURFACE: {
   readonly methods: readonly BridgeMethodName[];
-  readonly groups: { readonly [G in BridgeGroupName]: readonly (keyof RuntimeBridge[G])[] };
+  readonly groups: { readonly [G in BridgeGroupName]: readonly (keyof BrowserBridgeSurface[G])[] };
 } = {
   methods: ['getAppInfo', 'openCompanySite'],
   groups: {
@@ -456,6 +460,14 @@ it('the mock implements every backing method + emitter the bridge routes (B-070)
   // The real assertion: the mock backs the SAME surface the bridge routes to.
   expect(BACKING_METHODS.filter((name) => !hasMethod(mock, name))).toEqual([]);
   expect(BACKING_EMITTERS.filter((name) => !hasEmitter(mock, name))).toEqual([]);
+});
+
+it('keeps the floating panel door unavailable in a browser', () => {
+  live = new WebSocketRuntime('ws://127.0.0.1:1/parity-never-connects', {
+    createWebSocket: () => inertSocket(),
+  });
+  expect(createMockBridge().floatingPanels).toBeNull();
+  expect(live.floatingPanels).toBeNull();
 });
 
 it('both bridges expose the required RuntimeBridge methods and the live one can query source presence', () => {

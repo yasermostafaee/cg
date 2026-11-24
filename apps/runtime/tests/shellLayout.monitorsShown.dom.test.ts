@@ -11,6 +11,7 @@ import {
   useShellLayout,
   type ConfigurableShellLayout,
 } from '../src/renderer/hooks/useShellLayout.js';
+import type { FloatingPanelPlacement } from '../src/shared/floating-panels.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
 /**
@@ -75,19 +76,21 @@ function layout(): ConfigurableShellLayout {
   return latest;
 }
 
+async function reload(): Promise<void> {
+  if (host === null) throw new Error('probe host is missing');
+  act(() => root?.unmount());
+  root = createRoot(host);
+  await act(async () => root?.render(createElement(Probe)));
+}
+
 describe('local workspace settings', () => {
   it('keeps old records readable and persists named layouts without session visibility', async () => {
     storage.setItem(KEY, JSON.stringify({ inspectorPx: 370, monitorPx: 205, focus: 'none' }));
-    const reload = async (): Promise<void> => {
-      if (host === null) throw new Error('probe host is missing');
-      act(() => root?.unmount());
-      root = createRoot(host);
-      await act(async () => root?.render(createElement(Probe)));
-    };
     await reload();
     expect(layout().positions).toEqual(DEFAULT_WORKSPACE_POSITIONS);
     expect(layout().inspectorPx).toBe(370);
     expect(layout().monitorPx).toBe(205);
+    expect(layout().floatingPanels).toEqual({});
 
     const reversed = {
       monitorOrder: 'pgm-first',
@@ -96,7 +99,7 @@ describe('local workspace settings', () => {
     } as const;
     await act(async () => {
       layout().setPositions(reversed);
-      layout().saveProfile('Gallery');
+      await layout().saveProfile('Gallery');
       layout().setPositions(DEFAULT_WORKSPACE_POSITIONS);
       layout().setInspectorPx(300);
       layout().setMonitorsShown(true);
@@ -118,6 +121,112 @@ describe('local workspace settings', () => {
     await act(async () => layout().reset());
     expect(layout().positions).toEqual(DEFAULT_WORKSPACE_POSITIONS);
     expect(layout().uiProfiles.map(({ name }) => name)).toEqual(['Gallery']);
+  });
+
+  it('saves native restore bounds by profile and applies a legacy docked profile', async () => {
+    storage.setItem(
+      KEY,
+      JSON.stringify({
+        uiProfiles: [{ name: 'Docked', inspectorPx: 370, monitorPx: 205 }],
+      }),
+    );
+    await reload();
+    const placement: FloatingPanelPlacement = {
+      left: -1800,
+      top: -100,
+      width: 800,
+      height: 600,
+      displayId: 'gallery',
+      maximized: true,
+    };
+    await act(async () => {
+      layout().setFocus('pvw');
+      layout().setFloatingPanel('pvw', placement);
+      await layout().saveProfile('Floating');
+      layout().setFloatingPanel('pvw', { ...placement, width: 640 });
+      layout().setFocus('pvw');
+    });
+    expect(layout().focus).toBe('none');
+    expect(layout().floatingPanels.pvw?.width).toBe(640);
+    expect(layout().customized).toBe(true);
+    await reload();
+    expect(layout().floatingPanels.pvw?.width).toBe(640);
+
+    await act(async () => layout().loadProfile('Floating'));
+    expect(layout().floatingPanels).toEqual({ pvw: placement });
+    await act(async () => layout().loadProfile('Docked'));
+    expect(layout().floatingPanels).toEqual({});
+    expect(layout().inspectorPx).toBe(370);
+    expect(JSON.parse(storage.getItem(KEY) ?? '{}')).not.toHaveProperty('floatingPanels');
+
+    await act(async () => {
+      layout().loadProfile('Floating');
+      layout().reset();
+    });
+    expect(layout().floatingPanels).toEqual({});
+    expect(layout().uiProfiles).toContainEqual(
+      expect.objectContaining({ name: 'Floating', floatingPanels: { pvw: placement } }),
+    );
+  });
+
+  it('ignores invalid or unsupported native placements from layout storage and profile records', async () => {
+    const pgm = { left: -800, top: 200, width: 640, height: 480 };
+    const floatingPanels = {
+      pgm,
+      pvw: { ...pgm, width: 0 },
+      layers: { ...pgm, height: -480 },
+      inspector: { ...pgm, left: 2 ** 33 },
+      unknown: { ...pgm },
+    };
+    storage.setItem(
+      KEY,
+      JSON.stringify({
+        focus: 'pgm',
+        floatingPanels,
+        uiProfiles: [{ name: 'Partial', floatingPanels }],
+      }),
+    );
+    await reload();
+    expect(layout().focus).toBe('none');
+    expect(layout().floatingPanels).toEqual({ pgm });
+    expect(layout().uiProfiles[0]?.floatingPanels).toEqual({ pgm });
+
+    await act(async () => {
+      layout().setFloatingPanel('pgm', { ...pgm, width: 640.5 });
+      layout().setFloatingPanel('pvw', { ...pgm, height: Number.POSITIVE_INFINITY });
+    });
+    expect(layout().floatingPanels).toEqual({ pgm });
+    await act(async () => layout().setFloatingPanel('pgm', null));
+    expect(layout().floatingPanels).toEqual({});
+  });
+
+  it('samples current native window geometry when saving a profile, with a fallback per pane', async () => {
+    const last = { left: 100, top: 200, width: 640, height: 480 };
+    const actual = { ...last, left: -1000, width: 800, displayId: 'second', maximized: true };
+    const original = Object.getOwnPropertyDescriptor(window, 'cg');
+    Object.defineProperty(window, 'cg', {
+      configurable: true,
+      value: {
+        floatingPanels: {
+          async placement(panel: string) {
+            if (panel === 'pgm') return actual;
+            throw new Error('The other window is moving');
+          },
+        },
+      },
+    });
+    try {
+      await act(async () => {
+        layout().setFloatingPanel('pgm', last);
+        layout().setFloatingPanel('inspector', last);
+        await layout().saveProfile('Desk');
+      });
+      expect(layout().uiProfiles[0]?.floatingPanels).toEqual({ pgm: actual, inspector: last });
+      expect(layout().floatingPanels).toEqual({ pgm: last, inspector: last });
+    } finally {
+      if (original === undefined) Reflect.deleteProperty(window, 'cg');
+      else Object.defineProperty(window, 'cg', original);
+    }
   });
 });
 
@@ -188,11 +297,7 @@ describe('useShellLayout — monitorsShown', () => {
     await act(async () => {
       layout().setMonitorsShown(!DEFAULT_MONITORS_SHOWN);
     });
-    act(() => root?.unmount());
-    root = createRoot(host as HTMLDivElement);
-    await act(async () => {
-      root?.render(createElement(Probe));
-    });
+    await reload();
     expect(layout().monitorsShown).toBe(DEFAULT_MONITORS_SHOWN);
   });
 });

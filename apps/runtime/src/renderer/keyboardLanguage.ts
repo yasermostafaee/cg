@@ -12,9 +12,12 @@ let detector: KeyboardLanguageDetector | null = null;
 export function startKeyboardLanguage(
   doc: Document,
   native: (() => Promise<unknown>) | null,
+  panelDocs: readonly Document[] = [],
 ): () => void {
-  detector = createKeyboardLanguage(native === null ? {} : { native });
-  return detector.attach(doc);
+  const current = createKeyboardLanguage(native === null ? {} : { native });
+  detector = current;
+  const detach = [doc, ...panelDocs].map((target) => current.attach(target));
+  return () => detach.forEach((release) => release());
 }
 
 /** The keyboard language a digit typed now is written in; `unknown` before the detector starts. */

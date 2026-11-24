@@ -5443,7 +5443,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN a valid date filter is entered or picked THEN Bridge receives that local day's Gregorian bounds as UTC instants. Invalid or reversed date ranges issue no filter request.
 - WHEN an event is opened or copied THEN its original UTC stamp, identifiers and audit data remain available.
 
-## [ ] R-129 — Float CG Control panels on a second display — `openspec/changes/float-control-panels/`
+## [~] R-129 — Float CG Control panels on a second display — `openspec/changes/float-control-panels/`
 
 **What:** Let the operator detach and redock PGM, PVW, Layers and Inspector as workstation-local windows. Keep a single CG Control session across the workspace. Docked monitors use the companion layouts from R-111. Detached monitors maximize independently on their own display.
 
@@ -5459,6 +5459,8 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN a local UI profile is saved or restored THEN it includes detached panels' positions and sizes. A window returns to a visible display when its previous display is disconnected.
 - Verify docked and detached maximize and restore, repeated and changed row selections, editable drafts, return signals, preview and audio, Exit floating, the native close guard and display removal in the packaged Windows application with two displays.
 
-**Prototype evidence:** In Chromium, moving an existing preview iframe to a separate document
-created a new browsing context and lost its running state. The native prototype must demonstrate
-playback continuity across detach and redock before this behavior is enabled.
+**Prototype evidence:** Windows kept the same preview iframe, WebRTC connection and advancing
+video and audio when it docked, detached, maximized, restored and redocked the same WebView2
+panel window. The detached close guard held an independent close request. The prototype used
+one display. The installed-workspace verification also covers playback continuity across detach
+and redock, with two displays when available.

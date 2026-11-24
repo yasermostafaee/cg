@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { panelWindow, usePanelDocument } from './PanelDocument.js';
 
 /**
  * `B-229` — **ONE FOCUS TRAP, FOR THE TWO SURFACES THAT COVER THE WHOLE SCREEN.**
@@ -50,8 +51,12 @@ import { useEffect, useRef, type RefObject } from 'react';
  * traps too and must be able to win: whichever surface armed LAST is the one the key
  * belongs to, and the lock always arms over whatever is already up.
  */
-const layers: symbol[] = [];
-const layerContainers = new Map<symbol, RefObject<HTMLElement>>();
+interface TrapEntry {
+  token: symbol;
+  container: RefObject<HTMLElement>;
+}
+
+const layers = new WeakMap<Document, TrapEntry[]>();
 const layerListeners = new Set<() => void>();
 
 /** Observe the same foreground ownership used by keyboard containment. */
@@ -60,16 +65,18 @@ export function subscribeTrapLayers(listener: () => void): () => void {
   return () => layerListeners.delete(listener);
 }
 
-export function hasTrapLayer(): boolean {
-  return layers.length > 0;
+export function hasTrapLayer(ownerDocument: Document = document): boolean {
+  return (layers.get(ownerDocument)?.length ?? 0) > 0;
 }
 
 /** An authoring component can own a modal whose portal is below it in the React tree. */
-export function isForegroundTrapElement(element: HTMLElement | null): boolean {
-  const top = layers.at(-1);
+export function isForegroundTrapElement(
+  element: HTMLElement | null,
+  ownerDocument: Document = document,
+): boolean {
+  const top = layers.get(element?.ownerDocument ?? ownerDocument)?.at(-1);
   return (
-    top === undefined ||
-    (element !== null && layerContainers.get(top)?.current?.contains(element) === true)
+    top === undefined || (element !== null && top.container.current?.contains(element) === true)
   );
 }
 
@@ -77,23 +84,29 @@ function publishLayers(): void {
   for (const listener of layerListeners) listener();
 }
 
-function pushLayer(token: symbol, container: RefObject<HTMLElement>): void {
-  layers.push(token);
-  layerContainers.set(token, container);
+function pushLayer(
+  ownerDocument: Document,
+  token: symbol,
+  container: RefObject<HTMLElement>,
+): void {
+  const stack = layers.get(ownerDocument) ?? [];
+  stack.push({ token, container });
+  layers.set(ownerDocument, stack);
   publishLayers();
 }
 
-function popLayer(token: symbol): void {
-  const i = layers.lastIndexOf(token);
+function popLayer(ownerDocument: Document, token: symbol): void {
+  const stack = layers.get(ownerDocument);
+  if (stack === undefined) return;
+  const i = stack.findIndex((layer) => layer.token === token);
   if (i < 0) return;
-  layers.splice(i, 1);
-  layerContainers.delete(token);
+  stack.splice(i, 1);
   publishLayers();
 }
 
 /** Is `token` the surface the keyboard currently belongs to? */
-function isTopLayer(token: symbol): boolean {
-  return layers.length > 0 && layers[layers.length - 1] === token;
+function isTopLayer(ownerDocument: Document, token: symbol): boolean {
+  return layers.get(ownerDocument)?.at(-1)?.token === token;
 }
 
 /**
@@ -132,6 +145,7 @@ export function trapTabKey(container: HTMLElement | null, e: KeyboardEvent): voi
   const first = nodes[0];
   const last = nodes[nodes.length - 1];
   if (first === undefined || last === undefined) return;
+  const active = container?.ownerDocument.activeElement;
 
   /*
     🔴 FOCUS THAT IS ALREADY OUTSIDE IS PULLED BACK, and this clause is the difference
@@ -143,16 +157,16 @@ export function trapTabKey(container: HTMLElement | null, e: KeyboardEvent): voi
     focus is on a TAKE behind it, and a browser Tab from there walks along the row, never
     touching either end, and never entering the overlay at all.
   */
-  if (container !== null && !container.contains(document.activeElement)) {
+  if (container !== null && !container.contains(active ?? null)) {
     e.preventDefault();
     (e.shiftKey ? last : first).focus();
     return;
   }
 
-  if (e.shiftKey && document.activeElement === first) {
+  if (e.shiftKey && active === first) {
     e.preventDefault();
     last.focus();
-  } else if (!e.shiftKey && document.activeElement === last) {
+  } else if (!e.shiftKey && active === last) {
     e.preventDefault();
     first.focus();
   }
@@ -176,9 +190,14 @@ export function trapTabKey(container: HTMLElement | null, e: KeyboardEvent): voi
 export function useFocusTrap(
   ref: RefObject<HTMLElement>,
   enabled: boolean,
-  options: { restoreFocus?: boolean; initialFocusSelector?: string } = {},
+  options: { restoreFocus?: boolean; initialFocusSelector?: string; document?: Document } = {},
 ): TrapLayer {
-  const { restoreFocus = true, initialFocusSelector } = options;
+  const panelDocument = usePanelDocument();
+  const {
+    restoreFocus = true,
+    initialFocusSelector,
+    document: ownerDocument = panelDocument,
+  } = options;
   /*
     ONE token per mounted trap, stable for its life. `useRef` and not `useMemo`: a memo may
     be re-computed at React's discretion, and a token that changed identity would leave a
@@ -187,12 +206,16 @@ export function useFocusTrap(
   const token = useRef<symbol | null>(null);
   token.current ??= Symbol('focus-trap');
   const self = token.current;
+  const activeDocument = useRef<Document | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
 
-    pushLayer(self, ref);
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    activeDocument.current = ownerDocument;
+    pushLayer(ownerDocument, self, ref);
+    const active = panelDocument.activeElement;
+    const view = panelWindow(panelDocument);
+    const previous = active instanceof view.HTMLElement ? active : null;
     const nominated =
       initialFocusSelector === undefined
         ? null
@@ -202,17 +225,18 @@ export function useFocusTrap(
     const onKeyDown = (e: KeyboardEvent): void => {
       // The key belongs to the TOP-MOST trapping surface. A trap with something above it
       // does nothing at all — see the stack's note for what happens when both act.
-      if (!isTopLayer(self)) return;
+      if (!isTopLayer(ownerDocument, self)) return;
       trapTabKey(ref.current, e);
     };
-    document.addEventListener('keydown', onKeyDown, true);
+    ownerDocument.addEventListener('keydown', onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      popLayer(self);
+      ownerDocument.removeEventListener('keydown', onKeyDown, true);
+      activeDocument.current = null;
+      popLayer(ownerDocument, self);
       if (restoreFocus) previous?.focus();
     };
     /*
-      🔴 `B-230` — THE DEPENDENCY LIST IS `[enabled]`, AND NOTHING ELSE MAY JOIN IT.
+      🔴 `B-230` — ARM WHEN ENABLED OR WHEN THE OWNER DOCUMENT CHANGES.
 
       `Modal`'s version of this effect depended on `onClose`, which every caller passes as
       an inline arrow — a NEW identity on every render. So the effect tore down and set up
@@ -235,7 +259,7 @@ export function useFocusTrap(
       (`Definition for rule ... was not found`). The narrow list is deliberate and this note
       is what records it.
     */
-  }, [enabled]);
+  }, [enabled, ownerDocument]);
 
   /*
     Returned as a FUNCTION rather than a boolean, deliberately: whether this surface is on
@@ -248,7 +272,12 @@ export function useFocusTrap(
     every keystroke — `B-230`'s defect, in a new place.
   */
   const api = useRef<TrapLayer | null>(null);
-  api.current ??= { isTop: () => isTopLayer(self) };
+  api.current ??= {
+    isTop: () => {
+      const document = activeDocument.current;
+      return document !== null && isTopLayer(document, self);
+    },
+  };
   return api.current;
 }
 

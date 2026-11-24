@@ -2224,6 +2224,23 @@ export async function disableSplash(page: Page): Promise<void> {
   });
 }
 
+export async function armMockRuntime(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
+    // R-028 — the declared bank is armed for EVERY spec now, because the
+    // Layers list IS the operator surface: with no bank there are no rows,
+    // so there is nowhere to load, nothing to select and nothing to drive.
+    // It used to be opt-in because the fixed panel was an extra surface
+    // beside the Library and the Stack; both of those are gone.
+    (window as unknown as { CG_E2E_FIXED_BANK: boolean }).CG_E2E_FIXED_BANK = true;
+    // B-038 Phase 3 — pin the bridge probe at a guaranteed-dead port so a real
+    // caspar-bridge listening on the default 127.0.0.1:5280 can't make these
+    // specs go LIVE (failover banner + real CG ADD) and flake. The library /
+    // import flow exercises the offline MockRuntime deterministically.
+    (window as unknown as { __CG_BRIDGE_URL__: string }).__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
+  });
+}
+
 /** The extended `test` every Runtime spec imports: provides a booted `app`. */
 export const test = base.extend<{
   app: RuntimeApp;
@@ -2252,20 +2269,7 @@ export const test = base.extend<{
     await disableSplash(page);
     if (playoutSources !== null) await armPlayoutSources(page, playoutSources);
     if (mediaState !== null) await armMediaState(page, mediaState);
-    await page.addInitScript(() => {
-      (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
-      // R-028 — the declared bank is armed for EVERY spec now, because the
-      // Layers list IS the operator surface: with no bank there are no rows,
-      // so there is nowhere to load, nothing to select and nothing to drive.
-      // It used to be opt-in because the fixed panel was an extra surface
-      // beside the Library and the Stack; both of those are gone.
-      (window as unknown as { CG_E2E_FIXED_BANK: boolean }).CG_E2E_FIXED_BANK = true;
-      // B-038 Phase 3 — pin the bridge probe at a guaranteed-dead port so a real
-      // caspar-bridge listening on the default 127.0.0.1:5280 can't make these
-      // specs go LIVE (failover banner + real CG ADD) and flake. The library /
-      // import flow exercises the offline MockRuntime deterministically.
-      (window as unknown as { __CG_BRIDGE_URL__: string }).__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
-    });
+    await armMockRuntime(page);
     // The app no longer opens native dialogs — every confirm/prompt is an in-app modal, so
     // specs click a real button. This stays as a backstop: if a `window.confirm` ever
     // creeps back in, it is dismissed rather than hanging the run on an unanswered dialog.

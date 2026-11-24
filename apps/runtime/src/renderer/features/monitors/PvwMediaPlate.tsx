@@ -5,6 +5,7 @@ import type { PreviewEngine } from '../sources/usePreviewOrigins.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import { pvwPlateMediaKey } from './pvwPlatePictures.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
+import { panelWindow } from '../../ui/PanelDocument.js';
 import './pvw-media-plate.css';
 
 type MediaPixels = HTMLVideoElement | HTMLImageElement;
@@ -13,8 +14,9 @@ type PublishPicture = (picture: PvwSourceFrame) => void;
 /** The player remains in Control. Its decoded pixels share the normal mask and crop path. */
 function captureMediaPixels(element: MediaPixels, sourceId: string, publish: PublishPicture) {
   const canvases = new Set<HTMLCanvasElement>();
-  const video = element instanceof HTMLVideoElement ? element : undefined;
-  const image = element instanceof HTMLImageElement ? element : undefined;
+  const view = panelWindow(element.ownerDocument);
+  const video = element instanceof view.HTMLVideoElement ? element : undefined;
+  const image = element instanceof view.HTMLImageElement ? element : undefined;
   let animation: number | undefined;
   let lastTime = Number.NaN;
   let engine: PreviewEngine | undefined;
@@ -71,7 +73,7 @@ function captureMediaPixels(element: MediaPixels, sourceId: string, publish: Pub
 
   function schedule(): void {
     if (animation !== undefined || video === undefined || video.paused || video.ended) return;
-    animation = requestAnimationFrame(() => {
+    animation = view.requestAnimationFrame(() => {
       animation = undefined;
       if (lastTime !== video.currentTime) {
         lastTime = video.currentTime;
@@ -95,7 +97,7 @@ function captureMediaPixels(element: MediaPixels, sourceId: string, publish: Pub
       refresh();
     },
     stop(): void {
-      if (animation !== undefined) cancelAnimationFrame(animation);
+      if (animation !== undefined) view.cancelAnimationFrame(animation);
       for (const name of events) element.removeEventListener(name, refresh);
       canvases.clear();
     },

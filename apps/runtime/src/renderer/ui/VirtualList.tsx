@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { panelWindow, usePanelDocument } from './PanelDocument.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §2.A — **A LIST THAT DRAWS ONLY WHAT IS IN VIEW.** The Playout's media
@@ -165,6 +166,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   },
   ref,
 ): JSX.Element {
+  const view = panelWindow(usePanelDocument());
   const viewport = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [measuredHeight, setMeasuredHeight] = useState(0);
@@ -242,7 +244,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   }, [lastInView, rows.length, nearEndRows, onNearEnd]);
 
   const optionAt = (target: EventTarget | null, includeActionRow: boolean): number | null => {
-    if (!(target instanceof Element)) return null;
+    if (!(target instanceof view.Element)) return null;
     const el = target.closest<HTMLElement>(
       includeActionRow ? '[data-vlist-index], [data-vlist-action-index]' : '[data-vlist-index]',
     );
@@ -277,7 +279,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
         if (index !== null && index !== activeIndex) onActiveChange(index);
       }}
       onClick={(e) => {
-        if (e.target instanceof Element && e.target.closest('button, input') !== null) return;
+        if (e.target instanceof view.Element && e.target.closest('button, input') !== null) return;
         const index = optionAt(e.target, tiled || columns !== undefined);
         if (index !== null) onPick(index);
       }}

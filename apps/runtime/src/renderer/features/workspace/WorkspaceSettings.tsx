@@ -51,14 +51,20 @@ export function WorkspaceSettings(): JSX.Element {
   } = useShellLayoutContext();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
+  const [saving, setSaving] = useState(false);
   const trimmed = name.trim();
   const replacing = uiProfiles.some((profile) => profile.name === trimmed);
   const active = uiProfiles.find((profile) => profile.name === selected);
 
-  const save = (): void => {
-    if (trimmed === '') return;
-    saveProfile(trimmed);
-    setSelected(trimmed);
+  const save = async (): Promise<void> => {
+    if (saving || trimmed === '') return;
+    setSaving(true);
+    try {
+      await saveProfile(trimmed);
+      setSelected(trimmed);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -123,12 +129,17 @@ export function WorkspaceSettings(): JSX.Element {
               </SelectInput>
             </label>
             <div className="cg-setup-foot-actions cg-setup-field--full cg-workspace-profile-actions">
-              <Button variant="neutral" disabled={trimmed === ''} onClick={save}>
+              <Button
+                variant="neutral"
+                aria-busy={saving}
+                disabled={saving || trimmed === ''}
+                onClick={() => void save()}
+              >
                 {t(replacing ? 'Update profile' : 'Save profile')}
               </Button>
               <Button
                 variant="neutral"
-                disabled={active === undefined}
+                disabled={saving || active === undefined}
                 onClick={() => {
                   if (active === undefined) return;
                   loadProfile(active.name);
@@ -139,7 +150,7 @@ export function WorkspaceSettings(): JSX.Element {
               </Button>
               <Button
                 variant="neutral"
-                disabled={active === undefined}
+                disabled={saving || active === undefined}
                 onClick={() => {
                   if (active === undefined) return;
                   deleteProfile(active.name);

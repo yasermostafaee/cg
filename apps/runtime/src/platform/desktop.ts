@@ -1,5 +1,7 @@
 import { closeGuardDoor, type CloseGuardDoor, type ShellInvoke } from '@cg/gesture';
 import type { PlayoutFetchLike, PlayoutResponseLike } from '@cg/shared-ipc';
+import { FloatingPanelPlacementSchema } from '../shared/floating-panels.js';
+import type { FloatingPanelWindowDoor } from '../shared/floating-panel-window.js';
 import type {
   LocalBridgeOutcome,
   LocalBridgeState,
@@ -42,6 +44,23 @@ function tauri(): TauriInternals | null {
 /** Is this console inside CG Control — the app with a native sign-in and a keyboard-language door? */
 export function insideCgControl(): boolean {
   return tauri() !== null;
+}
+
+export function nativeFloatingPanels(): FloatingPanelWindowDoor | null {
+  const door = tauri();
+  if (door === null) return null;
+  return {
+    async arrange(arrangement) {
+      await door.invoke('arrange_floating_panel', { ...arrangement });
+    },
+    async placement(panel) {
+      const actual = await door.invoke('read_floating_panel_placement', { panel });
+      return actual === null ? null : FloatingPanelPlacementSchema.parse(actual);
+    },
+    async dispose() {
+      await door.invoke('dispose_floating_panels');
+    },
+  };
 }
 
 /**

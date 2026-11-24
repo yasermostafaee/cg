@@ -1,16 +1,21 @@
 ## 1. Native prototype
 
-- [ ] Demonstrate one shared session and preview continuity in docked, detached and redocked layouts on Windows.
+- [x] Exercise the native prototype on Windows. The same iframe, WebRTC session, video and
+      audio survived dock, float, maximize, restore, blocked close and redock on one display.
+- [ ] Demonstrate one shared session and preview continuity in the installed workspace.
 - [ ] Verify native maximize, restore, Exit floating and blocked independent close on two displays with different scaling.
 
 ## 2. Workspace
 
-- [ ] Connect detach and Exit floating for PGM, PVW, Layers and Inspector in the three interface languages.
-- [ ] Preserve render and audio ownership, active previews, selected layer and drafts. Verify zero playout actions for layout-only changes.
-- [ ] Keep detached monitors independent and exercise all existing docked companion modes.
-- [ ] Persist detached placement in local UI profiles and recover panels when a display is disconnected.
+- [x] Connect detach and Exit floating for PGM, PVW, Layers and Inspector in the three interface languages.
+- [x] Keep the same panel documents, preview iframe, selected layer and drafts across layout changes.
+      Windows Chromium verified zero playout writes. The Windows shell exercised media continuity.
+- [x] Keep detached monitors independent and exercise the docked companion modes in Windows Chromium.
+- [x] Persist floating placement and restore size in local UI profiles. The Windows shell verified
+      recovery into the available work area when a saved display was absent.
 
 ## 3. Verification
 
-- [ ] Test selecting the same row and a different row with Inspector detached.
-- [ ] Run the carrying browser and packaged Windows tests for all OpenSpec scenarios.
+- [x] Test selecting the same row and a different row with Inspector detached in Windows Chromium.
+- [ ] Verify the packaged app on two physical displays with different scaling.
+- [ ] Record the carrying Linux Playwright result.

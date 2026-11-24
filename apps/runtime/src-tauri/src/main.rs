@@ -5,7 +5,7 @@
 //! connects to it over the network (`ws://<Playout host>:5280`, or the address a station admin set).
 //! So this shell runs no bridge and opens no port. It keeps these jobs:
 //!
-//!   - one window (a second launch focuses the first);
+//!   - one console session (a second launch focuses the main window);
 //!   - the Playout sign-in, natively, with no `Origin` (`playout::playout_post`, rule 8);
 //!   - the keyboard language the window types in (`TEXT-DIGITS-01`);
 //!   - open the APASAI website in the system browser (`B-429`);
@@ -19,6 +19,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audit_archive;
+mod floating_panels;
 mod install_language;
 mod layer_shortcuts;
 mod local_bridge;
@@ -96,6 +97,13 @@ fn main() {
                 .find(|window| window.label == "main")
                 .ok_or("CG Control main window is not configured")?;
             let builder = WebviewWindowBuilder::from_config(app, main)?;
+            #[cfg(windows)]
+            let builder = {
+                let app_handle = app.handle().clone();
+                builder.on_new_window(move |url, features| {
+                    floating_panels::open(&app_handle, url, features)
+                })
+            };
             // Render the startup page with the installer language state from the first frame.
             let builder = match install_language::initialization_script() {
                 Some(script) => builder.initialization_script(script),
@@ -123,21 +131,30 @@ fn main() {
             close_window::close_window_now,
             ndi_preview::ndi_preview_start,
             ndi_preview::ndi_preview_poll,
-            ndi_preview::ndi_preview_stop
+            ndi_preview::ndi_preview_stop,
+            floating_panels::arrange_floating_panel,
+            floating_panels::read_floating_panel_placement,
+            floating_panels::dispose_floating_panels
         ])
         // `R-094` — every close request: held and asked about while the console holds it. What
         // happened to each one is written to `shell.log`.
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if floating_panels::handle_window_event(window, event) {
+                return;
+            }
             if let Some(said) = close_window::on_window_event(window, event) {
                 shell_log::log(said);
             }
         })
         .on_page_load(|webview, payload| {
             // `R-094` — a page that starts to load lets go of what the last one held.
-            close_window::on_page_load(webview, payload);
-            if webview.label() == "main" && payload.event() == PageLoadEvent::Started {
-                webview.state::<layer_shortcuts::LayerAltF4>().set(false);
-                webview.state::<ndi_preview::NdiPreviews>().clear();
+            if webview.label() == "main" {
+                close_window::on_page_load(webview, payload);
+                if payload.event() == PageLoadEvent::Started {
+                    webview.state::<layer_shortcuts::LayerAltF4>().set(false);
+                    webview.state::<ndi_preview::NdiPreviews>().clear();
+                }
             }
             if payload.event() == PageLoadEvent::Finished {
                 shell_log::log(&format!("page loaded: {}", payload.url()));

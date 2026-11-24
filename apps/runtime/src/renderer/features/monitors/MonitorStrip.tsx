@@ -15,6 +15,11 @@ import { programmeServerDisplayName } from './programmeServerDisplayName.js';
 import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import {
+  FloatingPanelSlot,
+  FloatingPanelSurface,
+  useFloatingWorkspace,
+} from '../workspace/floatingWorkspace.js';
 import { Columns3, Monitor, PanelBottom } from 'lucide-react';
 
 export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
@@ -54,6 +59,9 @@ export function MonitorStrip({
 }: Props): JSX.Element {
   const localizeUi = useUiText();
   const { focus, positions } = useShellLayoutContext();
+  const workspace = useFloatingWorkspace();
+  const pvwFloating = workspace?.placements.pvw !== undefined;
+  const pgmFloating = workspace?.placements.pgm !== undefined;
   /*
     🔴 `CONSOLE-MATCH-03` §1 — the two facts PGM's strip states, read HERE and passed down.
 
@@ -69,8 +77,10 @@ export function MonitorStrip({
   const { items } = useStackSnapshot();
   // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
   const onAirRows = airTally(onChannel(items, viewChannel)).onAir;
-  const showPvw = stripVisible && focus !== 'pgm';
-  const showPgm = stripVisible && focus !== 'pvw';
+  const dockPvw = stripVisible && focus !== 'pgm' && !pvwFloating;
+  const dockPgm = stripVisible && focus !== 'pvw' && !pgmFloating;
+  const showPvw = dockPvw || pvwFloating;
+  const showPgm = dockPgm || pgmFloating;
   /*
     🔴 `RELEASE-0113-01` / `R-104` — THIS channel's validated N → M backup line. It is also the
     identity of B's programme resource: if M or the backup host changes, the old viewer is replaced
@@ -200,17 +210,25 @@ export function MonitorStrip({
             ['layer-inspector', Columns3, 'Monitor, selected layer and Inspector'],
           ] as const
         ).map(([mode, glyph, label]) => {
-          const unavailable = mode !== 'monitor' && !hasSelectedLayer;
+          const layersFloating = workspace?.placements.layers !== undefined;
+          const inspectorFloating = workspace?.placements.inspector !== undefined;
+          const unavailable =
+            mode !== 'monitor' &&
+            (!hasSelectedLayer || (layersFloating && (mode === 'layer' || inspectorFloating)));
           return (
             <Button
               key={mode}
               variant="ghost"
               active={effectiveCompanionMode === mode}
-              aria-label={label}
+              aria-label={localizeUi(label)}
               aria-pressed={effectiveCompanionMode === mode}
               data-monitor-companion-mode={mode}
               disabled={unavailable}
-              title={unavailable ? localizeUi('Restore the workspace and select a layer') : label}
+              title={
+                !hasSelectedLayer && unavailable
+                  ? localizeUi('Restore the workspace and select a layer')
+                  : localizeUi(label)
+              }
               onClick={() => onCompanionModeChange(mode)}
             >
               <Icon icon={glyph} size={13} />
@@ -266,34 +284,40 @@ export function MonitorStrip({
         for a Control-authored layout when more than one layout is on Preview.
       */}
       {/* Keep the local rehearsal page while the strip or fullscreen PGM hides this pane. */}
-      <PreviewPanel
-        hidden={!showPvw}
-        companionActions={showPvw ? companionActions : undefined}
-        canEditPosition={canEditPreviewPosition}
-        onSelectItem={onSelectPreviewItem}
-        selectedItemId={selectedPreviewItem}
-      />
-      {showPgm && (
-        <MonitorPanel
-          id="pgm"
-          title={localizeUi('PROGRAM (PGM)')}
-          word="PROGRAM"
-          channel={viewChannel}
-          onAirRows={onAirRows}
-          returns={visibleTargets.map((target) => ({
-            ...target,
-            programReturn: returns[target.engine],
-          }))}
-          programSound={programSound}
-          monitorPreferences={monitorPreferences}
-          backupAvailable={legacy && audioTarget?.engine === 'B' && audioChannel !== null}
-          backupConfigured={legacy ? backupConfigured : undefined}
-          topologyTargets={legacy ? undefined : targets}
-          air={air}
-          backupLine={legacy ? backupLine : null}
-          companionActions={companionActions}
+      {workspace !== null && dockPvw && <FloatingPanelSlot panel="pvw" />}
+      <FloatingPanelSurface panel="pvw">
+        <PreviewPanel
+          hidden={!showPvw}
+          companionActions={dockPvw ? companionActions : undefined}
+          canEditPosition={canEditPreviewPosition}
+          onSelectItem={onSelectPreviewItem}
+          selectedItemId={selectedPreviewItem}
         />
-      )}
+      </FloatingPanelSurface>
+      {workspace !== null && dockPgm && <FloatingPanelSlot panel="pgm" />}
+      <FloatingPanelSurface panel="pgm">
+        {showPgm && (
+          <MonitorPanel
+            id="pgm"
+            title={localizeUi('PROGRAM (PGM)')}
+            word="PROGRAM"
+            channel={viewChannel}
+            onAirRows={onAirRows}
+            returns={visibleTargets.map((target) => ({
+              ...target,
+              programReturn: returns[target.engine],
+            }))}
+            programSound={programSound}
+            monitorPreferences={monitorPreferences}
+            backupAvailable={legacy && audioTarget?.engine === 'B' && audioChannel !== null}
+            backupConfigured={legacy ? backupConfigured : undefined}
+            topologyTargets={legacy ? undefined : targets}
+            air={air}
+            backupLine={legacy ? backupLine : null}
+            companionActions={dockPgm ? companionActions : undefined}
+          />
+        )}
+      </FloatingPanelSurface>
     </div>
   );
 }

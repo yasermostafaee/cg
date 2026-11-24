@@ -41,12 +41,14 @@ export interface KeyboardLanguageOptions {
 const MODIFIERS = new Set(['Alt', 'Shift', 'Control']);
 
 /** A text box: where a digit can be typed. */
-function isEditable(target: EventTarget | null): boolean {
-  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) return false;
+function isEditable(target: EventTarget | null, doc: Document): boolean {
+  const realm = doc.defaultView ?? globalThis;
+  if (typeof realm.HTMLElement === 'undefined' || !(target instanceof realm.HTMLElement))
+    return false;
   if (target.isContentEditable) return true;
-  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof realm.HTMLTextAreaElement) return true;
   return (
-    target instanceof HTMLInputElement &&
+    target instanceof realm.HTMLInputElement &&
     ['text', 'search', 'url', 'tel', 'email', 'password', 'number', ''].includes(target.type)
   );
 }
@@ -118,7 +120,7 @@ export function createKeyboardLanguage(
         }
       };
       const onFocusIn = (event: FocusEvent): void => {
-        if (!isEditable(event.target)) return;
+        if (!isEditable(event.target, doc)) return;
         void refresh();
         if (poll === null && !shellFailed) {
           poll = setInterval(() => {
@@ -128,7 +130,7 @@ export function createKeyboardLanguage(
         }
       };
       const onFocusOut = (event: FocusEvent): void => {
-        if (!isEditable(event.relatedTarget)) stopPolling();
+        if (!isEditable(event.relatedTarget, doc)) stopPolling();
       };
       const view = doc.defaultView;
       const onBlur = (): void => {

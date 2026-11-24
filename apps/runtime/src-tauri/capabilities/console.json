@@ -15,6 +15,9 @@
     "allow-close-window-now",
     "allow-ndi-preview-start",
     "allow-ndi-preview-poll",
-    "allow-ndi-preview-stop"
+    "allow-ndi-preview-stop",
+    "allow-arrange-floating-panel",
+    "allow-read-floating-panel-placement",
+    "allow-dispose-floating-panels"
   ]
 }

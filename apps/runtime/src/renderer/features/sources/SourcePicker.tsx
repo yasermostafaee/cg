@@ -28,6 +28,7 @@ import { ComboField } from '../../ui/ComboField.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Popover } from '../../ui/Popover.js';
+import { panelWindow } from '../../ui/PanelDocument.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
@@ -841,7 +842,8 @@ function InputsTab({
           onActiveChange={keys.setPointerActive}
           onPick={pick}
           onKeyDown={(e) => {
-            if (e.target instanceof Element && e.target.closest('button') !== null) return;
+            const view = panelWindow(e.currentTarget.ownerDocument);
+            if (e.target instanceof view.Element && e.target.closest('button') !== null) return;
             keys.onKeyDown(e);
           }}
           data={{ 'data-picker-list': '', 'data-modal-autofocus': '' }}
@@ -1260,7 +1262,9 @@ function MediaTab({
                   const options = [
                     ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button'),
                   ];
-                  const current = options.indexOf(document.activeElement as HTMLButtonElement);
+                  const current = options.findIndex(
+                    (option) => option === event.currentTarget.ownerDocument.activeElement,
+                  );
                   const step = event.key === 'ArrowDown' ? 1 : -1;
                   options[(current + step + options.length) % options.length]?.focus();
                 }}
@@ -1329,7 +1333,9 @@ function MediaTab({
             onActiveChange={keys.setPointerActive}
             onPick={chooseMedia}
             onKeyDown={(e) => {
-              if (e.target instanceof Element && e.target.closest('button, input') !== null) return;
+              const view = panelWindow(e.currentTarget.ownerDocument);
+              if (e.target instanceof view.Element && e.target.closest('button, input') !== null)
+                return;
               // Typing in the list goes to the search field.
               if (e.key !== ' ' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 search.current?.focus();

@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  FLOATING_PANEL_IDS,
+  FloatingPanelPlacementSchema,
+  readFloatingPanelPlacements,
+  sameFloatingPanelPlacement,
+  type FloatingPanelId,
+  type FloatingPanelPlacement,
+  type FloatingPanelPlacements,
+} from '../../shared/floating-panels.js';
 
 /**
  * R-028 part B — the operator's own workspace geometry: how wide the Inspector
@@ -90,13 +99,8 @@ export const MIN_WORKSPACE_PX = 620;
 const MIN_MONITOR_PX = 96;
 const MAX_MONITOR_FRACTION = 0.55;
 
-/**
- * Every panel that can be taken fullscreen. Adding a panel means adding it HERE
- * and rendering it inside `Panel` — the fullscreen affordance then comes for
- * free, which is the point (a per-panel button is how the Inspector ended up
- * without one).
- */
-export type PanelId = 'layers' | 'inspector' | 'pgm' | 'pvw';
+/** The same panels can take main-window focus or move to another native window. */
+export type PanelId = FloatingPanelId;
 
 export type ShellFocus = 'none' | PanelId;
 
@@ -117,6 +121,7 @@ export interface WorkspaceProfile {
   positions: WorkspacePositions;
   inspectorPx: number;
   monitorPx: number;
+  floatingPanels?: FloatingPanelPlacements;
 }
 
 export const WORKSPACE_PROFILE_NAME_MAX = 60;
@@ -124,8 +129,11 @@ export const WORKSPACE_PROFILE_NAME_MAX = 60;
 export interface ConfigurableShellLayout extends ShellLayout {
   positions: WorkspacePositions;
   uiProfiles: readonly WorkspaceProfile[];
+  /** Detached panels and their native window restore bounds. */
+  floatingPanels: Readonly<FloatingPanelPlacements>;
+  setFloatingPanel: (panel: PanelId, placement: FloatingPanelPlacement | null) => void;
   setPositions: (positions: Partial<WorkspacePositions>) => void;
-  saveProfile: (name: string) => void;
+  saveProfile: (name: string) => Promise<void>;
   loadProfile: (name: string) => void;
   deleteProfile: (name: string) => void;
 }
@@ -196,6 +204,7 @@ interface Persisted {
   focus?: ShellFocus;
   positions?: WorkspacePositions;
   uiProfiles?: WorkspaceProfile[];
+  floatingPanels?: FloatingPanelPlacements;
 }
 
 type SavedWorkspace = Required<Persisted>;
@@ -239,14 +248,16 @@ function profilesOf(value: unknown): WorkspaceProfile[] {
   if (!Array.isArray(value)) return [];
   const profiles = new Map<string, WorkspaceProfile>();
   for (const entry of value) {
-    const { name, positions, inspectorPx, monitorPx } = record(entry);
+    const { name, positions, inspectorPx, monitorPx, floatingPanels } = record(entry);
     if (typeof name !== 'string' || name.trim() === '' || name.length > WORKSPACE_PROFILE_NAME_MAX)
       continue;
+    const placements = readFloatingPanelPlacements(floatingPanels);
     profiles.set(name.trim(), {
       name: name.trim(),
       positions: positionsOf(positions),
       inspectorPx: finiteSize(inspectorPx, DEFAULT_INSPECTOR_PX),
       monitorPx: finiteSize(monitorPx, DEFAULT_MONITOR_PX),
+      ...(Object.keys(placements).length > 0 && { floatingPanels: placements }),
     });
   }
   return [...profiles.values()];
@@ -265,26 +276,38 @@ function readPersisted(): Record<string, unknown> {
 }
 
 function read(): SavedWorkspace {
-  const { inspectorPx, monitorPx, focus, positions, uiProfiles } = readPersisted();
+  const { inspectorPx, monitorPx, focus, positions, uiProfiles, floatingPanels } = readPersisted();
+  const placements = readFloatingPanelPlacements(floatingPanels);
+  const focusedPanel =
+    focus === 'inspector' || focus === 'layers' || focus === 'pgm' || focus === 'pvw'
+      ? focus
+      : 'none';
   return {
     inspectorPx: finiteSize(inspectorPx, DEFAULT_INSPECTOR_PX),
     monitorPx: finiteSize(monitorPx, DEFAULT_MONITOR_PX),
     focus:
-      focus === 'inspector' || focus === 'layers' || focus === 'pgm' || focus === 'pvw'
-        ? focus
-        : 'none',
+      focusedPanel !== 'none' && placements[focusedPanel] !== undefined ? 'none' : focusedPanel,
     positions: positionsOf(positions),
     uiProfiles: profilesOf(uiProfiles),
+    floatingPanels: placements,
   };
 }
 
-function write({ inspectorPx, monitorPx, focus, positions, uiProfiles }: SavedWorkspace): void {
+function write({
+  inspectorPx,
+  monitorPx,
+  focus,
+  positions,
+  uiProfiles,
+  floatingPanels,
+}: SavedWorkspace): void {
   const persisted: Persisted = {
     inspectorPx,
     monitorPx,
     focus,
     ...(!isDefaultPosition(positions) && { positions }),
     ...(uiProfiles.length > 0 && { uiProfiles }),
+    ...(Object.keys(floatingPanels).length > 0 && { floatingPanels }),
   };
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(persisted));
@@ -313,7 +336,7 @@ export function clampMonitor(px: number, viewportHeightPx: number): number {
 export function useShellLayout(): ConfigurableShellLayout {
   const [saved, setSaved] = useState(read);
   const savedRef = useRef(saved);
-  const { inspectorPx, monitorPx, focus, positions, uiProfiles } = saved;
+  const { inspectorPx, monitorPx, focus, positions, uiProfiles, floatingPanels } = saved;
   const update = useCallback((patch: Partial<SavedWorkspace>) => {
     const next = { ...savedRef.current, ...patch };
     savedRef.current = next;
@@ -350,7 +373,29 @@ export function useShellLayout(): ConfigurableShellLayout {
 
   const setFocus = useCallback(
     (next: ShellFocus) => {
+      if (next !== 'none' && savedRef.current.floatingPanels[next] !== undefined) return;
       update({ focus: next });
+    },
+    [update],
+  );
+
+  const setFloatingPanel = useCallback(
+    (panel: PanelId, placement: FloatingPanelPlacement | null) => {
+      const current = savedRef.current;
+      const panels = { ...current.floatingPanels };
+      if (placement === null) {
+        if (panels[panel] === undefined) return;
+        delete panels[panel];
+        update({ floatingPanels: panels });
+        return;
+      }
+      const parsed = FloatingPanelPlacementSchema.safeParse(placement);
+      if (!parsed.success || sameFloatingPanelPlacement(panels[panel], parsed.data)) return;
+      panels[panel] = parsed.data;
+      update({
+        floatingPanels: panels,
+        ...(current.focus === panel && { focus: 'none' }),
+      });
     },
     [update],
   );
@@ -358,21 +403,50 @@ export function useShellLayout(): ConfigurableShellLayout {
   const setPositions = (change: Partial<WorkspacePositions>): void =>
     update({ positions: { ...savedRef.current.positions, ...change } });
 
-  const saveProfile = (value: string): void => {
+  const saveProfile = async (value: string): Promise<void> => {
     const name = value.trim();
     if (name.length === 0 || name.length > WORKSPACE_PROFILE_NAME_MAX) return;
-    const { inspectorPx, monitorPx, positions, uiProfiles } = savedRef.current;
-    const profile = { name, inspectorPx, monitorPx, positions };
-    update({ uiProfiles: [...uiProfiles.filter((entry) => entry.name !== name), profile] });
+    const { inspectorPx, monitorPx, positions, floatingPanels } = savedRef.current;
+    const placements = { ...floatingPanels };
+    const native = window.cg?.floatingPanels;
+    if (native != null && Object.keys(placements).length > 0) {
+      // Query the native restore bounds at the save, even if the layout has not
+      // received the latest move, resize or maximize state yet.
+      await Promise.all(
+        FLOATING_PANEL_IDS.map(async (panel) => {
+          if (placements[panel] === undefined) return;
+          try {
+            const actual = FloatingPanelPlacementSchema.safeParse(await native.placement(panel));
+            if (actual.success) placements[panel] = actual.data;
+          } catch {
+            // A window can disappear while being queried. Retain its known geometry.
+          }
+        }),
+      );
+    }
+    const profile = {
+      name,
+      inspectorPx,
+      monitorPx,
+      positions,
+      ...(Object.keys(placements).length > 0 && { floatingPanels: placements }),
+    };
+    update({
+      uiProfiles: [...savedRef.current.uiProfiles.filter((entry) => entry.name !== name), profile],
+    });
   };
 
   const loadProfile = (name: string): void => {
     const profile = savedRef.current.uiProfiles.find((entry) => entry.name === name);
     if (profile !== undefined) {
+      const panels = profile.floatingPanels ?? {};
+      const currentFocus = savedRef.current.focus;
       update({
         inspectorPx: profile.inspectorPx,
         monitorPx: profile.monitorPx,
         positions: profile.positions,
+        floatingPanels: panels,
+        ...(currentFocus !== 'none' && panels[currentFocus] !== undefined && { focus: 'none' }),
       });
     }
   };
@@ -387,6 +461,7 @@ export function useShellLayout(): ConfigurableShellLayout {
       monitorPx: DEFAULT_MONITOR_PX,
       focus: 'none',
       positions: DEFAULT_WORKSPACE_POSITIONS,
+      floatingPanels: {},
     });
   }, [update]);
 
@@ -400,6 +475,8 @@ export function useShellLayout(): ConfigurableShellLayout {
     inspectorPx: clampInspector(inspectorPx, viewportPx),
     monitorPx: clampMonitor(monitorPx, viewportHeightPx),
     focus,
+    floatingPanels,
+    setFloatingPanel,
     narrow: viewportPx < NARROW_BREAKPOINT_PX,
     monitorsShown,
     setInspectorPx,
@@ -412,6 +489,7 @@ export function useShellLayout(): ConfigurableShellLayout {
       monitorPx !== DEFAULT_MONITOR_PX ||
       focus !== 'none' ||
       !isDefaultPosition(positions) ||
+      Object.keys(floatingPanels).length > 0 ||
       // Against the DEFAULT, not against `true`: with the strip folded away by default, a
       // console the operator has OPENED it on is the customised one.
       monitorsShown !== DEFAULT_MONITORS_SHOWN,
