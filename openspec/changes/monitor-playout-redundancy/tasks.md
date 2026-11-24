@@ -106,11 +106,16 @@
       The fixture
       models Playout checkpoint replication. The .37 package supplied 38 matching status and
       seven matching state responses for contract review.
-- [ ] Obtain and verify the matching .37 binaries and a licensed isolated pair. Exercise the
-      real CG Bridge and Control with both programme returns, power-off in each direction,
-      native restart, acknowledgement loss and a replacement after a receipt retention gap.
-      Verify that Clear stays applied on the returning member and record graphic and Programme
-      facts independently.
+- [x] Verify that supported managed row commands remain available through Playout when direct
+      primary AMCP observation is down. The Chromium pilot test covers Play, Inspector Update,
+      Bridge recreation, Stop and Clear while an unbound layer still requires AMCP.
+- [x] Run the managed pilot on the licensed .37 pair and verify both programme returns when
+      B's Engine and Core stop and restart. On 2026-11-24, A accepted all five layout writes.
+      Playout restored sequence 4 with the updated graphic on B, then restored sequence 5
+      with the layer cleared. Both members matched the confirmed request hash on both returns,
+      and Bridge sent zero additional layout writes during recovery.
+- [ ] Exercise the opposite outage direction, native restart of the selected Engine,
+      acknowledgement loss and a replacement after a receipt retention gap on a real .37 pair.
 - [ ] Verify explicit adoption of a reviewed migrated checkpoint separately from the fresh pilot.
 - [ ] Verify installed-service activation and credential renewal separately.
 

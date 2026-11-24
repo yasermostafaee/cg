@@ -2,7 +2,8 @@ import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
+import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { useOperatorNames } from '../../hooks/useOperatorNames.js';
@@ -369,8 +370,7 @@ export function Inspector({
    * resolves offline and costs nothing.
    */
   const [siblings, setSiblings] = useState<readonly TemplateInfo[]>([]);
-  // THE SECOND HOP — Update reaches air, so it needs CasparCG. Editing does not.
-  const casparReach = useCasparReach();
+  const health = useConnections();
   const link = useLink();
   const linkDown = link === 'disconnected';
   /**
@@ -380,7 +380,6 @@ export function Inspector({
    * after typing an edit sent him to the wrong machine.
    */
   const engineName = useEngineName();
-  const applyRefusal = casparRefusalReason(linkDown, casparReach);
   /**
    * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — golden rule 11: the heading names the ROW in
    * the operator's words. Through the one composition (`operatorRowName`, fed by the bank and
@@ -403,6 +402,11 @@ export function Inspector({
   const rowSlot =
     item?.slot ??
     (boundSlot === undefined ? undefined : { channel: boundSlot.channel, layer: boundSlot.layer });
+  const managedCg = rowSlot !== undefined && health?.managedCgChannel === rowSlot.channel;
+  const applyRefusal = casparRefusalReason(
+    linkDown,
+    managedCg ? 'reachable' : resolveCasparReach(link, health),
+  );
   // `CHANNEL-SOURCES-01` — the row's channel, whose own Source defaults this panel reads.
   const { selected: selectedChannel } = useSelectedChannel();
   const itemChannel = itemChannelOf(item, slots, selectedChannel);

@@ -285,6 +285,8 @@ const ConnectionHealthSchema = z.object({
    * `station-admin` has signed in.
    */
   amcpAwaitsSignIn: z.literal(true).optional(),
+  /** The isolated pilot channel sends bound graphics commands through Playout instead of AMCP. */
+  managedCgChannel: z.number().int().positive().optional(),
 });
 
 export type ConnectionHealth = z.infer<typeof ConnectionHealthSchema>;

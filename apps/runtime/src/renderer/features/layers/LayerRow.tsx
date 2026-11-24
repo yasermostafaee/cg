@@ -34,7 +34,8 @@ import { buttonActions, toMenuItems, withConfirm } from '../../ui/rowAction.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
-import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
+import { useConnections } from '../../hooks/useConnections.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { newItemId } from '../library/newItemFields.js';
@@ -369,7 +370,9 @@ export function LayerRow({
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
   // Three-valued: `connecting` refuses like `unreachable` but is worded as the
   // wait it is, not as a fault nothing has reported (see `reachWording`).
-  const casparReach = useCasparReach();
+  const health = useConnections();
+  const casparReach = resolveCasparReach(link, health);
+  const managedCg = binding.kind === 'bound' && health?.managedCgChannel === slot.channel;
   const { confirm, confirmDialog } = useConfirm();
   const engine = useEngineName();
   const { pickTemplate, pickerDialog } = useTemplatePicker(
@@ -630,6 +633,7 @@ export function LayerRow({
     book: rowBook,
     linkDown,
     casparReach,
+    managedCg,
     dirty,
     rehearsing,
     previewOnly,
@@ -940,7 +944,8 @@ export function LayerRow({
   // us either. `unreachable` ONLY, never `connecting`: greying and past-tensing a
   // live row for the first second of every reload would train the operator to
   // ignore the very signal this exists to give him.
-  const casparUnreachable = casparReach === 'unreachable';
+  // Managed rows receive their confirmed state from Playout, independently of AMCP observation.
+  const casparUnreachable = !managedCg && casparReach === 'unreachable';
   const airUnbackable = linkDown || casparUnreachable;
   const badgeStatus: StackItemStatus | null =
     item === null ? null : airUnbackable && onAirClaim ? 'unverified' : item.status;

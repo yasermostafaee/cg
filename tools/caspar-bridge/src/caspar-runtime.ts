@@ -25780,6 +25780,7 @@ export class CasparRuntime {
       strategy: this.#config.strategy,
       ...(this.#lastFailover !== undefined ? { lastFailover: this.#lastFailover } : {}),
       ...(this.#amcpAwaitsSignIn && !this.#amcpEverUp ? { amcpAwaitsSignIn: true as const } : {}),
+      ...(this.#managedCg !== undefined && { managedCgChannel: this.#managedCg.channel }),
     };
   }
 

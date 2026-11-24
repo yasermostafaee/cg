@@ -8,7 +8,7 @@ import { playoutPair } from '../../../../tools/caspar-bridge/tests/support/manag
 import { defaultFixedLayerBank } from '@cg/shared-ipc';
 import { expect, RuntimeApp, test } from './fixtures/runtime.js';
 
-test('managed CG row buttons use Playout and reattach after Bridge restart and owner transfer', async ({
+test('managed CG buttons work with primary AMCP down and reattach after restart and owner transfer', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -18,7 +18,8 @@ test('managed CG row buttons use Playout and reattach after Bridge restart and o
   try {
     const pair = await playoutPair(cleanup);
     const coreA = await createMock({ amcpPort: 0 });
-    cleanup.push(() => coreA.stop());
+    // The managed Engine API remains reachable while its direct Core port is closed.
+    await coreA.stop();
     const coreB = await createMock({ amcpPort: 0 });
     cleanup.push(() => coreB.stop());
     const bank = defaultFixedLayerBank();
@@ -33,7 +34,7 @@ test('managed CG row buttons use Playout and reattach after Bridge restart and o
           strategy: 'mirror-sync',
           autoFailoverEnabled: false,
         },
-        fixedLayers: { ...bank, visibility: { ...bank.visibility, 81: true } },
+        fixedLayers: { ...bank, visibility: { ...bank.visibility, 81: true, 82: true } },
         stackPath: join(directory, 'stack.json'),
         templatesDir: join(directory, 'templates'),
         managedCgPilot: { channel: 1, commands: pair.executor() },
@@ -62,7 +63,6 @@ test('managed CG row buttons use Playout and reattach after Bridge restart and o
         '</head><body>Static caption fixture</body></html>',
       1,
     );
-    await bridge.runtime.whenServerHealthy(8_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.addInitScript(
       'window.__CG_BRIDGE_URL__ = ' +
@@ -73,6 +73,15 @@ test('managed CG row buttons use Playout and reattach after Bridge restart and o
     await app.goto();
     const row = app.layerRow(81);
     await expect(row).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.cg.connections.health()))
+      .toMatchObject({
+        managedCgChannel: 1,
+        primary: { state: expect.not.stringMatching(/^(healthy|degraded)$/) },
+      });
+    await expect(
+      app.layerRow(82).getByRole('button', { name: 'CLEAR', exact: true }),
+    ).toBeDisabled();
     const loaded = await page.evaluate(async () =>
       window.cg.fixedLayers.load({
         channel: 1,

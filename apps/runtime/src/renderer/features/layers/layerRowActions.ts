@@ -211,6 +211,8 @@ export interface LayerRowActionDeps {
    * because nothing has said so. See `useCasparReach` / `reachWording`.
    */
   casparReach: CasparReach;
+  /** This bound row sends graphics commands to Playout through the pilot Bridge. */
+  managedCg?: boolean;
   /** Has the operator staged unapplied field edits for this item? */
   dirty: boolean;
   /**
@@ -406,6 +408,8 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * command is on its way. The refusal was always right; the button was not.
    */
   const needsCaspar = linkDown || deps.casparReach !== 'reachable';
+  const needsGraphics = linkDown || (deps.managedCg !== true && needsCaspar);
+  const needsClear = hasBinding ? needsGraphics : needsCaspar;
   /**
    * …and it names the RIGHT HOP, and the right STATE of that hop. Telling the
    * operator "bridge disconnected" while the bridge is fine sends him to the wrong
@@ -832,7 +836,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           takeRefused ||
           (deps.rehearsing && deps.previewOnly !== true) ||
           blocked ||
-          needsCaspar,
+          needsGraphics,
         async () => {
           if (item === null) return noop();
           const res = await deps.play(item.itemId);
@@ -846,7 +850,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       ),
       ...(blocked
         ? { title: RESTORE_BLOCKED_REASON }
-        : needsCaspar || awaiting
+        : needsGraphics || awaiting
           ? { title: casparVerbReason }
           : takeRefused
             ? { title: takeOnAirReason(deps.rowName, deps.localizeUi) }
@@ -933,7 +937,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
                 'PREV',
                 empty ||
                   blocked ||
-                  needsCaspar ||
+                  needsGraphics ||
                   managedPageUnavailable ||
                   book.count === 0 ||
                   (!book.wrap && book.page <= 1),
@@ -960,7 +964,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
               'NEXT',
               empty ||
                 blocked ||
-                needsCaspar ||
+                needsGraphics ||
                 managedPageUnavailable ||
                 book.count === 0 ||
                 (!book.wrap && book.page >= book.count && (managedBook === 'authored' || !onAir)),
@@ -971,13 +975,13 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         : act(
             'next',
             'NEXT',
-            empty || !onAir || !deps.hasNext || blocked || needsCaspar || managedPageUnavailable,
+            empty || !onAir || !deps.hasNext || blocked || needsGraphics || managedPageUnavailable,
             () => (item === null ? noop() : deps.next(item.itemId)),
             ArrowRightFromLine,
           )),
       ...(blocked
         ? { title: RESTORE_BLOCKED_REASON }
-        : needsCaspar || awaiting
+        : needsGraphics || awaiting
           ? { title: casparVerbReason }
           : {}),
       tone: 'next',
@@ -988,13 +992,13 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'update',
       'UPDATE',
-      empty || !onAir || !deps.dirty || blocked || needsCaspar,
+      empty || !onAir || !deps.dirty || blocked || needsGraphics,
       () => (item === null ? noop() : deps.update(item.itemId)),
       RefreshCw,
       'menu',
       // UPDATE reaches air: on a row with a resident producer it sends
       // `CG UPDATE` (measured). So it carries the same reason as the rest.
-      blocked ? RESTORE_BLOCKED_REASON : needsCaspar ? casparVerbReason : undefined,
+      blocked ? RESTORE_BLOCKED_REASON : needsGraphics ? casparVerbReason : undefined,
     ),
     {
       ...act(
@@ -1004,13 +1008,13 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // is resident. A blocked row's observation is emphatically not `html`, so
         // `CG STOP` there would be addressed to another system's producer, and
         // what 2.3.2 does with it is not something to find out on air.
-        empty || !onAir || blocked || needsCaspar,
+        empty || !onAir || blocked || needsGraphics,
         () => (item === null ? noop() : deps.stop(item.itemId)),
         CircleArrowOutDownRight,
       ),
       ...(blocked
         ? { title: RESTORE_BLOCKED_REASON }
-        : needsCaspar || awaiting
+        : needsGraphics || awaiting
           ? { title: casparVerbReason }
           : {}),
       tone: 'stop',
@@ -1107,8 +1111,8 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         bridge: `linkDown` reads BRIDGE DISCONNECTED, because that wait is not
         bounded and the operator has somewhere to go.
       */
-      disabled: needsCaspar || awaiting,
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      disabled: needsClear || awaiting,
+      ...(needsClear || awaiting ? { title: casparVerbReason } : {}),
       run: () => (item === null ? deps.clearLayer() : deps.clear(item.itemId)),
       onError,
       icon: XSquare,

@@ -5266,6 +5266,9 @@ other Engine is absent and use Playout's complete checkpoint for recovery.
 - WHEN an opt-in channel uses quorum External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
 - WHEN Core returns the exact External CG v2 migration refusal during legacy Play
   preparation THEN Bridge explains the refusal and keeps the unfinished preparation muted.
+- WHEN the isolated managed pilot is connected and direct AMCP observation is unavailable
+  THEN bound graphics commands still go through the verified Playout API. AMCP health and
+  unbound layer controls retain their own reachability checks.
 - WHEN both members report the same managed graphics revision but different programme keys
   THEN each PGM tile still reflects its own verified return.
 - WHEN the Bridge restarts with an applied static graphic THEN Control restores its confirmed

@@ -109,6 +109,13 @@ of supported static HTML templates. It SHALL preserve other applied layers and c
 selected row from Playout's applied state. Raw Caspar commands SHALL be limited to observation
 for the pilot.
 
+#### Scenario: The console cannot observe the primary Core through AMCP
+
+- **WHEN** Control is connected to the managed Bridge and primary AMCP is unreachable
+- **THEN** supported actions on bound rows of the managed channel remain available through Playout
+- **AND** Bridge validates Playout's authority and confirms the command before displaying a successful result
+- **AND** the AMCP connection indicator and actions that require direct AMCP reflect the actual connection.
+
 #### Scenario: The Bridge restarts after an applied update
 
 - **WHEN** the Bridge restarts with a retained matching template and a confirmed applied layout
