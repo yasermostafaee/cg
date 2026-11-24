@@ -91,10 +91,8 @@ whose outlines coincide.
 
 - **WHEN** the PVW toolbar shows its editing tools
 - **THEN** **Move template** comes before **Crop input**, followed by **Edit frames** when available
-- **AND** the order stays the same in compact layouts
-- **WHEN** the PVW pane becomes narrower, including with the Inspector open
-- **THEN** its tools keep one header row and use icons where the full labels no longer fit
-- **AND** the buttons retain their accessible names and tooltips
+- **AND** at every width the editing tools are bordered icons with localized accessible names and tooltips
+- **AND** the Safe Areas visibility and settings controls share an edge.
 
 ### Requirement: The Layers toolbar offers Stop All and Clear All
 

@@ -12,6 +12,7 @@ ratio choice or reusable custom lines.
 - Add a compact guide-settings popover beside each app's existing Safe areas toggle.
 - Reuse CG Control's profile on the normal New live layout preview, with a
   shared display setting.
+- Explain the selected guide frame in CG Control's shared Safe Areas popover.
 - Save the ratio, broadcast-box choice and one bounded named H/V guide set per app
   across project switches and restarts. Percentages refer to the selected frame.
 - Keep Designer's visibility toggle session-only. Save CG Control's guide settings and shared visibility with layer profiles.

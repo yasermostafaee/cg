@@ -9,7 +9,8 @@ layer and its programme state in view.
 - Keep the layer name, template and state visible, and show the current placement and draft marker
   when Position is collapsed.
 - Align simple Fields in compact rows and give larger editors the width they need.
-- Keep the existing Update and Discard footer.
+- Place Timing before Position and align the Position, Preset effect and Input effect controls.
+- Keep space in the preset buttons for Programme and Preview status, and keep the Update and Discard footer outside the scrollport.
 
 ## Capabilities
 

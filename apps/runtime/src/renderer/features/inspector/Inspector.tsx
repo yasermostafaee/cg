@@ -188,21 +188,11 @@ interface Props {
 }
 
 const styles = {
-  /**
-   * The Inspector's SCROLLING body. The panel chrome (border, background,
-   * header, and the fullscreen affordance) comes from `Panel` now — this is only
-   * the content that scrolls inside it. `Panel` clips, which is what finally
-   * bounds this scroll (see `layout.ts`: the page never scrolls, panels do).
-   */
+  // Panel bounds the scrollport between the header and the commit footer.
   scroll: {
     display: 'flex',
     flexDirection: 'column' as const,
-    // No BOTTOM padding: the sticky commit bar owns the space down there, and a
-    // container pad would sit BELOW the stuck bar (sticky offsets resolve against
-    // the padding box), leaving a stripe of scrolling content under it.
-    // `RUNTIME-REDESIGN-01` Phase 5 — `12px` on both axes, the reference's
-    // `.inspector-body{padding:12px}` as rendered (it was 24 / 16).
-    padding: 'var(--r-space-3) var(--r-space-3) 0',
+    padding: 'var(--r-space-3)',
     minHeight: 0,
     flex: 1,
     overflowY: 'auto' as const,
@@ -224,49 +214,17 @@ const styles = {
    * panel. What made the full-width layout look broken was never the width — it
    * was the item controls drifting apart inside it (see `ListFieldEditor`).
    */
-  /*
-   * THE COMMIT BAR — sticky to the BOTTOM of the scrolling body (owner request).
-   *
-   * Why the bottom rather than the top. The field list is the long part of this
-   * panel, and the operator's sequence is "edit a field, then apply". With a
-   * scrolled list the Update button used to be somewhere above the viewport, so
-   * committing meant scrolling back up to find it — on a live graphic, under time
-   * pressure. A footer keeps it one glance and one click away wherever the list is
-   * scrolled to, and it leaves the identity block (template name, status, layer)
-   * intact at the top instead of covering it.
-   *
-   * `marginTop: auto` pins it past the end of short content; `position: sticky`
-   * holds it while the content is long. The negative horizontal margin plus
-   * matching padding let the background bleed to the panel edges so scrolled text
-   * cannot appear beside the bar.
-   *
-   * `flexWrap`: at a narrow panel width the three children would push the row wider
-   * than the panel; they wrap onto a second line instead.
-   */
+  // The footer is a separate row of Panel's flex body.
   actions: {
     display: 'flex',
-    // CENTRED (owner request). Everything else about this bar — the sticky
-    // behaviour, the top border, the raised background and the DOM position — is
-    // unchanged and load-bearing; see the block comment above.
     justifyContent: 'center',
-    // `RUNTIME-REDESIGN-01` Phase 5 — the reference's own footer, as rendered
-    // (`design.md` §12.3): buttons gapped 10, padded `9px 12px`, a stronger top rule
-    // and an upward shadow that lifts the pinned bar off the list scrolling under it.
-    // The bleed margin matches the body's `12px` pad above, so the bar still reaches
-    // the panel's edges. All from `INSPECTOR_PX` in the token home.
     gap: 'var(--r-insp-foot-gap)',
     alignItems: 'center',
     flexWrap: 'wrap' as const,
-    position: 'sticky' as const,
-    bottom: 0,
-    marginTop: 'auto',
-    zIndex: 1,
-    // RAISED, matching the panel bar at the other end — the two pieces of chrome
-    // that are not content read as the same kind of thing.
+    flexShrink: 0,
     background: colors.panelMuted,
     borderTop: `1px solid ${cssVars['--r-border-strong']}`,
     boxShadow: cssVars['--r-insp-foot-shadow'],
-    marginInline: 'calc(var(--r-space-3) * -1)',
     padding: 'var(--r-insp-foot-pad)',
   },
   /*
@@ -845,6 +803,10 @@ export function Inspector({
           </p>
         )}
         <BackupStatus item={item} template={resolvedInfo} />
+        {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
+            operator's passes/gap as controls. Renders nothing for a template imported before
+            `TemplateInfo.playout` existed, rather than guessing what it does. */}
+        <TimingSection item={item} info={resolvedInfo} disclosure={disclosures?.timing} />
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker
           key={`pos-${itemId}`}
@@ -882,10 +844,6 @@ export function Inspector({
             setPreviewLookPin(itemId, lookId);
           }}
         />
-        {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
-            operator's passes/gap as controls. Renders nothing for a template imported before
-            `TemplateInfo.playout` existed, rather than guessing what it does. */}
-        <TimingSection item={item} info={resolvedInfo} disclosure={disclosures?.timing} />
         <div className="cg-inspector-section cg-inspector-fields">
           <h2>{localizeUi('Fields')}</h2>
           {isEmpty ? (
@@ -929,178 +887,43 @@ export function Inspector({
             </>
           )}
         </div>
-        {/* THE COMMIT BAR, LAST IN THE DOM — not merely last visually.
-          A sticky footer could have been achieved with flex `order` while leaving this
-          block up beside the title, but DOM order is TAB order: that would have put
-          Update and Discard ahead of the fields they apply, so a keyboard operator
-          would reach the commit before the thing being committed. Fields first, then
-          commit, matches both the reading order and the actual sequence of the task. */}
-        {/* The class carries only the CONTROLS' height (32px, the panel's primary
-            action), so Update and Discard cannot come out at two heights from two
-            variants — `accent` takes its height from padding, `neutral` carries a
-            36px floor meant for the layer table's header. Same defect the field
-            footers had. Layout stays in `styles.actions`. */}
-        <div className="cg-inspector-actions" style={styles.actions}>
-          {/*
-            `RUNTIME-REDESIGN-01` Phase 5 — DISCARD FIRST, UPDATE LAST, as the reference
-            renders its `.inspector-save-bar` (`Discard · Update`): the commit sits at the
-            trailing end, where the primary action of a bar conventionally is, and the
-            keyboard reaches the reversible control before the one that reaches air. Both
-            buttons keep their names, variants, gates and behaviour; only the order moved.
-          */}
-          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` — transparent fill,
-            transparent border, muted text — and it read as a line of static text
-            rather than a control. Removing COLOUR from a control never removes its
-            need for an AFFORDANCE: it still owes a visible boundary, a hover state
-            and a focus ring. `neutral` is the variant that carries all three without
-            a hue. See the `--ghost` warning in `controls.css`.
-
-            …AND NEITHER IS DISABLED, which is the half that was still missing.
-            `neutral:disabled` used to drop BOTH its fill and its border, so this
-            control vanished for exactly as long as there was nothing staged to
-            discard — i.e. every moment before the operator's first edit, which is
-            when they are learning where things are. An operator who cannot find how
-            to ABANDON an edit presses Update to get out of the panel, which is the
-            opposite of what they wanted and reaches air. `--neutral:disabled` keeps
-            its boundary now (`controls.css`); the row verbs' bare-glyph disabled
-            shape is untouched, because there a column of peers makes it legible. */}
-          <Button
-            variant="neutral"
-            aria-label={localizeUi('Discard staged edits')}
-            disabled={!dirty}
-            onClick={() => onDiscard(itemId)}
-          >
-            {localizeUi('Discard')}
-          </Button>
-          {/* Apply stays enabled even with nothing staged — re-sending unchanged
-            values is the operator's documented B-048 recovery path. */}
-          {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.
-            `applyDraft` (the shared apply behind this button AND the stack row's UPDATE)
-            already routes any failure to the toast with its own B-070 wording, so this
-            no-op only SUPPRESSES the button's duplicate INLINE error — it does not
-            re-report (which would double-toast) or change the wording. Exactly what
-            `StackRow`'s UPDATE does, for exactly this reason. */}
-          {/* PLAY'S VARIANT, BY THE OWNER'S EXPLICIT CALL — «رنگ دکمه update مثل
-            دکمه play بشه». `variant="play"` rather than a copied hex or a new
-            token: ONE source, so the two buttons cannot drift apart.
-
-            This supersedes C-012's retirement of the air hue on this control, and
-            the history is kept because it is emphatic and a future reader will
-            meet it: an outlined `--r-onair` UPDATE was removed on the rule that a
-            transmission colour may never sit on an affordance.
-
-            WHY THE RULE SURVIVES BEING APPLIED THE OTHER WAY. The palette already
-            distinguishes the two things by SHAPE, not only by hue:
-
-              - a FILLED GREEN BUTTON is an ACTION THAT REACHES AIR. PLAY has been
-                exactly that since C-012 and is the only one until now.
-              - the AIR CLAIM is a state MARK — coloured text and an icon in a
-                table cell, next to the word ON AIR. It is never a filled button.
-
-            So Update joining PLAY does not add a new meaning; it puts a second
-            member in a class that already existed and already reads correctly, and
-            the two are truthfully alike — PLAY takes a graphic to air, Update
-            pushes a change to one that is already there.
-
-            THE CONSTRAINT THAT REMAINS ABSOLUTE: this may not spread to anything
-            that is not an action reaching air, and the air hue may still never be
-            worn by a state mark outside the layer rows and the status bar. It is
-            `--r-onair` via the shared class and must stay that way — a hand-copied
-            green here would be the drift the owner's "use PLAY's token" forbids.
-
-            §3's sky `accent` remains for `Apply position` and `Add item`, which do
-            NOT reach air, so the two classes stay legible: sky = the action this
-            surface exists to perform; green = the action that reaches air. */}
-          {/*
-            GATED ON CASPARCG, exactly as the ROW's UPDATE is — and found by the
-            adversarial review of that change rather than by a test.
-
-            This button and the row's verb call the SAME `applyDraft`, so gating
-            one and not the other is the label-and-action-in-two-places class
-            again, one surface along: the row would say the command cannot go
-            while the Inspector still offered it. `update()` sends `CG UPDATE`
-            when a producer is resident (measured), so it needs CasparCG.
-
-            EDITING STAYS AVAILABLE. Only the APPLY is gated — the operator can go
-            on typing with the playout machine off, the edit stays a draft, and it
-            reaches air when the link returns. That is the whole point of the
-            offline surface, and gating the fields instead would destroy it.
-          */}
-          {/*
-            🔴 GREEN IS THE ON-AIR CASE AND NOTHING ELSE — owner decision,
-            `INSPECTOR-AUDIT-05` §3, and it supersedes the block above rather than
-            contradicting it.
-
-            What the block above argues is still exactly right: a FILLED GREEN BUTTON means
-            AN ACTION THAT REACHES AIR, and Update joining PLAY in that class was truthful
-            — on a row that is on air. On a row that is NOT, it was the class making a
-            claim the press cannot keep: the change lands in STATE and the next take seats
-            it (golden rule 10), and a green button is the loudest way this console has of
-            saying otherwise. So the hue now follows the FACT rather than the verb, and off
-            air the control takes `accent` — the same sky, the same weight, as
-            `Apply position` one section up, which is likewise the action its section
-            exists to perform and likewise reaches no output.
-
-            ⚠ AND THE LABEL MOVES WITH IT, which is the half that makes the colour
-            legible: green + `Update on air` says what it is in the operator's words, so
-            the hue is reinforcement and never the signal — the same construction the
-            status chip uses one panel up. The reference greens its Update in BOTH states
-            (measured in Chromium at 1280 × 800: `rgb(34 221 122)` off air as well); this
-            is a deliberate departure from the drawing, on the owner's call.
-
-            THE PREDICATE IS `isOnAirStatus`, the ONE definition both sides of the seam
-            read — never a second local spelling of the state list (golden rule 6), and
-            never `rehearsing`, which seats nothing on the channel (`B-216`). It counts
-            `updating` / `exiting` / `unconfirmed` / `pending` as on air, and that is the
-            right way for a LABEL to fail too: saying `Update on air` about a row whose air
-            state is unknown is the honest reading, where a bare `Update` would be a quiet
-            promise that nothing is live.
-
-            ⚠ NOTHING ABOUT WHAT THE PRESS DOES CHANGES. Same `onApply`, same
-            `applyDraft`, same CasparCG gate, same refusal CONDITION. This is appearance and
-            copy only — a configuration verb stays a configuration verb.
-          */}
-          <AsyncButton
-            variant={onAir ? 'commit' : 'accent'}
-            /*
-              The accessible name keeps `Apply staged edits` as its opening words in both
-              states — it is what every finder and every voice command already says — and
-              GAINS the fact the colour carries, so a screen-reader operator is told the row
-              is live by the control itself rather than only by the chip above it.
-            */
-            aria-label={
-              onAir
-                ? localizeUi('Apply staged edits to the on-air row')
-                : localizeUi('Apply staged edits')
-            }
-            disabled={applyRefusal !== undefined}
-            {...(applyRefusal !== undefined
-              ? { title: localizeEngineWording(applyRefusal, engineName, localizeUi) }
-              : {})}
-            run={() => onApply(itemId)}
-            onError={() => undefined}
-            data-inspector-commit={onAir ? 'on-air' : 'off-air'}
-          >
-            {onAir ? localizeUi('Update on air') : localizeUi('Update')}
-          </AsyncButton>
-          {dirty && <DraftChip label={localizeUi('unapplied edits')} />}
-          {/*
-            🔴 THE `.target-hint` SUB-LINE IS GONE — owner decision, `INSPECTOR-AUDIT-05`
-            §3. It read _"Saves this row’s configuration. No Take is sent."_ and
-            `design.md` §25.6 required it to stay "exactly this honest"; that requirement is
-            SUPERSEDED, not forgotten, and §25.6 is annotated where it stands.
-
-            The reasoning, recorded because deleting a golden-rule-10 sentence is the kind of
-            thing a later reader will want to re-add: the sentence existed to disown a claim
-            the BUTTON was making. A green Update on an off-air row said "this reaches air",
-            and a line of 11 px muted prose underneath said it does not — a hint whose job is
-            to contradict the control above it, which §25.8 already named as a heading that
-            needs fixing rather than a hint that needs keeping. With the hue now telling the
-            truth by itself and the on-air case saying exactly what it is in its own label,
-            the sentence has nothing left to disown.
-          */}
-        </div>
       </div>
+      {/* Keep commit controls after the editable fields in keyboard order. */}
+      <footer className="cg-inspector-actions" data-inspector-actions="" style={styles.actions}>
+        <Button
+          variant="neutral"
+          aria-label={localizeUi('Discard staged edits')}
+          disabled={!dirty}
+          onClick={() => onDiscard(itemId)}
+        >
+          {localizeUi('Discard')}
+        </Button>
+        <AsyncButton
+          variant={onAir ? 'commit' : 'accent'}
+          /*
+            The accessible name keeps `Apply staged edits` as its opening words in both
+            states — it is what every finder and every voice command already says — and
+            GAINS the fact the colour carries, so a screen-reader operator is told the row
+            is live by the control itself rather than only by the chip above it.
+          */
+          aria-label={
+            onAir
+              ? localizeUi('Apply staged edits to the on-air row')
+              : localizeUi('Apply staged edits')
+          }
+          disabled={applyRefusal !== undefined}
+          {...(applyRefusal !== undefined
+            ? { title: localizeEngineWording(applyRefusal, engineName, localizeUi) }
+            : {})}
+          run={() => onApply(itemId)}
+          onError={() => undefined}
+          data-inspector-commit={onAir ? 'on-air' : 'off-air'}
+        >
+          {onAir ? localizeUi('Update on air') : localizeUi('Update')}
+        </AsyncButton>
+
+        {dirty && <DraftChip label={localizeUi('unapplied edits')} />}
+      </footer>
     </Panel>
   );
 }

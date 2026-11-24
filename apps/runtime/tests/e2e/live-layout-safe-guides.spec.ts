@@ -129,9 +129,19 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expect(stage.locator('[data-safe-area-guides]')).toHaveCSS('pointer-events', 'none');
     await editor.getByRole('button', { name: 'Safe area settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
+    const help = settings.locator('details').filter({ hasText: 'About safe areas' });
+    await help.locator('summary').click();
+    await expect(help).toContainText('Auto follows the preview frame.');
+    await expect(help).not.toContainText(/EBU R95|SMPTE/);
+    await expect(
+      help.getByText('100% marks the full frame. 80% is an additional guide.'),
+    ).toBeVisible();
     await expect(settings.getByLabel('Guide color', { exact: true })).toHaveValue('#ffffff');
     await settings.getByLabel('Guide color', { exact: true }).fill('#22aaee');
     await showOnlyGuideFrame(settings, '4:3');
+    await expect(help).toContainText('in digital 576- and 480-line formats.');
+    await expect(help).toContainText('SMPTE ST 2046-1');
+    await expect(help).not.toContainText('EBU R95');
     await settings.getByLabel('Frame color', { exact: true }).fill('#22aaee');
     await settings.getByRole('button', { name: 'Add horizontal guide', exact: true }).click();
     const position = settings.getByRole('textbox', {
@@ -224,6 +234,8 @@ test('New live layout safe guides fit its active picture and share only view pre
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(34, 170, 238)');
     await expect(pvw.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(255, 102, 0)');
     await pvw.getByRole('button', { name: 'Safe area settings', exact: true }).click();
+    await help.locator('summary').click();
+    await expect(help).toContainText('SMPTE ST 2046-1');
     await settings.getByLabel('Guide color', { exact: true }).fill('#99dd44');
     await expect(pvw.locator('[data-guide-axis="y"]')).toHaveCSS('stroke', 'rgb(153, 221, 68)');
     await expect(pvw.locator('[data-guide-axis="x"]')).toHaveCSS('stroke', 'rgb(255, 102, 0)');
@@ -239,6 +251,8 @@ test('New live layout safe guides fit its active picture and share only view pre
       .getByRole('textbox', { name: 'Guide 1 name', exact: true })
       .fill('Shared view guide');
     await showOnlyGuideFrame(settings, '16:9');
+    await expect(help).toContainText('For full-screen 16:9, EBU R95');
+    await expect(help).not.toContainText('SMPTE');
     await settings.getByLabel('Frame color', { exact: true }).fill('#99dd44');
     await settings.getByRole('button', { name: 'Close safe area settings', exact: true }).click();
     await pvwToggle.click();
@@ -272,6 +286,11 @@ test('New live layout safe guides fit its active picture and share only view pre
     await page.screenshot({ path: testInfo.outputPath('new-layout-guide-colors.png') });
 
     await showOnlyGuideFrame(settings, 'custom');
+    await help.locator('summary').click();
+    await expect(help).toContainText(
+      'The 93% and 90% guides are proportional to this custom frame.',
+    );
+    await expect(help).not.toContainText(/EBU R95|SMPTE/);
     const ratioWidth = settings.getByRole('textbox', { name: 'Custom aspect width', exact: true });
     const ratioHeight = settings.getByRole('textbox', {
       name: 'Custom aspect height',

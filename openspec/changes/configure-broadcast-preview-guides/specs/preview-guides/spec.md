@@ -81,8 +81,17 @@ guides SHALL use the selected reference.
 - **WHEN** they enable and color individual 100%, 93%, 90% and 80% borders
 - **THEN** each visible border is drawn in its own color or inherits its frame color
 - **AND** its label identifies the ratio and percentage
-- **AND** help identifies Action 93% and Graphics 90% as the EBU R 95 recommendations for 16:9
 - **AND** choosing a frame to edit leaves the other visible frames on the canvas
+
+#### Scenario: CG Control explains the selected safe frame
+
+- **WHEN** the operator selects a guide frame in the Safe Areas settings in PVW or New live layout
+- **THEN** the help follows the selected guide frame
+- **AND** the full-screen 16:9 help names EBU R95. The 4:3 help names the SMPTE rule for digital
+  576- and 480-line formats. Auto and custom guides describe proportional geometry.
+- **AND** the 100% frame and additional 80% guide have a separate explanation.
+- **AND** the percentage rows are inset from Show frame, with their vertical rule on the left
+  in English and on the right in Persian and Arabic.
 
 #### Scenario: Designer snaps to visible safe area borders
 

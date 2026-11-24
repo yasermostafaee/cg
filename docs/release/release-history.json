@@ -75,6 +75,16 @@
       ],
       "fixes": [
         {
+          "fa": "توضیح Safe Area با انتخاب نسبت قاب عوض می‌شود. مرجع ۱۶:۹ و ۴:۳ جداست و درصدهای قاب سفارشی نسبت به همان قاب محاسبه می‌شوند. ردیف‌های درصد زیر «نمایش قاب» در رابط فارسی و عربی از سمت راست تورفتگی دارند.",
+          "en": "Safe Areas help follows the selected guide ratio, with separate references for 16:9 and 4:3 and proportional guidance for custom frames. Percentage rows are indented under Show frame in both interface directions.",
+          "ar": "يتغيّر شرح المناطق الآمنة بحسب نسبة الإطار المختار، مع مرجع مستقل لكلّ من ١٦:٩ و٤:٣ وشرح للأدلة النسبية في الإطارات المخصصة. تظهر صفوف النسب تحت «إظهار الإطار» بإزاحة من اليمين في الواجهة العربية والفارسية."
+        },
+        {
+          "fa": "زمان‌بندی در پنل ویژگی‌ها بالای موقعیت است و کنترل‌های موقعیت و افکت تراز شده‌اند. اسکرول پیش از فوتر تمام می‌شود و دکمه‌های پریست برای عنوان و وضعیت جا دارند. ابزارهای PVW آیکونی و کادردارند و Safe Area کنار تنظیماتش قرار دارد.",
+          "en": "Inspector puts Timing above Position, aligns position and effect fields, keeps the footer outside the scrollbar and leaves room for a second status line in preset buttons. PVW uses bordered icon tools and joins Safe Areas to its settings button.",
+          "ar": "يظهر التوقيت فوق الموضع في لوحة الخصائص، وتُحاذى حقول الموضع والتأثير. ينتهي شريط التمرير قبل التذييل، وتتسع أزرار الإعدادات المسبقة للاسم والحالة. تظهر أدوات المعاينة بأيقونات ذات إطار، ويجاور زر المناطق الآمنة زر إعداداتها."
+        },
+        {
           "fa": "پیش‌نمایش چیدمان زنده، تصویر NDI و مدیا را در قاب‌های مربوط به خودشان نگه می‌دارد. مدیا فقط با دکمهٔ پخش همان قاب شروع می‌شود و افکت‌های چیدمان از تب قاب در دسترس‌اند.",
           "en": "Live layout preview keeps NDI and media on their assigned plates. Media starts from its own Play control, and Layout effects are available on the Plate tab.",
           "ar": "تعرض معاينة الترتيب الحي إشارة NDI والوسائط في الإطارات المعيّنة لها. يبدأ تشغيل الوسائط بزر الإطار الخاص بها، وتتوفر تأثيرات الترتيب في تبويب الإطار."

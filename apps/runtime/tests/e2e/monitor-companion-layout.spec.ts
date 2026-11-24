@@ -20,42 +20,89 @@ async function expectHeaderActionsClear(
       Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 &&
       Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
     const rects = buttons.map((button) => button.getBoundingClientRect());
+    const safeGuides = element.querySelector('[data-monitor-safe-guide-tools]');
+    const shareSeam = (a: Element, b: Element) =>
+      safeGuides !== null && a.parentElement === safeGuides && b.parentElement === safeGuides;
     const actions = {
       insideHeader: rects.every((rect) => inside(frame, rect)),
       distinctHitboxes: rects.every((rect, i) =>
-        rects.slice(i + 1).every((other) => !intersect(rect, other)),
+        rects
+          .slice(i + 1)
+          .every(
+            (other, index) =>
+              !intersect(rect, other) ||
+              (shareSeam(buttons[i]!, buttons[i + index + 1]!) &&
+                Math.min(rect.right, other.right) - Math.max(rect.left, other.left) <= 1.5),
+          ),
       ),
     };
+    const paintedBorder = (button: Element) => {
+      const style = getComputedStyle(button);
+      return (
+        Number.parseFloat(style.borderTopWidth) >= 1 &&
+        style.borderTopStyle === 'solid' &&
+        !['transparent', 'rgba(0, 0, 0, 0)'].includes(style.borderTopColor)
+      );
+    };
+    const first = safeGuides?.querySelector('button:first-child');
+    const second = safeGuides?.querySelector('button:last-child');
+    const safeGuideSeam =
+      first !== undefined &&
+      first !== null &&
+      second !== undefined &&
+      second !== null &&
+      first !== second
+        ? (() => {
+            const a = first.getBoundingClientRect();
+            const b = second.getBoundingClientRect();
+            const [left, right] = a.left < b.left ? [a, b] : [b, a];
+            return (
+              Math.abs(left.right - right.left) <= 1.5 &&
+              Math.abs(left.top - right.top) < 1 &&
+              Math.abs(left.bottom - right.bottom) < 1 &&
+              Number.parseFloat(getComputedStyle(first).borderStartEndRadius) === 0 &&
+              Number.parseFloat(getComputedStyle(second).borderStartStartRadius) === 0 &&
+              paintedBorder(first) &&
+              paintedBorder(second)
+            );
+          })()
+        : safeGuides === null
+          ? null
+          : false;
     const tools = [
-      ...element.querySelectorAll('[data-monitor-pan], [data-monitor-move], [data-monitor-frames]'),
+      ...element.querySelectorAll(
+        '[data-monitor-pan], [data-monitor-move], [data-monitor-safe-areas], [data-monitor-frames], [data-monitor-masks]',
+      ),
     ];
-    const iconAndTextFit = tools.every((tool) => {
+    const iconToolsFit = tools.every((tool) => {
       const icon = tool.querySelector('svg')?.getBoundingClientRect();
-      const label = tool.querySelector('.cg-pvw-tool-label');
-      if (icon === undefined || label === null) return false;
       const button = tool.getBoundingClientRect();
-      if (getComputedStyle(label).display === 'none') {
-        return (
-          inside(button, icon) && tool.hasAttribute('aria-label') && tool.hasAttribute('title')
-        );
-      }
-      const range = document.createRange();
-      range.selectNodeContents(label);
-      const text = range.getBoundingClientRect();
-      return inside(button, icon) && inside(button, text) && !intersect(icon, text);
+      return (
+        icon !== undefined &&
+        inside(button, icon) &&
+        Math.abs(button.width - button.height) <= 1 &&
+        tool.textContent?.trim() === '' &&
+        Boolean(tool.getAttribute('aria-label')) &&
+        Boolean(tool.getAttribute('title')) &&
+        paintedBorder(tool)
+      );
     });
     const toolOrder = tools
-      .map((tool) => ({ label: tool.textContent?.trim(), box: tool.getBoundingClientRect() }))
+      .map((tool) => ({
+        label: tool.getAttribute('aria-label'),
+        box: tool.getBoundingClientRect(),
+      }))
       .sort(({ box: a }, { box: b }) =>
         Math.abs(a.top - b.top) > 0.5 ? a.top - b.top : a.left - b.left,
       )
       .map(({ label }) => label);
-    return { ...actions, iconAndTextFit, toolOrder };
+    return { ...actions, iconToolsFit, safeGuideSeam, toolOrder };
   });
   expect(geometry).toEqual({
     insideHeader: true,
     distinctHitboxes: true,
-    iconAndTextFit: true,
+    iconToolsFit: true,
+    safeGuideSeam: expectedTools.includes('Safe areas in Preview') ? true : null,
     toolOrder: expectedTools,
   });
 }
@@ -77,14 +124,16 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     const normal = await monitor.boundingBox();
     expect(normal).not.toBeNull();
     await expect(mainChrome).toHaveCount(2);
-    const expectedTools = name === 'PREVIEW (PVW)' ? ['Move template'] : [];
+    const expectedTools =
+      name === 'PREVIEW (PVW)' ? ['Move template in Preview', 'Safe areas in Preview'] : [];
     if (name === 'PREVIEW (PVW)') await expectHeaderActionsClear(panel, expectedTools);
     await page.getByRole('button', { name: `Show ${name} fullscreen` }).click();
     await expect(mainChrome).toHaveCount(0);
     await expect(panel.locator('[data-monitor-pan]')).toHaveCount(0);
     if (name === 'PREVIEW (PVW)') {
       const move = panel.getByRole('button', { name: 'Move template in Preview', exact: true });
-      await expect(move).toHaveText('Move template');
+      await expect(move).toHaveText('');
+      await expect(move).toHaveAttribute('title', /Preview/);
       await expect(move.locator('svg.lucide-hand')).toBeVisible();
     }
     if (name === 'PROGRAM (PGM)') {

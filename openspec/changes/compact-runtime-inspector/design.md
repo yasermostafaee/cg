@@ -7,9 +7,14 @@ Use the existing field controls and layout tokens. Simple values share a row wit
 where the panel has room. Complex editors use the available field area and keep their labels,
 groups and item controls.
 
+Timing is above Position. Shared grids align labels above the Position, Preset effect and
+Input effect controls and respond to the width of the Inspector. Preset buttons retain
+space for a second status line. The body is the only scrollport and the commit footer
+sits in its own row.
+
 ## Interaction
 
 The disclosures use native buttons and expose the expanded state and controlled region. The
 workspace retains section visibility when the operator switches layers, including after dismissing
 the narrow Inspector overlay to select the next row. Position, Timing and field drafts stay with their
-respective layers in the existing draft store and use the sticky Update and Discard actions.
+respective layers in the existing draft store and use the Update and Discard actions in the footer.

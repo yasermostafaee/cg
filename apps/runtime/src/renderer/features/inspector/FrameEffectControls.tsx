@@ -109,72 +109,82 @@ export function FrameEffectControls({
   return (
     <fieldset className="cg-position-effect" disabled={disabled}>
       <legend>{localizeUi(label)}</legend>
-      <label>
-        {localizeUi('Motion')}
-        <select
-          className="cg-field"
-          aria-label={localizeUi('Motion')}
-          value={preset !== undefined && override === undefined ? 'default' : motion}
-          onChange={(event) => {
-            if (event.currentTarget.value === 'default' && preset !== undefined) {
-              setRowEffectOverrides(preset.itemId, { preset: undefined });
-              setTypedDuration(null);
-            } else {
-              const next = FrameTransitionSchema.shape.motion.safeParse(event.currentTarget.value);
-              if (next.success) changeEffect({ motion: next.data });
-            }
-          }}
-        >
-          {preset !== undefined && (
-            <option value="default">
-              {localizeUi(preset.defaultLabel ?? 'Layout default')} (
-              {localizeUi(MOTION_LABELS[preset.value.motion])})
-            </option>
+      <div className="cg-position-effect__body cg-inspector-effect--frame">
+        <div className="cg-inspector-effect__motion">
+          <label className="cg-inspector-control-label">
+            {localizeUi('Motion')}
+            <select
+              className="cg-field"
+              aria-label={localizeUi('Motion')}
+              value={preset !== undefined && override === undefined ? 'default' : motion}
+              onChange={(event) => {
+                if (event.currentTarget.value === 'default' && preset !== undefined) {
+                  setRowEffectOverrides(preset.itemId, { preset: undefined });
+                  setTypedDuration(null);
+                } else {
+                  const next = FrameTransitionSchema.shape.motion.safeParse(
+                    event.currentTarget.value,
+                  );
+                  if (next.success) changeEffect({ motion: next.data });
+                }
+              }}
+            >
+              {preset !== undefined && (
+                <option value="default">
+                  {localizeUi(preset.defaultLabel ?? 'Layout default')} (
+                  {localizeUi(MOTION_LABELS[preset.value.motion])})
+                </option>
+              )}
+              {FrameTransitionSchema.shape.motion.options.map((value) => (
+                <option key={value} value={value}>
+                  {localizeUi(MOTION_LABELS[value])}
+                </option>
+              ))}
+            </select>
+          </label>
+          {hasEffect && (
+            <label
+              className="cg-inspector-control-label cg-effect-duration"
+              htmlFor={`${controlId}-duration`}
+            >
+              {localizeUi('Duration (ms)')}
+              <NumericInput
+                id={`${controlId}-duration`}
+                className="cg-field"
+                dir="ltr"
+                allow="digits"
+                scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
+                title={`${String(FRAME_TRANSITION_MIN_MS)}–${String(FRAME_TRANSITION_MAX_MS)} ms`}
+                value={typedDuration ?? String(durationMs)}
+                onValueChange={changeDuration}
+                onBlur={() => setTypedDuration(null)}
+              />
+            </label>
           )}
-          {FrameTransitionSchema.shape.motion.options.map((value) => (
-            <option key={value} value={value}>
-              {localizeUi(MOTION_LABELS[value])}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="cg-position-aspect" htmlFor={`${controlId}-fade`}>
-        <Checkbox
-          id={`${controlId}-fade`}
-          checked={fade}
-          onChange={(next) => changeEffect({ fade: next })}
-        />
-        {localizeUi('Fade')}
-      </label>
-      {hasEffect && (
-        <label htmlFor={`${controlId}-duration`}>
-          {localizeUi('Duration (ms)')}
-          <NumericInput
-            id={`${controlId}-duration`}
-            className="cg-field"
-            allow="digits"
-            scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
-            title={`${String(FRAME_TRANSITION_MIN_MS)}–${String(FRAME_TRANSITION_MAX_MS)} ms`}
-            value={typedDuration ?? String(durationMs)}
-            onValueChange={changeDuration}
-            onBlur={() => setTypedDuration(null)}
-          />
-        </label>
-      )}
-      {preset !== undefined && hasEffect && (
-        <>
-          <PresetPlateDirectionControl
-            phase="enter"
-            direction={effect.enterDirection}
-            onChange={(enterDirection) => changeEffect({ enterDirection })}
-          />
-          <PresetPlateDirectionControl
-            phase="exit"
-            direction={effect.exitDirection}
-            onChange={(exitDirection) => changeEffect({ exitDirection })}
-          />
-        </>
-      )}
+          <label className="cg-position-aspect" htmlFor={`${controlId}-fade`}>
+            <Checkbox
+              id={`${controlId}-fade`}
+              checked={fade}
+              onChange={(next) => changeEffect({ fade: next })}
+            />
+            {localizeUi('Fade')}
+          </label>
+        </div>
+        {preset !== undefined && hasEffect && (
+          <div className="cg-inspector-effect__plates">
+            <PresetPlateDirectionControl
+              phase="enter"
+              direction={effect.enterDirection}
+              onChange={(enterDirection) => changeEffect({ enterDirection })}
+            />
+            <PresetPlateDirectionControl
+              phase="exit"
+              direction={effect.exitDirection}
+              onChange={(exitDirection) => changeEffect({ exitDirection })}
+            />
+          </div>
+        )}
+      </div>
     </fieldset>
   );
 }

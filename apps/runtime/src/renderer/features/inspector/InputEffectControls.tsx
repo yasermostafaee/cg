@@ -56,74 +56,77 @@ export function InputEffectControls({
   return (
     <fieldset className="cg-position-effect">
       <legend>{localizeUi('Input effect')}</legend>
-      <label>
-        {localizeUi('Transition')}
-        <select
-          aria-label={localizeUi('Input transition')}
-          className="cg-field"
-          value={layout !== undefined && override === undefined ? 'default' : mode}
-          onChange={(event) => {
-            if (event.currentTarget.value === 'default') {
-              setRowEffectOverrides(itemId, { input: undefined });
-            } else {
-              const next = InputTransitionSchema.shape.mode.safeParse(event.currentTarget.value);
-              if (next.success) changeEffect({ mode: next.data });
-            }
-            setTypedDuration(null);
-          }}
-        >
-          {layout !== undefined && (
-            <option value="default">
-              {localizeUi('Layout default ({effect})', {
-                effect: localizeUi(MODE_LABELS[authoredInputTransition(layout).mode]),
-              })}
-            </option>
-          )}
-          {InputTransitionSchema.shape.mode.options.map((value) => (
-            <option key={value} value={value}>
-              {localizeUi(MODE_LABELS[value])}
-            </option>
-          ))}
-        </select>
-      </label>
-      {isInputSlideMode(mode) && (
-        <label>
-          {localizeUi('Direction')}
+      <div className="cg-position-effect__body cg-inspector-effect--input">
+        <label className="cg-inspector-control-label cg-effect-transition">
+          {localizeUi('Transition')}
           <select
-            aria-label={localizeUi('Input direction')}
+            aria-label={localizeUi('Input transition')}
             className="cg-field"
-            value={direction}
+            value={layout !== undefined && override === undefined ? 'default' : mode}
             onChange={(event) => {
-              const next = InputTransitionDirectionSchema.safeParse(event.currentTarget.value);
-              if (next.success) changeEffect({ direction: next.data });
+              if (event.currentTarget.value === 'default') {
+                setRowEffectOverrides(itemId, { input: undefined });
+              } else {
+                const next = InputTransitionSchema.shape.mode.safeParse(event.currentTarget.value);
+                if (next.success) changeEffect({ mode: next.data });
+              }
+              setTypedDuration(null);
             }}
           >
-            {InputTransitionDirectionSchema.options.map((value) => (
+            {layout !== undefined && (
+              <option value="default">
+                {localizeUi('Layout default ({effect})', {
+                  effect: localizeUi(MODE_LABELS[authoredInputTransition(layout).mode]),
+                })}
+              </option>
+            )}
+            {InputTransitionSchema.shape.mode.options.map((value) => (
               <option key={value} value={value}>
-                {localizeUi(DIRECTION_LABELS[value])}
+                {localizeUi(MODE_LABELS[value])}
               </option>
             ))}
           </select>
         </label>
-      )}
-      {mode !== 'cut' && (
-        <label htmlFor={durationId}>
-          {localizeUi('Duration (ms)')}
-          <NumericInput
-            id={durationId}
-            className="cg-field"
-            allow="digits"
-            scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
-            value={typedDuration ?? String(durationMs)}
-            onValueChange={(value) => {
-              setTypedDuration(value);
-              const duration = InputTransitionSchema.shape.durationMs.safeParse(Number(value));
-              if (duration.success) changeEffect({ durationMs: duration.data });
-            }}
-            onBlur={() => setTypedDuration(null)}
-          />
-        </label>
-      )}
+        {isInputSlideMode(mode) && (
+          <label className="cg-inspector-control-label cg-effect-direction">
+            {localizeUi('Direction')}
+            <select
+              aria-label={localizeUi('Input direction')}
+              className="cg-field"
+              value={direction}
+              onChange={(event) => {
+                const next = InputTransitionDirectionSchema.safeParse(event.currentTarget.value);
+                if (next.success) changeEffect({ direction: next.data });
+              }}
+            >
+              {InputTransitionDirectionSchema.options.map((value) => (
+                <option key={value} value={value}>
+                  {localizeUi(DIRECTION_LABELS[value])}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {mode !== 'cut' && (
+          <label className="cg-inspector-control-label cg-effect-duration" htmlFor={durationId}>
+            {localizeUi('Duration (ms)')}
+            <NumericInput
+              id={durationId}
+              className="cg-field"
+              dir="ltr"
+              allow="digits"
+              scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
+              value={typedDuration ?? String(durationMs)}
+              onValueChange={(value) => {
+                setTypedDuration(value);
+                const duration = InputTransitionSchema.shape.durationMs.safeParse(Number(value));
+                if (duration.success) changeEffect({ durationMs: duration.data });
+              }}
+              onBlur={() => setTypedDuration(null)}
+            />
+          </label>
+        )}
+      </div>
     </fieldset>
   );
 }

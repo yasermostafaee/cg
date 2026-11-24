@@ -24,3 +24,6 @@
 - [x] Add a reusable Custom width-to-height ratio to Designer, CG Control PVW and New live layout.
 - [x] Verify simultaneous standard and custom frames, border colors, and legible labels in Designer, CG Control PVW and New live layout.
 - [x] Round-trip CG Control preview visibility and guides with layer profiles, keeping older profiles compatible.
+- [x] Verify CG Control's separate Safe Areas descriptions in Windows Chromium. Cover Auto, 16:9,
+      4:3 and custom across PVW and New live layout, and the English, Persian and Arabic UI.
+- [x] Verify the percentage controls are visually nested below Show frame in LTR and RTL on Windows Chromium.

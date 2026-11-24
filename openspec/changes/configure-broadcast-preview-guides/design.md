@@ -17,9 +17,14 @@ Action dashed/Graphics solid distinction remain. Colour edits stay preview-only.
 
 Auto uses the active raster. Explicit landscape references are centred and
 contained in that raster; they cannot extend into monitor letterbox. Both broadcast
-boxes and custom percentages reference that rectangle. EBU R95 is the formal 16:9
-reference; the same Action/Graphics margins at other ratios are proportional
-composition guides, not a claim of an alternate EBU format standard.
+boxes and custom percentages reference that rectangle.
+
+CG Control's shared settings explain the frame currently selected for editing, including
+hidden frames. Full-screen 16:9 refers to EBU R95. The 4:3 help gives the scope of SMPTE
+ST 2046-1 for digital 576- and 480-line formats. Auto and custom describe proportional
+guides. The 100% frame and optional 80% guide are explained separately.
+The percentage controls form an indented group under Show frame. The vertical rule and
+indent follow the interface's inline start.
 
 The shared storage helper provides a stable subscribed snapshot, explicit validated
 updates and refresh. Local-storage errors leave in-memory editing usable. The

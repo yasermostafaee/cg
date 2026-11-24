@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   aggregateBoundCompositionFields,
   type Composition,
@@ -310,6 +310,97 @@ async function registerFlatTemplate(app: { page: Page }): Promise<void> {
   }, FLAT_TPL);
 }
 
+async function expectPresetStatusFits(preset: Locator, badge: Locator, priorHeight: number) {
+  await expect(badge).toBeVisible();
+  const geometry = await preset.evaluate((button) => {
+    const caption = button.querySelector('.cg-look-preset__caption');
+    const status = button.querySelector('[data-look-badge]');
+    if (caption === null || status === null) throw new Error('Missing preset caption or status');
+    const frame = button.getBoundingClientRect();
+    const textBounds = (element: Node) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect();
+    };
+    const fits = (text: DOMRect) =>
+      text.left >= frame.left &&
+      text.right <= frame.right &&
+      text.top >= frame.top &&
+      text.bottom <= frame.bottom;
+    const peers = [...(button.parentElement?.querySelectorAll('[data-look-tab]') ?? [])];
+    const row = peers.filter((peer) => Math.abs(peer.getBoundingClientRect().top - frame.top) < 1);
+    return {
+      height: frame.height,
+      equalRowHeight: row.every(
+        (peer) => Math.abs(peer.getBoundingClientRect().height - frame.height) < 1,
+      ),
+      textFits: fits(textBounds(caption)) && fits(textBounds(status)),
+      onSeparateLines:
+        caption.getBoundingClientRect().bottom <= status.getBoundingClientRect().top + 0.5,
+    };
+  });
+  expect(geometry).toMatchObject({ equalRowHeight: true, textFits: true, onSeparateLines: true });
+  expect(geometry.height).toBeGreaterThanOrEqual(Math.max(54, priorHeight - 0.5));
+}
+
+async function expectNestedSafeGuideBorders(
+  settings: Locator,
+  labels: { frameToggle: string; guideBorders: string; actionGuide: string },
+  direction: 'ltr' | 'rtl',
+) {
+  const frame = settings.getByRole('checkbox', { name: labels.frameToggle, exact: true });
+  const borders = settings.getByRole('group', { name: labels.guideBorders, exact: true });
+  await expect(frame).toBeVisible();
+  await expect(borders.getByRole('checkbox')).toHaveCount(4);
+  const geometry = await borders.evaluate(
+    (group, frameId) => {
+      const frameInput = document.getElementById(frameId ?? '');
+      const frameLabel = frameInput instanceof HTMLInputElement ? frameInput.labels?.item(0) : null;
+      if (frameLabel == null) throw new Error('Missing Show frame label');
+      const frameBox = frameLabel.getBoundingClientRect();
+      const groupBox = group.getBoundingClientRect();
+      const style = getComputedStyle(group);
+      const rtl = style.direction === 'rtl';
+      const start = (box: DOMRect) => (rtl ? -box.right : box.left);
+      const children = [...group.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+      return {
+        direction: style.direction,
+        lineStyle: rtl ? style.borderRightStyle : style.borderLeftStyle,
+        lineWidth: parseFloat(rtl ? style.borderRightWidth : style.borderLeftWidth),
+        oppositeLineWidth: parseFloat(rtl ? style.borderLeftWidth : style.borderRightWidth),
+        underFrame: groupBox.top >= frameBox.bottom - 0.5,
+        lineIndent: start(groupBox) - start(frameBox),
+        labelIndents: children.map((child) => {
+          const label = child.labels?.item(0);
+          if (label == null) throw new Error('Missing safe guide border label');
+          return start(label.getBoundingClientRect()) - start(groupBox);
+        }),
+      };
+    },
+    await frame.getAttribute('id'),
+  );
+  expect(geometry).toMatchObject({
+    direction,
+    lineStyle: 'solid',
+    oppositeLineWidth: 0,
+    underFrame: true,
+  });
+  expect(geometry.lineWidth).toBeGreaterThan(0);
+  expect(geometry.lineIndent).toBeGreaterThan(1);
+  expect(geometry.labelIndents).toHaveLength(4);
+  for (const indent of geometry.labelIndents) expect(indent).toBeGreaterThan(geometry.lineWidth);
+
+  const label = borders.getByText(labels.actionGuide, { exact: true });
+  const action = label.getByRole('checkbox');
+  const frameChecked = await frame.isChecked();
+  const actionChecked = await action.isChecked();
+  await label.click();
+  await expect(action).toBeChecked({ checked: !actionChecked });
+  await expect(frame).toBeChecked({ checked: frameChecked });
+  await label.click();
+  await expect(action).toBeChecked({ checked: actionChecked });
+}
+
 test('highlights the selected preset and localizes its PVW state and Safe areas tooltip', async ({
   app,
 }) => {
@@ -341,6 +432,7 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
   expect(active[1]).not.toBe(idle[1]);
   expect(active[2]).not.toBe(idle[2]);
   await expect(two.locator('[data-look-badge]')).toHaveCount(0);
+  const readyHeight = (await two.boundingBox())!.height;
 
   await solo.click();
   await page.mouse.move(0, 0);
@@ -357,8 +449,22 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
   const badge = two.locator('[data-look-badge="rehearsing"]');
   const guides = page.locator('[data-monitor-safe-areas]');
   await expect(badge).toHaveText('SHOWING IN PVW');
-  await expect(guides).toHaveAttribute('title', /^Action 93% · Graphics 90% · EBU R95/);
+  await expectPresetStatusFits(two, badge, readyHeight);
+  await expect(guides).toHaveAttribute(
+    'title',
+    'Safe areas · Action 93% · Graphics 90% · Preview only',
+  );
   await expect.poll(() => appearance(two)).toEqual(active);
+  await page.getByRole('button', { name: 'Safe area settings', exact: true }).click();
+  const englishGuides = page.getByRole('dialog', { name: 'Safe area settings', exact: true });
+  await expectNestedSafeGuideBorders(
+    englishGuides,
+    { frameToggle: 'Show frame', guideBorders: 'Safe area borders', actionGuide: '93% Action' },
+    'ltr',
+  );
+  await englishGuides
+    .getByRole('button', { name: 'Close safe area settings', exact: true })
+    .click();
 
   for (const language of [
     {
@@ -370,7 +476,15 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
       inspector: 'ویژگی‌ها',
       disclosures: ['جزئیات لایه', 'موقعیت', 'زمان‌بندی'],
       defaultLabel: /^\u2068?پیشفرض/,
-      guides: /^محدودهٔ امن حرکت ۹۳٪.*EBU R95.*فقط در پیش‌نمایش$/,
+      guides: 'محدوده‌های امن · عمل ۹۳٪ · گرافیک ۹۰٪ · فقط در پیش‌نمایش',
+      guideSettings: 'تنظیمات محدوده‌های امن',
+      guideHelp: 'دربارهٔ محدوده‌های امن',
+      closeGuideSettings: 'بستن تنظیمات محدودهٔ امن',
+      help16x9: /برای تصویر تمام‌صفحه با نسبت ۱۶:۹.*EBU R95/,
+      help4x3: /SMPTE ST 2046-1.*۵۷۶ و ۴۸۰ خطی/,
+      frameToggle: 'نمایش قاب',
+      guideBorders: 'حاشیه‌های محدودهٔ امن',
+      actionGuide: 'محدودهٔ عمل ۹۳٪',
     },
     {
       code: 'ar',
@@ -381,20 +495,49 @@ test('highlights the selected preset and localizes its PVW state and Safe areas 
       inspector: 'لوحة الخصائص',
       disclosures: ['تفاصيل الطبقة', 'الموضع', 'التوقيت'],
       defaultLabel: /^\u2068?افتراضي/,
-      guides: /^المنطقة الآمنة للحركة ٩٣٪.*EBU R95.*للمعاينة فقط$/,
+      guides: 'المناطق الآمنة · الحركة ٩٣٪ · الرسومات ٩٠٪ · للمعاينة فقط',
+      guideSettings: 'إعدادات المنطقة الآمنة',
+      guideHelp: 'حول المناطق الآمنة',
+      closeGuideSettings: 'إغلاق إعدادات المناطق الآمنة',
+      help16x9: /للعرض بملء الشاشة بنسبة ١٦:٩.*EBU R95/,
+      help4x3: /SMPTE ST 2046-1.*٥٧٦ و٤٨٠ خطًا/,
+      frameToggle: 'إظهار الإطار',
+      guideBorders: 'حدود المنطقة الآمنة',
+      actionGuide: 'منطقة الحركة ٩٣٪',
     },
-  ]) {
+  ] as const) {
     await page.getByRole('button', { name: language.settings, exact: true }).click();
     const settings = page.getByRole('dialog');
     await settings.getByRole('tab', { name: language.general, exact: true }).click();
     await settings.locator('#cg-interface-language').selectOption(language.code);
     await settings.getByRole('button', { name: language.close, exact: true }).last().click();
     await expect(badge).toHaveText(language.badge);
-    await expect(page.getByRole('complementary', { name: language.inspector })).toBeVisible();
+    const inspector = page.getByRole('complementary', { name: language.inspector });
+    await expect(inspector).toBeVisible();
+    await expectPresetStatusFits(two, badge, readyHeight);
+    const timing = await inspector
+      .getByRole('button', { name: language.disclosures[2], exact: true })
+      .boundingBox();
+    const position = await inspector
+      .getByRole('button', { name: language.disclosures[1], exact: true })
+      .boundingBox();
+    expect(timing!.y + timing!.height).toBeLessThan(position!.y);
     await expect(
       page.locator('[data-look-binding="two:l-1"] [data-source-label="choice"]'),
     ).toHaveText(language.defaultLabel);
     await expect(guides).toHaveAttribute('title', language.guides);
+    await page.getByRole('button', { name: language.guideSettings, exact: true }).click();
+    const guideSettings = page.getByRole('dialog', { name: language.guideSettings, exact: true });
+    const help = guideSettings.locator('details').filter({ hasText: language.guideHelp });
+    await help.locator('summary').click();
+    await guideSettings.getByRole('radio', { name: '16:9', exact: true }).click();
+    await expect(help).toContainText(language.help16x9);
+    await guideSettings.getByRole('radio', { name: '4:3', exact: true }).click();
+    await expect(help).toContainText(language.help4x3);
+    await expectNestedSafeGuideBorders(guideSettings, language, 'rtl');
+    await guideSettings
+      .getByRole('button', { name: language.closeGuideSettings, exact: true })
+      .click();
     for (const name of language.disclosures) {
       const button = page.getByRole('button', { name, exact: true });
       if ((await button.getAttribute('aria-expanded')) === 'true') await button.click();
@@ -757,6 +900,8 @@ test('🔴 FIELD-FIXES-01 C — a REFUSED take does not claim air for its look; 
   await registerLooksTemplate(app);
   const row = await app.loadTemplate(LOOKS_TPL);
   await app.selectLayerRow(row);
+  const preset = app.inspector.locator('[data-look-tab="two"]');
+  const readyHeight = (await preset.boundingBox())!.height;
   await app.page.evaluate(() => {
     (window as unknown as { CG_E2E_REFUSE_NEXT_TAKE?: unknown }).CG_E2E_REFUSE_NEXT_TAKE = {
       code: 'amcp-403',
@@ -775,6 +920,7 @@ test('🔴 FIELD-FIXES-01 C — a REFUSED take does not claim air for its look; 
   const onAirBadge = app.inspector.locator('[data-look-live="two"]');
   await expect(onAirBadge).toContainText('ON AIR NOW');
   await expect(onAirBadge).toHaveAttribute('data-look-badge', 'on-air');
+  await expectPresetStatusFits(preset, onAirBadge, readyHeight);
 });
 
 test.describe('D-218 Designer-authored Focus', () => {

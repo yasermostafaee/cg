@@ -365,18 +365,6 @@
   padding: var(--r-monitor-head-btn-pad);
   border-radius: var(--r-monitor-head-btn-radius);
 }
-.cg-panel-header.cg-panel-header--monitor
-  .cg-btn:is(
-    [data-monitor-pan],
-    [data-monitor-move],
-    [data-monitor-frames],
-    [data-monitor-masks],
-    [data-monitor-safe-areas]
-  ) {
-  width: auto;
-  padding-inline: var(--r-space-2);
-  white-space: nowrap;
-}
 .cg-panel-header--monitor .cg-panel-actions {
   max-width: 100%;
   margin-inline-start: auto;
@@ -389,42 +377,29 @@
   gap: var(--r-space-1);
 }
 
+.cg-panel-header--monitor [data-monitor-safe-guide-tools] {
+  display: inline-flex;
+  flex: none;
+}
+.cg-panel-header--monitor [data-monitor-safe-guide-tools] > .cg-btn:first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.cg-panel-header--monitor [data-monitor-safe-guide-tools] > .cg-btn:last-child {
+  margin-inline-start: -1px;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+.cg-panel-header--monitor
+  [data-monitor-safe-guide-tools]
+  > .cg-btn:is(:hover, :focus-visible, [aria-pressed='true']) {
+  z-index: 1;
+}
+
 /* The PVW pane itself gets narrower when Inspector opens, even at the same viewport width. */
 @container pvw (min-width: 0px) {
-  .cg-panel-header.cg-panel-header--monitor,
-  .cg-panel-header--monitor .cg-panel-actions {
-    flex-wrap: nowrap;
-  }
   .cg-panel-header--monitor .cg-monitor-head {
     overflow: hidden;
-  }
-}
-
-@container pvw (max-width: 36rem) {
-  .cg-panel-header.cg-panel-header--monitor
-    .cg-btn:is(
-      [data-monitor-pan],
-      [data-monitor-move],
-      [data-monitor-frames],
-      [data-monitor-masks],
-      [data-monitor-safe-areas]
-    ) {
-    width: var(--r-monitor-head-btn);
-    padding-inline: var(--r-monitor-head-btn-pad);
-  }
-  .cg-pvw-tool-label {
-    display: none;
-  }
-}
-
-@container pvw (max-width: 42rem) {
-  .cg-panel-header.cg-panel-header--monitor:has([data-monitor-masks])
-    .cg-btn:has(.cg-pvw-tool-label) {
-    width: var(--r-monitor-head-btn);
-    padding-inline: var(--r-monitor-head-btn-pad);
-  }
-  .cg-panel-header--monitor:has([data-monitor-masks]) .cg-pvw-tool-label {
-    display: none;
   }
 }
 
@@ -2540,6 +2515,7 @@ textarea.cg-field--autogrow {
 .cg-inspector-body {
   container-type: inline-size;
   container-name: inspector;
+  scrollbar-gutter: stable;
 }
 
 /*
@@ -2854,6 +2830,55 @@ textarea.cg-field--autogrow {
   padding-block-end: var(--r-space-2);
 }
 
+.cg-inspector-position__placement,
+.cg-inspector-body .cg-position-effect__body {
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-md);
+  background: var(--r-surface-raised);
+  padding: var(--r-space-2);
+}
+
+.cg-inspector-position__placement {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--r-space-2);
+}
+
+.cg-position-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, var(--r-insp-position-field-w)));
+  gap: var(--r-space-2);
+  min-inline-size: 0;
+}
+
+.cg-inspector-position__lock {
+  display: block;
+  margin-block-start: var(--r-space-2);
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+}
+
+.cg-inspector-position__placement > .cg-position-reset {
+  align-self: end;
+  justify-self: start;
+}
+
+@container inspector (max-width: 27rem) {
+  .cg-inspector-position__placement {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .cg-inspector-position__placement > .cg-position-reset {
+    grid-column: 2;
+  }
+}
+
+@container inspector (max-width: 16rem) {
+  .cg-position-row {
+    grid-template-columns: minmax(0, var(--r-insp-position-field-w));
+  }
+}
+
 /* ── Inspector control heights — a ROW decides, not the variants in it ──────
  *
  * Owner report: "the From file… button height is higher than Add item". It was —
@@ -2899,17 +2924,13 @@ textarea.cg-field--autogrow {
   font-size: var(--r-insp-foot-btn-text);
   padding-block: 0;
 }
-/* "Apply position" has its OWN row now (`INSPECTOR-DELTA` §3) and keeps the field height it
-   had beside the boxes — the section's controls stay one size whatever row they are on, which
-   is what stops the button reading as a different rank of thing once it moved. */
-.cg-position-apply .cg-btn,
-.cg-position-row .cg-btn {
+/* Reset shares the height of the offset inputs, including when it wraps onto its own row. */
+.cg-btn.cg-position-reset {
   height: var(--r-insp-position-field-h);
   min-height: var(--r-insp-position-field-h);
   padding-block: 0;
 }
-/* …and the two number boxes are that height, so X, Y and the button share one baseline —
-   `32 px` here against `31` for a text field, as the reference renders them. */
+/* Keep the existing position field height with labels above the inputs. */
 .cg-position-row input.cg-field {
   height: var(--r-insp-position-field-h);
   min-height: var(--r-insp-position-field-h);
@@ -3301,26 +3322,8 @@ input.cg-field.cg-book-page {
  * never disagree about which anchor is chosen.
  */
 
-/*
- * 🔴 SIZED TO THE TWO INPUTS — the owner, 2026-09-14: «9 دکمه پوزیشن رو هم کوچیکتر
- * کن و با اینپوتها تراز و مرتب کن.»
- *
- * The arithmetic is the whole point, so it is written down rather than left as three numbers
- * that happen to work: the pad must be EXACTLY as tall as the dx/dy stack beside it, so its
- * top edge is the first box's top and its bottom edge is the second box's bottom.
- *
- *     the stack   32 + 12 + 32          = 76      (two boxes, one `--r-space-3` between)
- *     the pad     24 + 2 + 24 + 2 + 24  = 76      (three cells, 2 px gutters)
- *
- * ⚠ **24 px IS THE FLOOR AND NOT A STEP BELOW IT.** `design.md` §12.3 records that the
- * reference's own 20 px cells were REFUSED here because a 20 px hit target is under the 24 px
- * minimum (the `A8` shape). 24 is that minimum exactly, so the pad shrank as far as it may and
- * no further. Anything smaller has to move the floor first, which is not a layout decision.
- *
- * ⚠ And the two numbers are a PAIR: changing the field stack's row gap without re-deriving
- * the cell size (or the reverse) silently un-aligns them, which is exactly the raggedness this
- * replaced. `PositionPicker`'s `offsets` carries the matching note.
- */
+/* The anchor pad has nine 24 px targets. PositionPicker keeps the pad itself LTR so
+   its left, center and right anchors always refer to physical sides. */
 .cg-anchor-grid {
   display: grid;
   grid-template-columns: repeat(3, 24px);
@@ -3694,6 +3697,9 @@ input.cg-field.cg-book-page {
   gap: var(--r-space-1) var(--r-space-2);
   margin-block-start: var(--r-space-2);
 }
+.cg-position-adjustments:empty {
+  display: none;
+}
 .cg-position-aspect {
   display: inline-flex;
   align-items: center;
@@ -3718,13 +3724,89 @@ input.cg-field.cg-book-page {
   padding: 0;
   color: var(--r-text);
 }
-.cg-position-effect > label {
+.cg-position-effect__body {
+  display: contents;
+}
+.cg-position-effect__body > label {
   display: inline-flex;
   align-items: center;
   gap: var(--r-space-1);
 }
 .cg-position-effect input.cg-field {
   inline-size: 4rem;
+}
+.cg-inspector-body .cg-position-effect {
+  display: block;
+}
+.cg-inspector-body .cg-position-effect legend {
+  margin-block-end: var(--r-space-1);
+  font-weight: var(--r-weight-semibold);
+}
+.cg-inspector-body .cg-position-effect__body,
+.cg-inspector-effect__motion,
+.cg-inspector-effect__plates {
+  display: grid;
+  gap: var(--r-space-2);
+  min-inline-size: 0;
+}
+.cg-inspector-body .cg-inspector-control-label,
+.cg-inspector-effect__plates > label {
+  display: grid;
+  align-items: start;
+  align-content: start;
+  gap: var(--r-space-1);
+  min-inline-size: 0;
+  color: var(--r-text-secondary);
+  font-size: var(--r-insp-label-text);
+  font-weight: var(--r-weight-medium);
+  line-height: var(--r-insp-label-line);
+}
+.cg-inspector-body .cg-position-effect__body .cg-field,
+.cg-position-row .cg-field {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+.cg-inspector-effect__motion {
+  grid-template-columns: minmax(0, 1fr) minmax(5.75rem, 6.75rem) auto;
+  align-items: end;
+}
+.cg-inspector-effect__motion:not(:has(> .cg-effect-duration)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.cg-inspector-effect__motion > .cg-position-aspect {
+  min-block-size: var(--r-insp-field-h);
+}
+.cg-inspector-effect__plates {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cg-inspector-effect--input {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(5.75rem, 6.75rem);
+}
+.cg-inspector-effect--input:not(:has(> .cg-effect-direction)) {
+  grid-template-columns: minmax(0, 1fr) minmax(5.75rem, 6.75rem);
+}
+.cg-inspector-effect--input:not(:has(> .cg-effect-duration)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container inspector (max-width: 25rem) {
+  .cg-inspector-effect__motion:has(> .cg-effect-duration),
+  .cg-inspector-effect--input:has(> .cg-effect-direction) {
+    grid-template-columns: minmax(0, 1fr) minmax(5.75rem, 6.75rem);
+  }
+  .cg-inspector-effect__motion:has(> .cg-effect-duration) > .cg-position-aspect {
+    grid-column: 1 / -1;
+    min-block-size: auto;
+  }
+  .cg-inspector-effect--input:has(> .cg-effect-direction) > .cg-effect-transition {
+    grid-column: 1 / -1;
+  }
+}
+@container inspector (max-width: 17rem) {
+  .cg-inspector-effect__motion:has(> .cg-effect-duration),
+  .cg-inspector-effect__plates,
+  .cg-inspector-effect--input:has(> .cg-effect-duration) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .cg-frame-auto-layout {
   flex: 1 0 100%;
@@ -10316,7 +10398,7 @@ input[type='checkbox']:disabled:checked {
   gap: 2px;
   width: 100%;
   min-width: 0;
-  min-height: 46px;
+  min-block-size: 3.5rem;
   white-space: normal;
   line-height: 1.15;
   text-align: center;

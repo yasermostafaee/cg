@@ -3,7 +3,6 @@ import { isPositionLocked } from '../inspector/PositionPicker.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { BROADCAST_SAFE_AREA_TITLE } from '@cg/ui';
 import {
   ArrowRightFromLine,
   CircleArrowOutDownRight,
@@ -620,7 +619,7 @@ export function PreviewPanel({
             </span>
           </MonitorHeadFact>
           <Button
-            variant="ghost"
+            variant="icon"
             active={moveOpen}
             aria-label={localizeUi('Move template in Preview')}
             aria-pressed={moveOpen}
@@ -634,27 +633,28 @@ export function PreviewPanel({
             onClick={() => toggleEditTool('move')}
           >
             <Icon icon={Hand} size={13} />
-            <span className="cg-pvw-tool-label">{localizeUi('Move template')}</span>
           </Button>
-          <Button
-            variant={safeAreasVisible ? 'accent' : 'ghost'}
-            aria-label={localizeUi('Safe areas in Preview')}
-            aria-pressed={safeAreasVisible}
-            data-monitor-safe-areas=""
-            title={localizeUi(BROADCAST_SAFE_AREA_TITLE)}
-            onClick={() => safeGuides.setVisible(!safeAreasVisible)}
-          >
-            <Icon icon={SquareDashed} size={13} />
-            <span className="cg-pvw-tool-label">{localizeUi('Safe areas')}</span>
-          </Button>
-          <SafeGuideSettings
-            profile={safeGuides.profile}
-            onChange={safeGuides.setProfile}
-            onReset={safeGuides.resetProfile}
-          />
+          <div role="group" aria-label={localizeUi('Safe areas')} data-monitor-safe-guide-tools="">
+            <Button
+              variant="icon"
+              active={safeAreasVisible}
+              aria-label={localizeUi('Safe areas in Preview')}
+              aria-pressed={safeAreasVisible}
+              data-monitor-safe-areas=""
+              title={localizeUi('Safe areas · Action 93% · Graphics 90% · Preview only')}
+              onClick={() => safeGuides.setVisible(!safeAreasVisible)}
+            >
+              <Icon icon={SquareDashed} size={13} />
+            </Button>
+            <SafeGuideSettings
+              profile={safeGuides.profile}
+              onChange={safeGuides.setProfile}
+              onReset={safeGuides.resetProfile}
+            />
+          </div>
           {panVisible && (
             <Button
-              variant="ghost"
+              variant="icon"
               active={panOpen}
               aria-label={localizeUi('Crop input in Preview')}
               aria-pressed={panOpen}
@@ -668,12 +668,11 @@ export function PreviewPanel({
               onClick={() => toggleEditTool('pan')}
             >
               <Icon icon={Crop} size={13} />
-              <span className="cg-pvw-tool-label">{localizeUi('Crop input')}</span>
             </Button>
           )}
           {frameEditAvailable && (
             <Button
-              variant="ghost"
+              variant="icon"
               active={frameEditOpen}
               aria-label={localizeUi('Edit frames in Preview')}
               aria-pressed={frameEditOpen}
@@ -682,12 +681,11 @@ export function PreviewPanel({
               onClick={() => toggleEditTool('frames')}
             >
               <Icon icon={Frame} size={13} />
-              <span className="cg-pvw-tool-label">{localizeUi('Edit frames')}</span>
             </Button>
           )}
           {maskEditAvailable && (
             <Button
-              variant="ghost"
+              variant="icon"
               active={maskEditOpen}
               aria-label={localizeUi('Edit masks in Preview')}
               aria-pressed={maskEditOpen}
@@ -696,7 +694,6 @@ export function PreviewPanel({
               onClick={() => toggleEditTool('masks')}
             >
               <Icon icon={Scan} size={13} />
-              <span className="cg-pvw-tool-label">{localizeUi('Edit masks')}</span>
             </Button>
           )}
           {companionActions}

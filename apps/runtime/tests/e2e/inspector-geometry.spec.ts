@@ -10,10 +10,7 @@ import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
  *
  *   - the Update button stays PINNED at the foot of the panel, at MORE THAN ONE panel height
  *     and with content both shorter and longer than the panel;
- *   - X and Y ALIGN — same left, same width, Y under X, and the anchor pad's top and bottom
- *     edges land on the two boxes' (it was same TOP with `Apply position` on their baseline
- *     until `INSPECTOR-DELTA` stacked them, and that button no longer exists — UPDATE
- *     commits the placement; see the test's own note for how each claim was re-pointed);
+ *   - X and Y keep their compact width and share a row when the Inspector has room;
  *   - an input's focus is ONE ring, not two;
  *   - subtitle items reorder by their GRIP HANDLE — by pointer, not only by the keyboard
  *     path `stage-inspector-edits.spec.ts` already drives.
@@ -41,11 +38,19 @@ async function box(loc: Locator): Promise<{ x: number; y: number; width: number;
 }
 
 /** The Update button's bottom edge sits on the panel's bottom edge — within a border. */
-async function expectFootPinned(app: { inspector: Locator }, label: string): Promise<void> {
-  const panel = await box(app.inspector);
-  const foot = await box(app.inspector.locator('.cg-inspector-actions'));
-  const update = await box(app.inspector.getByRole('button', { name: 'Apply staged edits' }));
+async function expectFootPinned(inspector: Locator, label: string): Promise<void> {
+  const panel = await box(inspector);
+  const foot = await box(inspector.locator('[data-inspector-actions]'));
+  const body = await box(inspector.locator('.cg-inspector-body'));
+  const updateButton = inspector
+    .locator('[data-inspector-actions]')
+    .getByRole('button', { name: /^(Apply staged edits|اعمال تغییرات موقت)$/ });
+  const update = await box(updateButton);
   const panelBottom = panel.y + panel.height;
+  expect(
+    body.y + body.height,
+    `${label}: the scroll area ends before the footer`,
+  ).toBeLessThanOrEqual(foot.y + 0.5);
   expect(
     Math.abs(foot.y + foot.height - panelBottom),
     `${label}: the foot's bottom edge is the panel's (foot ${String(foot.y + foot.height)}, panel ${String(panelBottom)})`,
@@ -55,7 +60,7 @@ async function expectFootPinned(app: { inspector: Locator }, label: string): Pro
     foot.y + foot.height + 1,
   );
   // …and inside the viewport, which is the operator's actual question.
-  await expect(app.inspector.getByRole('button', { name: 'Apply staged edits' })).toBeInViewport();
+  await expect(updateButton).toBeInViewport({ ratio: 1 });
 }
 
 test('R-008 — a compact Inspector keeps Ready state, staged placement and complex fields', async ({
@@ -91,6 +96,7 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await expect(details).toHaveAttribute('aria-expanded', 'true');
   await expect(position).toHaveAttribute('aria-expanded', 'true');
   await expect(timing).toHaveAttribute('aria-expanded', 'true');
+  expect((await box(timing)).y + (await box(timing)).height).toBeLessThan((await box(position)).y);
   const detailsContent = await controlled(details);
   const positionContent = await controlled(position);
   const heading = inspector.locator('[data-inspector-heading]');
@@ -122,7 +128,7 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await timing.press('Space');
   await expect(timing).toHaveAttribute('aria-expanded', 'false');
   await expect(timingContent).toBeHidden();
-  await expectFootPinned(app, 'sections collapsed');
+  await expectFootPinned(inspector, 'sections collapsed');
 
   const label = await box(inspector.locator('[data-field-heading="anchor"]'));
   const field = await box(title);
@@ -181,7 +187,7 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await expect(position).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('the Update button stays pinned at the foot of the panel at every panel height, short content and long', async ({
+test('Inspector scroll ends before its pinned footer in the split, narrow and fullscreen layouts', async ({
   app,
 }) => {
   const page = app.page;
@@ -191,55 +197,57 @@ test('the Update button stays pinned at the foot of the panel at every panel hei
   await app.selectStackRow(templateId);
   await expect(app.inspector).toBeVisible();
 
-  // SHORT content first: at 800 the field list fits, and the foot must still be at the
-  // bottom of the panel rather than trailing the last field.
-  await expectFootPinned(app, 'short at 800');
+  await expectFootPinned(app.inspector, 'initial split');
 
-  // LONG content: add items until the body genuinely overflows, so the sticky half of the
-  // rule is what holds the foot in place. Staged drafts only — nothing is applied.
+  // Force overflow with staged list items and follow the same draft through both directions.
   const add = app.inspector.getByRole('button', { name: 'Add _tickerTexts item' });
   for (let i = 0; i < 8; i++) await add.click();
-  const body = app.inspector.locator('.cg-inspector-body');
-  await expect
-    .poll(() => body.evaluate((el) => el.scrollHeight - el.clientHeight))
-    .toBeGreaterThan(100);
-
-  // "At every panel height" is not proved by one height. Three, from the reference's
-  // 800 down to a cramped 480, with the list scrolled to the top and to the bottom each time.
-  for (const height of [800, 620, 480]) {
-    await page.setViewportSize({ width: WIDE.width, height });
+  async function checkScroll(inspector: Locator, label: string) {
+    const body = inspector.locator('.cg-inspector-body');
+    const footer = inspector.locator('[data-inspector-actions]');
+    await expect(footer.getByRole('button')).toHaveCount(2);
     await expect
-      .poll(async () => (await app.inspector.boundingBox())?.height ?? 0)
-      .toBeLessThan(height);
+      .poll(() => body.evaluate((el) => el.scrollHeight - el.clientHeight))
+      .toBeGreaterThan(100);
     await body.evaluate((el) => {
       el.scrollTop = 0;
     });
-    await expectFootPinned(app, `long at ${String(height)}, scrolled to top`);
+    const before = await box(footer);
+    await expectFootPinned(inspector, `${label}, top`);
     await body.evaluate((el) => {
       el.scrollTop = el.scrollHeight;
     });
-    await expectFootPinned(app, `long at ${String(height)}, scrolled to bottom`);
+    await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+    expect(await box(footer)).toEqual(before);
+    await expectFootPinned(inspector, `${label}, bottom`);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
   }
+  await checkScroll(app.inspector, 'English split');
+
+  await app.inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
+  await checkScroll(app.inspector, 'English fullscreen');
+  await app.inspector.getByRole('button', { name: 'Exit fullscreen INSPECTOR' }).click();
+
+  await app.openStationSetupAt('General');
+  const settings = page.getByRole('dialog');
+  await settings.locator('#cg-interface-language').selectOption('fa');
+  await settings.getByRole('button', { name: 'بستن', exact: true }).last().click();
+  const rtl = page.getByRole('complementary', { name: 'ویژگی‌ها', exact: true });
+  await expect(rtl).toHaveCSS('direction', 'rtl');
+  await checkScroll(rtl, 'Persian split');
+  await page.setViewportSize({ width: 620, height: 530 });
+  await expect(page.locator('[data-inspector-scrim]')).toBeVisible();
+  await checkScroll(rtl, 'Persian narrow overlay');
+  await rtl.getByRole('button', { name: /تمام‌صفحه/ }).click();
+  await expect(rtl.getByRole('button', { name: /خروج.*تمام‌صفحه/ })).toBeVisible();
+  await checkScroll(rtl, 'Persian narrow fullscreen');
 });
 
 /**
- * 🔴 **RE-POINTED, NOT WEAKENED — `INSPECTOR-DELTA` §3.** This asserted the OLD contract:
- * X and Y side by side on one line with `Apply position` on their baseline, growing to fill
- * the row. The owner's call stacked them and gave the button its own row, so the old
- * assertions describe a layout that is deliberately gone.
- *
- * The replacement is the SAME STRENGTH on the new axis, and deliberately so — a layout
- * change is the easiest moment to lose a guard by "relaxing it to match". Side-by-side was
- * pinned by `same top` + `X before Y`; stacked is pinned by `same left` + `X above Y`, and
- * `same width` / `same height` survive unchanged because they were never about the axis.
- *
- * ⚠ AND THE GROWTH CLAIM IS INVERTED RATHER THAN DROPPED. It used to prove the fields FILL
- * their row (they grew when the panel did). They are now CAPPED at the reference's own
- * measured field width, so the claim worth holding is the opposite one: widening the panel
- * must NOT stretch them. Dropping the fullscreen leg entirely would have left the cap
- * untested, which is the part most likely to be undone by accident.
+ * Position groups the anchor, two labeled offsets and the reset. At full width the offsets
+ * share a row and remain capped, leaving space for the other controls.
  */
-test('X and Y stack: same left, same width, Y under X, and the anchor pad lines up with them', async ({
+test('Position offsets align above their own compact fields with room for the anchor and Reset', async ({
   app,
 }) => {
   const page = app.page;
@@ -248,76 +256,40 @@ test('X and Y stack: same left, same width, Y under X, and the anchor pad lines 
   await app.importVcg('xy.vcg', await buildListFieldVcg(templateId));
   await app.selectStackRow(templateId);
 
-  const x = await box(app.inspector.getByLabel('Position offset X'));
-  const y = await box(app.inspector.getByLabel('Position offset Y'));
-  const pad = await box(app.inspector.locator('.cg-anchor-grid'));
-  expect(Math.abs(x.x - y.x), 'same left').toBeLessThanOrEqual(1);
-  expect(Math.abs(x.height - y.height), 'same height').toBeLessThanOrEqual(1);
-  expect(Math.abs(x.width - y.width), 'same width').toBeLessThanOrEqual(1);
-  expect(x.y + x.height, 'X sits above Y').toBeLessThanOrEqual(y.y + 1);
-
-  /*
-    🔴 `Apply position` IS GONE (owner, 2026-09-14 — UPDATE commits the placement), so what
-    this test guards on the horizontal axis moved to the ANCHOR PAD: the owner's ask was that
-    the nine cells be smaller and line up with the boxes, and "lines up" is two exact edges —
-    the pad's top on the first box's top, its bottom on the second box's bottom. That is an
-    arithmetic identity between two independently-written numbers (3 × 24 + 2 × 2 = 32 + 12 +
-    32), which is exactly the kind of agreement that rots silently, so it is pinned.
-  */
-  expect(Math.abs(pad.y - x.y), 'the pad’s top is the first box’s top').toBeLessThanOrEqual(1);
-  expect(
-    Math.abs(pad.y + pad.height - (y.y + y.height)),
-    'the pad’s bottom is the second box’s bottom',
-  ).toBeLessThanOrEqual(1);
-  // …and it is SQUARE and smaller than it was (96 px before the owner's call).
-  expect(Math.abs(pad.width - pad.height), 'the pad is square').toBeLessThanOrEqual(1);
-  expect(pad.width, 'the pad shrank').toBeLessThan(96);
-
-  // The reference's 32 px position boxes, from the token home.
+  const xField = app.inspector.getByLabel('Position offset X');
+  const yField = app.inspector.getByLabel('Position offset Y');
+  const pad = app.inspector.locator('.cg-anchor-grid');
+  const reset = app.inspector.getByRole('button', { name: 'Reset position', exact: true });
+  const inputBox = await box(xField);
   const h = await tokenPx(page, '--r-insp-position-field-h');
-  expect(Math.round(x.height)).toBe(h);
-  // The section carries no commit control of its own any more — the row has ONE.
+  expect(Math.round(inputBox.height)).toBe(h);
   await expect(app.inspector.getByRole('button', { name: 'Apply position' })).toHaveCount(0);
-
-  // THE CAP: the reference's own measured field width, and widening the panel must not
-  // stretch past it (it painted 90.3 × 32 in Chromium at 1280 × 800).
-  const capped = await tokenPx(page, '--r-insp-position-field-w');
-  expect(Math.round(x.width), 'the field takes the reference’s width').toBe(capped);
 
   await app.inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
   await expect
     .poll(async () => (await app.inspector.boundingBox())?.width ?? 0)
     .toBeGreaterThan(900);
-  const xWide = await box(app.inspector.getByLabel('Position offset X'));
-  const yWide = await box(app.inspector.getByLabel('Position offset Y'));
-  expect(Math.round(xWide.width), 'a wider panel must NOT stretch a capped field').toBe(capped);
-  expect(Math.abs(xWide.width - yWide.width)).toBeLessThanOrEqual(1);
+  const [x, y, anchor, resetButton] = await Promise.all([
+    box(xField),
+    box(yField),
+    box(pad),
+    box(reset),
+  ]);
+  const capped = await tokenPx(page, '--r-insp-position-field-w');
+  expect(Math.round(x.width)).toBe(capped);
+  expect(Math.abs(x.width - y.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(x.height - y.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(x.y - y.y)).toBeLessThanOrEqual(1);
+  expect(anchor.x + anchor.width).toBeLessThanOrEqual(x.x);
+  expect(x.x + x.width).toBeLessThanOrEqual(y.x);
+  expect(y.x + y.width).toBeLessThanOrEqual(resetButton.x);
+  const labels = app.inspector.locator('.cg-position-row .cg-inspector-control-label > span');
+  await expect(labels).toHaveCount(2);
+  for (const [index, field] of [x, y].entries()) {
+    const label = await box(labels.nth(index));
+    expect(label.y + label.height).toBeLessThanOrEqual(field.y);
+  }
 });
-
-/**
- * ONE RING. Read as the browser resolves it once the 120 ms transition has settled — the
- * first reading of this spec landed mid-transition on a 0.2 px shadow.
- */
-async function focusRing(
-  loc: Locator,
-): Promise<{ outline: string; shadows: number; ancestors: number }> {
-  await loc.focus();
-  await expect
-    .poll(() => loc.evaluate((el) => getComputedStyle(el).boxShadow), { timeout: 2000 })
-    .not.toMatch(/^rgba\(0, 0, 0, 0\)|^none$|0\.\d+px\)?$/);
-  return loc.evaluate((el) => {
-    const c = getComputedStyle(el);
-    // Count the shadows (rgb(…) …, rgb(…) …) — one ring is one shadow.
-    const shadows = c.boxShadow === 'none' ? 0 : c.boxShadow.split(/\),\s*(?=rgb)/).length;
-    let ancestors = 0;
-    for (let p = el.parentElement; p !== null; p = p.parentElement) {
-      const pc = getComputedStyle(p);
-      if (pc.outlineStyle !== 'none' || pc.boxShadow !== 'none') ancestors++;
-      if (p.getAttribute('role') === 'complementary') break;
-    }
-    return { outline: c.outlineStyle, shadows, ancestors };
-  });
-}
 
 test('an input’s focus is one ring, not two — on a position box and on a text field', async ({
   app,
@@ -328,18 +300,27 @@ test('an input’s focus is one ring, not two — on a position box and on a tex
   await app.importVcg('ring.vcg', await buildListFieldVcg(templateId));
   await app.selectStackRow(templateId);
 
+  const ringWidth = await tokenPx(page, '--r-focus-ring');
   for (const [label, loc] of [
     ['position X', app.inspector.getByLabel('Position offset X')],
     ['text field', app.inspector.getByRole('textbox', { name: 'anchor' })],
     ['list item', app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' })],
   ] as const) {
-    const ring = await focusRing(loc);
-    // The ring is the box-shadow; the browser's own outline is off, so there is no second one.
-    expect(ring.outline, `${label}: no outline beside the shadow`).toBe('none');
-    expect(ring.shadows, `${label}: exactly one shadow`).toBe(1);
-    // …and nothing between the input and the panel draws a ring of its own (no
-    // `:focus-within` halo on the row, the section or the body).
-    expect(ring.ancestors, `${label}: no ancestor ring`).toBe(0);
+    await loc.focus();
+    await expect(loc, label).toBeFocused();
+    await expect(loc, label).toHaveCSS('outline-style', 'solid');
+    await expect(loc, label).toHaveCSS('outline-width', String(ringWidth) + 'px');
+    await expect(loc, label).toHaveCSS('box-shadow', 'none');
+    const ancestorRings = await loc.evaluate((el) => {
+      let rings = 0;
+      for (let parent = el.parentElement; parent !== null; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (style.outlineStyle !== 'none' || style.boxShadow !== 'none') rings++;
+        if (parent.getAttribute('role') === 'complementary') break;
+      }
+      return rings;
+    });
+    expect(ancestorRings, label).toBe(0);
   }
 });
 

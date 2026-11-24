@@ -10,7 +10,7 @@
 - [x] 1.8 Render the selected row without list chrome. Put the Inspector on the right and hide
       the app header and status footer for every maximized panel per the owner review.
 - [x] 1.9 Keep disabled layout choices visible in a maximized monitor without a selection and
-      fit the Pan label and adjacent actions in the compact header.
+      fit the bordered icon controls in the compact header.
 
 ## 2. Verification
 
@@ -25,3 +25,4 @@
 - [x] 2.7 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42689856329/job/129406540835) passed on `9dd4b023` for the revised headers.
 - [x] 2.8 Windows Chromium verified that maximizing and restoring PGM retains the same playing
       PVW document and sends no playout command. Four companion layout cases also passed.
+- [x] Verify icon-only toolbar tools and the joined Safe Areas control in LTR and RTL on Windows Chromium.

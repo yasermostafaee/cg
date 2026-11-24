@@ -40,6 +40,14 @@ import './safe-guide-settings.css';
 
 type GuidePercent = BroadcastGuideFrameSetting['borders'][number]['percent'];
 
+const GUIDE_ASPECT_HELP: Record<BroadcastGuideFrameSetting['aspect'], string> = {
+  auto: 'Auto follows the preview frame. The 93% and 90% guides are proportional to that frame.',
+  '16:9': 'For full-screen 16:9, EBU R95 specifies 93% for action and 90% for graphics.',
+  '4:3':
+    'These guides use the 4:3 frame. SMPTE ST 2046-1 specifies 93% for action and 90% for graphics in digital 576- and 480-line formats.',
+  custom: 'The 93% and 90% guides are proportional to this custom frame.',
+};
+
 export function SafeGuideSettings({
   profile,
   onChange,
@@ -260,8 +268,11 @@ export function SafeGuideSettings({
                           .findIndex((entry) => entry.id === frame.id) + 1;
                       const label =
                         frame.aspect === 'custom'
-                          ? `Custom ${String(customIndex)} (${guideFrameLabel(frame).replace('Custom ', '')})`
-                          : guideFrameLabel(frame);
+                          ? `${localizeUi('Custom')} ${String(customIndex)} (${guideFrameLabel(frame).replace('Custom ', '')})`
+                          : localizeUi(guideFrameLabel(frame));
+                      const visibility = localizeUi(
+                        frame.visible ? 'Shown in preview' : 'Hidden in preview',
+                      );
                       return (
                         <Button
                           key={frame.id}
@@ -269,12 +280,8 @@ export function SafeGuideSettings({
                           active={editing?.id === frame.id}
                           role="radio"
                           aria-label={label}
-                          aria-description={
-                            frame.visible
-                              ? localizeUi('Shown in preview')
-                              : localizeUi('Hidden in preview')
-                          }
-                          title={`${label} · ${frame.visible ? 'Shown' : 'Hidden'} in preview`}
+                          aria-description={visibility}
+                          title={`${label} · ${visibility}`}
                           aria-checked={editing?.id === frame.id}
                           data-guide-aspect={frame.aspect}
                           data-guide-frame-id={frame.id}
@@ -295,7 +302,7 @@ export function SafeGuideSettings({
                               <small>{guideFrameLabel(frame).replace('Custom ', '')}</small>
                             </span>
                           ) : (
-                            guideFrameLabel(frame)
+                            label
                           )}
                           {frame.visible && (
                             <span className="cg-safe-guide-settings__visible" aria-hidden>
@@ -362,51 +369,47 @@ export function SafeGuideSettings({
                         role="group"
                         aria-label={localizeUi('Safe area borders')}
                       >
-                        {editing.borders.map((border) => (
-                          <div key={border.percent} className="cg-safe-guide-settings__heading">
-                            <label className="cg-safe-guide-settings__check">
-                              <Checkbox
-                                aria-label={localizeUi('Show {name}', {
-                                  name: GUIDE_BORDER_LABELS[border.percent],
-                                })}
-                                checked={border.visible}
-                                onChange={(visible) => changeBorder(border.percent, { visible })}
-                              />
-                              {GUIDE_BORDER_LABELS[border.percent]}
-                            </label>
-                            <div className="cg-safe-guide-settings__colors">
-                              <ColorInput
-                                appearance="swatch"
-                                aria-label={localizeUi('{border} color', {
-                                  border: GUIDE_BORDER_LABELS[border.percent],
-                                })}
-                                value={border.color ?? editing.color}
-                                onChange={(color) => changeBorder(border.percent, { color })}
-                              />
-                              <Button
-                                variant="icon"
-                                aria-label={localizeUi('Use frame color for {name}', {
-                                  name: GUIDE_BORDER_LABELS[border.percent],
-                                })}
-                                title={localizeUi('Use frame color')}
-                                disabled={border.color === undefined}
-                                onClick={() => inheritBorder(border.percent)}
-                              >
-                                <Icon icon={RotateCcw} size={13} />
-                              </Button>
+                        {editing.borders.map((border) => {
+                          const label = localizeUi(GUIDE_BORDER_LABELS[border.percent]);
+                          return (
+                            <div key={border.percent} className="cg-safe-guide-settings__heading">
+                              <label className="cg-safe-guide-settings__check">
+                                <Checkbox
+                                  aria-label={localizeUi('Show {name}', { name: label })}
+                                  checked={border.visible}
+                                  onChange={(visible) => changeBorder(border.percent, { visible })}
+                                />
+                                {label}
+                              </label>
+                              <div className="cg-safe-guide-settings__colors">
+                                <ColorInput
+                                  appearance="swatch"
+                                  aria-label={localizeUi('{border} color', { border: label })}
+                                  value={border.color ?? editing.color}
+                                  onChange={(color) => changeBorder(border.percent, { color })}
+                                />
+                                <Button
+                                  variant="icon"
+                                  aria-label={localizeUi('Use frame color for {name}', {
+                                    name: label,
+                                  })}
+                                  title={localizeUi('Use frame color')}
+                                  disabled={border.color === undefined}
+                                  onClick={() => inheritBorder(border.percent)}
+                                >
+                                  <Icon icon={RotateCcw} size={13} />
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </>
                   )}
                   <details className="cg-safe-guide-settings__about">
                     <summary>{localizeUi('About safe areas')}</summary>
-                    <p>
-                      {localizeUi(
-                        '100% marks the full ratio frame. EBU R95 defines Action 93% and Graphics 90% for 16:9. Other ratios use proportional guides; 80% is an additional guide.',
-                      )}
-                    </p>
+                    <p>{localizeUi(GUIDE_ASPECT_HELP[editing?.aspect ?? profile.aspect])}</p>
+                    <p>{localizeUi('100% marks the full frame. 80% is an additional guide.')}</p>
                     <p>
                       {localizeUi(
                         'Frame visibility, borders and colors are independent. Guides appear only in Preview and New live layout; they never enter programme output.',

@@ -10,8 +10,8 @@ the list and Inspector by presentation conditions; it does not need a second sel
 - When a maximized monitor opens without a selected layer, keep both companion modes discoverable
   as disabled controls. The operator can restore the workspace to select a row. Browser reloads
   retain the shell focus preference while layer selection remains session-only.
-- Let the compact monitor header wrap its actions at narrow widths. Pan is a labelled button with
-  intrinsic width alongside the existing square icon buttons.
+- Let the compact monitor header wrap its actions at narrow widths. Preview tools use the same
+  bordered square buttons at every width. Safe Areas and its settings share a border seam.
 - Render the existing Layers panel filtered to the selected row, so its state and verbs remain the
   same controls as the normal list rather than a second imitation.
 - In companion mode, ignore the selected row's normal request to toggle itself off.

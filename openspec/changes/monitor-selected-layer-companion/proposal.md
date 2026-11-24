@@ -10,7 +10,8 @@ internally, but the operator cannot see the row or edit it until leaving fullscr
 - Preserve selection while changing layouts and when the compact selected row is clicked again.
 - Keep the companion choices visible while a monitor is maximized. Disable the layer and
   Inspector choices with no selected layer and leave the picture full-size.
-- Keep Pan's icon and label together and wrap the monitor actions when space is limited.
+- Show Preview editing tools as bordered icons with localized accessible names and tooltips, and wrap
+  monitor actions when space is limited. Join Safe Areas visibility and settings visually.
 - Place the compact selected row below the picture and the optional Inspector in its own right column.
 - Give any maximized panel the space from the app header and footer.
 - Keep the current PVW rehearsal when PGM is maximized and restored.

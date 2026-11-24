@@ -152,9 +152,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  margin-left: 0.35rem;
-  padding-left: 1rem;
-  border-left: 1px solid var(--r-border);
+  margin-inline-start: 0.35rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid var(--r-border);
 }
 
 .cg-safe-guide-settings__about summary {

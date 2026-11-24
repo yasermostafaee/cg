@@ -5,7 +5,20 @@
 The Inspector SHALL provide independently collapsible Layer details, Position and Timing sections. The
 selected layer's name, template and current status SHALL remain visible. A collapsed Position
 SHALL summarize the effective anchor and offsets and indicate an unapplied Position change. The
-Inspector SHALL keep Update and Discard in the footer and retain the existing field editors.
+Inspector SHALL keep Update and Discard in a separate footer outside the scrollport and retain the
+existing field editors. Timing SHALL appear before Position.
+
+#### Scenario: Scroll the Inspector without moving its footer
+
+- **WHEN** the operator scrolls a tall Inspector in either interface direction
+- **THEN** the body and its scrollbar end at the top edge of the footer
+- **AND** Update and Discard remain in place in the normal, narrow and maximized Inspector.
+
+#### Scenario: Read the preset title and output state
+
+- **WHEN** an Inspector preset reports that it is on Programme or Preview
+- **THEN** the preset name and the state occupy separate readable lines within the same button
+- **AND** all preset buttons have sufficient height with or without a status.
 
 #### Scenario: Inspect a Ready row with collapsed sections
 

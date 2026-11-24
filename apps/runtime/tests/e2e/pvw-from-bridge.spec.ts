@@ -2046,30 +2046,48 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(pan).toBeDisabled();
   const tools = pvw.locator('[data-monitor-move], [data-monitor-pan], [data-monitor-frames]');
-  await expect(tools).toHaveText(['Move template', 'Crop input', 'Edit frames']);
-  const labels = tools.locator('.cg-pvw-tool-label');
+  await expect(tools).toHaveText(['', '', '']);
+  expect(
+    await tools.evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute('aria-label')),
+    ),
+  ).toEqual(['Move template in Preview', 'Crop input in Preview', 'Edit frames in Preview']);
+  for (const tool of await tools.all()) await expect(tool).toHaveAttribute('title', /\S/);
   const header = pvw.locator('.cg-panel-header--monitor');
   const headerLayout = () =>
     header.evaluate((element) => {
       const box = element.getBoundingClientRect();
-      const buttons = [...element.querySelectorAll('button')].map((button) =>
-        button.getBoundingClientRect(),
-      );
+      const controls = [...element.querySelectorAll('button')];
+      const buttons = controls.map((button) => button.getBoundingClientRect());
+      const safeGuides = element.querySelector('[data-monitor-safe-guide-tools]');
       return {
-        height: box.height,
         singleRow: buttons.every(({ top }) => Math.abs(top - (buttons[0]?.top ?? top)) < 1),
-        inside: buttons.every(({ left, right }) => left >= box.left && right <= box.right),
-        distinct: buttons.every(({ right }, index) => right <= (buttons[index + 1]?.left ?? right)),
+        inside: buttons.every(
+          ({ left, right, top, bottom }) =>
+            left >= box.left && right <= box.right && top >= box.top && bottom <= box.bottom,
+        ),
+        distinct: buttons.every((button, index) =>
+          buttons.slice(index + 1).every((other, offset) => {
+            const joined =
+              safeGuides !== null &&
+              controls[index]?.parentElement === safeGuides &&
+              controls[index + offset + 1]?.parentElement === safeGuides;
+            const overlapX =
+              Math.min(button.right, other.right) - Math.max(button.left, other.left);
+            const overlapY =
+              Math.min(button.bottom, other.bottom) - Math.max(button.top, other.top);
+            return overlapX <= (joined ? 1.5 : 0.5) || overlapY <= 0.5;
+          }),
+        ),
       };
     });
   await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
-  await expect(labels.first()).toBeVisible();
   const full = await headerLayout();
   expect(full).toMatchObject({ singleRow: true, inside: true, distinct: true });
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
-  await expect(labels.first()).toBeHidden();
+  await expect(tools).toHaveText(['', '', '']);
   await expect(tools.locator('svg')).toHaveCount(3);
   expect(await headerLayout()).toEqual(full);
 
@@ -2077,12 +2095,12 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   await pvw.getByRole('button', { name: 'Monitor, selected layer and Inspector' }).click();
   await page.setViewportSize({ width: 620, height: 900 });
   await expect(page.locator('[data-monitor-inspector-companion]')).toBeVisible();
-  await expect(labels.first()).toBeHidden();
+  await expect(tools).toHaveText(['', '', '']);
   await expect(pvw.getByRole('button', { name: 'Exit fullscreen PREVIEW (PVW)' })).toBeVisible();
-  expect(await headerLayout()).toEqual(full);
+  expect(await headerLayout()).toMatchObject({ inside: true, distinct: true });
   await page.setViewportSize({ width: 1600, height: 900 });
   await pvw.getByRole('button', { name: 'Exit fullscreen PREVIEW (PVW)' }).click();
-  await expect(labels.first()).toBeVisible();
+  await expect(tools).toHaveText(['', '', '']);
   const moveTemplate = pvw.getByRole('button', { name: 'Move template in Preview', exact: true });
   await moveTemplate.click();
   await expect(moveTemplate).toHaveAttribute('aria-pressed', 'true');
@@ -2090,7 +2108,7 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   const framesIcon = framesButton.locator('svg.lucide-frame[aria-hidden="true"]');
   await expect(framesIcon).toBeVisible();
   await expect(framesIcon).toHaveAttribute('width', '13');
-  await expect(framesButton).toHaveText('Edit frames');
+  await expect(framesButton).toHaveText('');
   await framesButton.click();
   await expect(framesButton).toHaveAttribute('aria-pressed', 'true');
   await expect(moveTemplate).toHaveAttribute('aria-pressed', 'false');
@@ -2312,6 +2330,8 @@ test('Frames drafts the authored box and whole-template Position moves the retai
     await expect.poll(async () => (await airPlate.boundingBox())?.width ?? 0).toBeCloseTo(400, 1);
     await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
 
+    // The programme page shares this context; foreground the operator before pointer actions.
+    await page.bringToFront();
     const motion = frameEffect.getByRole('combobox', { name: 'Motion' });
     const fade = frameEffect.getByRole('checkbox', { name: 'Fade' });
     const duration = frameEffect.getByRole('textbox', { name: 'Duration (ms)' });
@@ -2331,7 +2351,6 @@ test('Frames drafts the authored box and whole-template Position moves the retai
     await duration.fill('۵۰۰');
     await expect(duration).toHaveValue('500');
     await expect(rowDraft).toHaveCount(0);
-    await page.bringToFront();
     const beforeEffect = await readBox();
     await dragControl(move, 30, 0);
     await expect
@@ -4471,6 +4490,8 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const editFrames = pvw.getByRole('button', { name: 'Edit frames in Preview' });
   const editMasks = pvw.getByRole('button', { name: 'Edit masks in Preview' });
+  await expect(editMasks).toHaveText('');
+  await expect(editMasks).toHaveAttribute('title', /authored mask/);
   await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(pvw.getByRole('button', { name: 'Crop input in Preview' })).toHaveCount(0);
   await editFrames.click();
@@ -4900,7 +4921,8 @@ test('custom safe guides persist across channels and reload, fit the active pict
   const vertical = guides.locator('[data-custom-guide][data-guide-axis="x"]');
   const baseline = engine.receivedCommands().length;
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-  await expect(toggle.locator('.cg-pvw-tool-label')).toBeVisible();
+  await expect(toggle).toHaveText('');
+  await expect(toggle).toHaveAttribute('title', /Action 93%/);
   expect(await toggle.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
   await configure.click();
   expect(

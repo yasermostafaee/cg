@@ -296,6 +296,8 @@ place (R-007).
 template and current status visible. A collapsed Position shows the effective anchor and offsets
 and still marks unapplied changes. Align the labels and values of simple Fields in compact rows.
 Keep space for text areas, item editors and grouped fields. The footer stays at the bottom.
+Timing precedes Position. Group related position and effect controls and put their labels above
+the fields. Preset buttons leave room for their title and a second Programme or Preview status line.
 
 **Why:** After the R-007 design-system rollout the controls read well
 stylistically, but the operator finds the inputs still too small / cramped
@@ -314,6 +316,7 @@ follow-up, not a restyle.
   collapsed state for the current workspace, and their values follow the selected layer.
 - WHEN the operator edits complex Fields THEN their editors and grouped content remain available
   in the compact form, including on narrow panels.
+- WHEN the operator scrolls the Inspector THEN only its body moves and its scrollbar ends at the footer.
   **Notes:** Builds directly on R-007 (`.cg-field`, the `--r-*` spacing/type
   scale). Symptom-level for now; measure comfortable field metrics during the
   change.
@@ -5210,8 +5213,12 @@ is no verified ownership map.
 - WHEN **Move template** is off in PVW THEN template outlines remain visible and dragging does not change Position. The tool starts off and is available when an eligible template is ready.
 - WHEN the PVW toolbar shows its editing tools THEN **Move template** comes before **Crop input**,
   followed by **Edit frames** when available. **Crop input** appears for eligible **Crop edges**
-  plates on PVW and enables after Preview Play. As the pane narrows, its tools keep one row and
-  switch to icons with accessible names and tooltips.
+  plates on PVW and enables after Preview Play. The editing tools use bordered icons with localized
+  accessible names and tooltips at every width. The Safe Areas toggle and its settings share an edge.
+- WHEN the operator selects a ratio in Safe Areas settings THEN the explanation follows that guide
+  frame. It identifies the EBU reference for full-screen 16:9, the SMPTE reference for digital
+  576- and 480-line 4:3 material, and proportional guides for Auto and custom frames. The
+  100% frame and the additional 80% guide are described separately.
 - WHEN the operator enables **Move template** and drags an editable template in PVW THEN select its row and stage its Position offsets in Inspector. Preserve the current anchor when known. The outline and preview follow the move in channel coordinates and the existing Update or Update on air action applies it.
 - WHEN the operator switches **Move template** off or switches to **Crop input** or **Edit frames** THEN template dragging stops and completed Position drafts remain available for Update or Discard. The same Position locks apply to Inspector and Preview.
 - WHEN the operator presses **Reset position** in an editable Position section THEN the
