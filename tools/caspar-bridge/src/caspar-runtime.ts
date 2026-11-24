@@ -449,8 +449,19 @@ import {
   type NativePresetFallback,
   type NativeArtworkLayerProducer,
 } from './preset-fallback-producer.js';
-import { artworkGroupRemainder, parkedArtworkClip, routedArtworkFit } from './preset-artwork-route.js';
-import { FOCUS_NORMALIZE_FIELDS, FocusImportSurfaces, focusBlackUri, isFullFocusFit, planFocusDissolve, type FocusDissolveSurface } from './focus-dissolve.js';
+import {
+  artworkGroupRemainder,
+  parkedArtworkClip,
+  routedArtworkFit,
+} from './preset-artwork-route.js';
+import {
+  FOCUS_NORMALIZE_FIELDS,
+  FocusImportSurfaces,
+  focusBlackUri,
+  isFullFocusFit,
+  planFocusDissolve,
+  type FocusDissolveSurface,
+} from './focus-dissolve.js';
 import { focusArtworkFit, independentFocusPage } from './focus-artwork-mixer.js';
 import {
   establishedFingerprintFile,
@@ -652,7 +663,10 @@ interface LiveFrameEffect {
   readonly departure?: PresetArtworkEffect;
   readonly arrival?: PresetArtworkEffect;
   readonly moveFrames?: number;
-  readonly decorationAt?: (from: number, to: number) => NonNullable<FrameTransitionPhase['decorationOpacity']>;
+  readonly decorationAt?: (
+    from: number,
+    to: number,
+  ) => NonNullable<FrameTransitionPhase['decorationOpacity']>;
   readonly destinationLookId?: string;
   readonly focusSwap?: FocusSwapEffect;
 }
@@ -3229,9 +3243,10 @@ export class CasparRuntime {
     } = {},
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
-    this.#managedCg = options.managedCgPilot === undefined
-      ? undefined
-      : { ...options.managedCgPilot, stack: new ManagedCgStack(options.managedCgPilot.commands) };
+    this.#managedCg =
+      options.managedCgPilot === undefined
+        ? undefined
+        : { ...options.managedCgPilot, stack: new ManagedCgStack(options.managedCgPilot.commands) };
     this.#playoutLinked = options.playoutLinked === true;
     this.#standalone = options.standalone === true;
     this.#reservedLayers = options.reservedLayers ?? [];
@@ -3373,7 +3388,8 @@ export class CasparRuntime {
       strategy: config.strategy,
       sessions: this.#sessions,
       initialPrimary: 'A',
-      autoFailoverEnabled: this.#managedCg === undefined && !this.#playoutLinked && config.autoFailoverEnabled,
+      autoFailoverEnabled:
+        this.#managedCg === undefined && !this.#playoutLinked && config.autoFailoverEnabled,
       // 🔴 `B-316` — every road to server B asks this, and only this.
       serverBLine: (line) => this.#serverBLine(line),
       allowReserveLine: (session, line) => this.#allowReserveLine(session, line),
@@ -3405,7 +3421,9 @@ export class CasparRuntime {
           the core's own default per-client subscription goes there and is left alone.
         */
         oscSubscribe: true,
-        ...(this.#managedCg !== undefined && { createAmcp: () => new ManagedObservationTransport() }),
+        ...(this.#managedCg !== undefined && {
+          createAmcp: () => new ManagedObservationTransport(),
+        }),
         // `CENTRAL-BRIDGE-01` (`C-047`) — the start check's `INFO` reads, before `healthy`.
         onHandshake: (read, info) => this.#startCheckRead(name, read, info),
         resyncDurationMs: RESYNC_MS,
@@ -3478,7 +3496,8 @@ export class CasparRuntime {
             this.#mirroredLiveSeats.delete(adoptionKey(event));
         }
         if (this.#adapter.currentPrimary !== label) return;
-        if (this.#managedCg === undefined) for (const event of events) this.#reconciler.applyOsc(event);
+        if (this.#managedCg === undefined)
+          for (const event of events) this.#reconciler.applyOsc(event);
       });
       /*
         🔴 `RELEASE-091-01` (DELTA B, B2) — **OUR OWN ACKNOWLEDGED `CLEAR` IS THE EVIDENCE THE LAYER
@@ -4429,7 +4448,10 @@ export class CasparRuntime {
     fields: FieldValues,
     detail: AuditDetail,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
-    if (this.#managedCg !== undefined && (this.#managedBusy || this.#reconciler.get(itemId) !== null)) {
+    if (
+      this.#managedCg !== undefined &&
+      (this.#managedBusy || this.#reconciler.get(itemId) !== null)
+    ) {
       return { accepted: false, errorCode: 'managed-cg-row-held' };
     }
     // B-093 — the operator is acting; any parked restore for this item is stale.
@@ -5302,7 +5324,12 @@ export class CasparRuntime {
        * refused. A second copy of the predicate inside `#decidePendingRestores` is the
        * kind of drift golden rule 6 exists to prevent.
        */
-      if (this.#managedCg === undefined && source === 'startup' && isRestorable(item.state) && slot !== null) {
+      if (
+        this.#managedCg === undefined &&
+        source === 'startup' &&
+        isRestorable(item.state) &&
+        slot !== null
+      ) {
         this.#pendingRestore.set(item.itemId, {
           slot,
           templateId: item.templateId,
@@ -7069,7 +7096,10 @@ export class CasparRuntime {
       }
       if (!(await wait(0))) return interrupted;
       const durationMs = step.frames * period;
-      const decorationOpacity = effect.decorationAt?.(elapsed / totalFrames, (elapsed + step.frames) / totalFrames);
+      const decorationOpacity = effect.decorationAt?.(
+        elapsed / totalFrames,
+        (elapsed + step.frames) / totalFrames,
+      );
       const told = await tell({
         ...(decorationOpacity?.length && { decorationOpacity }),
         durationMs,
@@ -7114,7 +7144,14 @@ export class CasparRuntime {
       attachedArtwork,
     }: FocusSwapEffect,
     plates: readonly string[],
-    { batch, wait, stage, tell, startFocusDissolve, waitForFocusEndpoint }: LiveFrameEffectTransport,
+    {
+      batch,
+      wait,
+      stage,
+      tell,
+      startFocusDissolve,
+      waitForFocusEndpoint,
+    }: LiveFrameEffectTransport,
   ): Promise<FrameEffectReply> {
     const period = this.#channelFrameMsFor(channel);
     const interrupted = { ok: false, errorCode: 'frame-transition-interrupted' };
@@ -7619,10 +7656,17 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, true);
     }
     if (paging !== undefined && paging.pageCount > 1) {
-      if (paging.bookField !== undefined && (layer?.visibility === 'stopped' || absent === 'clear')) {
+      if (
+        paging.bookField !== undefined &&
+        (layer?.visibility === 'stopped' || absent === 'clear')
+      ) {
         this.#rewindPicturePages(itemId, paging.info, data ?? item.fields);
       } else {
-        this.#setPageIndex(itemId, paging.bookField?.id ?? managedSequencePageKey, layer?.page ?? 0);
+        this.#setPageIndex(
+          itemId,
+          paging.bookField?.id ?? managedSequencePageKey,
+          layer?.page ?? 0,
+        );
       }
     }
     this.#markDirty(itemId);
@@ -8051,10 +8095,17 @@ export class CasparRuntime {
       };
     }
 
-    if ([...this.#nativePresetBorderLeases].some((lease) => lease.clippedForeground &&
-      lease.foreground.channel === slot.channel && lease.foreground.layer === slot.layer)) {
+    if (
+      [...this.#nativePresetBorderLeases].some(
+        (lease) =>
+          lease.clippedForeground &&
+          lease.foreground.channel === slot.channel &&
+          lease.foreground.layer === slot.layer,
+      )
+    ) {
       const opened = await this.#send(this.#foregroundArtworkClip(slot), this.#nextSeq(), 'urgent');
-      if (!opened.ok) return {ok:false, ...(opened.errorCode && {errorCode: opened.errorCode})};
+      if (!opened.ok)
+        return { ok: false, ...(opened.errorCode && { errorCode: opened.errorCode }) };
     }
     if (resident === undefined || replaceResident) {
       const added = await this.#sendAdd(
@@ -9321,7 +9372,11 @@ export class CasparRuntime {
     if (this.#managedCg !== undefined) {
       return this.#audited('update', this.#itemDetail(itemId), async () => {
         if (lookBindings !== undefined || position !== undefined || inputTransition !== undefined) {
-          return { accepted: false, errorCode: 'managed-cg-static-only', message: 'The managed pilot supports static template fields.' };
+          return {
+            accepted: false,
+            errorCode: 'managed-cg-static-only',
+            message: 'The managed pilot supports static template fields.',
+          };
         }
         return this.#applyManaged(itemId, 'update', { fields, mergeMode });
       });
@@ -12352,10 +12407,10 @@ export class CasparRuntime {
         );
       const focusPlan =
         focusSeats.size > 0
-          ? spaced(PRESET_BORDER_EDGES, underlays, focusSeats) ??
+          ? (spaced(PRESET_BORDER_EDGES, underlays, focusSeats) ??
             spaced(1, underlays, focusSeats) ??
             spaced(PRESET_BORDER_EDGES, noGaps, focusSeats) ??
-            spaced(1, noGaps, focusSeats)
+            spaced(1, noGaps, focusSeats))
           : null;
       layers =
         focusPlan ??
@@ -13476,7 +13531,10 @@ export class CasparRuntime {
     );
   }
 
-  #foregroundArtworkClip(slot: CommandSlot, clip: NormalizedRect = { x: 0, y: 0, width: 1, height: 1 }): string {
+  #foregroundArtworkClip(
+    slot: CommandSlot,
+    clip: NormalizedRect = { x: 0, y: 0, width: 1, height: 1 },
+  ): string {
     return this.#builder.mixerFit(slot, { fill: clip, clip })[1];
   }
 
@@ -13531,8 +13589,12 @@ export class CasparRuntime {
 
       if (lease.clippedForeground) {
         const producer = stageProducersOfInfo(xml)?.get(foreground.layer);
-        if (lease.ownsArtworkForeground() && oscProducerKind(producer ?? '') === 'html' &&
-            !(await send(this.#foregroundArtworkClip(foreground)))) return;
+        if (
+          lease.ownsArtworkForeground() &&
+          oscProducerKind(producer ?? '') === 'html' &&
+          !(await send(this.#foregroundArtworkClip(foreground)))
+        )
+          return;
         lease.clippedForeground = false;
       }
 
@@ -14674,7 +14736,12 @@ export class CasparRuntime {
     const changes = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
     const changingDecorations = new Set(
       info?.controlLiveLayout
-        ? controlLiveLayoutDecorationOpacity(info.controlLiveLayout, fromLookId, toLook.id, Object.keys(fromRects)).map(({ plateId }) => plateId)
+        ? controlLiveLayoutDecorationOpacity(
+            info.controlLiveLayout,
+            fromLookId,
+            toLook.id,
+            Object.keys(fromRects),
+          ).map(({ plateId }) => plateId)
         : [],
     );
     for (const [plateId, fromFrame] of Object.entries(fromLook.transitionFrames ?? {})) {
@@ -14885,9 +14952,10 @@ export class CasparRuntime {
     const layout = metadata?.controlLiveLayout;
     const carrier = metadata?.liveSources;
     if (carrier === undefined) return undefined;
-    const from = layout === undefined
-      ? templateFocusTarget(carrier, layout, fromLookId)
-      : controlLiveLayoutSoloTarget(layout, fromLookId);
+    const from =
+      layout === undefined
+        ? templateFocusTarget(carrier, layout, fromLookId)
+        : controlLiveLayoutSoloTarget(layout, fromLookId);
     const to = templateFocusTarget(carrier, layout, toLook.id);
     if (from === undefined || to === undefined || from.presetId !== to.presetId) return undefined;
 
@@ -15194,7 +15262,7 @@ export class CasparRuntime {
       authoredPreset: true,
       ...(movingFallbacks !== undefined && { movingFallbacks }),
       focusSwap: {
-        ...(dissolve && {dissolve: true}),
+        ...(dissolve && { dissolve: true }),
         incoming,
         outgoing,
         ...movement,
@@ -15258,7 +15326,9 @@ export class CasparRuntime {
         }
         if (media === undefined || fileMember < 0) return undefined;
         const paths = stages.map((stage) =>
-          stage === null ? undefined : this.#opaqueMediaForeground(stage.session, stage.xml, layer, media),
+          stage === null
+            ? undefined
+            : this.#opaqueMediaForeground(stage.session, stage.xml, layer, media),
         );
         const file = paths[fileMember];
         return file !== undefined &&
@@ -15870,7 +15940,9 @@ export class CasparRuntime {
       opaqueCover?: true;
     })[] = [];
     const nativeBorderPlateIds = () =>
-      nativeBorders.flatMap(({ plateId, slots, artwork, focusPage }) => (slots.length > 0 && !artwork && !focusPage ? [plateId] : []));
+      nativeBorders.flatMap(({ plateId, slots, artwork, focusPage }) =>
+        slots.length > 0 && !artwork && !focusPage ? [plateId] : [],
+      );
     const previousCovers = new Map<string, { rect: PresetRect; opacity: number }>();
     type PlateStack = NonNullable<FrameTransitionPhase['plateStack']>;
     const pictureStack = (
@@ -16307,8 +16379,14 @@ export class CasparRuntime {
       );
       if (!recovered) return false;
       this.#forgetInputReplicaMixer(effectPeer.session, channel);
-      if (afterResponse && peerSettled && sameTake() && this.activeLookId(itemId) === toLook &&
-          effectPeer.unsettledPreset === cancel && this.#residentMirror(page) === effectPeer) {
+      if (
+        afterResponse &&
+        peerSettled &&
+        sameTake() &&
+        this.activeLookId(itemId) === toLook &&
+        effectPeer.unsettledPreset === cancel &&
+        this.#residentMirror(page) === effectPeer
+      ) {
         delete effectPeer.unsettledPreset;
       }
       return true;
@@ -16369,6 +16447,12 @@ export class CasparRuntime {
       property: 'FILL' | 'CLIP' | 'OPACITY';
       values: readonly number[];
     }
+    const matchesMixerValues = (observed: readonly number[], target: readonly number[]) =>
+      observed.length === target.length &&
+      observed.every((value, index) => {
+        const expected = target[index];
+        return expected !== undefined && Math.abs(value - expected) < 0.00002;
+      });
     const focusWitnesses = new Map<string, MixerEndpoint>();
     const moveWitnesses = new Map<string, MixerEndpoint>();
     const watchMixer = (
@@ -16446,10 +16530,7 @@ export class CasparRuntime {
               if (response.kind !== 'ok-line') return false;
               noteProgress(layer + '/' + property, response.data.trim());
               const observed = response.data.trim().split(/\s+/).map(Number);
-              if (
-                observed.length !== values.length ||
-                !observed.every((v, i) => Number.isFinite(v) && Math.abs(v - values[i]!) < 0.00002)
-              ) {
+              if (!matchesMixerValues(observed, values)) {
                 ready = false;
                 break;
               }
@@ -16514,8 +16595,10 @@ export class CasparRuntime {
         else if (!effect.focusSwap && nativeBorders.length > 0 && changes.has(record))
           watchMixer(moveWitnesses, record.slot.layer, fit, phase);
       }
-      const focusSurfaces = nativeBorders.filter(
-        (surface) => surface.focusPage && surface.focusSeat !== undefined,
+      const focusSurfaces = nativeBorders.flatMap((surface) =>
+        surface.focusPage && surface.focusSeat !== undefined
+          ? [{ surface, seat: surface.focusSeat }]
+          : [],
       );
       const stageSurface = async (slot: CommandSlot, line: string): Promise<boolean> => {
         const sent = await this.#sendDeferredMixer(
@@ -16544,9 +16627,10 @@ export class CasparRuntime {
           !(await stageSurface(focusMix.slot, this.#builder.mixerOpacity(focusMix.slot, 1)))
         )
           return unavailable;
-        for (const surface of focusSurfaces) {
-          const slot = surface.slots[0]!;
-          const base = surface.focusSeat!.fullFit;
+        for (const { surface, seat } of focusSurfaces) {
+          const slot = surface.slots[0];
+          if (slot === undefined) return unavailable;
+          const base = seat.fullFit;
           const setup = focusArtworkFit(base, base);
           if (setup === undefined) return unavailable;
           for (const line of [
@@ -16556,8 +16640,8 @@ export class CasparRuntime {
             if (!(await stageSurface(slot, line))) return unavailable;
         }
         if (compoundVisible) {
-          for (const surface of focusSurfaces) {
-            const owner = surface.focusSeat!.record;
+          for (const { surface, seat } of focusSurfaces) {
+            const owner = seat.record;
             touched.add(owner);
             const park = this.#foregroundArtworkClip(owner.slot, parkedArtworkClip);
             const sent = await this.#sendDeferredMixer(batch, channel, park, cancel.signal);
@@ -16587,7 +16671,8 @@ export class CasparRuntime {
       for (const entry of nativeBorders) {
         if (entry.focusSeat?.record !== record) continue;
         if (entry.focusPage && focusPagesActive && !focusMix) {
-          const slot = entry.slots[0]!;
+          const slot = entry.slots[0];
+          if (slot === undefined) return unavailable;
           const placed = focusArtworkFit(entry.focusSeat.fullFit, fit);
           if (placed === undefined) return unavailable;
           if (!rollback && phase.frames > 0) watchMixer(focusWitnesses, slot.layer, placed, phase);
@@ -16711,7 +16796,10 @@ export class CasparRuntime {
         raster.width / raster.height,
       );
     };
-    const edgeRects = (border: { plateId: string; strokeTexture?: NativePresetFallback }, rect: PresetRect) => {
+    const edgeRects = (
+      border: { plateId: string; strokeTexture?: NativePresetFallback },
+      rect: PresetRect,
+    ) => {
       if (border.strokeTexture === undefined) return strokeRects(border.plateId, rect);
       const box = fitArtwork(rect, null)?.fill;
       return box === undefined ? undefined : [box];
@@ -16727,11 +16815,12 @@ export class CasparRuntime {
       let witnesses: MixerEndpoint[];
       if (phase === 'move') {
         const mirroredLayers = new Set([
-          ...[...peerProducers.keys()].map(record => record.slot.layer),
-          ...[...lease.touched].map(slot => slot.layer),
+          ...[...peerProducers.keys()].map((record) => record.slot.layer),
+          ...[...lease.touched].map((slot) => slot.layer),
         ]);
-        witnesses = [...moveWitnesses.values()].filter(({ layer }) =>
-          owner === page.session || mirroredLayers.has(layer));
+        witnesses = [...moveWitnesses.values()].filter(
+          ({ layer }) => owner === page.session || mirroredLayers.has(layer),
+        );
       } else {
         // The stationary page may draw several arriving fallbacks. Wait for
         // position and opacity of every one before handing them back to it.
@@ -16739,10 +16828,16 @@ export class CasparRuntime {
           if (border.phase !== 'arrival' || border.focusSeat || !border.underlay) return [];
           const { slot, producer } = border.underlay;
           const rect = fallbackFit(producer, border.to)?.fill;
-          return rect === undefined ? [] : [
-            { layer: slot.layer, property: 'FILL', values: [rect.x, rect.y, rect.width, rect.height] },
-            { layer: slot.layer, property: 'OPACITY', values: [1] },
-          ];
+          return rect === undefined
+            ? []
+            : [
+                {
+                  layer: slot.layer,
+                  property: 'FILL',
+                  values: [rect.x, rect.y, rect.width, rect.height],
+                },
+                { layer: slot.layer, property: 'OPACITY', values: [1] },
+              ];
         });
       }
       if (witnesses.length === 0) return true;
@@ -16754,18 +16849,22 @@ export class CasparRuntime {
           (owner === page.session ? current() : peerCurrent()) &&
           owner.queue === queue
         ) {
-          const witness = witnesses[0]!;
-          const { response } = await queue.enqueue(`MIXER ${wireChannel}-${witness.layer} ${witness.property}`, {
-            priority: 'urgent',
-            timeoutMs: 250,
-            signal,
-          });
+          const witness = witnesses[0];
+          if (witness === undefined) break;
+          const { response } = await queue.enqueue(
+            `MIXER ${wireChannel}-${witness.layer} ${witness.property}`,
+            {
+              priority: 'urgent',
+              timeoutMs: 250,
+              signal,
+            },
+          );
           if (response.kind !== 'ok-line') break;
           const body = response.data.trim();
           if (!body) break;
           const values = body.split(/\s+/).map(Number);
           if (values.length !== witness.values.length || !values.every(Number.isFinite)) break;
-          if (values.every((value, index) => Math.abs(value - witness.values[index]!) < 0.00002)) {
+          if (matchesMixerValues(values, witness.values)) {
             witnesses.shift();
             if (witnesses.length > 0) continue;
             if (phase === 'move' && owner === effectPeer?.session) peerBorderAtDestination = true;
@@ -16790,15 +16889,23 @@ export class CasparRuntime {
         // Hold the outgoing source field at the settled native geometry. The
         // CEF page is about to paint the same title at a different position in
         // its texture; sampling it again would transform that position twice.
-        for (const surface of frozen) for (const slot of surface.slots) {
-          const source = lease.layers.get(slot);
-          if (source?.kind !== 'artwork-route' || nativePresetProducerLayerState(xml, slot.layer, source) !== 'native')
-            return false;
-          const line = this.#builder.pause(slot);
-          if (owner !== page.session) {
-            if (!peerCurrent() || !(await sendPeer(line, signal))) return false;
-          } else if (!current() || !(await this.#send(line, this.#nextSeq(), 'urgent', {...nativeTarget, signal})).ok) return false;
-        }
+        for (const surface of frozen)
+          for (const slot of surface.slots) {
+            const source = lease.layers.get(slot);
+            if (
+              source?.kind !== 'artwork-route' ||
+              nativePresetProducerLayerState(xml, slot.layer, source) !== 'native'
+            )
+              return false;
+            const line = this.#builder.pause(slot);
+            if (owner !== page.session) {
+              if (!peerCurrent() || !(await sendPeer(line, signal))) return false;
+            } else if (
+              !current() ||
+              !(await this.#send(line, this.#nextSeq(), 'urgent', { ...nativeTarget, signal })).ok
+            )
+              return false;
+          }
       }
       return true;
     };
@@ -16838,7 +16945,9 @@ export class CasparRuntime {
         to === undefined ||
         foreground === undefined ||
         presetEffectId === undefined ||
-        (direct !== undefined && direct.slide === undefined && direct.attachedArtwork === undefined) ||
+        (direct !== undefined &&
+          direct.slide === undefined &&
+          direct.attachedArtwork === undefined) ||
         !this.#hasFramePlacementMarker(page.version, CG_LIVE_NATIVE_BORDER_PAGE_MARKER)
       )
         return true;
@@ -16905,7 +17014,8 @@ export class CasparRuntime {
         fadingFallbacks: retainedNdi,
         departure: artwork(effect.departure),
         arrival: artwork(effect.arrival),
-        attachedArtwork: (id) => layout.frames.some((f) => f.id === id && (f.title !== '' || f.additionalTexts?.length)) ||
+        attachedArtwork: (id) =>
+          layout.frames.some((f) => f.id === id && (f.title !== '' || f.additionalTexts?.length)) ||
           layout.frameAttachments?.some((a) => a.frameId === id) === true,
         colorOf: (id) => layout.frames.find((frame) => frame.id === id)?.border?.color,
       }).flatMap((candidate) => {
@@ -17004,7 +17114,10 @@ export class CasparRuntime {
         candidates.flatMap(({ cut, phase, plateId, focusPage, focusUnderlay }) =>
           cut ||
           (focusPage === true && !focusUnderlay) ||
-          (phase === 'move' && effect.transition.fade && !focusUnderlay && !retainedNdi.has(plateId)) ||
+          (phase === 'move' &&
+            effect.transition.fade &&
+            !focusUnderlay &&
+            !retainedNdi.has(plateId)) ||
           maskedArtwork.has(plateId)
             ? []
             : [plateId],
@@ -17076,13 +17189,25 @@ export class CasparRuntime {
           }),
         );
         const reserve = stages[1];
-        if (direct && nativePeer && (reserve == null || !peerHasPages() ||
-            (needsFocusPages && templateUrl !== undefined &&
-              independentFocusPage(reserve.xml, foreground.layer, templateUrl, itemId, presetEffectId) === undefined))) {
+        if (
+          direct &&
+          nativePeer &&
+          (reserve == null ||
+            !peerHasPages() ||
+            (needsFocusPages &&
+              templateUrl !== undefined &&
+              independentFocusPage(
+                reserve.xml,
+                foreground.layer,
+                templateUrl,
+                itemId,
+                presetEffectId,
+              ) === undefined))
+        ) {
           nativePeer = undefined;
           peerFailed = true;
           mirrorForward = false;
-          return stages.slice(0,1);
+          return stages.slice(0, 1);
         }
         if (
           reserve != null &&
@@ -17165,7 +17290,9 @@ export class CasparRuntime {
           return [];
         const layer = record.slot.layer;
         const files = stages.map((stage) =>
-          stage === null ? undefined : this.#opaqueMediaForeground(stage.owner, stage.xml, layer, media),
+          stage === null
+            ? undefined
+            : this.#opaqueMediaForeground(stage.owner, stage.xml, layer, media),
         );
         const file = files[stages.indexOf(localStage)];
         return file === undefined || files.some((path) => path === undefined)
@@ -17227,12 +17354,20 @@ export class CasparRuntime {
       // strokes in the same gap. Never cross a live picture to find space.
       // This generation is the first to group the complete plate foreground,
       // including imported graphics, inside the same authored aperture.
-      const canRouteArtwork = this.#hasFramePlacementMarker(page.version, CG_LIVE_FOCUS_ARTWORK_PAGE_MARKER) &&
+      const canRouteArtwork =
+        this.#hasFramePlacementMarker(page.version, CG_LIVE_FOCUS_ARTWORK_PAGE_MARKER) &&
         effect.focusSwap === undefined;
-      const retainedIds = Object.keys(fromTemplateLook?.rects ?? {}).filter((id) => toTemplateLook?.rects[id] !== undefined);
-      const fullRetainedArtwork = canRouteArtwork &&
-        retainedIds.length > 0 && retainedIds.every((id) => !maskedArtwork.has(id) &&
-          candidates.some((candidate) => candidate.phase === 'move' && candidate.plateId === id));
+      const retainedIds = Object.keys(fromTemplateLook?.rects ?? {}).filter(
+        (id) => toTemplateLook?.rects[id] !== undefined,
+      );
+      const fullRetainedArtwork =
+        canRouteArtwork &&
+        retainedIds.length > 0 &&
+        retainedIds.every(
+          (id) =>
+            !maskedArtwork.has(id) &&
+            candidates.some((candidate) => candidate.phase === 'move' && candidate.plateId === id),
+        );
       const topDepth = (candidate: NativePresetArtwork) =>
         Math.max(...pictureFor(candidate).map(({ slot }) => slot.layer));
       for (const candidate of [...candidates].sort((a, b) => topDepth(b) - topDepth(a))) {
@@ -17256,26 +17391,47 @@ export class CasparRuntime {
         if (candidate.phase === 'move' && fullRetainedArtwork) {
           const source = fitArtwork(candidate.from, null)?.fill;
           const rects = framePlacementRects(carrier, fromLook, placements);
-          if (source && Object.entries(rects).every(([id, rect]) => {
-            const other = fitArtwork(rect, null)?.fill;
-            return id === candidate.plateId || (other && intersectNormalizedRects(source, other) === null);
-          })) artwork = { source };
+          if (
+            source &&
+            Object.entries(rects).every(([id, rect]) => {
+              const other = fitArtwork(rect, null)?.fill;
+              return (
+                id === candidate.plateId ||
+                (other && intersectNormalizedRects(source, other) === null)
+              );
+            })
+          )
+            artwork = { source };
         }
-        if (candidate.phase !== 'move' && canRouteArtwork && !candidate.cut && !maskedArtwork.has(candidate.plateId)) {
+        if (
+          candidate.phase !== 'move' &&
+          canRouteArtwork &&
+          !candidate.cut &&
+          !maskedArtwork.has(candidate.plateId)
+        ) {
           const rects = framePlacementRects(carrier, candidate.lookId, placements);
           const selected = new Set(effect[candidate.phase]?.plateIds);
           const others = Object.entries(rects).filter(([id]) => !selected.has(id));
           const local = rects[candidate.plateId];
           const source = local && fitArtwork(local, null)?.fill;
           const boxes = others.flatMap(([, rect]) => fitArtwork(rect, null)?.fill ?? []);
-          const surfaces = [...selected].flatMap(id => {
-            const rect = rects[id]; return rect ? fitArtwork(rect, null)?.fill ?? [] : [];
+          const surfaces = [...selected].flatMap((id) => {
+            const rect = rects[id];
+            return rect ? (fitArtwork(rect, null)?.fill ?? []) : [];
           });
-          const remainder = source && surfaces.length === selected.size && boxes.length === others.length &&
+          const remainder =
+            source &&
+            surfaces.length === selected.size &&
+            boxes.length === others.length &&
             artworkGroupRemainder(surfaces, boxes);
           if (source && remainder) artwork = { source, remainder };
         }
-        const edgeCount = candidate.focusPage || artwork ? 1 : candidate.color === undefined ? 0 : PRESET_BORDER_EDGES;
+        const edgeCount =
+          candidate.focusPage || artwork
+            ? 1
+            : candidate.color === undefined
+              ? 0
+              : PRESET_BORDER_EDGES;
         const slots: CommandSlot[] = [];
         for (
           let layer = Math.max(range.start, page.slot.layer + 1, top + 1);
@@ -17300,7 +17456,8 @@ export class CasparRuntime {
           !candidate.cut &&
           (candidate.phase !== 'move' ||
             !effect.transition.fade ||
-            fadeWithPicture.has(candidate.plateId) || candidate.focusUnderlay) &&
+            fadeWithPicture.has(candidate.plateId) ||
+            candidate.focusUnderlay) &&
           fallbackFit(producer, candidate.from) !== undefined
         ) {
           for (let layer = bottom - 1; layer > floor && layer >= range.start; layer -= 1) {
@@ -17330,15 +17487,26 @@ export class CasparRuntime {
       // The shared foreground can be parked only if every remaining plate
       // has a real native seat. Roll incomplete route allocations back to the
       // resident artwork rather than dropping the plate without a seat.
-      for (const phase of ['move','arrival','departure'] as const) {
-        const required = phase === 'move' ? retainedIds : effect[phase]?.plateIds ?? [];
-        const arrivalWillPaint = phase !== 'move' || (effect.arrival?.plateIds ?? []).every(id =>
-          prepared.some(p => p.phase === 'arrival' && p.plateId === id && p.artwork));
-        if (arrivalWillPaint && required.every((id) => prepared.some((p) => p.phase === phase && p.plateId === id && p.artwork))) continue;
+      for (const phase of ['move', 'arrival', 'departure'] as const) {
+        const required = phase === 'move' ? retainedIds : (effect[phase]?.plateIds ?? []);
+        const arrivalWillPaint =
+          phase !== 'move' ||
+          (effect.arrival?.plateIds ?? []).every((id) =>
+            prepared.some((p) => p.phase === 'arrival' && p.plateId === id && p.artwork),
+          );
+        if (
+          arrivalWillPaint &&
+          required.every((id) =>
+            prepared.some((p) => p.phase === phase && p.plateId === id && p.artwork),
+          )
+        )
+          continue;
         for (const p of prepared) {
           if (p.phase !== phase || !p.artwork) continue;
           delete p.artwork;
-          const original = candidates.find((candidate) => candidate.phase === p.phase && candidate.plateId === p.plateId);
+          const original = candidates.find(
+            (candidate) => candidate.phase === p.phase && candidate.plateId === p.plateId,
+          );
           const compact = original && compactStrokes.get(original);
           if (p.color && compact) {
             p.strokeTexture = compact;
@@ -17394,8 +17562,13 @@ export class CasparRuntime {
           mode && (videoModeScan(mode) === 'interlaced' || /^(?:pal|ntsc)$/i.test(mode)) ? 2 : 1;
         const fields = frames * fieldsPerFrame + 1;
         const [prior, next] = inputs;
-        if (frames > 0 && prior && next) {
+        const outgoing = prior?.slots[0];
+        const incoming = next?.slots[0];
+        if (frames > 0 && prior && next && outgoing && incoming) {
           if (
+            templateUrl !== undefined &&
+            prior.focusSeat &&
+            next.focusSeat &&
             inputs.every((entry) => {
               if (!entry?.focusSeat || !isFullFocusFit(entry.focusSeat.fullFit)) return false;
               if (!entry.underlay) return !entry.focusUnderlay;
@@ -17404,18 +17577,26 @@ export class CasparRuntime {
               const fit = fallbackFit(entry.underlay.producer, entry.from);
               return fit !== undefined && isFullFocusFit(fit);
             }) &&
-            this.#focusImports.canUseSeparateMatte(page.version, layout, [
-              { preset: from, frameId: direct.outgoing.sourceId },
-              { preset: to, frameId: direct.incoming.sourceId },
-            ], () => this.#templates.htmlOf(page.version))
+            this.#focusImports.canUseSeparateMatte(
+              page.version,
+              layout,
+              [
+                { preset: from, frameId: direct.outgoing.sourceId },
+                { preset: to, frameId: direct.incoming.sourceId },
+              ],
+              () => this.#templates.htmlOf(page.version),
+            )
           ) {
-            const black = await focusBlackUri(this.#pages, templateUrl!);
+            const black = await focusBlackUri(this.#pages, templateUrl);
             if (black)
               focusMix = planFocusDissolve(
-                [prior, next].map((entry) => ({
-                  picture: entry.underlay?.slot ?? entry.focusSeat!.record.slot,
-                  artwork: entry.slots[0]!,
-                })),
+                [
+                  {
+                    picture: prior.underlay?.slot ?? prior.focusSeat.record.slot,
+                    artwork: outgoing,
+                  },
+                  { picture: next.underlay?.slot ?? next.focusSeat.record.slot, artwork: incoming },
+                ],
                 free,
                 black,
                 presetEffectId,
@@ -17427,8 +17608,6 @@ export class CasparRuntime {
           // pages can still dissolve, while each original live seat keeps its
           // own aperture, layer and authored transforms.
           if (!focusMix) {
-            const incoming = next.slots[0]!;
-            const outgoing = prior.slots[0]!;
             const slot = free.findLast(
               (candidate) => candidate.layer > Math.max(incoming.layer, outgoing.layer),
             );
@@ -17539,7 +17718,8 @@ export class CasparRuntime {
         borderLeases.push(lease);
         this.#nativePresetBorderLeases.add(lease);
       }
-      const layers = borderLeases[0]!.layers;
+      const layers = borderLeases[0]?.layers;
+      if (layers === undefined) return false;
       const pictureTexture = [...layers.values()].some(
         (producer) => producer.kind === 'image' || producer.kind === 'focus-page',
       );
@@ -17594,7 +17774,8 @@ export class CasparRuntime {
             }
           }
           if (entry.focusPage) {
-            const colorSlot = slots[0]!;
+            const colorSlot = slots[0];
+            if (colorSlot === undefined) return false;
             const compound = focusMix?.plates?.find((plate) => plate.artwork === colorSlot);
             const fields = withCgControl(item.fields, {
               ...this.#takeControl(itemId, item.templateId, false, placements),
@@ -17627,7 +17808,8 @@ export class CasparRuntime {
             continue;
           }
           if (entry.artwork) {
-            const slot = slots[0]!;
+            const slot = slots[0];
+            if (slot === undefined) return false;
             const dest = fitArtwork(entry.from, null)?.fill;
             const fit = dest && routedArtworkFit(entry.artwork.source, dest);
             if (!fit) return false;
@@ -17771,7 +17953,9 @@ export class CasparRuntime {
         // for more than twelve interlaced frames on a cold take. Their setup
         // already has a hard deadline. Use it instead of throwing away all
         // ready native artwork because one owned image is still opening.
-        const attempts = pictureTexture ? Math.ceil((focusMix?.plates ? 5_000 : 3_000) / frameMs) : 4;
+        const attempts = pictureTexture
+          ? Math.ceil((focusMix?.plates ? 5_000 : 3_000) / frameMs)
+          : 4;
         let confirmed = false;
         for (let attempt = 0; attempt < attempts; attempt += 1) {
           if (setupSignal.aborted || !current() || lease.queue !== lease.owner.queue) return false;
@@ -17787,11 +17971,22 @@ export class CasparRuntime {
         }
         if (!confirmed) return false;
         for (const producer of lease.layers.values()) {
-          if (producer.kind === 'focus-page' && !(await focusReadiness.get(producer.url))) return false;
+          if (producer.kind === 'focus-page' && !(await focusReadiness.get(producer.url)))
+            return false;
         }
-        for (const { slots, initialOpacity, strokeInitiallyHidden, underlay, artwork, focusPage } of prepared) {
+        for (const {
+          slots,
+          initialOpacity,
+          strokeInitiallyHidden,
+          underlay,
+          artwork,
+          focusPage,
+        } of prepared) {
           if (initialOpacity === 0) continue;
-          for (const slot of [...(artwork || focusPage || strokeInitiallyHidden ? [] : slots), ...(underlay ? [underlay.slot] : [])])
+          for (const slot of [
+            ...(artwork || focusPage || strokeInitiallyHidden ? [] : slots),
+            ...(underlay ? [underlay.slot] : []),
+          ])
             if (!(await send(this.#builder.mixerOpacity(slot, initialOpacity)))) return false;
         }
         return true;
@@ -17813,7 +18008,12 @@ export class CasparRuntime {
         return current() && unavailableFocus('focus-artwork-not-ready');
       }
       const paintSignal = AbortSignal.any([cancel.signal, AbortSignal.timeout(1_000)]);
-      if (prepared.some(({ belowAnotherProducer, focusPage, artwork }) => belowAnotherProducer && !focusPage && !artwork)) {
+      if (
+        prepared.some(
+          ({ belowAnotherProducer, focusPage, artwork }) =>
+            belowAnotherProducer && !focusPage && !artwork,
+        )
+      ) {
         // The native edge is already correctly stacked and stationary. Let CEF
         // suppress its matching foreground stroke before any overlap can begin.
         const hideHtml = this.#builder.update(
@@ -17922,39 +18122,58 @@ export class CasparRuntime {
       const surfaces = nativeBorders.filter((s) => s.phase === kind && s.artwork);
       if (surfaces.length === 0) return phase;
       const keysOfFrames = new Set(surfaces.map((s) => s.frameKey));
-      if (kind === 'move') return { ...phase, frames: phase.frames.filter((frame) => !keysOfFrames.has(frame.frameKey)) };
+      if (kind === 'move')
+        return {
+          ...phase,
+          frames: phase.frames.filter((frame) => !keysOfFrames.has(frame.frameKey)),
+        };
       const keys = new Set(effect[kind]?.artworkKeys);
-      return { ...phase, frames: phase.frames.filter((frame) => !keysOfFrames.has(frame.frameKey)),
-        ...(phase.opacityArtwork && { opacityArtwork: phase.opacityArtwork.filter((art) => !keys.has(art.key)) }),
-        ...(phase.hidePresetArtworkKeys && { hidePresetArtworkKeys: phase.hidePresetArtworkKeys.filter((k) => !keys.has(k)) }),
+      return {
+        ...phase,
+        frames: phase.frames.filter((frame) => !keysOfFrames.has(frame.frameKey)),
+        ...(phase.opacityArtwork && {
+          opacityArtwork: phase.opacityArtwork.filter((art) => !keys.has(art.key)),
+        }),
+        ...(phase.hidePresetArtworkKeys && {
+          hidePresetArtworkKeys: phase.hidePresetArtworkKeys.filter((k) => !keys.has(k)),
+        }),
       };
     };
     const clipResidentArtwork = async (phase: NativePresetBorderPhase) => {
       const routed = nativeBorders.filter((entry) => entry.phase === phase && entry.artwork);
-      if (routed.length === 0 || !foreground) return true;
+      const artwork = routed[0]?.artwork;
+      if (artwork === undefined || !foreground) return true;
       if (phase === 'arrival' && retainedArtworkActive) return true;
       if (phase === 'move' && retainedArtworkActive) return true;
       // A zero-area CLIP is treated as no scissor by Caspar's compositor.
       // Keep a non-empty scissor wholly outside the actual channel raster.
-      const scope = phase === 'move' ? parkedArtworkClip : routed[0]!.artwork!.remainder;
+      const scope = phase === 'move' ? parkedArtworkClip : artwork.remainder;
       const lines = [
-        ...routed.flatMap(({ slots, initialOpacity }) => initialOpacity === 0 ? [] :
-          slots.map((slot) => this.#builder.mixerOpacity(slot, initialOpacity))),
+        ...routed.flatMap(({ slots, initialOpacity }) =>
+          initialOpacity === 0
+            ? []
+            : slots.map((slot) => this.#builder.mixerOpacity(slot, initialOpacity)),
+        ),
         this.#foregroundArtworkClip(foreground, scope),
       ];
-      const results = await Promise.all(borderLeases.map(async (lease) => {
-        if (!lease.ownsArtworkForeground() || !current()) return false;
-        lease.clippedForeground = true;
-        for (const line of lines) {
-          if (lease.owner !== page.session) {
-            if (!(peerCurrent() && await sendPeer(line, cancel.signal))) return false;
-          } else {
-            const sent = await this.#send(line, this.#nextSeq(), 'urgent', {...nativeTarget, signal: cancel.signal});
-            if (!sent.ok || !sent.onPrimary) return false;
+      const results = await Promise.all(
+        borderLeases.map(async (lease) => {
+          if (!lease.ownsArtworkForeground() || !current()) return false;
+          lease.clippedForeground = true;
+          for (const line of lines) {
+            if (lease.owner !== page.session) {
+              if (!(peerCurrent() && (await sendPeer(line, cancel.signal)))) return false;
+            } else {
+              const sent = await this.#send(line, this.#nextSeq(), 'urgent', {
+                ...nativeTarget,
+                signal: cancel.signal,
+              });
+              if (!sent.ok || !sent.onPrimary) return false;
+            }
           }
-        }
-        return true;
-      }));
+          return true;
+        }),
+      );
       if (phase === 'move' && results.every(Boolean)) retainedArtworkActive = true;
       return results.every(Boolean);
     };
@@ -17964,7 +18183,12 @@ export class CasparRuntime {
     ): Promise<FramePhaseReply> => {
       const period = this.#channelFrameMsFor(channel);
       if (kind !== 'arrival' && !(await clipResidentArtwork(kind))) return unavailable;
-      if (kind === 'move' && !retainedArtworkActive && foreground && nativeBorders.some((s) => s.phase === 'departure' && s.artwork)) {
+      if (
+        kind === 'move' &&
+        !retainedArtworkActive &&
+        foreground &&
+        nativeBorders.some((s) => s.phase === 'departure' && s.artwork)
+      ) {
         const line = this.#foregroundArtworkClip(foreground);
         const sent = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
         if (!sent.ok || !sent.onPrimary) return { ...sent, ok: false };
@@ -17974,7 +18198,8 @@ export class CasparRuntime {
         if (border.focusSeat !== undefined) continue;
         const step = nativePresetBorderStep(border, kind, phase, period);
         if (step === undefined) continue;
-        const rects = border.slots.length === 0 || border.artwork ? [] : edgeRects(border, step.rect);
+        const rects =
+          border.slots.length === 0 || border.artwork ? [] : edgeRects(border, step.rect);
         if (rects === undefined) return unavailable;
         if (border.underlay !== undefined) {
           const { slot, producer } = border.underlay;
@@ -17996,7 +18221,10 @@ export class CasparRuntime {
             const fit = box && routedArtworkFit(border.artwork.source, box);
             if (!fit) return unavailable;
             if (kind === 'move') watchMixer(moveWitnesses, slot.layer, fit, step);
-            for (const line of [...this.#builder.mixerFit(slot, fit, step), this.#builder.mixerOpacity(slot, step.opacity, step)]) {
+            for (const line of [
+              ...this.#builder.mixerFit(slot, fit, step),
+              this.#builder.mixerOpacity(slot, step.opacity, step),
+            ]) {
               const sent = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
               if (!sent.ok || !sent.onPrimary) return { ...sent, ok: false };
               queuePeer(this.#builder.deferMixer(line), undefined, undefined, slot);
@@ -18005,8 +18233,10 @@ export class CasparRuntime {
           }
           const rect = rects[index];
           if (rect === undefined) return unavailable;
-          const strokeStep = step.strokeOpacity === undefined ? step : { ...step, opacity: step.strokeOpacity };
-          if (kind === 'move') watchMixer(moveWitnesses, slot.layer, { fill: rect, clip: rect }, strokeStep);
+          const strokeStep =
+            step.strokeOpacity === undefined ? step : { ...step, opacity: step.strokeOpacity };
+          if (kind === 'move')
+            watchMixer(moveWitnesses, slot.layer, { fill: rect, clip: rect }, strokeStep);
           for (const line of nativeBorderLines(slot, rect, strokeStep)) {
             const sent = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
             if (!sent.ok || !sent.onPrimary) return { ...sent, ok: false };
@@ -18046,7 +18276,9 @@ export class CasparRuntime {
       const build = (slot: CommandSlot, nativeStartsAt: number) => {
         const focus = effect.focusSwap?.attachedArtwork;
         const foregroundFocus = slot === foreground && phase.focusArtwork !== undefined;
-        const pagePhase: FrameTransitionPhase = { ...hideNativeFallbacks(slot === foreground ? staticRouteSource(phase, kind) : phase) };
+        const pagePhase: FrameTransitionPhase = {
+          ...hideNativeFallbacks(slot === foreground ? staticRouteSource(phase, kind) : phase),
+        };
         if (foregroundFocus && focus !== undefined && phase.focusArtwork !== undefined) {
           pagePhase.frames = [];
           delete pagePhase.hidePresetTitlePlateIds;
@@ -18103,7 +18335,9 @@ export class CasparRuntime {
               // pages recognize an explicit border list as a pass-addressed update,
               // even when this effect owns no native borders.
               ...((supportedBorderIds.length > 0 ||
-                (slot === page.slot && effect.focusSwap !== undefined && backdropLook !== undefined)) && {
+                (slot === page.slot &&
+                  effect.focusSwap !== undefined &&
+                  backdropLook !== undefined)) && {
                 nativeBorderPlateIds: supportedBorderIds,
               }),
             },
@@ -18140,14 +18374,17 @@ export class CasparRuntime {
         }
         if (!(await prepareNativeBorders())) {
           if (focusPreparationError === undefined) return unavailable;
-          const message = focusPreparationError === 'focus-artwork-capacity'
-            ? 'The live layer band needs more free layers for this Focus effect. The current Focus is still on air.'
-            : 'The Focus graphics could not be prepared on the active engine. The current Focus is still on air.';
-          return {ok:false, errorCode:focusPreparationError, message};
+          const message =
+            focusPreparationError === 'focus-artwork-capacity'
+              ? 'The live layer band needs more free layers for this Focus effect. The current Focus is still on air.'
+              : 'The Focus graphics could not be prepared on the active engine. The current Focus is still on air.';
+          return { ok: false, errorCode: focusPreparationError, message };
         }
         let focus = effect.focusSwap;
+        const firstStep = focus?.steps[0];
         if (
           focus?.dissolve &&
+          firstStep !== undefined &&
           nativeBorders.some((entry) => entry.focusUnderlay && entry.underlay)
         ) {
           // A running native fallback is at the NDI plate's own depth. Only
@@ -18156,7 +18393,7 @@ export class CasparRuntime {
           const plan = this.#planFocusDissolve(
             focus.initial,
             focus.outgoing,
-            focus.steps[0]!.frames,
+            firstStep.frames,
             focus.incoming.slot.layer > focus.outgoing.slot.layer,
           );
           if (plan) focus = { ...focus, ...plan };
@@ -18166,10 +18403,18 @@ export class CasparRuntime {
           {
             ...effect,
             ...(focus && { focusSwap: focus }),
-            ...(layout && !focus && {
-              decorationAt: (start: number, end: number) =>
-                controlLiveLayoutDecorationOpacity(layout, fromLook, toLook, effect.plateIds, start, end),
-            }),
+            ...(layout &&
+              !focus && {
+                decorationAt: (start: number, end: number) =>
+                  controlLiveLayoutDecorationOpacity(
+                    layout,
+                    fromLook,
+                    toLook,
+                    effect.plateIds,
+                    start,
+                    end,
+                  ),
+              }),
             movingFallbacks,
           },
           changes,
@@ -18299,7 +18544,10 @@ export class CasparRuntime {
               masks,
               true,
               slot === foreground
-                ? { ...staticRouteSource(initialArtwork, 'arrival'), ...(initialStack && {plateStack: initialStack}) }
+                ? {
+                    ...staticRouteSource(initialArtwork, 'arrival'),
+                    ...(initialStack && { plateStack: initialStack }),
+                  }
                 : initialArtwork,
               presetEffectId,
             ),
@@ -18341,7 +18589,8 @@ export class CasparRuntime {
         if (!revealed.landed) return { ...revealed, ok: false };
         if (!(await wait(enter * period + period))) return interrupted;
         return (await waitForNativeBorderEndpoint(page.session, 'arrival')) && current()
-          ? { ok: true } : interrupted;
+          ? { ok: true }
+          : interrupted;
       },
       restore: async () => {
         mirrorForward = false;
@@ -18512,13 +18761,16 @@ export class CasparRuntime {
             peerNeedsRepair() ||
             this.#pendingInputReplicaMixers.get(replica.session)?.has(channel) ||
             this.#orphanedPrimaryMixers.get(replica.session)?.has(channel)
-          ) return;
+          )
+            return;
           const snapshot = !animatePeer || peerFailed || !peerHasPages();
           if (snapshot) {
             const wireChannel = this.#engineChannel(replica.session, channel);
             if (wireChannel === null) return;
             const xml = await this.#readStageInfo(
-              replica.session, wireChannel, AbortSignal.timeout(1_000),
+              replica.session,
+              wireChannel,
+              AbortSignal.timeout(1_000),
             );
             if (!latestReplica() || xml === null) return;
             const state = peerPageState(xml);
@@ -18553,7 +18805,8 @@ export class CasparRuntime {
               fullGeometry ||
               !sameMixerRect(before.fill, after.fill) ||
               !sameMixerRect(before.clip, after.clip)
-            ) lines.push(...this.#builder.mixerFit(slot, after));
+            )
+              lines.push(...this.#builder.mixerFit(slot, after));
             if (opacityChanged && opacity > 0)
               lines.push(this.#builder.mixerOpacity(slot, opacity));
             if (volumeChanged && volume > 0) lines.push(this.#builder.mixerVolume(slot, volume));
@@ -18621,7 +18874,8 @@ export class CasparRuntime {
             for (const change of replicaChanges) {
               touchedSeats.push(change);
               for (const line of change.forward) {
-                if (ownsSeat(change.before) && (await sendReplica(line, change.before)).ok) continue;
+                if (ownsSeat(change.before) && (await sendReplica(line, change.before)).ok)
+                  continue;
                 await restoreReplica();
                 return;
               }
@@ -19074,9 +19328,10 @@ export class CasparRuntime {
       const previousLookId = this.activeLookId(itemId);
       const layout = template?.controlLiveLayout;
       const carrier = template?.liveSources;
-      const fromFocus = layout === undefined
-        ? templateFocusTarget(carrier, layout, previousLookId)
-        : controlLiveLayoutSoloTarget(layout, previousLookId);
+      const fromFocus =
+        layout === undefined
+          ? templateFocusTarget(carrier, layout, previousLookId)
+          : controlLiveLayoutSoloTarget(layout, previousLookId);
       const toFocus = templateFocusTarget(carrier, layout, lookId);
       if (toFocus !== undefined && (fromFocus?.presetId ?? previousLookId) !== toFocus.presetId) {
         return {
@@ -20163,9 +20418,18 @@ export class CasparRuntime {
     this.#forgetOrphanedMixer(channel, session);
   }
 
-  #ownsNativeArtworkCommand(owner: ServerSession | undefined, channel: number, cmd: ArtworkCommand): boolean {
-    return [...this.#nativePresetBorderLeases].some(lease => {
-      if (lease.retired || lease.owner !== owner || lease.queue !== owner.queue || lease.foreground.channel !== channel)
+  #ownsNativeArtworkCommand(
+    owner: ServerSession | undefined,
+    channel: number,
+    cmd: ArtworkCommand,
+  ): boolean {
+    return [...this.#nativePresetBorderLeases].some((lease) => {
+      if (
+        lease.retired ||
+        lease.owner !== owner ||
+        lease.queue !== owner.queue ||
+        lease.foreground.channel !== channel
+      )
         return false;
       const entries = [...lease.layers];
       const entry = entries.find(([slot]) => slot.layer === cmd.target);
@@ -20175,25 +20439,40 @@ export class CasparRuntime {
       const hasSource = (layer: number, ...kinds: NativeArtworkLayerProducer['kind'][]) =>
         entries.some(([slot, value]) => slot.layer === layer && kinds.includes(value.kind));
       if (cmd.kind === 'sting') {
-        return producer.kind === 'focus-group' && cmd.blackUri === producer.blackUri &&
-          cmd.matteLayer === producer.matteLayer && cmd.artworkLayer === producer.artworkLayer &&
-          hasSource(cmd.matteLayer, 'focus-matte', 'focus-page') && hasSource(cmd.artworkLayer, 'focus-page');
+        return (
+          producer.kind === 'focus-group' &&
+          cmd.blackUri === producer.blackUri &&
+          cmd.matteLayer === producer.matteLayer &&
+          cmd.artworkLayer === producer.artworkLayer &&
+          hasSource(cmd.matteLayer, 'focus-matte', 'focus-page') &&
+          hasSource(cmd.artworkLayer, 'focus-page')
+        );
       }
       const initial = cmd.verb === 'PLAY' && cmd.mixFields === undefined;
       switch (producer.kind) {
         case 'artwork-route':
           return initial && cmd.source === lease.foreground.layer && cmd.source === producer.layer;
         case 'focus-matte':
-          return initial && cmd.source === producer.sourceLayer && hasSource(cmd.source, 'focus-page');
+          return (
+            initial && cmd.source === producer.sourceLayer && hasSource(cmd.source, 'focus-page')
+          );
         case 'focus-group':
           return initial && cmd.source === producer.videoLayer;
         case 'focus-normalize':
-          return cmd.source === producer.sourceLayer && hasSource(cmd.source, 'focus-group') &&
-            cmd.verb === 'PLAY' && (initial || cmd.mixFields === producer.holdFields);
+          return (
+            cmd.source === producer.sourceLayer &&
+            hasSource(cmd.source, 'focus-group') &&
+            cmd.verb === 'PLAY' &&
+            (initial || cmd.mixFields === producer.holdFields)
+          );
         case 'focus-mix':
-          return hasSource(cmd.source, 'focus-page', 'focus-normalize') && (
-            initial ? cmd.source === producer.outgoing :
-              cmd.verb === 'LOADBG' && cmd.source === producer.incoming && cmd.mixFields === producer.fields
+          return (
+            hasSource(cmd.source, 'focus-page', 'focus-normalize') &&
+            (initial
+              ? cmd.source === producer.outgoing
+              : cmd.verb === 'LOADBG' &&
+                cmd.source === producer.incoming &&
+                cmd.mixFields === producer.fields)
           );
       }
     });
@@ -20248,10 +20527,15 @@ export class CasparRuntime {
     return [...this.#nativePresetBorderLeases].some(
       (lease) =>
         (owner === undefined || lease.owner === owner) &&
-        !lease.retired && lease.queue === lease.owner.queue && lease.ownsArtworkForeground() &&
-        [...lease.touched].some((slot) =>
-          slot.channel === channel && slot.layer === layer &&
-          lease.layers.get(slot)?.kind === 'artwork-route'),
+        !lease.retired &&
+        lease.queue === lease.owner.queue &&
+        lease.ownsArtworkForeground() &&
+        [...lease.touched].some(
+          (slot) =>
+            slot.channel === channel &&
+            slot.layer === layer &&
+            lease.layers.get(slot)?.kind === 'artwork-route',
+        ),
     );
   }
 
@@ -22905,7 +23189,8 @@ export class CasparRuntime {
   ): string | undefined {
     const { A, B } = this.#adapter.sessions;
     const backup = session === B ? this.#backupClip?.(media.fingerprint) : undefined;
-    const catalogueFile = session === A ? media.file : backup?.kind === 'copy' ? backup.clip : undefined;
+    const catalogueFile =
+      session === A ? media.file : backup?.kind === 'copy' ? backup.clip : undefined;
     return establishedFingerprintFile(stage, layer, media.fingerprint, catalogueFile);
   }
 
@@ -25071,7 +25356,11 @@ export class CasparRuntime {
     for (const item of items) {
       const result = await this.remove(item.itemId);
       if (this.#managedCg !== undefined && !result.accepted) {
-        return { ok: false, removed, ...(result.errorCode !== undefined && { errorCode: result.errorCode }) };
+        return {
+          ok: false,
+          removed,
+          ...(result.errorCode !== undefined && { errorCode: result.errorCode }),
+        };
       }
       removed += 1;
     }
@@ -25831,7 +26120,8 @@ export class CasparRuntime {
    * switch for direct stations; refused when Playout owns redundancy or no backup is declared.
    */
   async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
-    if (this.#managedCg !== undefined) return { ok: false, newPrimary: this.#adapter.currentPrimary };
+    if (this.#managedCg !== undefined)
+      return { ok: false, newPrimary: this.#adapter.currentPrimary };
     const ok = !this.#playoutLinked && (await this.#adapter.failover('manual'));
     const newPrimary = this.#adapter.currentPrimary;
     // B-141 — `server` records which machine is primary AFTER the switch, which
@@ -26000,10 +26290,13 @@ export class CasparRuntime {
         if (row.templateId !== templateId) return false;
         const slot = this.#slots.get(row.itemId);
         if (slot?.channel !== managedChannel) return false;
-        if (!this.#managedBusy && this.#templates.heldVersion(row.itemId) === undefined) return false;
+        if (!this.#managedBusy && this.#templates.heldVersion(row.itemId) === undefined)
+          return false;
         const artifact = this.#managedArtifact(row, slot);
-        return artifact?.bookField !== undefined &&
-          (artifact.html !== html || !isDeepStrictEqual(artifact.info, template));
+        return (
+          artifact?.bookField !== undefined &&
+          (artifact.html !== html || !isDeepStrictEqual(artifact.info, template))
+        );
       });
       if (heldBook) {
         return {
@@ -28110,7 +28403,11 @@ export class CasparRuntime {
       (retirement.owner.queue !== retirementQueue ||
         !this.#ownsNativeBorderRetirement(retirement) ||
         (line !== this.#nativeBorderReleaseCommand(retirement) &&
-          !(retirement.clippedForeground && retirement.ownsArtworkForeground() && line === this.#foregroundArtworkClip(retirement.foreground)) &&
+          !(
+            retirement.clippedForeground &&
+            retirement.ownsArtworkForeground() &&
+            line === this.#foregroundArtworkClip(retirement.foreground)
+          ) &&
           ![...retirement.touched].some(
             (slot) => line === this.#builder.out(slot) || line === this.#builder.mixerClear(slot),
           )))
@@ -28187,7 +28484,8 @@ export class CasparRuntime {
             // `MEDIA-PLATES-01` — `PAUSE` / `RESUME` / `CALL` only where the ledger holds a clip of ours.
             clipOn: (channel, layer) =>
               this.#holdsClip(channel, layer) ||
-              (line === this.#builder.pause({ channel, layer }) && this.#ownsArtworkHold(channel, layer)),
+              (line === this.#builder.pause({ channel, layer }) &&
+                this.#ownsArtworkHold(channel, layer)),
             // `PLAYOUT-FEATURES-01` C — never the Playout's playout layer L; never a raise on the box.
             playoutLayerOn: (channel, layer) => this.#isPlayoutPlaylistLayer(channel, layer),
             audioLockedOn: (channel, layer) => this.#audioLockedOn(channel, layer),

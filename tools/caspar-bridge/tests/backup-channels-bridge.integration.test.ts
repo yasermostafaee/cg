@@ -290,7 +290,10 @@ describe('🔴 R-089 — the fake pair maps itself from the backup engine’s ow
       });
     await answer('missing');
     await runtime.whenServerHealthy(12_000);
-    await until(async () => runtime.health().backup?.state === 'healthy', 'both native connections');
+    await until(
+      async () => runtime.health().backup?.state === 'healthy',
+      'both native connections',
+    );
     const templateId = 'ndi-test';
     runtime.templateImport(
       {

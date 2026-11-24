@@ -108,8 +108,13 @@ export function planNativePresetBorders({
   for (const { plateId, frame } of retained) {
     const fromStroke = fromLook.borderVisible(plateId);
     const toStroke = toLook.borderVisible(plateId);
-    if (!retainedFade && sameBorderRect(frame.from, frame.to) &&
-        fromStroke === toStroke && !attachedArtwork?.(plateId)) continue;
+    if (
+      !retainedFade &&
+      sameBorderRect(frame.from, frame.to) &&
+      fromStroke === toStroke &&
+      !attachedArtwork?.(plateId)
+    )
+      continue;
     const color = fromStroke || toStroke ? opaqueColor(plateId) : undefined;
     const hasStill =
       (!retainedFade || fadingFallbacks?.has(plateId)) &&
@@ -148,8 +153,12 @@ export function planNativePresetBorders({
       const color = look.borderVisible(plateId) ? opaqueColor(plateId) : undefined;
       if (rect === undefined || frameKey === undefined) continue;
       const cut = phase === 'departure' && artwork.immediatelyHidden?.has(plateId) === true;
-      if (color === undefined && (cut || !look.fallbacks?.includes(plateId)) &&
-          !attachedArtwork?.(plateId)) continue;
+      if (
+        color === undefined &&
+        (cut || !look.fallbacks?.includes(plateId)) &&
+        !attachedArtwork?.(plateId)
+      )
+        continue;
       const slide = cut ? undefined : slideByKey.get(frameKey);
       plan.push({
         phase,
@@ -209,7 +218,9 @@ export function nativePresetBorderStep(
   const decoration = phase.decorationOpacity?.find(({ plateId }) => plateId === border.plateId);
   if (
     motion === undefined ||
-    (!decoration && sameBorderRect(motion.from, motion.to) && motion.fromOpacity === motion.toOpacity)
+    (!decoration &&
+      sameBorderRect(motion.from, motion.to) &&
+      motion.fromOpacity === motion.toOpacity)
   )
     return undefined;
   return {

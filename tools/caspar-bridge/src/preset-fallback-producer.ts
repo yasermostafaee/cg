@@ -17,43 +17,51 @@ export type NativePresetFallback =
       readonly sha256: string;
     };
 
-export type NativeArtworkLayerProducer = NativePresetFallback | {
-  readonly kind: 'artwork-route';
-  readonly channel: number;
-  readonly layer: number;
-} | {
-  readonly kind: 'focus-mix';
-  readonly fields: number;
-  readonly channel: number;
-  readonly outgoing: number;
-  readonly incoming: number;
-} | {
-  readonly kind: 'focus-page';
-  readonly url: string;
-} | {
-  readonly kind: 'focus-group';
-  readonly channel: number;
-  readonly videoLayer: number;
-  readonly matteLayer: number;
-  readonly artworkLayer: number;
-  readonly blackUri: string;
-} | {
-  readonly kind: 'focus-normalize';
-  readonly channel: number;
-  readonly sourceLayer: number;
-  readonly holdFields: number;
-} | {
-  readonly kind: 'focus-matte';
-  readonly channel: number;
-  readonly sourceLayer: number;
-};
+export type NativeArtworkLayerProducer =
+  | NativePresetFallback
+  | {
+      readonly kind: 'artwork-route';
+      readonly channel: number;
+      readonly layer: number;
+    }
+  | {
+      readonly kind: 'focus-mix';
+      readonly fields: number;
+      readonly channel: number;
+      readonly outgoing: number;
+      readonly incoming: number;
+    }
+  | {
+      readonly kind: 'focus-page';
+      readonly url: string;
+    }
+  | {
+      readonly kind: 'focus-group';
+      readonly channel: number;
+      readonly videoLayer: number;
+      readonly matteLayer: number;
+      readonly artworkLayer: number;
+      readonly blackUri: string;
+    }
+  | {
+      readonly kind: 'focus-normalize';
+      readonly channel: number;
+      readonly sourceLayer: number;
+      readonly holdFields: number;
+    }
+  | {
+      readonly kind: 'focus-matte';
+      readonly channel: number;
+      readonly sourceLayer: number;
+    };
 
 type SolidOrImage =
   | { readonly kind: 'color'; readonly color: string }
   | {
       readonly kind: 'image';
       readonly url: string;
-    } | Exclude<NativeArtworkLayerProducer, NativePresetFallback>;
+    }
+  | Exclude<NativeArtworkLayerProducer, NativePresetFallback>;
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 // The 75% bars match the authored programme fallback in buildLiveFallback.
@@ -137,7 +145,10 @@ export async function resolveNativeStrokeTexture(
   ]);
   const result = await putStill(pages, bytes, 'Plate border');
   if (!result.ok) return undefined;
-  if (!cached.has(key) && cached.size >= 32) cached.delete(cached.keys().next().value!);
+  if (!cached.has(key) && cached.size >= 32) {
+    const oldest = cached.keys().next();
+    if (!oldest.done) cached.delete(oldest.value);
+  }
   cached.set(key, result.page.sha256);
   return stored(result.page.sha256);
 }
@@ -308,23 +319,44 @@ export function nativePresetProducerLayerState(
   const stateOf = (pass: string | undefined): 'empty' | 'native' | 'native-pending' | 'foreign' => {
     const kind = producer(pass);
     if (pass === undefined || kind === 'empty') return 'empty';
-    if (expected.kind === 'focus-group' || expected.kind === 'focus-normalize' || expected.kind === 'focus-matte') {
+    if (
+      expected.kind === 'focus-group' ||
+      expected.kind === 'focus-normalize' ||
+      expected.kind === 'focus-matte'
+    ) {
       const route = /<route>([\s\S]*?)<\/route>/i.exec(pass)?.[1] ?? '';
       const source = expected.kind === 'focus-group' ? expected.videoLayer : expected.sourceLayer;
-      const ownRoute = Number(/<channel>(\d+)<\/channel>/.exec(route)?.[1]) === expected.channel &&
+      const ownRoute =
+        Number(/<channel>(\d+)<\/channel>/.exec(route)?.[1]) === expected.channel &&
         Number(/<layer>(\d+)<\/layer>/.exec(route)?.[1]) === source;
-      if (kind === 'route' && ownRoute) return expected.kind === 'focus-matte' ? 'native' : 'native-pending';
+      if (kind === 'route' && ownRoute)
+        return expected.kind === 'focus-matte' ? 'native' : 'native-pending';
       if (expected.kind === 'focus-matte' || kind !== 'transition') return 'foreign';
       const transition = /<transition>([\s\S]*?)<\/transition>/i.exec(pass)?.[1] ?? '';
-      const frames = [...transition.matchAll(/<frame>(\d+)<\/frame>/g)].map(match => Number(match[1]));
-      if (frames.length !== 2 || frames[1]! <= 0 || frames[0]! > frames[1]!) return 'foreign';
+      const frames = [...transition.matchAll(/<frame>(\d+)<\/frame>/g)].map((match) =>
+        Number(match[1]),
+      );
+      const [currentFrame, totalFrames] = frames;
+      if (
+        frames.length !== 2 ||
+        currentFrame === undefined ||
+        totalFrames === undefined ||
+        totalFrames <= 0 ||
+        currentFrame > totalFrames
+      )
+        return 'foreign';
       if (expected.kind === 'focus-group') {
         // INFO identifies STING by its destination. Each lease serves its
         // own black URI because the engine omits its matte and overlay URLs.
         const file = /<file>([\s\S]*?)<\/file>/i.exec(pass)?.[1] ?? '';
         const path = /<path>([^<]+)<\/path>/i.exec(file)?.[1]?.replaceAll('&amp;', '&');
-        if (path !== expected.blackUri || !/<type>sting<\/type>/i.test(transition)) return 'foreign';
-      } else if (!ownRoute || frames[1] !== expected.holdFields || !/<type>mix<\/type>/i.test(transition)) {
+        if (path !== expected.blackUri || !/<type>sting<\/type>/i.test(transition))
+          return 'foreign';
+      } else if (
+        !ownRoute ||
+        totalFrames !== expected.holdFields ||
+        !/<type>mix<\/type>/i.test(transition)
+      ) {
         return 'foreign';
       }
       return frames[0] === 0 ? 'native-pending' : 'native';
@@ -363,7 +395,9 @@ export function nativePresetProducerLayerState(
     }
     const path = /<file>[\s\S]*?<path>([^<]+)<\/path>[\s\S]*?<\/file>/i.exec(pass)?.[1]?.trim();
     if (expected.kind === 'focus-page')
-      return kind === 'html' && path?.replaceAll('&amp;', '&') === expected.url ? 'native' : 'foreign';
+      return kind === 'html' && path?.replaceAll('&amp;', '&') === expected.url
+        ? 'native'
+        : 'foreign';
     if (path !== expected.url) return 'foreign';
     if (kind === 'ffmpeg') return 'native';
     // CasparCG reports the destination file at the top level while a zero-frame

@@ -1,30 +1,56 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   artworkGroupRemainder,
   remainingArtworkClip,
   routedArtworkFit,
 } from '../src/preset-artwork-route.js';
 import { nativePresetProducerLayerState } from '../src/preset-fallback-producer.js';
-import { artworkCommand, serverBLineFor, serverBLineRefusal, type ArtworkCommand } from '../src/server-b-line.js';
+import {
+  artworkCommand,
+  serverBLineFor,
+  serverBLineRefusal,
+  type ArtworkCommand,
+} from '../src/server-b-line.js';
 
 describe('native plate artwork route', () => {
   it('maps both STING sources and accepts only the exact leased composition on B', () => {
     const black = 'http://192.168.21.32:7911/pages/black.png?plate=1';
-    const channelOnB = (channel: number) => channel === 1 ? 2 : null;
+    const channelOnB = (channel: number) => (channel === 1 ? 2 : null);
     const ctx = {
-      map: { channelOnB, channelOnBAtTake: channelOnB, release: () => {}, stationChannelOf: (channel: number) => channel === 2 ? 1 : null },
+      map: {
+        channelOnB,
+        channelOnBAtTake: channelOnB,
+        release: vi.fn(),
+        stationChannelOf: (channel: number) => (channel === 2 ? 1 : null),
+      },
       isOwnLayer: () => false,
-      ownsArtworkCommand: (station: number, cmd: ArtworkCommand) => station === 1 && (cmd.kind === 'sting'
-        ? cmd.blackUri === black && cmd.target === 65 && cmd.matteLayer === 64 && cmd.artworkLayer === 62
-        : cmd.verb === 'PLAY' && cmd.target === 68 && cmd.source === 65 && cmd.mixFields === 30_000),
+      ownsArtworkCommand: (station: number, cmd: ArtworkCommand) =>
+        station === 1 &&
+        (cmd.kind === 'sting'
+          ? cmd.blackUri === black &&
+            cmd.target === 65 &&
+            cmd.matteLayer === 64 &&
+            cmd.artworkLayer === 62
+          : cmd.verb === 'PLAY' &&
+            cmd.target === 68 &&
+            cmd.source === 65 &&
+            cmd.mixFields === 30_000),
     };
-    const sting = (c: number) => 'PLAY ' + c + '-65 "' + black + '" STING "route://' + c + '-64" 0 "route://' + c + '-62"';
-    expect(serverBLineFor(sting(1),ctx)).toEqual({line:sting(2)});
-    expect(serverBLineRefusal(sting(2),ctx)).toBeNull();
-    expect(serverBLineFor('PLAY 1-68 "route://1-65" MIX 30000',ctx)).toEqual({line:'PLAY 2-68 "route://2-65" MIX 30000'});
-    for (const line of [sting(1).replace('plate=1','plate=2'), sting(1).replace('-64"','-63"'),
-      sting(1).replace('route://1-62','route://2-62'), sting(1) + ' LOOP', 'PLAY 1-68 "route://1-65" MIX 1']) {
-      expect(serverBLineFor(line,ctx)).toHaveProperty('refused');
+    const sting = (c: number) =>
+      'PLAY ' + c + '-65 "' + black + '" STING "route://' + c + '-64" 0 "route://' + c + '-62"';
+    expect(serverBLineFor(sting(1), ctx)).toEqual({ line: sting(2) });
+    expect(serverBLineRefusal(sting(2), ctx)).toBeNull();
+    expect(serverBLineFor('PLAY 1-68 "route://1-65" MIX 30000', ctx)).toEqual({
+      line: 'PLAY 2-68 "route://2-65" MIX 30000',
+    });
+    for (const line of [
+      sting(1).replace('plate=1', 'plate=2'),
+      sting(1).replace('-64"', '-63"'),
+      sting(1).replace('route://1-62', 'route://2-62'),
+      sting(1) + ' LOOP',
+      'PLAY 1-68 "route://1-65" MIX 1',
+    ]) {
+      expect(serverBLineFor(line, ctx)).toHaveProperty('refused');
     }
     expect(artworkCommand(sting(1) + '\n')).toBeUndefined();
   });

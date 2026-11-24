@@ -30,7 +30,7 @@ function readVint(
   let value = retainMarker ? first : first & (marker - 1);
   let unknown = !retainMarker && value === marker - 1;
   for (let i = 1; i < width; i++) {
-    const byte = bytes[offset + i]!;
+    const byte = bytes.readUInt8(offset + i);
     value = value * 256 + byte;
     unknown &&= byte === 0xff;
   }
@@ -86,15 +86,16 @@ function plainHevc(configuration: Buffer): boolean {
   if (
     configuration.length < 24 ||
     configuration[0] !== 1 ||
-    ![1, 2].includes(configuration[1]! & 31) ||
-    (configuration[16]! & 3) !== 1
+    ![1, 2].includes(configuration.readUInt8(1) & 31) ||
+    (configuration.readUInt8(16) & 3) !== 1
   )
     return false;
   const parameterSets = new Set<number>();
   let offset = 23;
-  for (let array = 0; array < configuration[22]!; array++) {
+  const arrays = configuration.readUInt8(22);
+  for (let array = 0; array < arrays; array++) {
     if (offset + 3 > configuration.length) return false;
-    const type = configuration[offset]! & 63;
+    const type = configuration.readUInt8(offset) & 63;
     const count = configuration.readUInt16BE(offset + 1);
     if (![32, 33, 34, 39, 40].includes(type) || count === 0) return false;
     offset += 3;
@@ -103,16 +104,16 @@ function plainHevc(configuration: Buffer): boolean {
       const length = configuration.readUInt16BE(offset);
       offset += 2;
       if (length < 3 || offset + length > configuration.length) return false;
-      const first = configuration[offset]!;
-      const second = configuration[offset + 1]!;
+      const first = configuration.readUInt8(offset);
+      const second = configuration.readUInt8(offset + 1);
       if ((first & 0x81) !== 0 || second >> 3 !== 0 || (second & 7) === 0 || first >> 1 !== type)
         return false;
       if (type === 32) {
         // A VPS with a nonzero vps_max_layers_minus1 can carry an auxiliary alpha layer.
         if (
           length < 4 ||
-          (configuration[offset + 2]! & 3) !== 0 ||
-          configuration[offset + 3]! >> 4 !== 0
+          (configuration.readUInt8(offset + 2) & 3) !== 0 ||
+          configuration.readUInt8(offset + 3) >> 4 !== 0
         )
           return false;
       }
@@ -124,12 +125,9 @@ function plainHevc(configuration: Buffer): boolean {
 }
 
 function plainAvc(configuration: Buffer): boolean {
-  if (
-    configuration.length < 11 ||
-    configuration[0] !== 1 ||
-    ![66, 77, 100, 110].includes(configuration[1]!)
-  )
-    return false;
+  if (configuration.length < 11 || configuration[0] !== 1) return false;
+  const profile = configuration.readUInt8(1);
+  if (![66, 77, 100, 110].includes(profile)) return false;
   let offset = 6;
   const read = (count: number, type: number): boolean => {
     if (count === 0) return false;
@@ -140,21 +138,21 @@ function plainAvc(configuration: Buffer): boolean {
       if (
         length < 2 ||
         offset + length > configuration.length ||
-        (configuration[offset]! & 0x9f) !== type
+        (configuration.readUInt8(offset) & 0x9f) !== type
       )
         return false;
       offset += length;
     }
     return true;
   };
-  if (!read(configuration[5]! & 31, 7) || offset === configuration.length) return false;
-  if (!read(configuration[offset++]!, 8)) return false;
+  if (!read(configuration.readUInt8(5) & 31, 7) || offset === configuration.length) return false;
+  if (!read(configuration.readUInt8(offset++), 8)) return false;
   // A high-profile extension may declare chroma and bit depth. Reject an auxiliary SPS.
   return (
     offset === configuration.length ||
-    ([100, 110].includes(configuration[1]!) &&
+    ([100, 110].includes(profile) &&
       configuration.length - offset === 4 &&
-      (configuration[offset]! & 3) === 1 &&
+      (configuration.readUInt8(offset) & 3) === 1 &&
       configuration[offset + 3] === 0)
   );
 }
@@ -236,7 +234,8 @@ export function establishedFingerprintFile(
   const path = /<file>[\s\S]*?<path>([^<]+)<\/path>/.exec(foreground)?.[1]?.trim();
   if (
     path === undefined ||
-    /[&\x00-\x1f]/.test(path) ||
+    path.includes('&') ||
+    Array.from(path).some((character) => character.charCodeAt(0) < 32) ||
     path.startsWith('\\\\') ||
     path.startsWith('//') ||
     !(isAbsolute(path) || /^[a-z]:[/\\]/i.test(path)) ||
@@ -250,7 +249,8 @@ export function establishedFingerprintFile(
   // The supplied path is this engine's D11 entry for the fingerprint. A named
   // file from another engine's catalogue does not identify this foreground.
   if (/^[a-z]:[/\\]/i.test(path) && /^[a-z]:[/\\]/i.test(engineCatalogueFile))
-    return win32.normalize(path).toLowerCase() === win32.normalize(engineCatalogueFile).toLowerCase()
+    return win32.normalize(path).toLowerCase() ===
+      win32.normalize(engineCatalogueFile).toLowerCase()
       ? path
       : undefined;
   return path === engineCatalogueFile ? path : undefined;
@@ -308,14 +308,15 @@ export function establishedNdiVideoFrame(xml: string, layer: number, sender: str
   if (foreground === undefined) return false;
   const transition = /<transition>([\s\S]*?)<\/transition>/.exec(foreground);
   const top = transition ? foreground.replace(transition[0], '') : foreground;
+  const transitionBody = transition?.[1];
   const producer = producerOf(top);
   if (
     producer !== 'ndi' &&
     !(
       producer === 'transition' &&
-      transition &&
-      producerOf(transition[1]!) === 'ndi' &&
-      /<type>cut<\/type>/.test(transition[1]!)
+      transitionBody !== undefined &&
+      producerOf(transitionBody) === 'ndi' &&
+      /<type>cut<\/type>/.test(transitionBody)
     )
   )
     return false;

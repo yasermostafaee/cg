@@ -3380,7 +3380,10 @@ it.each([
       },
     );
     if (thirdBorderOnly) {
-      const pictures = r.liveLayers().get('item-1')!.toSorted((a, b) => a.slot.layer - b.slot.layer);
+      const pictures = r
+        .liveLayers()
+        .get('item-1')!
+        .toSorted((a, b) => a.slot.layer - b.slot.layer);
       expect(pictures).toHaveLength(3);
       for (const [i, picture] of pictures.entries()) {
         const nextDepth = pictures[i + 1]?.slot.layer ?? 79;
@@ -5845,7 +5848,10 @@ it('applies the destination Designer effect to an ordinary mirrored preset switc
     const starts = engines.map((engine) => engine.receivedCommands().length);
     expect(await r.setActiveLook('item-1', look, override)).toEqual({ ok: true });
     for (const [i, engine] of engines.entries()) {
-      const writes = engine.receivedCommands().slice(starts[i]!).map(({ line }) => line);
+      const writes = engine
+        .receivedCommands()
+        .slice(starts[i]!)
+        .map(({ line }) => line);
       const phases = writes.flatMap((line) => nativeBorderControl(line)?.frameTransition ?? []);
       const timed = writes.some((line) =>
         / (?:FILL|CLIP) .* [1-9]\d* easeoutquad DEFER$/.test(line),

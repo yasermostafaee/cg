@@ -646,15 +646,22 @@ export class TemplateHttpServer {
         return;
       }
       if (field === 'focus-pair-ready') {
-        const start = index === 0 && this.focusPaints.rendezvous(take, record['look'], record['clock']);
-        if (!start) { refuse('token names no matching Focus pair'); return; }
+        const start =
+          index === 0 && this.focusPaints.rendezvous(take, record['look'], record['clock']);
+        if (!start) {
+          refuse('token names no matching Focus pair');
+          return;
+        }
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
         res.end(JSON.stringify(start));
         return;
       }
       let accepted = false;
       try {
-        accepted = this.nativeFallbacks.accepts(take, field, index) || this.focusPaints.report(take, field, index) || (this.#onPageState?.(take, field, index) ?? false);
+        accepted =
+          this.nativeFallbacks.accepts(take, field, index) ||
+          this.focusPaints.report(take, field, index) ||
+          (this.#onPageState?.(take, field, index) ?? false);
       } catch (err) {
         refuse(`handler threw: ${err instanceof Error ? err.message : String(err)}`);
         return;

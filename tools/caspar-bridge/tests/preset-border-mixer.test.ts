@@ -119,7 +119,10 @@ describe('native preset border planning', () => {
   it('keeps author-hidden, fallback-only, and translucent strokes in their existing rendering path', () => {
     expect(
       planNativePresetBorders({
-        fromLook: look('old', { shared: left, fallback: left, hidden: right }, ['hidden', 'shared']),
+        fromLook: look('old', { shared: left, fallback: left, hidden: right }, [
+          'hidden',
+          'shared',
+        ]),
         toLook: look('new', { shared: right, incoming: left, alpha: right }, ['shared']),
         retained: [{ plateId: 'shared', frame: frame('shared', 'old') }],
         retainedFade: true,
@@ -148,11 +151,21 @@ describe('native preset border planning', () => {
       });
       expect(border?.color).toBe('#112233');
       expect(Boolean(border?.strokeInitiallyHidden)).toBe(!startVisible);
-      const step = nativePresetBorderStep(border!, 'move', {
-        ...phase, frames: [motion], decorationOpacity: [{
-          plateId: 'host', border: { fromOpacity: Number(startVisible), toOpacity: 0.75 },
-        }],
-      }, 40);
+      const step = nativePresetBorderStep(
+        border!,
+        'move',
+        {
+          ...phase,
+          frames: [motion],
+          decorationOpacity: [
+            {
+              plateId: 'host',
+              border: { fromOpacity: Number(startVisible), toOpacity: 0.75 },
+            },
+          ],
+        },
+        40,
+      );
       expect(step).toMatchObject({ rect: left, frames: 3, opacity: 1, strokeOpacity: 0.75 });
     }
   });

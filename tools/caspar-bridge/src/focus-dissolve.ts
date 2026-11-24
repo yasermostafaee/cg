@@ -108,7 +108,10 @@ export class FocusImportSurfaces {
       if (html === null) return false;
       still = staticFocusImports(html);
       this.#byVersion.set(version, still);
-      if (this.#byVersion.size > 16) this.#byVersion.delete(this.#byVersion.keys().next().value!);
+      if (this.#byVersion.size > 16) {
+        const oldest = this.#byVersion.keys().next();
+        if (!oldest.done) this.#byVersion.delete(oldest.value);
+      }
     }
     return attachments.every(({ sourceId }) => still.has(sourceId));
   }
@@ -198,6 +201,7 @@ export function planFocusDissolve(
   const slot = slots.findLast((slot) =>
     plates.every((plate) => slot.layer > plate.normalized.layer),
   );
-  if (!slot) return undefined;
-  return { slot, fields, outgoing: plates[0]!.normalized, incoming: plates[1]!.normalized, plates };
+  const [outgoing, incoming] = plates;
+  if (!slot || !outgoing || !incoming) return undefined;
+  return { slot, fields, outgoing: outgoing.normalized, incoming: incoming.normalized, plates };
 }

@@ -235,7 +235,11 @@ export function spaceLiveLayersForBorders(
   order: readonly LiveLayerOrder[] = [],
   focusSeatIndices: ReadonlySet<number> = new Set(),
 ): number[] | null {
-  if (borderedSeatIndices.size === 0 && underlaySeatIndices.size === 0 && focusSeatIndices.size === 0)
+  if (
+    borderedSeatIndices.size === 0 &&
+    underlaySeatIndices.size === 0 &&
+    focusSeatIndices.size === 0
+  )
     return [...layers];
   if (!Number.isInteger(edgeSlots) || edgeSlots < 0) return null;
 
@@ -244,13 +248,14 @@ export function spaceLiveLayersForBorders(
   for (let layer = range.start; layer <= range.end; layer += 1) {
     if (isAvailable(layer)) available.push(layer);
   }
-  type Group = {
+  type Seat = (typeof seats)[number];
+  interface Group {
     readonly key: string | undefined;
-    readonly seats: typeof seats;
+    readonly seats: [Seat, ...Seat[]];
     edges: number;
     underlay: number;
-  };
-  const group = (previous: Group | undefined, seat: (typeof seats)[number]): Group => {
+  }
+  const group = (previous: Group | undefined, seat: Seat): Group => {
     const edges = Math.max(
       borderedSeatIndices.has(seat.index) ? edgeSlots : 0,
       focusSeatIndices.has(seat.index) ? 1 : 0,
@@ -305,7 +310,10 @@ export function spaceLiveLayersForBorders(
   const compactGroups =
     arranged === null
       ? null
-      : compact.toSorted((a, b) => arranged[compact.indexOf(a)]! - arranged[compact.indexOf(b)]!);
+      : compact
+          .map((group, index) => ({ group, rank: arranged[index] ?? Infinity }))
+          .sort((a, b) => a.rank - b.rank)
+          .map(({ group }) => group);
   const safeOrder = compactGroups?.flatMap((slice) => slice.seats.map(({ index }) => index));
   const groups =
     compactGroups !== null &&
@@ -332,7 +340,7 @@ export function spaceLiveLayersForBorders(
   const spaced: number[] = [];
   let firstAvailable = 0;
   for (const group of groups) {
-    const preferred = available.indexOf(group.seats[0]!.layer);
+    const preferred = available.indexOf(group.seats[0].layer);
     const lastAvailable = available.length - remaining + group.underlay;
     const chosen = Math.min(lastAvailable, Math.max(preferred, firstAvailable + group.underlay));
     for (const [offset, seat] of group.seats.entries()) {

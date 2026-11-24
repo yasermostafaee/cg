@@ -2,21 +2,24 @@ import { randomUUID } from 'node:crypto';
 import { TEMPLATE_PAGE_STATE_PATH } from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
-type Fit = { fill: NormalizedRect; clip: NormalizedRect };
+interface Fit {
+  fill: NormalizedRect;
+  clip: NormalizedRect;
+}
 
-type FocusPair = {
+interface FocusPair {
   colorClock?: number;
   matteClock?: number;
   startAt?: number;
-};
+}
 
-type FocusPaint = {
+interface FocusPaint {
   look: string;
   path: string;
   matte: boolean;
   pair?: FocusPair;
   done: () => void;
-};
+}
 
 /** The focus page is an entire output raster. Transform that raster by the
  * same affine change as its native picture, including the picture's crop. */

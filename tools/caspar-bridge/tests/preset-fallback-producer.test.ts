@@ -260,7 +260,11 @@ describe('native preset producer stage ownership', () => {
   it('accepts a warmed Focus dissolve only for its owned foreground and background routes', () => {
     const mix = { kind: 'focus-mix', channel: 2, outgoing: 67, incoming: 72, fields: 21 } as const;
     const route = (channel: number, layer: number) =>
-      '<producer>route</producer><route><channel>' + channel + '</channel><layer>' + layer + '</layer></route>';
+      '<producer>route</producer><route><channel>' +
+      channel +
+      '</channel><layer>' +
+      layer +
+      '</layer></route>';
     const previous = route(2, 67);
     const next = route(2, 72);
     expect(nativePresetProducerLayerState(stage(previous, next), 60, mix)).toBe('native');
@@ -271,25 +275,59 @@ describe('native preset producer stage ownership', () => {
 
   it('proves a complete Focus group and its normalizer from the exact producer on the same engine', () => {
     const blackUri = 'http://127.0.0.1:7911/pages/black.png?take=t&plate=p';
-    const group = { kind: 'focus-group', channel: 2, videoLayer: 71, matteLayer: 64, artworkLayer: 62, blackUri } as const;
-    const normal = { kind: 'focus-normalize', channel: 2, sourceLayer: 65, holdFields: 30_000 } as const;
-    const route = (layer: number) => '<route><channel>2</channel><layer>' + layer + '</layer></route>';
+    const group = {
+      kind: 'focus-group',
+      channel: 2,
+      videoLayer: 71,
+      matteLayer: 64,
+      artworkLayer: 62,
+      blackUri,
+    } as const;
+    const normal = {
+      kind: 'focus-normalize',
+      channel: 2,
+      sourceLayer: 65,
+      holdFields: 30_000,
+    } as const;
+    const route = (layer: number) =>
+      '<route><channel>2</channel><layer>' + layer + '</layer></route>';
     const transit = (identity: string, type: string, index: number, fields: number) =>
-      identity + '<producer>transition</producer><transition><frame>' + index + '</frame><frame>' + fields +
-      '</frame><type>' + type + '</type></transition>';
-    const file = '<file><name>black.png</name><path>' + blackUri.replace('&','&amp;') + '</path></file>';
+      identity +
+      '<producer>transition</producer><transition><frame>' +
+      index +
+      '</frame><frame>' +
+      fields +
+      '</frame><type>' +
+      type +
+      '</type></transition>';
+    const file =
+      '<file><name>black.png</name><path>' + blackUri.replace('&', '&amp;') + '</path></file>';
     const current = transit(file, 'sting', 2, 600);
     expect(nativePresetProducerLayerState(stage(current), 60, group)).toBe('native');
-    expect(nativePresetProducerLayerState(stage(transit(file,'sting',0,600)), 60, group)).toBe('native-pending');
-    expect(nativePresetProducerLayerState(stage('<producer>route</producer>' + route(71)), 60, group)).toBe('native-pending');
-    for (const other of [current.replace('plate=p','plate=q'), current.replace('>sting<','>mix<'),
-      '<producer>route</producer>' + route(77), current.replace(file,'<color>#000000</color>')])
-      expect(nativePresetProducerLayerState(stage(other),60,group)).toBe('foreign');
+    expect(nativePresetProducerLayerState(stage(transit(file, 'sting', 0, 600)), 60, group)).toBe(
+      'native-pending',
+    );
+    expect(
+      nativePresetProducerLayerState(stage('<producer>route</producer>' + route(71)), 60, group),
+    ).toBe('native-pending');
+    for (const other of [
+      current.replace('plate=p', 'plate=q'),
+      current.replace('>sting<', '>mix<'),
+      '<producer>route</producer>' + route(77),
+      current.replace(file, '<color>#000000</color>'),
+    ])
+      expect(nativePresetProducerLayerState(stage(other), 60, group)).toBe('foreign');
     const mixed = transit(route(65), 'mix', 7, 30_000);
-    expect(nativePresetProducerLayerState(stage(mixed),60,normal)).toBe('native');
-    expect(nativePresetProducerLayerState(stage('<producer>route</producer>'+route(65)),60,normal)).toBe('native-pending');
-    for (const other of [mixed.replace('30000','30'), mixed.replace('>65<','>64<'), mixed.replace('>2<','>1<')])
-      expect(nativePresetProducerLayerState(stage(other),60,normal)).toBe('foreign');
+    expect(nativePresetProducerLayerState(stage(mixed), 60, normal)).toBe('native');
+    expect(
+      nativePresetProducerLayerState(stage('<producer>route</producer>' + route(65)), 60, normal),
+    ).toBe('native-pending');
+    for (const other of [
+      mixed.replace('30000', '30'),
+      mixed.replace('>65<', '>64<'),
+      mixed.replace('>2<', '>1<'),
+    ])
+      expect(nativePresetProducerLayerState(stage(other), 60, normal)).toBe('foreign');
   });
 
   it('accepts the exact FFmpeg file URI regardless of whether it is pending or seated', () => {

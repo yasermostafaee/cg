@@ -3738,9 +3738,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         )
           continue;
         const { matches } = reserveLiveInputIdentity(backupInputs, scope, logicalId);
-        if (matches.length > 0) {
+        const local = matches[0];
+        if (local !== undefined) {
           const mappedSender = sourceNdiTarget(sourceId, 'B', matches);
-          const local = matches[0]!;
           const isReserve = (row: { casparHost: string; casparChannel: number }) =>
             row.casparChannel === reserveChannel &&
             hostJoinsStation(row.casparHost, [serverB.host]);
@@ -3770,7 +3770,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         ) {
           return { engines, sources: {} };
         }
-        for (const id of proven) sources[id]!.B = 'present';
+        for (const id of proven) {
+          const source = sources[id];
+          if (source !== undefined) source.B = 'present';
+        }
       }
     }
     return { engines, sources };

@@ -9,7 +9,7 @@ function backgroundPage() {
   const holds = new NativeFallbackHolds();
   const html = holds.inject('<body></body>', '/t/old?cgpass=background');
   const styles = new Set<{ textContent: string }>();
-  const page = { update(_payload: string) {} };
+  const page = { update: vi.fn<(payload: string) => void>() };
   const script = /<script>([\s\S]+)<\/script>/.exec(html)![1]!;
   runInNewContext(script, {
     window: page,

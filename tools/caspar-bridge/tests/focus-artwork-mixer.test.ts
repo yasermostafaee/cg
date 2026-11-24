@@ -14,10 +14,10 @@ describe('first painted focus artwork', () => {
     const location = new URL(page.url);
     const markup = staging.inject('<body></body>', location.pathname + location.search);
     const script = /<script>([\s\S]+)<\/script>/.exec(markup)![1]!;
-    const ticks: Array<() => void> = [];
+    const ticks: (() => void)[] = [];
     let loaded = false;
     let reported = false;
-    const win = { update(_data: string) {} };
+    const win = { update: vi.fn<(data: string) => void>() };
     const flush = async () => {
       const tick = ticks.shift();
       if (tick) tick();
@@ -85,7 +85,7 @@ describe('first painted focus artwork', () => {
     const color = staging.expect('http://cg.test/template/a', 'F1', controller.signal);
     const matte = staging.expect(color.url, 'F1', controller.signal, { matte: true });
     let now = 1000;
-    const paints: Array<() => void> = [];
+    const paints: (() => void)[] = [];
     const timers: { at: number; invoke: () => void }[] = [];
     function mount(url: string) {
       const play = vi.fn(() => now);

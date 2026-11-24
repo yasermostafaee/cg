@@ -179,18 +179,37 @@ describe('spaceLiveLayersForBorders', () => {
   it('leaves independent Focus artwork over unbordered plates and four edges over the third', () => {
     expect(
       spaceLiveLayersForBorders(
-        [60, 61, 62], new Set([2]), FREE, { start: 60, end: 68 },
-        4, new Set(), new Map(), [], new Set([0, 1, 2]),
+        [60, 61, 62],
+        new Set([2]),
+        FREE,
+        { start: 60, end: 68 },
+        4,
+        new Set(),
+        new Map(),
+        [],
+        new Set([0, 1, 2]),
       ),
     ).toEqual([60, 62, 64]);
   });
 
   it('shares one Focus page across alternate seats belonging to the same plate', () => {
-    const owners = new Map([[0, 'a'], [1, 'a'], [2, 'b'], [3, 'c']]);
+    const owners = new Map([
+      [0, 'a'],
+      [1, 'a'],
+      [2, 'b'],
+      [3, 'c'],
+    ]);
     expect(
       spaceLiveLayersForBorders(
-        [60, 61, 62, 63], new Set([3]), FREE, { start: 60, end: 69 },
-        4, new Set(), owners, [], new Set([0, 1, 2, 3]),
+        [60, 61, 62, 63],
+        new Set([3]),
+        FREE,
+        { start: 60, end: 69 },
+        4,
+        new Set(),
+        owners,
+        [],
+        new Set([0, 1, 2, 3]),
       ),
     ).toEqual([60, 61, 63, 65]);
   });
