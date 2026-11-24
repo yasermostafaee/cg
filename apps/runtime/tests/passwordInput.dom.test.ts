@@ -3,6 +3,7 @@ import { StrictMode, createElement, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import { PasswordInput } from '../src/renderer/ui/PasswordInput.js';
 
 /**
@@ -25,6 +26,8 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+  setLanguage('interface', 'en');
+  setLanguage('feedback', 'en');
 });
 
 function Harness({ disabled }: { disabled: boolean }): JSX.Element {
@@ -77,6 +80,34 @@ describe('R-082 — PasswordInput', () => {
     expect(field(c).classList.contains('cg-field')).toBe(true);
     // The toggle is a button, never a submit: Enter on it must not send a form.
     expect(toggle(c).getAttribute('type')).toBe('button');
+  });
+
+  it('localizes the tooltip and accessible action from the interface without resetting the field', async () => {
+    setLanguage('feedback', 'ar');
+    const c = await render();
+    expect(toggle(c).title).toBe('Show password');
+    expect(toggle(c).getAttribute('aria-label')).toBe('Show password');
+    await act(async () => {
+      setLanguage('interface', 'fa');
+    });
+    expect(toggle(c).title).toBe('نمایش رمز عبور');
+    expect(toggle(c).getAttribute('aria-label')).toBe('نمایش رمز عبور');
+    await act(async () => {
+      toggle(c).click();
+    });
+    expect(field(c).type).toBe('text');
+    expect(toggle(c).title).toBe('پنهان کردن رمز عبور');
+    expect(toggle(c).getAttribute('aria-label')).toBe('پنهان کردن رمز عبور');
+
+    await act(async () => {
+      setLanguage('interface', 'ar');
+      setLanguage('feedback', 'fa');
+    });
+    expect(toggle(c).title).toBe('إخفاء كلمة المرور');
+    expect(toggle(c).getAttribute('aria-label')).toBe('إخفاء كلمة المرور');
+    expect(field(c).value).toBe('test-only-not-a-secret');
+    expect(field(c).type).toBe('text');
+    expect(field(c).dir).toBe('ltr');
   });
 
   it('CONTROL — a disabled field disables its control', async () => {

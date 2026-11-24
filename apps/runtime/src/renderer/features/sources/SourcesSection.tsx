@@ -74,14 +74,23 @@ const READ_TIME_FORMATS = {
   }),
 };
 
-function inputFormatLabel(format: string | undefined): string {
-  if (format === undefined || format.toUpperCase() === 'AUTO') return 'Auto';
-  const mode = videoModeWords(format);
-  return mode.scan === 'Interlaced' || mode.scan === 'Progressive'
-    ? `${mode.word} · ${mode.rate}`
-    : mode.scan === '—'
-      ? mode.word
-      : 'Unknown';
+function InputFormat({ format }: { format: string | undefined }): JSX.Element | null {
+  const localizeUi = useUiText();
+  const token = format?.trim();
+  if (!token || token.toUpperCase() === 'AUTO') return null;
+  const mode = videoModeWords(token);
+  const label =
+    mode.scan === 'Interlaced' || mode.scan === 'Progressive'
+      ? `${mode.word} · ${mode.rate}`
+      : mode.scan === '—'
+        ? mode.word
+        : 'Unknown';
+  const text = localizeUi(label);
+  return (
+    <bdi className="cg-resource__value cg-setup-source-format" title={text}>
+      {text}
+    </bdi>
+  );
 }
 
 function parseLayerNumber(raw: string): number | null {
@@ -259,12 +268,7 @@ export function SourcesSection({
                       {localizeUi('Unavailable')}
                     </Tag>
                   )}
-                  <bdi
-                    className="cg-resource__value cg-setup-source-format"
-                    title={localizeUi(inputFormatLabel(source.format))}
-                  >
-                    {localizeUi(inputFormatLabel(source.format))}
-                  </bdi>
+                  <InputFormat format={source.format} />
                 </div>
               </div>
             </div>

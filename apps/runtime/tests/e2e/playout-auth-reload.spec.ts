@@ -10,6 +10,7 @@ import {
   FAKE_PLAYOUT_PASSWORD,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { CONTROL_LANGUAGE_KEY } from '../../src/renderer/i18n/localePreferences.js';
 import { stopChild } from './fixtures/child-process.js';
 
 /**
@@ -282,4 +283,68 @@ test('🔴 DELTA A — a reload is refused NOTHING, and the layer list arrives',
     default bank, so rows are genuinely expected.
   */
   await expect(page.locator('[data-layers-loading]')).toHaveCount(0, { timeout: 20_000 });
+});
+
+test('R-123 — localized sign-in keeps the CG Control name and names both password actions', async ({
+  page,
+}) => {
+  const station = await startStation();
+  await page.addInitScript(
+    ({ bridgeUrl, languageKey }) => {
+      Object.assign(window, { __CG_BRIDGE_URL__: bridgeUrl });
+      if (localStorage.getItem(languageKey) === null) {
+        localStorage.setItem(languageKey, JSON.stringify({ interface: 'fa', feedback: 'en' }));
+      }
+    },
+    { bridgeUrl: station.bridgeUrl, languageKey: CONTROL_LANGUAGE_KEY },
+  );
+  await page.goto('/');
+
+  for (const { locale, dialog, show, hide } of [
+    {
+      locale: 'fa',
+      dialog: 'ورود به Playout',
+      show: 'نمایش رمز عبور',
+      hide: 'پنهان کردن رمز عبور',
+    },
+    {
+      locale: 'ar',
+      dialog: 'تسجيل الدخول إلى Playout',
+      show: 'إظهار كلمة المرور',
+      hide: 'إخفاء كلمة المرور',
+    },
+  ]) {
+    if (locale === 'ar') {
+      await page.evaluate(
+        (key) => localStorage.setItem(key, JSON.stringify({ interface: 'ar', feedback: 'en' })),
+        CONTROL_LANGUAGE_KEY,
+      );
+      await page.reload();
+    }
+    const gate = page.getByRole('dialog', { name: dialog, exact: true });
+    const brand = gate.locator('.cg-signin-brand__product');
+    await expect(brand).toHaveText('CG Control');
+    await expect(brand).toHaveCSS('direction', 'ltr');
+    const password = gate.locator('#cg-signin-pass');
+    await expect(password).toBeEnabled({ timeout: 20_000 });
+    await expect(password).toHaveAttribute('type', 'password');
+    await password.fill('test-only-value');
+
+    const showPassword = gate.getByRole('button', { name: show, exact: true });
+    await page.mouse.move(0, 0);
+    await showPassword.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(show);
+    await showPassword.click();
+    await expect(password).toHaveAttribute('type', 'text');
+    await expect(password).toHaveValue('test-only-value');
+
+    await page.mouse.move(0, 0);
+    const hidePassword = gate.getByRole('button', { name: hide, exact: true });
+    await hidePassword.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(hide);
+    await hidePassword.click();
+    await expect(password).toHaveAttribute('type', 'password');
+    await expect(password).toHaveValue('test-only-value');
+  }
+  expect(auditRows(station.auditPath).filter((row) => row.action === 'sign-in')).toEqual([]);
 });

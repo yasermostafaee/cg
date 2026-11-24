@@ -17,4 +17,7 @@
 - [x] Verify translated connected, unknown, and joining input previews and the identified PGM and preview source in Chromium.
 - [x] Verify the channel card for 1080i, 1080p, 720p and 2160p in both RTL languages.
 - [x] Verify mixed-direction feedback, media grid A/B, Channel dividers, station-layer labels and PGM audio alignment in the carrying browser build. Windows Chromium passed.
+- [x] Verify the CG Control name and localized surrounding text in the interface and feedback catalogs.
+- [x] Verify both password visibility tooltips and accessible names in English, Persian and Arabic.
+      Unit tests covered the shared input, and Windows Chromium verified both RTL sign-in screens.
 - [ ] Record the carrying Linux Playwright result.

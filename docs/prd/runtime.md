@@ -5360,8 +5360,9 @@ Repeatable playback and independent timeline animation within imported artwork n
 The source picker, assigned-input fields, and Station setup show vertical source meters flush with the
 picture of each live input and Playlist output. Equal-width rails display every channel delivered with
 the measurement. An input with no channel count yet shows two empty rails with a neutral outline.
-Station setup opens Live sources in Grid view and also offers List view. The New live layout preview
-offers an off-by-default VU toggle.
+Station setup opens Live sources in Grid view and also offers List view. Both views display an
+input's specific video format as read-only metadata and omit the format label when Playout supplies
+Auto or no format. The New live layout preview offers an off-by-default VU toggle.
 When on, meters beside eligible frames use their full frame height. PGM meters stay with their respective
 engine pictures, including when all pictures and meters are visible.
 Source defaults, the picker, and Station setup identify the last server to supply the input list. A cached
@@ -5387,6 +5388,8 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN the operator keeps the interface in English and selects Persian or Arabic feedback THEN action confirmations and refusals use that language.
 - WHEN the operator selects Persian or Arabic as the interface language THEN the settings, labels, fields and tables flow right to left and numeric transport fields and authored names retain their own direction.
 - WHEN Persian or Arabic is the interface language THEN modal tabs, Inspector fields, option labels, tooltips, confirmations and statuses use that language, while action messages use the selected feedback language.
+- WHEN interface text or action feedback names the product THEN it displays CG Control in English lettering within the selected language.
+- WHEN the operator uses a password field THEN the tooltip and accessible name describe the next action in the interface language. They show Show password while the value is masked and Hide password while it is visible.
 - WHEN Station setup shows an assigned graphic THEN the template name is aligned with the table direction, and the tooltip uses its display name. The visibility switch knob stays on its track in both RTL positions.
 - WHEN the operator reads the first action column in Layers THEN the localized heading names both Load and Remove and the button names its available action.
 - WHEN the operator opens Layers, Station setup, the Inspector or a removal confirmation THEN generated layer names agree across views in the current language and custom names stay as entered.

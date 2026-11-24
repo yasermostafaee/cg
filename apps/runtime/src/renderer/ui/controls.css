@@ -10208,7 +10208,6 @@ input[type='checkbox']:disabled:checked {
   font-weight: 300;
   letter-spacing: 0.3em;
   text-indent: 0.3em;
-  text-transform: uppercase;
   line-height: 1;
 }
 .cg-signin-brand__product b {

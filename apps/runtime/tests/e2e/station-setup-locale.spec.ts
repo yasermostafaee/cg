@@ -213,14 +213,14 @@ for (const locale of ['fa', 'ar'] as const) {
     const view = sourceSection.locator('.cg-picker-input-view button');
     await expect(view).toHaveText(words.grid);
     await expect(sourceSection.locator('[data-sources-read]')).toContainText(words.lastRead);
+    const autoFormat = sourceSection.locator('.cg-setup-source-format', { hasText: words.auto });
+    await expect(autoFormat).toHaveCount(0);
     await expect(
       sourceSection.locator('.cg-resource__name').filter({ hasText: /^Studio 1$/ }),
     ).toHaveAttribute('dir', 'ltr');
     await view.click();
     await expect(view).toHaveText(words.list);
-    await expect(
-      sourceSection.locator('.cg-setup-source-format', { hasText: words.auto }).first(),
-    ).toBeVisible();
+    await expect(autoFormat).toHaveCount(0);
 
     await dialog.getByRole('tab', { name: words.files, exact: true }).click();
     await expect(dialog.locator('#shared-files-path')).toHaveValue('D:\\CG Shared');

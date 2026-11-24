@@ -1824,3 +1824,10 @@ question. **No task in this file changes on the strength of it**, §9a's punch w
   own.
 - [ ] 9.4 **Hardware:** the phase-6 `route://` demo is dischargeable here; **phase 7 is not** —
       see `design.md` §12.1, which is an owner decision, not work.
+
+## Live source catalogue format labels
+
+- [x] Verify both Grid and List omit Auto and absent format labels and still show the reported
+      1080i mode, the input kind and availability. Windows Chromium passed in English, Persian
+      and Arabic.
+- [ ] Record the carrying Linux Playwright result.

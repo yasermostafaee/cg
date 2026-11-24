@@ -33,4 +33,23 @@ describe('CG Control language catalogs', () => {
       setLanguage('feedback', 'en');
     }
   });
+
+  it('keeps the CG Control product name where interface or feedback copy names it', () => {
+    const product = /\bCG Control\b/i;
+    for (const scope of ['interface', 'feedback'] as const) {
+      for (const [key, english] of Object.entries(en[scope])) {
+        if (!product.test(key) && !product.test(english)) continue;
+        expect(english, `en/${scope}: ${key}`).toMatch(product);
+        for (const [locale, catalog] of [
+          ['fa', fa],
+          ['ar', ar],
+        ] as const) {
+          expect(
+            (catalog[scope] as Record<string, string>)[key],
+            `${locale}/${scope}: ${key}`,
+          ).toContain('CG Control');
+        }
+      }
+    }
+  });
 });

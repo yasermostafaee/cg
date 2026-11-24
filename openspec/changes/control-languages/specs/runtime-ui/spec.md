@@ -35,6 +35,20 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **AND** confirmation prompts and recorded Audit outcomes use the interface language, while operation messages and toasts use the separately selected feedback language
 - **AND** authored names and technical values retain their text and natural direction
 
+#### Scenario: Read the CG Control product name in any language
+
+- **WHEN** interface text or a feedback message names the product in English, Persian or Arabic
+- **THEN** it spells the product name CG Control in English lettering
+- **AND** the surrounding text uses the selected language for that surface
+
+#### Scenario: Identify the password visibility action
+
+- **WHEN** a shared password field displays a masked value in any interface language
+- **THEN** the visibility button's tooltip and accessible name use the interface translation of Show password
+- **WHEN** the value is visible
+- **THEN** the same tooltip and accessible name use the interface translation of Hide password
+- **AND** password entry stays left to right
+
 #### Scenario: Read a mixed-direction title or action message
 
 - **WHEN** a Persian or Arabic title or feedback message starts with a Latin name

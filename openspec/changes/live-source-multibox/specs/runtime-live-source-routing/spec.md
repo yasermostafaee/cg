@@ -56,6 +56,13 @@ PRESENT but unusable SHALL still be a HARD startup failure, before the socket ac
 - **WHEN** a console sends a catalog to `sources.set-config` **THEN** only the plate band is taken
   from it
 
+#### Scenario: Read the input format in Station setup
+
+- **WHEN** the operator views an input with a specific video format in either Live sources view
+- **THEN** CG Control shows that format as read-only information
+- **WHEN** Playout supplies Auto or no format
+- **THEN** CG Control omits the format label
+
 #### Scenario: A refusal never shows a wire identifier
 
 - **WHEN** any live-source call is refused — by the validator, or by the bridge's own frame

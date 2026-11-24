@@ -174,6 +174,52 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   await app.closeStationSetup();
 });
 
+test.describe('reported video formats in Station setup', () => {
+  test.use({
+    playoutSources: {
+      inputs: {
+        inputs: [
+          { id: 'reported', name: 'Reported format', format: '1080i5000' },
+          { id: 'automatic', name: 'Automatic format', format: ' aUtO ' },
+          { id: 'blank', name: 'Blank format', format: '   ' },
+          { id: 'missing', name: 'Missing format', available: false },
+        ].map((input) => ({
+          ...input,
+          producer: { kind: 'ndi', source: input.name },
+        })),
+      },
+    },
+  });
+
+  test('sources: Grid and List show reported formats and omit Auto and missing formats', async ({
+    app,
+  }) => {
+    await app.openStationSetupAt('Live sources');
+    const dialog = app.page.getByRole('dialog', { name: 'Station setup' });
+    const list = dialog.getByRole('region', { name: 'Inputs from the Playout' });
+    const rows = list.locator('[data-source-input]');
+    const expectedFormat = '1080i · 25 fps · 50 fields/s';
+
+    const expectReportedFormat = async (): Promise<void> => {
+      await expect(rows).toHaveCount(4);
+      await expect(rows.locator('.cg-setup-source-format')).toHaveText([expectedFormat]);
+      await expect(
+        rows.filter({ hasText: 'Reported format' }).locator('.cg-setup-source-format'),
+      ).toHaveAttribute('title', expectedFormat);
+      await expect(rows.locator('[data-source-kind]')).toHaveText(['NDI', 'NDI', 'NDI', 'NDI']);
+      await expect(
+        rows.filter({ hasText: 'Missing format' }).getByText('Unavailable', { exact: true }),
+      ).toBeVisible();
+    };
+
+    await expect(list).toHaveAttribute('data-input-view', 'grid');
+    await expectReportedFormat();
+    await dialog.getByRole('button', { name: 'Switch to list view' }).click();
+    await expect(list).toHaveAttribute('data-input-view', 'list');
+    await expectReportedFormat();
+  });
+});
+
 test.describe('a Playout that has shared nothing', () => {
   test.use({ playoutSources: null });
 

@@ -1,5 +1,6 @@
 import { forwardRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { useUiText } from '../i18n/locale.js';
 import { Button } from './Button.js';
 import { Icon } from './Icon.js';
 import { TextInput, type TextInputProps } from './TextInput.js';
@@ -21,8 +22,9 @@ export type PasswordInputProps = Omit<TextInputProps, 'type' | 'dir'>;
 
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   function PasswordInput(props, ref): JSX.Element {
+    const localizeUi = useUiText();
     const [shown, setShown] = useState(false);
-    const label = shown ? 'Hide password' : 'Show password';
+    const label = localizeUi(shown ? 'Hide password' : 'Show password');
     return (
       <span className="cg-password" data-password-shown={shown ? 'true' : 'false'}>
         <TextInput {...props} ref={ref} type={shown ? 'text' : 'password'} dir="ltr" />
