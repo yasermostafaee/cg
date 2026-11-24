@@ -111,6 +111,7 @@ import type {
   StackPrepareUpcomingProgramsChannel,
   UpcomingMediaGetChannel,
   UpcomingMediaPutChannel,
+  UpcomingMediaRemoveChannel,
   StackUpdateChannel,
   PlayoutLayerState,
   LiveLayerState,
@@ -1002,6 +1003,9 @@ export interface RuntimeBridge {
     get(
       req: ChannelRequest<typeof UpcomingMediaGetChannel>,
     ): Promise<ChannelResponse<typeof UpcomingMediaGetChannel>>;
+    remove(
+      req: ChannelRequest<typeof UpcomingMediaRemoveChannel>,
+    ): Promise<ChannelResponse<typeof UpcomingMediaRemoveChannel>>;
   };
   pages: {
     put(

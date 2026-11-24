@@ -51,10 +51,24 @@ export const UpcomingMediaGetChannel = defineChannel(
   ]),
 );
 
+export const UpcomingMediaRemoveChannel = defineChannel(
+  'upcoming-media.remove',
+  z.object({ sha256: MediaHashSchema }),
+  z.discriminatedUnion('removed', [
+    z.object({ removed: z.literal(true) }),
+    z.object({
+      removed: z.literal(false),
+      errorCode: z.enum(['upcoming-program-media-in-use', 'upcoming-program-media-remove-failed']),
+    }),
+  ]),
+);
+
 export type UpcomingMediaPutRequest = ChannelRequest<typeof UpcomingMediaPutChannel>;
 export type UpcomingMediaPutResult = ChannelResponse<typeof UpcomingMediaPutChannel>;
 export type UpcomingMediaGetRequest = ChannelRequest<typeof UpcomingMediaGetChannel>;
 export type UpcomingMediaGetResult = ChannelResponse<typeof UpcomingMediaGetChannel>;
+export type UpcomingMediaRemoveRequest = ChannelRequest<typeof UpcomingMediaRemoveChannel>;
+export type UpcomingMediaRemoveResult = ChannelResponse<typeof UpcomingMediaRemoveChannel>;
 
 const MP4_BRANDS = new Set([
   'isom',

@@ -14239,3 +14239,20 @@ continue to authorize access to the archive. A browser with the file picker API 
 **Actual.** A `frame-…` ID appears as the operator's primary name.
 
 **Expected.** The authored frame name or friendly numbered label identifies the frame. The assigned source uses its display name and empty or unknown sources use a readable status. The regression covers authored Persian names and the absence of raw IDs in visible text.
+
+## [~] B-453 — Play operator-uploaded Upcoming Programs clips on CasparCG ⟨priority: high — owner, 2026-11-25⟩ — `openspec/changes/add-upcoming-programs/`
+
+**Repro.** In CG Control, choose an H.264/AAC MP4 for the focused card in Upcoming Programs.
+Preview the clip, confirm the list and use Take on stock CasparCG 2.5.
+
+**Actual.** The clip plays in WebView2 Preview. On CasparCG, the template receives the video
+through its same-origin HTTP 206 response, and the bundled CEF cannot decode the video.
+
+**Expected.** CG Control converts the MP4 locally to VP8/Opus WebM before upload and generates
+the poster from the prepared clip. Existing compatible WebM keeps its bytes, source files stay
+unchanged, and a failed preparation preserves the last confirmed list. A stored legacy MP4 can
+use its poster until the operator reselects the source or a compatible replacement.
+
+**Regression.** Verify focused motion in Preview and on stock CasparCG using the prepared clip,
+as well as WebM passthrough, a failed conversion and the legacy still fallback. Track the
+browser and output verification separately in task 2.8.

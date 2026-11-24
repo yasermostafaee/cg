@@ -196,6 +196,35 @@ Lane **FULL**. The change adds persisted authoring state and later reaches the p
       staged Take refusal, off-air Update, Discard, and isolation between two rows using the same
       template. The empty Manual list cases verified the Persian and Arabic editor and media picker.
       All 16 Designer Upcoming Programs browser regressions passed against the rebuilt renderer.
+- [ ] 2.8 Resolve B-453. Prepare operator MP4 uploads in a lazily loaded local FFmpeg worker as
+      VP8/Opus WebM and generate the poster from the prepared video. Preserve ready WebM bytes,
+      source files and previously confirmed attachments. Verify **Use an operator-selected MP4 in
+      Preview and stock CasparCG** and **Keep ready media after preparation failure and replace
+      a legacy MP4**. Exercise the real production-built worker and video in CG Control Playwright.
+      Confirm the same prepared asset reaches CasparCG, advances across visibly distinct frames
+      on stock 2.5, and has a working generated poster when out of focus. Record the target
+      engine evidence separately from browser playback, the local gate and carrying Linux E2E.
+      In a disposable probe with the same CEF 142 binary, the source MP4 gave media error 4
+      and zero decoded frames. An equivalent VP8/Opus clip reached ready state 4 and decoded 84
+      frames by playback time 2.627 seconds. The integrated CG Control-to-output check is pending.
+      The owner imported the preconverted WebM through CG Control and confirmed it moved on the
+      real CasparCG Screen. Local Chromium exercised automatic MP4 conversion, verified the
+      generated VP8/Opus upload, Take carrying the same hash, HTTP range delivery and moving
+      frames in the served graphic. Automatic conversion in the desktop build plus a stock
+      CasparCG Take and the carrying Linux run are still owed.
+- [ ] 2.9 Show authored photos and video posters in the CG Control picker and support safe upload
+      deletion. Verify **Identify a prepared photo and video in the media picker** and
+      **Delete a draft upload and protect media used by a graphic**. Exercise thumbnail fallback,
+      canceling and confirming a deletion, restoring affected current draft cards without losing
+      other field edits, and keeping the generated companion poster when explicitly deleting the
+      selected clip. Verify a shared poster survives and the Bridge sweep can collect an orphan
+      after grace. Verify refusal for an attachment used by another local draft, a confirmed row
+      or an on-air graphic. Verify authored package media and local originals stay intact. Record
+      real browser, Bridge and carrying Linux evidence.
+      Local Playwright verified package photo and video-poster thumbnails, delete confirmation
+      and cancellation, draft media restoration with title/time preserved, the removed hash
+      returning missing, and confirmed media refusal. Focused Bridge tests verified queued and
+      on-air protection, a shared poster remaining readable, and lock and authorization classes.
 
 ## 3. Pictures, excerpts, and audio
 

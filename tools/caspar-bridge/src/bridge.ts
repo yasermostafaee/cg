@@ -150,6 +150,7 @@ import {
   PagesPutChannel,
   UpcomingMediaGetChannel,
   UpcomingMediaPutChannel,
+  UpcomingMediaRemoveChannel,
   StackPrepareUpcomingProgramsChannel,
   BridgeCapabilitiesChannel,
   StackRestoreReportChangedChannel,
@@ -1751,7 +1752,8 @@ export function channelsForRequest(
     name === PagesPutChannel.name ||
     name === PagesGetChannel.name ||
     name === UpcomingMediaPutChannel.name ||
-    name === UpcomingMediaGetChannel.name
+    name === UpcomingMediaGetChannel.name ||
+    name === UpcomingMediaRemoveChannel.name
   )
     return [];
 
@@ -6222,6 +6224,12 @@ export function buildRoutes(
       'read',
       'read',
       (r: ChannelRequest<typeof UpcomingMediaGetChannel>) => b.getUpcomingMedia(r),
+    ),
+    route(
+      UpcomingMediaRemoveChannel,
+      'operator',
+      'operator',
+      (r: ChannelRequest<typeof UpcomingMediaRemoveChannel>) => b.removeUpcomingMedia(r),
     ),
     route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>

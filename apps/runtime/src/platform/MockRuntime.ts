@@ -2,6 +2,7 @@ import {
   isOnAirStatus,
   operatorFieldUpdateRefusal,
   ownsLiveSeats,
+  upcomingProgramMediaAssetId,
   upcomingProgramsOverrideIssue,
 } from '@cg/shared-schema';
 import type {
@@ -130,6 +131,7 @@ import {
   type AuditFilter,
   type AuditNaming,
   type UpcomingMediaGetResult,
+  type UpcomingMediaRemoveResult,
   type UpcomingMediaPutRequest,
   type UpcomingMediaPutResult,
   type UpcomingMediaMime,
@@ -1022,6 +1024,18 @@ export class MockRuntime {
   getUpcomingMedia(sha256: string): UpcomingMediaGetResult {
     const found = this.#upcomingMedia.get(sha256);
     return found === undefined ? { kind: 'missing' } : { kind: 'media', ...found };
+  }
+
+  removeUpcomingMedia(sha256: string): UpcomingMediaRemoveResult {
+    const id = upcomingProgramMediaAssetId(sha256);
+    const inUse = this.#stack.some((item) =>
+      Object.values(item.upcomingPrograms ?? {}).some((rows) =>
+        rows.some((row) => row.mediaAssetId === id || row.posterAssetId === id),
+      ),
+    );
+    if (inUse) return { removed: false, errorCode: 'upcoming-program-media-in-use' };
+    this.#upcomingMedia.delete(sha256);
+    return { removed: true };
   }
 
   prepareUpcomingPrograms(itemId: string, upcomingPrograms: UpcomingProgramsOverrides) {

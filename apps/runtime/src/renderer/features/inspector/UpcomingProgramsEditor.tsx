@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Film, FolderOpen, Image as ImageIcon, Plus, X } from 'lucide-react';
-import type { UpcomingProgramsSampleItem } from '@cg/shared-schema';
+import {
+  ArrowDown,
+  ArrowUp,
+  Film,
+  FolderOpen,
+  Image as ImageIcon,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
+import type { UpcomingMediaRemoveResult } from '@cg/shared-ipc';
+import { upcomingProgramMediaHash, type UpcomingProgramsSampleItem } from '@cg/shared-schema';
 import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
@@ -8,6 +18,9 @@ import { FileInput } from '../../ui/FileInput.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { TextInput } from '../../ui/TextInput.js';
+import { useConfirm } from '../../ui/useDialog.js';
+import { upcomingProgramMediaInOtherDrafts } from './draftStore.js';
+import { removeUploadedProgramMedia } from './upcomingProgramMedia.js';
 
 export interface UpcomingProgramsMediaOption {
   assetId: string;
@@ -18,7 +31,9 @@ export interface UpcomingProgramsMediaOption {
 }
 
 interface UpcomingProgramsEditorProps {
-  element: { name: string; mediaVisible?: boolean | undefined };
+  itemId: string;
+  element: { id: string; name: string; mediaVisible?: boolean | undefined };
+  appliedRows: readonly UpcomingProgramsSampleItem[];
   rows: readonly UpcomingProgramsSampleItem[];
   mediaOptions: readonly UpcomingProgramsMediaOption[];
   onChange: (rows: UpcomingProgramsSampleItem[]) => void;
@@ -26,7 +41,9 @@ interface UpcomingProgramsEditorProps {
 }
 
 export function UpcomingProgramsEditor({
+  itemId,
   element,
+  appliedRows,
   rows,
   mediaOptions,
   onChange,
@@ -35,6 +52,8 @@ export function UpcomingProgramsEditor({
   const localizeUi = useUiText();
   const latestRows = useRef(rows);
   latestRows.current = rows;
+  const latestApplied = useRef(appliedRows);
+  latestApplied.current = appliedRows;
   const [importedMedia, setImportedMedia] = useState<Record<string, UpcomingProgramsMediaOption>>(
     {},
   );
@@ -55,6 +74,33 @@ export function UpcomingProgramsEditor({
     if (row === undefined) return;
     next.splice(index + delta, 0, row);
     commit(next);
+  };
+
+  const removeMedia = async (assetId: string): Promise<UpcomingMediaRemoveResult> => {
+    if (
+      latestRows.current.some((row) => row.posterAssetId === assetId) ||
+      upcomingProgramMediaInOtherDrafts(assetId, itemId, element.id)
+    ) {
+      return { removed: false, errorCode: 'upcoming-program-media-in-use' };
+    }
+    const result = await removeUploadedProgramMedia(assetId);
+    if (!result.removed) return result;
+    setImportedMedia((known) => {
+      const remaining = { ...known };
+      delete remaining[assetId];
+      return remaining;
+    });
+    if (latestRows.current.some((row) => row.mediaAssetId === assetId)) {
+      commit(
+        latestRows.current.map((row) => {
+          if (row.mediaAssetId !== assetId) return row;
+          const previous = latestApplied.current.find((entry) => entry.id === row.id);
+          const { mediaAssetId, mediaKind, posterAssetId, audioAssetId } = previous ?? {};
+          return { ...row, mediaAssetId, mediaKind, posterAssetId, audioAssetId };
+        }),
+      );
+    }
+    return result;
   };
 
   return (
@@ -114,6 +160,7 @@ export function UpcomingProgramsEditor({
                     row={row}
                     options={options}
                     onImport={onImport}
+                    onRemove={removeMedia}
                     onChoose={(asset) => {
                       if (
                         asset !== undefined &&
@@ -177,11 +224,13 @@ function UpcomingProgramMediaPicker({
   row,
   options,
   onImport,
+  onRemove,
   onChoose,
 }: {
   row: UpcomingProgramsSampleItem;
   options: readonly UpcomingProgramsMediaOption[];
   onImport: UpcomingProgramsEditorProps['onImport'];
+  onRemove: (assetId: string) => Promise<UpcomingMediaRemoveResult>;
   onChoose: (asset: UpcomingProgramsMediaOption | undefined) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
@@ -193,8 +242,9 @@ function UpcomingProgramMediaPicker({
       row.mediaKind === 'video' ? 'Video' : row.mediaKind === 'image' ? 'Picture' : 'None',
     );
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [importFailed, setImportFailed] = useState(false);
+  const [pending, setPending] = useState<'import' | 'remove' | null>(null);
+  const [error, setError] = useState<'import' | 'remove' | 'in-use' | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
   const input = useRef<HTMLInputElement>(null);
   const importRequest = useRef(0);
   useEffect(
@@ -205,8 +255,8 @@ function UpcomingProgramMediaPicker({
   );
   const close = (): void => {
     importRequest.current += 1;
-    setPending(false);
-    setImportFailed(false);
+    setPending(null);
+    setError(null);
     setOpen(false);
   };
   const choose = (asset: UpcomingProgramsMediaOption | undefined): void => {
@@ -215,17 +265,46 @@ function UpcomingProgramMediaPicker({
   };
   const importFile = async (file: File): Promise<void> => {
     const request = ++importRequest.current;
-    setPending(true);
-    setImportFailed(false);
+    setPending('import');
+    setError(null);
     try {
       const asset = await onImport(file);
       if (request === importRequest.current) choose(asset);
     } catch {
       if (request !== importRequest.current) return;
-      setPending(false);
-      setImportFailed(true);
+      setPending(null);
+      setError('import');
     }
   };
+  const remove = async (asset: UpcomingProgramsMediaOption): Promise<void> => {
+    setPending('remove');
+    setError(null);
+    try {
+      if (
+        !(await confirm({
+          title: 'Remove uploaded media?',
+          body: <bdi dir="auto">{asset.label}</bdi>,
+          confirmLabel: 'Remove',
+        }))
+      )
+        return;
+      const result = await onRemove(asset.assetId);
+      if (!result.removed)
+        setError(result.errorCode === 'upcoming-program-media-in-use' ? 'in-use' : 'remove');
+    } catch {
+      setError('remove');
+    } finally {
+      setPending(null);
+    }
+  };
+  const refusal =
+    error === 'import'
+      ? localizeFeedback('Could not import program media.')
+      : error === 'in-use'
+        ? localizeFeedback('This upload is in use by a program.')
+        : error === 'remove'
+          ? localizeFeedback('Could not remove program media.')
+          : undefined;
   const label = localizeUi('Image or video');
   const dialogTitle = localizeUi('Choose program media');
   return (
@@ -251,12 +330,7 @@ function UpcomingProgramMediaPicker({
           ariaLabel={dialogTitle}
           size="wide"
           onClose={close}
-          {...(importFailed && {
-            message: {
-              role: 'refusal',
-              text: localizeFeedback('Could not import program media.'),
-            },
-          })}
+          {...(refusal !== undefined && { message: { role: 'refusal', text: refusal } })}
           footer={
             <>
               <ModalAction actionRole="cancel" onClick={close}>
@@ -264,11 +338,11 @@ function UpcomingProgramMediaPicker({
               </ModalAction>
               <ModalAction
                 actionRole="primary"
-                disabled={pending}
+                disabled={pending !== null}
                 onClick={() => input.current?.click()}
               >
                 <Icon icon={FolderOpen} />
-                {localizeUi(pending ? 'Importing media…' : 'Browse…')}
+                {localizeUi(pending === 'import' ? 'Importing media…' : 'Browse…')}
               </ModalAction>
             </>
           }
@@ -278,7 +352,7 @@ function UpcomingProgramMediaPicker({
             className="cg-visually-hidden"
             aria-label={localizeUi('Choose an image or video file')}
             accept=".png,.jpg,.jpeg,.webp,.mp4,.webm"
-            disabled={pending}
+            disabled={pending !== null}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = '';
@@ -290,7 +364,7 @@ function UpcomingProgramMediaPicker({
               variant="default"
               className="cg-image-picker-choice"
               aria-pressed={row.mediaAssetId === undefined}
-              disabled={pending}
+              disabled={pending !== null}
               onClick={() => choose(undefined)}
             >
               <span className="cg-image-picker-choice__thumb" aria-hidden="true">
@@ -298,27 +372,46 @@ function UpcomingProgramMediaPicker({
               </span>
               <span className="cg-image-picker-choice__label">{localizeUi('None')}</span>
             </Button>
-            {options.map((asset) => (
-              <Button
-                key={asset.assetId}
-                variant="default"
-                className="cg-image-picker-choice"
-                aria-pressed={asset.assetId === row.mediaAssetId}
-                disabled={pending}
-                title={asset.label}
-                onClick={() => choose(asset)}
-              >
-                <span className="cg-image-picker-choice__thumb" aria-hidden="true">
-                  <MediaThumbnail kind={asset.kind} thumbnailUrl={asset.thumbnailUrl} />
-                </span>
-                <bdi className="cg-image-picker-choice__label" dir="auto">
-                  {asset.label}
-                </bdi>
-              </Button>
-            ))}
+            {options.map((asset) => {
+              const uploaded = upcomingProgramMediaHash(asset.assetId) !== undefined;
+              const removeLabel = localizeUi('Remove upload {name}', { name: asset.label });
+              return (
+                <div key={asset.assetId} className="cg-image-picker-option">
+                  <Button
+                    variant="default"
+                    className="cg-image-picker-choice"
+                    aria-pressed={asset.assetId === row.mediaAssetId}
+                    disabled={pending !== null}
+                    title={asset.label}
+                    onClick={() => choose(asset)}
+                  >
+                    <span className="cg-image-picker-choice__thumb" aria-hidden="true">
+                      <MediaThumbnail kind={asset.kind} thumbnailUrl={asset.thumbnailUrl} />
+                    </span>
+                    <bdi className="cg-image-picker-choice__label" dir="auto">
+                      {asset.label}
+                    </bdi>
+                  </Button>
+                  {uploaded && (
+                    <span className="cg-image-picker-option__action">
+                      <Button
+                        variant="icon"
+                        aria-label={removeLabel}
+                        title={removeLabel}
+                        disabled={pending !== null}
+                        onClick={() => void remove(asset)}
+                      >
+                        <Icon icon={Trash2} />
+                      </Button>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Modal>
       )}
+      {confirmDialog}
     </>
   );
 }

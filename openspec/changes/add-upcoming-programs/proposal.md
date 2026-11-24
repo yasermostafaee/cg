@@ -34,6 +34,13 @@ use must obey the timing of its place in the playlist.
 - Let a CG Control operator prepare the program list for an individual stack row without
   Playout. Start with published Designer rows or build a list from empty. Edit each program's
   title, airtime and optional photo or video, preview the draft, and confirm it for an explicit Take.
+- Conform operator-uploaded MP4 clips to VP8/Opus WebM locally before upload so Preview and
+  stock CasparCG can use the same prepared clip. Generate its poster from the prepared video
+  and retain poster playback for existing MP4 references when motion is unavailable.
+- Show thumbnails for the template's authored photos and video posters in the CG Control
+  media picker. Let the operator confirm deletion of the uploaded media itself. The Bridge's
+  existing cleanup can collect an orphaned poster after its grace period. Protect confirmed and
+  on-air attachments and keep Designer assets and local source files intact.
 - In CG Control, support the Designer Prepared source, an operator-edited Manual source and a
   Playout source built from eligible future program occurrences in the selected playlist.
   Let the operator choose a program count, override display titles and airtimes, and choose or

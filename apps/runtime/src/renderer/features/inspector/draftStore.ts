@@ -805,6 +805,23 @@ export function upcomingProgramsDraftOf(itemId: string): UpcomingProgramsOverrid
   return upcomingProgramsDrafts.get(itemId);
 }
 
+/** Screen-local drafts are guarded before withdrawing an upload from the shared station. */
+export function upcomingProgramMediaInOtherDrafts(
+  assetId: string,
+  itemId: string,
+  elementId: string,
+): boolean {
+  for (const [otherItemId, draft] of upcomingProgramsDrafts) {
+    for (const [otherElementId, rows] of Object.entries(draft)) {
+      if (otherItemId === itemId && otherElementId === elementId) continue;
+      if (rows.some((row) => row.mediaAssetId === assetId || row.posterAssetId === assetId)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function effectiveUpcomingPrograms(
   itemId: string,
   applied: UpcomingProgramsOverrides | undefined,

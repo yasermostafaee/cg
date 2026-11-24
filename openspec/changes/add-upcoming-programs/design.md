@@ -172,6 +172,11 @@ a regular video deliverable for transmission. [Viz Mosart rundown](https://docs.
   Treat air-state or freshness information absent from a file according to its stated capabilities.
   The owner has confirmed that the target API or file delivery path is currently undecided. The
   Playout adapter awaits that contract.
+- The existing D4 channel contract provides playlist name and lifecycle state. D11 reads the
+  approved media library by asset identity. Lookahead still requires the Playout-owned ordered
+  occurrences, stable occurrence IDs, updated planned time and snapshot revision from the active
+  rundown. See `tools/caspar-bridge/src/playout-catalogue.ts` and
+  `tools/caspar-bridge/src/playout-sources.ts` for D4 and D11.
 
 ### Designer rehearsal stills
 
@@ -204,12 +209,38 @@ Use case: photorealistic-natural. Create a precision-aligned 2 by 2 contact shee
   apply them before Take. Draft changes, preview and confirmation leave program output as it was. Use the
   renderer's established still and text fallbacks for program cards with absent or unusable media.
   Engine-specific readiness, live replacement and Playout integration keep their own acceptance.
-- For local photo or video attachments the console checks browser decoding before upload, then sends
-  the media through the control socket. The console derives a poster from the video and uploads it
-  as a still. The Bridge validates the actual media type and size and persists the bytes by their
-  content hash. Confirmed row data carries these references. The template fetches approved media
-  from the read-only same-origin media route. It can read ranges for video. AMCP carries only the
-  list and media references. The browser Preview reads its own copies through the control socket.
+- For local photo or video attachments the console prepares and checks decoding before upload.
+  B-453 reproduces with an H.264/AAC MP4 that moves in WebView2 Preview and fails to decode on
+  stock CasparCG 2.5 CEF even though the template's same-origin request receives valid HTTP 206
+  media bytes. In a disposable probe using the same CEF 142 binary, the 7.3-second H.264
+  Main/AAC LC source returned media error 4 (`DEMUXER_ERROR_NO_SUPPORTED_STREAMS`), stayed at
+  time zero and decoded zero frames. Its VP8/Opus equivalent reached ready state 4 and decoded
+  84 frames by playback time 2.627 seconds.
+- Conform a picked MP4 in the browser through the app's lazily loaded, same-origin FFmpeg
+  assets. Produce a WebM with VP8 video and Opus audio when audio is present. Pass a ready
+  WebM through unchanged. Decode the prepared clip and take the poster from that clip before
+  uploading. Conversion only reads the owner's original file. A preparation failure retains
+  the last confirmed list. A legacy stored MP4 can display its prepared poster or current text
+  fallback. Reselecting the original local file or choosing a compatible replacement prepares
+  the attachment through the same path.
+- Send the prepared media and still through the control socket. The Bridge validates media type
+  and size and persists the bytes by their content hash. Confirmed rows carry these references.
+  The template fetches authorized media from the read-only same-origin route, with range reads
+  for video. AMCP carries the list and media references. The browser Preview reads the prepared
+  media through the control socket.
+- Resolve the picker thumbnail for a packaged image from the template's own media and for a
+  packaged video from its authored poster if available. Use an existing media icon while a
+  thumbnail is loading or unavailable. Continue to use the still prepared for an uploaded video.
+- Render a Delete action on uploaded choices in the existing picker session catalog. Confirm
+  the action before removal. Protect attachments in other local editors and have the Bridge guard
+  authoritative confirmed and on-air references. If the upload belongs only to the current
+  unconfirmed list, restore each affected card's confirmed or default media, or clear the media
+  on a newly added card. Keep its other draft fields.
+- After a successful explicit deletion, remove only the selected upload from the current picker
+  and the Bridge store. A generated companion poster remains available for other assignments,
+  including an unconfirmed picker in another console. The existing Bridge sweep can remove an
+  orphaned poster after its grace period. Preserve the picker and draft if removal is refused.
+  The operator's source file and the authored package assets remain available.
 
 ## 3. Prepare scheduled snapshots, media and sound
 

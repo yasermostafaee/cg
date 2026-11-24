@@ -610,6 +610,7 @@ export function createMockBridge(): RuntimeBridge {
     upcomingMedia: {
       put: (req) => mock.putUpcomingMedia(req),
       get: (req) => Promise.resolve(mock.getUpcomingMedia(req.sha256)),
+      remove: (req) => Promise.resolve(mock.removeUpcomingMedia(req.sha256)),
     },
     pages: {
       put: (req) => mock.putPage(req.name, req.base64),

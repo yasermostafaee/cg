@@ -135,6 +135,8 @@ export default defineConfig({
   define: {
     __CG_BUILD__: JSON.stringify(buildStamp),
   },
+  // Vite prebundling would break FFmpeg's relative worker URL during local development.
+  optimizeDeps: { exclude: ['@ffmpeg/ffmpeg'] },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

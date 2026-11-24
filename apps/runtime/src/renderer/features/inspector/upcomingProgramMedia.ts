@@ -2,8 +2,9 @@ import {
   UPCOMING_MEDIA_MAX_BYTES,
   UpcomingMediaMimeSchema,
   type UpcomingMediaMime,
+  type UpcomingMediaRemoveResult,
 } from '@cg/shared-ipc';
-import { upcomingProgramMediaAssetId } from '@cg/shared-schema';
+import { upcomingProgramMediaAssetId, upcomingProgramMediaHash } from '@cg/shared-schema';
 import { bytesToBase64 } from '../library/packageBytes.js';
 import type { UpcomingProgramsMediaOption } from './UpcomingProgramsEditor.js';
 
@@ -44,15 +45,32 @@ export function upcomingProgramMediaDataUrl(hash: string): Promise<string | unde
   const read = window.cg.upcomingMedia
     .get({ sha256: hash })
     .then((result) => {
-      if (result.kind !== 'media') return undefined;
+      if (result.kind !== 'media' || pending.get(hash) !== read) return undefined;
       const dataUrl = `data:${result.mime};base64,${result.base64}`;
       remember(hash, dataUrl);
       return dataUrl;
     })
     .catch(() => undefined)
-    .finally(() => pending.delete(hash));
+    .finally(() => {
+      if (pending.get(hash) === read) pending.delete(hash);
+    });
   pending.set(hash, read);
   return read;
+}
+
+export async function removeUploadedProgramMedia(
+  assetId: string,
+): Promise<UpcomingMediaRemoveResult> {
+  const sha256 = upcomingProgramMediaHash(assetId);
+  if (sha256 === undefined)
+    return { removed: false, errorCode: 'upcoming-program-media-remove-failed' };
+  const result = await window.cg.upcomingMedia.remove({ sha256 });
+  if (result.removed) {
+    characters -= cached.get(sha256)?.length ?? 0;
+    cached.delete(sha256);
+    pending.delete(sha256);
+  }
+  return result;
 }
 
 async function upload(bytes: Blob, name: string, mime: UpcomingMediaMime) {
@@ -126,9 +144,17 @@ export async function importUpcomingProgramMedia(file: File): Promise<UpcomingPr
       thumbnailUrl: stored.dataUrl,
     };
   }
-  const poster = await videoPoster(file);
+  // The preview browser decodes H.264/AAC, but the CasparCG CEF renderer may not.
+  const clip =
+    mime === 'video/mp4'
+      ? await (await import('./upcomingProgramVideo.js')).prepareUpcomingMp4(file)
+      : file;
+  if (clip.size === 0 || clip.size > UPCOMING_MEDIA_MAX_BYTES) {
+    throw new Error('Prepared program video exceeds the media limit');
+  }
+  const poster = await videoPoster(clip);
   const [stored, still] = await Promise.all([
-    upload(file, file.name, mime),
+    upload(clip, file.name, 'video/webm'),
     upload(poster, `${file.name} poster`, 'image/jpeg'),
   ]);
   return {

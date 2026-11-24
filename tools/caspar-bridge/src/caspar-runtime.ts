@@ -114,6 +114,7 @@ import {
   fixedBanksSlots,
   type UpcomingMediaGetRequest,
   type UpcomingMediaPutRequest,
+  type UpcomingMediaRemoveRequest,
   FixedLayerBankSchema,
   LayerShortcutSettingsSchema,
   isLowBankLayer,
@@ -2613,8 +2614,10 @@ export class CasparRuntime {
   readonly #pages: PageStore;
   readonly #upcomingMedia: ReturnType<typeof createUpcomingMediaStore>;
   readonly #upcomingPrograms = new Map<string, UpcomingProgramsOverrides>();
-  readonly #preparingUpcoming = new Set<string>();
-  readonly #takingUpcoming = new Set<string>();
+  readonly #preparingUpcoming = new Map<string, readonly string[]>();
+  readonly #takingUpcoming = new Map<string, readonly string[]>();
+  /** Media from a removed row stays available while its former producer may still be resident. */
+  readonly #retiringUpcomingMedia = new Map<string, Set<string>>();
   /*
     🔴 `SELF-STOP-24` / `C-013` — **ITEM ID → THE TOKEN THAT NAMES ITS CURRENT TAKE.**
 
@@ -5494,6 +5497,7 @@ export class CasparRuntime {
       slot !== undefined &&
       (isOnAirStatus(item) || item.status === 'unverified' || this.#loaded.has(itemId))
     ) {
+      this.#retainUpcomingMediaOnLayer(itemId, slot);
       this.#noteStray({
         itemId,
         templateId: item.templateId,
@@ -7920,7 +7924,7 @@ export class CasparRuntime {
         return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
       }
       if (item === null) return { accepted: false, errorCode: 'unknown-item' };
-      this.#takingUpcoming.add(itemId);
+      this.#takingUpcoming.set(itemId, upcomingProgramsMediaHashes(upcoming));
       try {
         const issue =
           upcoming === undefined
@@ -10200,6 +10204,10 @@ export class CasparRuntime {
     return this.#upcomingMedia.get(request);
   }
 
+  removeUpcomingMedia(request: UpcomingMediaRemoveRequest) {
+    return this.#upcomingMedia.remove(request, () => this.#upcomingMediaInUse(request.sha256));
+  }
+
   async prepareUpcomingPrograms(itemId: string, upcomingPrograms: UpcomingProgramsOverrides) {
     const item = this.#reconciler.get(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
@@ -10213,7 +10221,7 @@ export class CasparRuntime {
     if (this.#managedCg !== undefined || template?.upcomingPrograms === undefined) {
       return { accepted: false, errorCode: 'upcoming-programs-invalid' };
     }
-    this.#preparingUpcoming.add(itemId);
+    this.#preparingUpcoming.set(itemId, upcomingProgramsMediaHashes(upcomingPrograms));
     try {
       const issue = await this.#upcomingIssue(template.upcomingPrograms, upcomingPrograms);
       if (issue !== undefined) return { accepted: false, errorCode: issue };
@@ -10261,11 +10269,34 @@ export class CasparRuntime {
   }
 
   #sweepUpcomingMedia(): void {
-    const keep = new Set<string>();
-    for (const upcomingPrograms of this.#upcomingPrograms.values()) {
-      for (const hash of upcomingProgramsMediaHashes(upcomingPrograms)) keep.add(hash);
+    void this.#upcomingMedia
+      .sweep((sha256) => this.#upcomingMediaInUse(sha256))
+      .catch(() => undefined);
+  }
+
+  #upcomingMediaInUse(sha256: string): boolean {
+    for (const hashes of this.#preparingUpcoming.values()) {
+      if (hashes.includes(sha256)) return true;
     }
-    void this.#upcomingMedia.sweep(keep).catch(() => undefined);
+    for (const hashes of this.#takingUpcoming.values()) {
+      if (hashes.includes(sha256)) return true;
+    }
+    for (const hashes of this.#retiringUpcomingMedia.values()) {
+      if (hashes.has(sha256)) return true;
+    }
+    for (const programs of this.#upcomingPrograms.values()) {
+      if (upcomingProgramsMediaHashes(programs).includes(sha256)) return true;
+    }
+    return false;
+  }
+
+  #retainUpcomingMediaOnLayer(itemId: string, slot: CommandSlot): void {
+    const hashes = upcomingProgramsMediaHashes(this.#upcomingPrograms.get(itemId));
+    if (hashes.length === 0) return;
+    const key = adoptionKey(slot);
+    const held = this.#retiringUpcomingMedia.get(key) ?? new Set<string>();
+    for (const hash of hashes) held.add(hash);
+    this.#retiringUpcomingMedia.set(key, held);
   }
 
   /**
@@ -25774,6 +25805,7 @@ export class CasparRuntime {
     }
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
+    if (slot !== undefined) this.#retainUpcomingMediaOnLayer(itemId, slot);
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
     this.#dropIndependentPreview(itemId);
     this.#loaded.delete(itemId);
@@ -28261,7 +28293,10 @@ export class CasparRuntime {
    * operator clearLayer) so "adopted" and "provably cleared" can never drift.
    */
   #markAdoptedOnPrimary(slot: CommandSlot): void {
-    this.#adopted.add(adoptionKey(slot));
+    const key = adoptionKey(slot);
+    this.#adopted.add(key);
+    // A mirror send only reports one winner, so primary confirmation alone cannot release peer media.
+    if (this.#adapter.backupSession === null) this.#retiringUpcomingMedia.delete(key);
     this.#resolveOwnedOccupancy(slot);
   }
 

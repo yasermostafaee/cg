@@ -6,6 +6,7 @@ import {
   UPCOMING_MEDIA_MAX_BYTES,
   UpcomingMediaGetChannel,
   UpcomingMediaPutChannel,
+  UpcomingMediaRemoveChannel,
   type UpcomingMediaMime,
 } from '@cg/shared-ipc';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -108,6 +109,37 @@ describe('Upcoming Programs media storage', () => {
     expect(await restored.mimeOf(sha256)).toBe(body.mime);
     expect(await restored.read(sha256)).toEqual({ mime: body.mime, bytes: MP4 });
     expect(await restored.get({ sha256: shaOf(PNG) })).toEqual({ kind: 'missing' });
+  });
+
+  it('checks protection inside the mutation queue and idempotently removes one managed upload', async () => {
+    const directory = await workspace();
+    const store = createUpcomingMediaStore(directory);
+    const kept = shaOf(PNG);
+    const sha256 = shaOf(MP4);
+    const upload = store.put(request(MP4, 'video/mp4'));
+    let protectedHash = false;
+    const remove = UpcomingMediaRemoveChannel.request.parse({ sha256 });
+    const removing = store.remove(remove, () => protectedHash);
+    protectedHash = true;
+    expect(await upload).toMatchObject({ ok: true, sha256 });
+    expect(UpcomingMediaRemoveChannel.response.parse(await removing)).toEqual({
+      removed: false,
+      errorCode: 'upcoming-program-media-in-use',
+    });
+    await store.put(request(PNG, 'image/png'));
+    await writeFile(path.join(directory, 'not-an-upload'), 'keep');
+    expect(
+      UpcomingMediaRemoveChannel.request.safeParse({ sha256: '../not-an-upload' }).success,
+    ).toBe(false);
+    expect(await store.remove({ sha256: 'not-an-upload' }, () => false)).toEqual({
+      removed: false,
+      errorCode: 'upcoming-program-media-remove-failed',
+    });
+    protectedHash = false;
+    expect(await store.remove(remove, () => protectedHash)).toEqual({ removed: true });
+    expect(await store.remove(remove, () => protectedHash)).toEqual({ removed: true });
+    expect(await createUpcomingMediaStore(directory).get({ sha256 })).toEqual({ kind: 'missing' });
+    expect(await readdir(directory)).toEqual([kept, 'not-an-upload']);
   });
 
   it('sweeps unused objects after grace and only removes managed hashes', async () => {

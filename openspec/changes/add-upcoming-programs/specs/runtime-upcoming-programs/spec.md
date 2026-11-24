@@ -69,6 +69,76 @@ for the selected stack row.
 - **AND WHEN** the operator uses the normal Take for that stack row
 - **THEN** Take uses only that row's confirmed list and media
 
+### Requirement: Prepare an operator's video for the program output decoder
+
+CG Control SHALL conform an operator-selected MP4 to WebM with VP8 video and Opus audio when
+audio is present. It SHALL load the FFmpeg preparation assets only as needed from the CG Control
+origin and perform the conversion locally. A ready WebM SHALL keep its video bytes. The original
+source file SHALL remain unchanged. CG Control SHALL validate the prepared video and derive its
+poster before uploading the video and poster. Preview and Take SHALL use the same prepared media
+references. A failure SHALL preserve the last confirmed list and its playable attachments. A
+legacy stored MP4 that cannot decode on the output SHALL use its existing poster or text fallback.
+The operator SHALL be able to reselect the original file or choose a compatible replacement to
+prepare a new attachment.
+
+#### Scenario: Use an operator-selected MP4 in Preview and stock CasparCG
+
+- **WHEN** the operator selects an H.264/AAC MP4 for a program card
+- **THEN** the console prepares VP8/Opus WebM locally, creates a poster from the prepared video
+  and uploads those assets while preserving the source file
+- **AND** Preview plays the prepared clip and explicit Take uses the same asset on stock CasparCG 2.5
+- **AND** the current focus controls which card plays the clip
+
+#### Scenario: Keep ready media after preparation failure and replace a legacy MP4
+
+- **WHEN** the operator selects a ready WebM
+- **THEN** the original video bytes are uploaded and its poster is prepared
+- **AND WHEN** conversion or video preparation fails
+- **THEN** the last confirmed list and media stay available for Take
+- **AND** a legacy MP4 that fails to decode on the output shows its existing poster or text
+- **AND** selecting the original file again or a compatible replacement can prepare new playable media
+
+### Requirement: Show authored media thumbnails in the CG Control picker
+
+The Upcoming Programs media picker SHALL show thumbnails for available authored photos and linked
+video posters from its template. An uploaded video SHALL continue to show its prepared poster.
+The picker SHALL retain a media icon and label when the thumbnail is unavailable.
+
+#### Scenario: Identify a prepared photo and video in the media picker
+
+- **WHEN** the operator opens the media picker for a template with a published photo and a video with
+  an authored poster
+- **THEN** the picker shows the packaged photo and the video's linked poster as thumbnails
+- **AND** uploaded photos and videos are distinguishable by their own thumbnails
+- **AND** missing thumbnails retain a usable media icon and label
+
+### Requirement: Let an operator delete an uploaded program asset that has no protected reference
+
+The media picker SHALL offer Delete for uploaded photos and videos in the current picker
+catalog and require confirmation. A local draft outside the current editor SHALL protect its
+attachments. The Bridge SHALL refuse removal of an upload referenced by a confirmed row or
+on-air graphic. On successful deletion, the picker SHALL remove the item and restore affected
+cards in the current draft to their confirmed or default media. A newly added card SHALL
+return to no media, and titles and airtimes in the draft SHALL stay intact. Explicit deletion
+SHALL target only the selected upload. A generated companion poster SHALL remain available for
+other assignments. An orphaned poster SHALL be eligible for the existing Bridge sweep when its
+grace period expires. The originals on disk and the authored package assets SHALL remain available.
+
+#### Scenario: Delete a draft upload and protect media used by a graphic
+
+- **WHEN** the operator cancels a deletion
+- **THEN** the upload and the current draft stay available
+- **AND WHEN** the operator confirms deletion of an upload used only in the current unconfirmed list
+- **THEN** the media disappears from the picker and the affected cards restore their confirmed or
+  default media while keeping their draft titles and airtimes
+- **AND** a newly added card returns to no media
+- **AND** the generated poster survives the explicit deletion and stays available to other
+  assignments, with orphan cleanup through the Bridge sweep after the grace period
+- **AND WHEN** the operator requests deletion of media used by another local draft, a confirmed row or
+  an on-air graphic
+- **THEN** that media stays available and the row keeps its attachment
+- **AND** Designer package media and local source files remain unchanged
+
 ### Requirement: Apply approved operator updates to the active graphic
 
 CG Control SHALL let the operator prepare replacement rows or override display fields and media for

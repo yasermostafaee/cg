@@ -78,6 +78,7 @@ import {
   StackPrepareUpcomingProgramsChannel,
   UpcomingMediaGetChannel,
   UpcomingMediaPutChannel,
+  UpcomingMediaRemoveChannel,
   StackUpdateChannel,
   TemplatesActedChannel,
   TemplatesChangedChannel,
@@ -2577,6 +2578,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(UpcomingMediaPutChannel, req, PAGE_PUT_TIMEOUT_MS),
     get: (req: ChannelRequest<typeof UpcomingMediaGetChannel>) =>
       this.#invoke(UpcomingMediaGetChannel, req, PAGE_PUT_TIMEOUT_MS),
+    remove: (req: ChannelRequest<typeof UpcomingMediaRemoveChannel>) =>
+      this.#invoke(UpcomingMediaRemoveChannel, req),
   };
 
   readonly pages = {

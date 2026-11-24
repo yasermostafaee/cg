@@ -11,6 +11,8 @@ import {
   type UpcomingMediaMime,
   type UpcomingMediaPutRequest,
   type UpcomingMediaPutResult,
+  type UpcomingMediaRemoveRequest,
+  type UpcomingMediaRemoveResult,
 } from '@cg/shared-ipc';
 
 const MEDIA_HASH = /^[0-9a-f]{64}$/;
@@ -92,6 +94,24 @@ export class UpcomingMediaStore {
       : { kind: 'media', mime: media.mime, base64: media.bytes.toString('base64') };
   }
 
+  async remove(
+    { sha256 }: UpcomingMediaRemoveRequest,
+    inUse: () => boolean,
+  ): Promise<UpcomingMediaRemoveResult> {
+    if (!MEDIA_HASH.test(sha256)) {
+      return { removed: false, errorCode: 'upcoming-program-media-remove-failed' };
+    }
+    try {
+      return await this.#mutate<UpcomingMediaRemoveResult>(async () => {
+        if (inUse()) return { removed: false, errorCode: 'upcoming-program-media-in-use' };
+        await this.#delete(sha256);
+        return { removed: true };
+      });
+    } catch {
+      return { removed: false, errorCode: 'upcoming-program-media-remove-failed' };
+    }
+  }
+
   async read(sha256: string): Promise<StoredUpcomingMedia | null> {
     if (!MEDIA_HASH.test(sha256)) return null;
     if (this.directory === null) {
@@ -142,7 +162,11 @@ export class UpcomingMediaStore {
   }
 
   /** A newly uploaded or validated file gets time to be associated with a stack row. */
-  sweep(keep: ReadonlySet<string>, now = Date.now(), graceMs = UPLOAD_GRACE_MS): Promise<number> {
+  sweep(
+    keep: ReadonlySet<string> | ((sha256: string) => boolean),
+    now = Date.now(),
+    graceMs = UPLOAD_GRACE_MS,
+  ): Promise<number> {
     return this.#mutate(async () => {
       const directory = this.directory;
       const hashes =
@@ -154,21 +178,26 @@ export class UpcomingMediaStore {
             });
       let removed = 0;
       for (const sha256 of hashes) {
-        if (!MEDIA_HASH.test(sha256) || keep.has(sha256)) continue;
+        if (!MEDIA_HASH.test(sha256)) continue;
         const lastUse = this.#recentUses.get(sha256);
         if (lastUse !== undefined && now - lastUse < graceMs) continue;
-        if (directory === null) {
-          this.#memory.delete(sha256);
-        } else {
-          await unlink(path.join(directory, sha256)).catch((error: NodeJS.ErrnoException) => {
-            if (error.code !== 'ENOENT') throw error;
-          });
-        }
-        this.#recentUses.delete(sha256);
+        if (typeof keep === 'function' ? keep(sha256) : keep.has(sha256)) continue;
+        await this.#delete(sha256);
         removed += 1;
       }
       return removed;
     });
+  }
+
+  async #delete(sha256: string): Promise<void> {
+    if (this.directory === null) {
+      this.#memory.delete(sha256);
+    } else {
+      await unlink(path.join(this.directory, sha256)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
+    }
+    this.#recentUses.delete(sha256);
   }
 
   #mutate<T>(operation: () => Promise<T>): Promise<T> {

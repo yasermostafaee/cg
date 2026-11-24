@@ -354,6 +354,13 @@ describe('C-038 — the census: every route, classified', () => {
     expect(release.lock).toBe('unlock');
   });
 
+  it('requires an unlocked operator to delete Upcoming Programs media', () => {
+    expect(routes().get('upcoming-media.remove')).toMatchObject({
+      perm: 'operator',
+      lock: 'operator',
+    });
+  });
+
   /**
    * 🔴🔴 `silenceAllLivePlates` **STAYS UNSCOPED** — owner answer A16 and CLAUDE.md's cadence
    * floor. It takes the `operator` class like any other intent, and NO channel check.

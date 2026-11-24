@@ -124,7 +124,11 @@ it('takes an off-air preparation only after the resident page accepts the list',
       },
     ],
   };
-  expect(await runtime.prepareUpcomingPrograms('item1', manual)).toEqual({ accepted: true });
+  const inUse = { removed: false, errorCode: 'upcoming-program-media-in-use' };
+  const preparing = runtime.prepareUpcomingPrograms('item1', manual);
+  expect(await runtime.removeUpcomingMedia({ sha256: videoHash })).toEqual(inUse);
+  expect(await preparing).toEqual({ accepted: true });
+  expect(await runtime.removeUpcomingMedia({ sha256: posterHash })).toEqual(inUse);
   expect(await runtime.prepareUpcomingPrograms('item1', missing)).toEqual({
     accepted: false,
     errorCode: 'upcoming-program-media-unavailable',
@@ -164,6 +168,8 @@ it('takes an off-air preparation only after the resident page accepts the list',
     accepted: false,
     errorCode: 'upcoming-programs-on-air',
   });
+  expect(await runtime.removeUpcomingMedia({ sha256: videoHash })).toEqual(inUse);
+  expect(await runtime.removeUpcomingMedia({ sha256: posterHash })).toEqual(inUse);
 
   const serve = runtime.templateServe;
   if (serve === null) throw new Error('Upcoming Programs has no template server');
@@ -180,4 +186,23 @@ it('takes an off-air preparation only after the resident page accepts the list',
   expect(await runtime.stopItem('item1')).toMatchObject({ accepted: true });
   expect(row()?.upcomingPrograms).toEqual(manual);
   expect(await runtime.getUpcomingMedia({ sha256: videoHash })).toMatchObject({ kind: 'media' });
+  expect(await runtime.out('item1')).toMatchObject({ accepted: true });
+  const sharedPoster: UpcomingProgramsOverrides = {
+    programs: [
+      {
+        id: 'photo',
+        title: 'Reuse the poster as a photo',
+        mediaKind: 'image',
+        mediaAssetId: upcomingProgramMediaAssetId(posterHash),
+      },
+    ],
+  };
+  expect(await runtime.prepareUpcomingPrograms('item1', sharedPoster)).toEqual({ accepted: true });
+  const beforeRemove = await wire();
+  expect(await runtime.removeUpcomingMedia({ sha256: videoHash })).toEqual({ removed: true });
+  expect(await runtime.removeUpcomingMedia({ sha256: posterHash })).toEqual(inUse);
+  expect(row()?.upcomingPrograms).toEqual(sharedPoster);
+  expect(await wire()).toEqual(beforeRemove);
+  expect((await fetch(origin + upcomingProgramMediaPath(videoHash))).status).toBe(404);
+  expect((await fetch(origin + upcomingProgramMediaPath(posterHash))).status).toBe(200);
 });

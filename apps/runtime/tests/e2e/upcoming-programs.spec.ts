@@ -1,8 +1,14 @@
 import { createSocket } from 'node:dgram';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { createBridge } from '@cg/caspar-bridge';
-import { readCgControl, SceneSchema } from '@cg/shared-schema';
+import {
+  readCgControl,
+  SceneSchema,
+  upcomingProgramMediaHash,
+  upcomingProgramMediaPath,
+} from '@cg/shared-schema';
 import { pack, sha256Hex } from '@cg/vcg-format';
 import type { FileChooser, Locator, Page } from '@playwright/test';
 import { expect, RuntimeApp, test } from './fixtures/runtime.js';
@@ -13,8 +19,10 @@ const ELEMENT = 'e2e-upcoming-programs';
 const LAYER = 99;
 const SLOT = { channel: 1, layer: LAYER };
 const PHOTO = 'evening-news.png';
-const VIDEO = 'seek-safe-64x64.webm';
-const VIDEO_PATH = fileURLToPath(new URL(`./fixtures/${VIDEO}`, import.meta.url));
+const WEBM = 'seek-safe-64x64.webm';
+const MP4 = 'upcoming-h264-aac-64x64.mp4';
+const WEBM_PATH = fileURLToPath(new URL(`./fixtures/${WEBM}`, import.meta.url));
+const MP4_PATH = fileURLToPath(new URL(`./fixtures/${MP4}`, import.meta.url));
 const DISPLAY_TITLE = 'گزارش شب';
 const DISPLAY_TIME = 'بعد از ساعت ۲';
 
@@ -22,6 +30,9 @@ async function buildUpcomingVcg(prepared: boolean): Promise<Uint8Array> {
   const picture = solidPng(32, 18, [30, 160, 95]);
   const sha256 = sha256Hex(picture);
   const path = `assets/image/${sha256}.png`;
+  const video = readFileSync(WEBM_PATH);
+  const videoSha256 = sha256Hex(video);
+  const videoPath = `assets/video/${videoSha256}.webm`;
   const scene = SceneSchema.parse({
     schemaVersion: 1,
     id: 'e2e-upcoming-scene',
@@ -67,8 +78,9 @@ async function buildUpcomingVcg(prepared: boolean): Promise<Uint8Array> {
                     id: 'designer-news',
                     title: 'Designer News',
                     airtime: '20:00',
-                    mediaAssetId: 'designer-photo',
-                    mediaKind: 'image',
+                    mediaAssetId: 'designer-video',
+                    mediaKind: 'video',
+                    posterAssetId: 'designer-photo',
                   },
                 ]
               : [],
@@ -104,13 +116,27 @@ async function buildUpcomingVcg(prepared: boolean): Promise<Uint8Array> {
               bytes: picture.length,
               sha256,
             },
+            {
+              id: 'designer-video',
+              kind: 'video',
+              path: videoPath,
+              filename: 'designer.webm',
+              mime: 'video/webm',
+              bytes: video.length,
+              sha256: videoSha256,
+            },
           ]
         : [],
     },
     indexHtml: '<!doctype html><html><body>placeholder</body></html>',
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
-    ...(prepared && { assets: new Map([[path, picture]]) }),
+    ...(prepared && {
+      assets: new Map([
+        [path, picture],
+        [videoPath, video],
+      ]),
+    }),
   });
 }
 
@@ -141,12 +167,12 @@ function latestProgramTake(engine: MockHandle) {
   for (const message of [engine.lastCgUpdate(SLOT), engine.lastCgAdd(SLOT)]) {
     if (message?.data === undefined || message.data === null) continue;
     const control = readCgControl(JSON.parse(message.data));
-    if (control?.take !== undefined) return control;
+    if (control?.take !== undefined) return { control, data: message.data };
   }
   return undefined;
 }
 
-test('CG Control previews and prepares one row’s programs before a separate Take', async ({
+test('CG Control previews a prepared MP4 before Take and plays its WebM from the served graphic', async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -179,9 +205,23 @@ test('CG Control previews and prepares one row’s programs before a separate Ta
       const take = layer.getByRole('button', { name: 'PLAY', exact: true });
       const draftChip = app.inspector.getByLabel('unapplied edits');
       await expect(first.getByRole('textbox', { name: 'Title' })).toHaveValue('Designer News');
-      await expect(first.getByRole('button', { name: 'Image or video' })).toContainText(
-        'designer.png',
-      );
+      const firstMedia = first.getByRole('button', { name: 'Image or video' });
+      await expect(firstMedia).toContainText('designer.webm');
+      await firstMedia.click();
+      const authoredPicker = page.getByRole('dialog', { name: 'Choose program media' });
+      for (const name of ['designer.png', 'designer.webm']) {
+        const thumbnail = authoredPicker.getByRole('button', { name, exact: true }).locator('img');
+        await expect(thumbnail).toBeVisible();
+        await expect
+          .poll(() =>
+            thumbnail.evaluate((image) =>
+              image instanceof HTMLImageElement ? image.naturalWidth : 0,
+            ),
+          )
+          .toBe(32);
+      }
+      await expect(authoredPicker.getByRole('button', { name: /^Remove upload/ })).toHaveCount(0);
+      await authoredPicker.getByText('Close', { exact: true }).click();
       await layer.getByRole('button', { name: 'ON PVW', exact: true }).click();
       await page
         .locator('[data-pvw-controls]')
@@ -200,17 +240,49 @@ test('CG Control previews and prepares one row’s programs before a separate Ta
         buffer: solidPng(64, 36, [180, 38, 65]),
       });
       await expect(second.getByRole('button', { name: 'Image or video' })).toContainText(PHOTO);
-      await pickFile(page, first, VIDEO_PATH);
-      await expect(first.getByRole('button', { name: 'Image or video' })).toContainText(VIDEO);
-      await pickFile(page, second, {
-        name: 'unreadable.png',
+
+      const accidentalName = 'accidental.png';
+      const accidental = solidPng(32, 18, [28, 40, 230]);
+      await pickFile(page, first, {
+        name: accidentalName,
         mimeType: 'image/png',
-        buffer: Buffer.from('invalid image'),
+        buffer: accidental,
       });
-      const picker = page.getByRole('dialog', { name: 'Choose program media' });
-      await expect(picker.getByText('Could not import program media.')).toBeVisible();
-      await picker.getByText('Close', { exact: true }).click();
-      await expect(second.getByRole('button', { name: 'Image or video' })).toContainText(PHOTO);
+      await expect(firstMedia).toContainText(accidentalName);
+      await firstMedia.click();
+      const removalPicker = page.getByRole('dialog', { name: 'Choose program media' });
+      const removeAccidental = removalPicker.getByRole('button', {
+        name: 'Remove upload accidental.png',
+      });
+      await removeAccidental.click();
+      const confirmation = page.getByRole('dialog', { name: 'Remove uploaded media?' });
+      await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(removeAccidental).toBeVisible();
+      await removeAccidental.click();
+      await confirmation.getByRole('button', { name: 'Remove', exact: true }).click();
+      await expect(removeAccidental).toHaveCount(0);
+      await removalPicker.getByText('Close', { exact: true }).click();
+      await expect(firstMedia).toContainText('designer.webm');
+      await expect(first.getByRole('textbox', { name: 'Title' })).toHaveValue(DISPLAY_TITLE);
+      await expect(first.getByRole('textbox', { name: 'Display time' })).toHaveValue(DISPLAY_TIME);
+      expect(
+        await page.evaluate(
+          async (sha256) => (await window.cg.upcomingMedia.get({ sha256 })).kind,
+          sha256Hex(accidental),
+        ),
+      ).toBe('missing');
+
+      await pickFile(page, first, WEBM_PATH);
+      await expect(firstMedia).toContainText(WEBM);
+      const originalWebmHash = sha256Hex(readFileSync(WEBM_PATH));
+      const storedWebm = await page.evaluate(async (sha256) => {
+        const media = await window.cg.upcomingMedia.get({ sha256 });
+        return media.kind === 'media' ? media.mime : null;
+      }, originalWebmHash);
+      expect(storedWebm).toBe('video/webm');
+
+      await pickFile(page, first, MP4_PATH);
+      await expect(firstMedia).toContainText(MP4, { timeout: 25_000 });
       await expect(preview.locator('[data-cg-upcoming-title]')).toHaveText([
         DISPLAY_TITLE,
         'City Window',
@@ -222,9 +294,35 @@ test('CG Control previews and prepares one row’s programs before a separate Ta
         .poll(() => still.evaluate((node: HTMLImageElement) => node.naturalWidth))
         .toBe(64);
       await expect
+        .poll(() =>
+          video.evaluate(
+            (node: HTMLVideoElement, hash) =>
+              node.currentSrc.startsWith('data:video/webm;base64,') &&
+              node.dataset['cgAssetId'] !== `upcoming-media:${hash}`,
+            originalWebmHash,
+          ),
+        )
+        .toBe(true);
+      await expect
         .poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime))
         .toBeGreaterThan(0);
       await expect(preview.locator('[data-cg-upcoming-card] video')).toHaveCount(1);
+      const stagedVideo = await video.getAttribute('data-cg-asset-id');
+      if (stagedVideo === null) throw new Error('Preview has no uploaded video ID');
+      const preparedHash = upcomingProgramMediaHash(stagedVideo);
+      expect(preparedHash).toBeDefined();
+      expect(preparedHash).not.toBe(sha256Hex(readFileSync(MP4_PATH)));
+
+      await pickFile(page, first, {
+        name: 'unreadable.mp4',
+        mimeType: 'video/mp4',
+        buffer: Buffer.from('invalid video'),
+      });
+      const picker = page.getByRole('dialog', { name: 'Choose program media' });
+      await expect(picker.getByText('Could not import program media.')).toBeVisible();
+      await picker.getByText('Close', { exact: true }).click();
+      await expect(firstMedia).toContainText(MP4);
+      await expect(video).toHaveAttribute('data-cg-asset-id', stagedVideo);
 
       await layer.getByRole('button', { name: 'OFF PVW', exact: true }).click();
       await expect(draftChip).toBeVisible();
@@ -236,6 +334,14 @@ test('CG Control previews and prepares one row’s programs before a separate Ta
       await expect(draftChip).toHaveCount(0);
       expect(latestProgramTake(engine)).toBeUndefined();
       await expect(layer).not.toHaveAttribute('aria-label', /ON AIR$/);
+
+      await firstMedia.click();
+      const protectedPicker = page.getByRole('dialog', { name: 'Choose program media' });
+      await protectedPicker.getByRole('button', { name: 'Remove upload ' + MP4 }).click();
+      await confirmation.getByRole('button', { name: 'Remove', exact: true }).click();
+      await expect(protectedPicker.getByText('This upload is in use by a program.')).toBeVisible();
+      await protectedPicker.getByText('Close', { exact: true }).click();
+      await expect(firstMedia).toContainText(MP4);
 
       await app.loadTemplate(TEMPLATE, LAYER - 1);
       await expect(app.layerRow(LAYER - 1)).toHaveAttribute('aria-pressed', 'true');
@@ -250,13 +356,14 @@ test('CG Control previews and prepares one row’s programs before a separate Ta
       await expect(first.getByRole('textbox', { name: 'Title' })).toHaveValue(DISPLAY_TITLE);
       await take.click();
       await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
-      expect(latestProgramTake(engine)?.upcomingPrograms?.[ELEMENT]).toMatchObject([
+      const aired = latestProgramTake(engine);
+      expect(aired?.control.upcomingPrograms?.[ELEMENT]).toMatchObject([
         {
           id: 'designer-news',
           title: DISPLAY_TITLE,
           airtime: DISPLAY_TIME,
           mediaKind: 'video',
-          mediaAssetId: expect.stringMatching(/^upcoming-media:/),
+          mediaAssetId: stagedVideo,
           posterAssetId: expect.stringMatching(/^upcoming-media:/),
         },
         {
@@ -265,6 +372,47 @@ test('CG Control previews and prepares one row’s programs before a separate Ta
           mediaAssetId: expect.stringMatching(/^upcoming-media:/),
         },
       ]);
+      const add = engine.lastCgAdd(SLOT);
+      if (add === undefined || aired === undefined || preparedHash === undefined) {
+        throw new Error('Take did not deliver the served graphic and its prepared video');
+      }
+      const air = await page.context().newPage();
+      try {
+        await air.goto(add.template);
+        await air.waitForFunction(
+          () => typeof (window as unknown as { play?: unknown }).play === 'function',
+        );
+        const mediaUrl = new URL(upcomingProgramMediaPath(preparedHash), add.template).href;
+        const requestedVideo = air.waitForResponse(
+          (response) =>
+            response.url() === mediaUrl && response.request().resourceType() === 'media',
+        );
+        await air.evaluate((payload) => {
+          const producer = window as unknown as {
+            update: (value: string) => void;
+            play: () => void;
+          };
+          producer.update(payload);
+          producer.play();
+        }, aired.data);
+        const mediaResponse = await requestedVideo;
+        expect(mediaResponse.status()).toBe(206);
+        expect(mediaResponse.headers()['content-type']).toBe('video/webm');
+        expect(mediaResponse.headers()['content-range']).toMatch(/^bytes 0-\d+\/\d+$/);
+        const airVideo = air.locator('[data-cg-upcoming-focus] video');
+        await expect(airVideo).toHaveJSProperty('muted', true);
+        await expect
+          .poll(() => airVideo.evaluate((node: HTMLVideoElement) => node.currentTime))
+          .toBeGreaterThan(0);
+        const uploaded = await air.request.get(mediaUrl);
+        await expect(uploaded).toBeOK();
+        const bytes = await uploaded.body();
+        expect(sha256Hex(bytes)).toBe(preparedHash);
+        expect(bytes.includes(Buffer.from('V_VP8'))).toBe(true);
+        expect(bytes.includes(Buffer.from('A_OPUS'))).toBe(true);
+      } finally {
+        await air.close();
+      }
     } finally {
       await bridge.close();
     }

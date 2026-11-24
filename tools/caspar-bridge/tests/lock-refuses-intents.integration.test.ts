@@ -225,6 +225,10 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
       base64: 'AAAA',
     });
     expectRefused(upload.error, 'upcoming-media.put while locked');
+    const remove = await ask(ws, frames, 'remove-media', 'upcoming-media.remove', {
+      sha256: '0'.repeat(64),
+    });
+    expectRefused(remove.error, 'upcoming-media.remove while locked');
     const prepare = await ask(ws, frames, 'prepare', 'stack.prepare-upcoming-programs', {
       itemId: 'nope',
       upcomingPrograms: {},

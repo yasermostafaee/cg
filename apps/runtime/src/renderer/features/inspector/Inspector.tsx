@@ -103,6 +103,7 @@ import {
   type FieldPath,
 } from './draftStore.js';
 import { UpcomingProgramsEditor } from './UpcomingProgramsEditor.js';
+import { readUpcomingAuthoredThumbnails } from './upcomingAuthoredThumbnails.js';
 import { importUpcomingProgramMedia } from './upcomingProgramMedia.js';
 import {
   formatNumberLike,
@@ -367,6 +368,7 @@ export function Inspector({
     channel: number | undefined;
     info: TemplateInfo | null;
     retained: RetainedLookFields | null;
+    upcomingThumbnails: ReadonlyMap<string, string>;
   } | null>(null);
   /**
    * Every template this browser holds — read ONLY to answer "does another
@@ -438,8 +440,11 @@ export function Inspector({
       const publish = (
         info: TemplateInfo | null,
         retained: RetainedLookFields | null = null,
+        upcomingThumbnails: ReadonlyMap<string, string> = new Map(),
       ): void => {
-        if (current()) setLookup({ templateId, channel: templateChannel, info, retained });
+        if (current()) {
+          setLookup({ templateId, channel: templateChannel, info, retained, upcomingThumbnails });
+        }
       };
       // The Bridge owns live metadata. The adapter can answer offline from the local copy.
       void window.cg.templates
@@ -455,26 +460,42 @@ export function Inspector({
               return;
             }
             const looks = info.liveSources?.looks ?? [];
+            const readsRetained =
+              looks.length >= 2 &&
+              (info.sharedFrameTitles === undefined ||
+                looks.some((look) => look.instanceId === undefined)) &&
+              (info.groups ?? []).some((group) => aggregateHasFields(group.aggregate));
+            const upcoming = managedCg ? undefined : info.upcomingPrograms;
+            const readsUpcoming =
+              upcoming !== undefined &&
+              upcoming.assets.length > 0 &&
+              upcoming.elements.some(({ mediaVisible }) => mediaVisible);
             if (
-              looks.length < 2 ||
-              (info.sharedFrameTitles !== undefined &&
-                looks.every((look) => look.instanceId !== undefined)) ||
-              !(info.groups ?? []).some((group) => aggregateHasFields(group.aggregate)) ||
+              (!readsRetained && !readsUpcoming) ||
               typeof window.cg.templates.page !== 'function'
             ) {
               publish(info);
               return;
             }
-            // Older Bridge schemas can omit field relationships, but keep the authored scene.
-            // A browser-local fallback may be a different version than this catalogue response.
+            if (!readsRetained) publish(info);
+            // Both readers need the same baked page for this channel's template version.
             const page = await window.cg.templates
               .page(templateId, templateChannel)
               .catch(() => null);
+            if (!current()) return;
+            // Older Bridge schemas can omit field relationships. A local fallback can be a
+            // different version from the Bridge record, so it cannot resolve those relationships.
             const retained =
-              page?.kind === 'page' && page.source === 'bridge'
+              readsRetained && page?.kind === 'page' && page.source === 'bridge'
                 ? retainedLookFields(info, page.html)
                 : null;
             publish(info, retained);
+            if (!readsUpcoming || page?.kind !== 'page') return;
+            const thumbnails = new Map<string, string>();
+            await readUpcomingAuthoredThumbnails(page.html, upcoming, current, (id, thumbnail) => {
+              thumbnails.set(id, thumbnail);
+              publish(info, retained, new Map(thumbnails));
+            });
           },
           () => publish(null),
         )
@@ -501,7 +522,7 @@ export function Inspector({
       cancelled = true;
       offChanged();
     };
-  }, [templateId, templateChannel, link]);
+  }, [templateId, templateChannel, link, managedCg]);
 
   /*
    * `templates.get` resolves after selection.  During that gap React still owns
@@ -859,12 +880,15 @@ export function Inspector({
           return (
             <UpcomingProgramsEditor
               key={`${itemId}:${element.id}`}
+              itemId={itemId}
               element={element}
               rows={effectiveUpcoming?.[element.id] ?? applied}
+              appliedRows={applied}
               mediaOptions={upcoming.assets.map(({ id, kind, name }) => ({
                 assetId: id,
                 kind,
                 label: name,
+                thumbnailUrl: currentLookup?.upcomingThumbnails.get(id),
                 posterAssetId: element.preparedItems.find(({ mediaAssetId }) => mediaAssetId === id)
                   ?.posterAssetId,
               }))}

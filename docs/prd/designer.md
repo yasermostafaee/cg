@@ -7135,6 +7135,18 @@ when the rundown changes close to transmission.
 - WHEN the operator previews a manual draft THEN CG Control shows its content in the authored
   graphic. Confirming valid changes readies that stack row for Take. Preview and confirmation leave
   program output unchanged until the operator explicitly takes the row.
+- WHEN an operator adds an MP4 in CG Control THEN local preparation converts it to a WebM that
+  stock CasparCG can decode, generates the poster from the prepared clip and uploads those assets
+  for Preview and Take. A ready WebM keeps its original bytes. Preparation leaves the operator's
+  source file and last confirmed list intact on failure. An older MP4 card can display its poster
+  while the operator reselects the original clip or chooses a compatible replacement.
+- WHEN the operator opens the Upcoming Programs media picker THEN authored photos and video
+  posters are visible as thumbnails alongside uploaded media. A missing thumbnail uses the
+  existing media icon and label.
+- WHEN the operator confirms deletion of an uploaded picker item THEN it leaves the picker if
+  it is free of confirmed, on-air and other local draft references. Cards using it only in the
+  current draft revert to their confirmed or default media and keep their title and airtime edits.
+  Packaged Designer media and original local files stay intact.
 - WHEN the operator selects the active Playout source or explicitly updates a graphic already on air
   THEN the later integration and live-update contracts apply. An approved live update preserves the
   graphic lifecycle while replacing its content.

@@ -17,7 +17,10 @@ const MARK = 'assetUrls: ';
  * ours). Reads the one JSON object after the mark by its braces — a `data:` URI holds neither quotes
  * nor braces, and JSON strings are skipped whole.
  */
-export function authoredPictureUrls(html: string): Record<string, string> {
+function authoredInlineUrls(
+  html: string,
+  accepts: (url: string) => boolean,
+): Record<string, string> {
   // The boot script is the page's LAST script; the runtime bundle before it spells `assetUrls: ` too.
   const at = html.lastIndexOf(MARK);
   if (at < 0) return {};
@@ -42,8 +45,7 @@ export function authoredPictureUrls(html: string): Record<string, string> {
           if (typeof parsed !== 'object' || parsed === null) return {};
           return Object.fromEntries(
             Object.entries(parsed as Record<string, unknown>).filter(
-              (e): e is [string, string] =>
-                typeof e[1] === 'string' && e[1].startsWith('data:image/'),
+              (e): e is [string, string] => typeof e[1] === 'string' && accepts(e[1]),
             ),
           );
         } catch {
@@ -53,6 +55,17 @@ export function authoredPictureUrls(html: string): Record<string, string> {
     }
   }
   return {};
+}
+
+export function authoredPictureUrls(html: string): Record<string, string> {
+  return authoredInlineUrls(html, (url) => url.startsWith('data:image/'));
+}
+
+export function authoredMediaUrls(html: string): Record<string, string> {
+  return authoredInlineUrls(
+    html,
+    (url) => url.startsWith('data:image/') || /^data:video\/(?:mp4|webm);base64,/.test(url),
+  );
 }
 
 const byTemplate = new Map<string, Promise<Record<string, string>>>();

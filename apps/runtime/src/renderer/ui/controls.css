@@ -2303,6 +2303,21 @@
   color: var(--r-text);
 }
 
+.cg-image-picker-option {
+  position: relative;
+  min-width: 0;
+}
+
+.cg-image-picker-option > .cg-image-picker-choice {
+  width: 100%;
+}
+
+.cg-image-picker-option__action {
+  position: absolute;
+  inset-block-start: var(--r-space-1);
+  inset-inline-end: var(--r-space-1);
+}
+
 .cg-image-picker-choice[aria-pressed='true'] {
   border-color: var(--r-accent);
   box-shadow: 0 0 0 1px var(--r-accent);
