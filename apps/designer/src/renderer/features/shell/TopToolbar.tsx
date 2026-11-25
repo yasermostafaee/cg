@@ -25,6 +25,7 @@ import * as s from './TopToolbar.css.js';
 interface Props {
   scene: Scene | null;
   projectPath: string | null;
+  fullscreen?: { active: boolean; pending: boolean; toggle: () => void } | null;
 }
 
 /**
@@ -34,7 +35,7 @@ interface Props {
  * the middle; Preview / Export moved to the per-composition bar above the canvas
  * (`CompositionActionBar`), since the export engine is now per-composition.
  */
-export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
+export function TopToolbar({ scene, projectPath, fullscreen = null }: Props): JSX.Element {
   const { canUndo, canRedo, rulerVisible, snappingEnabled, dirty } = useDesignerSelector(
     (s) => ({
       canUndo: s.canUndo,
@@ -469,6 +470,17 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
                   designerStore.toggleSnapping();
                 }}
               />
+              {fullscreen !== null && (
+                <>
+                  <div className={s.dropdownDivider} aria-hidden />
+                  <FileMenuItem
+                    label={fullscreen.active ? 'Exit fullscreen' : 'Enter fullscreen'}
+                    shortcut="F11"
+                    disabled={fullscreen.pending}
+                    onClick={() => runFileAction(fullscreen.toggle)}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>

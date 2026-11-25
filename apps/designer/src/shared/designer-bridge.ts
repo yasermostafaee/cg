@@ -34,6 +34,7 @@ import type {
   ProjectsStartersChannel,
 } from '@cg/shared-ipc';
 import type { Scene } from '@cg/shared-schema';
+import type { WindowFullscreenDoor } from '@cg/gesture';
 
 /**
  * `B-351` — the code of the preflight error for a template too large for CG Control. `Export .vcg`
@@ -177,6 +178,8 @@ export interface DesignerBridge {
     /** Close the window now, asking nothing more (nothing to close in a browser). */
     closeNow(): Promise<void>;
   };
+  /** Fullscreen for the whole Designer window. */
+  windowFullscreen: WindowFullscreenDoor;
 
   projects: {
     create(

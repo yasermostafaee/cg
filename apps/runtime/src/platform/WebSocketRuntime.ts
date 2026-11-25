@@ -202,6 +202,7 @@ import {
   localBridgeState,
   nativePlayoutFetch,
   shellCloseGuard,
+  shellWindowFullscreen,
   nativeFloatingPanels,
   shellKeyboardLanguage,
   shellSetLayerAltF4Armed,
@@ -2785,6 +2786,7 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   readonly closeGuard = shellCloseGuard();
   readonly floatingPanels = nativeFloatingPanels();
+  readonly windowFullscreen = shellWindowFullscreen();
 
   readonly update = {
     request: (req: ChannelRequest<typeof UpdateRequestChannel>) =>

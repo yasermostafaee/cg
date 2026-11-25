@@ -14,6 +14,7 @@ import {
   shellSetLayerAltF4Armed,
   shellOpenCompanySite,
   shellReportsKeyboardLanguage,
+  shellWindowFullscreen,
   insideCgControl,
   nativeFloatingPanels,
 } from './desktop.js';
@@ -220,6 +221,7 @@ export function createMockBridge(): RuntimeBridge {
     getAppInfo: () => Promise.resolve(APP_INFO),
     openCompanySite: shellOpenCompanySite,
     floatingPanels: nativeFloatingPanels(),
+    windowFullscreen: shellWindowFullscreen(),
 
     // `TEXT-DIGITS-01` — the shell is not the bridge: test mode asks the same (absent) shell.
     keyboard: {

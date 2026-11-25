@@ -1272,6 +1272,49 @@ async function controlDrive() {
       keyboard.said,
     );
   }
+  {
+    const name = 'CG Control keeps native app fullscreen when a fullscreen preview closes';
+    const readFullscreen = () => page.evaluate(() => window.cg.windowFullscreen.read());
+    const toggleFullscreen = () => page.evaluate(() => window.cg.windowFullscreen.toggle());
+    const readNativeFullscreen = () =>
+      page.evaluate(() => window.__TAURI_INTERNALS__.invoke('plugin:window|is_fullscreen'));
+    try {
+      const initial = await readFullscreen();
+      const initialNative = await readNativeFullscreen();
+      if (initial || initialNative) throw new Error('Expected to start in windowed mode');
+      try {
+        await toggleFullscreen();
+        await until('native app fullscreen', readNativeFullscreen, 5000);
+        await page.evaluate(async () => {
+          const preview = document.createElement('div');
+          preview.id = 'cg-smoke-fullscreen-preview';
+          document.body.append(preview);
+          await preview.requestFullscreen();
+        });
+        await page.evaluate(() => document.exitFullscreen());
+        await until(
+          'the console to remain in app fullscreen',
+          async () => (await readFullscreen()) && (await readNativeFullscreen()),
+          5000,
+        );
+      } finally {
+        await page.evaluate(async () => {
+          const preview = document.getElementById('cg-smoke-fullscreen-preview');
+          if (preview && document.fullscreenElement === preview) await document.exitFullscreen();
+          preview?.remove();
+        });
+        if (await readFullscreen()) await toggleFullscreen();
+        await until(
+          'the original window mode',
+          async () => !(await readFullscreen()) && !(await readNativeFullscreen()),
+          5000,
+        );
+      }
+      check(name, true);
+    } catch (error) {
+      check(name, false, String(error));
+    }
+  }
   page.close();
 
   // 4 — CG Control runs no bridge: the one cg-bridge.exe on this machine is the SERVICE's.

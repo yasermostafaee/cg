@@ -4366,3 +4366,14 @@ operation messages in the installed console.
 - WHEN an operator explicitly selects a language during setup THEN both preferences use it on the next launch, even on an existing console. Later interface and feedback choices are independent.
 - WHEN an upgrade accepts the untouched language screen or runs silently THEN the existing language choices are preserved.
 - WHEN setup runs silently or for another product THEN the existing flow is preserved.
+
+## [~] P-080 — Fullscreen for CG Designer and CG Control ⟨priority: medium — owner, 2026-11-25⟩ — `openspec/changes/app-window-fullscreen/`
+
+**What:** Let each app enter or leave whole-window fullscreen from its own workspace.
+
+**Acceptance:**
+
+- WHEN a Designer user opens View THEN its fullscreen action names the current action and shows F11. Pressing F11 in the Designer window performs the same toggle.
+- WHEN a CG Control operator uses the icon-only button after Lock THEN it toggles the main window and exposes a tooltip and accessible name in the interface language.
+- WHEN a CG Control operator presses a bound layer shortcut such as F11 THEN the existing layer shortcut handles the key.
+- WHEN the main app window enters or exits fullscreen THEN the session, editor or layer state, and floating panel placement are preserved.

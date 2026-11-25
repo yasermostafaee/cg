@@ -7,7 +7,7 @@ import {
   type ProjectDocument,
 } from '@cg/vcg-format';
 import { getStarter } from '@cg/starter-templates';
-import { closeGuardDoor, type ShellInvoke } from '@cg/gesture';
+import { closeGuardDoor, windowFullscreenDoor, type ShellInvoke } from '@cg/gesture';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
 import {
   cgCss,
@@ -334,6 +334,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     // `D-162` — the window's close, held by CG Designer's shell for the page to answer. In a
     // browser there is no shell and this holds nothing: the tab's `beforeunload` is the warning.
     closeGuard: closeGuardDoor(shellInvoke(), window),
+    windowFullscreen: windowFullscreenDoor(shellInvoke(), document),
 
     projects: {
       create: (req) =>

@@ -2191,6 +2191,7 @@ test('Media file preview decodes the original network Range stream on one Play',
   app,
 }, testInfo) => {
   const ffmpeg = process.env.CG_E2E_FFMPEG;
+  const expectedDuration = ffmpeg ? '0:10' : '0:04';
   const fixture = ffmpeg
     ? testInfo.outputPath('network-original.mkv')
     : new URL('./fixtures/seek-safe-64x64.webm', import.meta.url);
@@ -2265,6 +2266,10 @@ test('Media file preview decodes the original network Range stream on one Play',
   const origin = `http://127.0.0.1:${String(address.port)}`;
   const page = app.page;
   try {
+    await page.getByRole('button', { name: 'Enter app fullscreen', exact: true }).click();
+    const appFullscreen = () =>
+      page.evaluate(() => document.fullscreenElement === document.documentElement);
+    await expect.poll(appFullscreen).toBe(true);
     const defaults = await openDefaults(app);
     const field = defaults.locator('[data-defaults-select="l-1"]');
     await page.evaluate((origin) => {
@@ -2400,7 +2405,7 @@ test('Media file preview decodes the original network Range stream on one Play',
     await transport.getByRole('button', { name: 'Fullscreen preview', exact: true }).click();
     await expect(preview.locator('video')).toBeVisible();
     await expect(time).toBeVisible();
-    await expect(time).toHaveText(/^0:\d{2}\s*\/\s*0:10$/);
+    await expect(time).toHaveText(new RegExp(`^0:\\d{2}\\s*/\\s*${expectedDuration}$`));
     await expect
       .poll(() => preview.evaluate((element) => document.fullscreenElement === element))
       .toBe(true);
@@ -2430,7 +2435,7 @@ test('Media file preview decodes the original network Range stream on one Play',
     expect(corner.right).toBeGreaterThanOrEqual(0);
     expect(corner.right).toBeLessThanOrEqual(32);
     await closeFullscreen.click();
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await expect.poll(appFullscreen).toBe(true);
     const enterFullscreen = transport.getByRole('button', {
       name: 'Fullscreen preview',
       exact: true,
@@ -2448,7 +2453,7 @@ test('Media file preview decodes the original network Range stream on one Play',
     await page.keyboard.press('Space');
     await expect(video).toHaveJSProperty('paused', false);
     await page.keyboard.press('Escape');
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await expect.poll(appFullscreen).toBe(true);
     await expect(panel).toBeVisible();
     await expect(enterFullscreen).toBeFocused();
     await page.keyboard.press('Space');
@@ -2478,7 +2483,8 @@ test('Media file preview decodes the original network Range stream on one Play',
     await expect
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).currentTime))
       .toBeGreaterThan(duration / 2);
-    await expect(time).toHaveText(/^0:0[6-8]\s*\/\s*0:10$/);
+    const seekSeconds = ffmpeg ? '[6-8]' : '[2-4]';
+    await expect(time).toHaveText(new RegExp(`^0:0${seekSeconds}\\s*/\\s*${expectedDuration}$`));
     await expect
       .poll(() =>
         seek.evaluate((element) =>
@@ -2490,7 +2496,7 @@ test('Media file preview decodes the original network Range stream on one Play',
     await preview.getByRole('button', { name: 'Stop preview' }).click();
     await expect(seek).toHaveValue('0');
     await expect(seek).toHaveCSS('--preview-played', '0%');
-    await expect(time).toHaveText(/^0:00\s*\/\s*0:10$/);
+    await expect(time).toHaveText(`0:00 / ${expectedDuration}`);
     await expect(poster).toBeVisible();
     expect(posterReads).toBe(readsBeforeStop);
     expect((await state()).closes).toHaveLength(1);
@@ -2532,6 +2538,9 @@ test('Media file preview decodes the original network Range stream on one Play',
     expect(final.commands).toBe(0);
     expect(final.proxyFallbacks).toBe(0);
     await expect(field).toHaveAttribute('data-picker-value', '');
+    await defaults.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Exit app fullscreen', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>

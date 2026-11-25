@@ -1,4 +1,10 @@
-import { closeGuardDoor, type CloseGuardDoor, type ShellInvoke } from '@cg/gesture';
+import {
+  closeGuardDoor,
+  windowFullscreenDoor,
+  type CloseGuardDoor,
+  type ShellInvoke,
+  type WindowFullscreenDoor,
+} from '@cg/gesture';
 import type { PlayoutFetchLike, PlayoutResponseLike } from '@cg/shared-ipc';
 import { FloatingPanelPlacementSchema } from '../shared/floating-panels.js';
 import type { FloatingPanelWindowDoor } from '../shared/floating-panel-window.js';
@@ -44,6 +50,19 @@ function tauri(): TauriInternals | null {
 /** Is this console inside CG Control — the app with a native sign-in and a keyboard-language door? */
 export function insideCgControl(): boolean {
   return tauri() !== null;
+}
+
+/** The main console window's presentation, independent of the connected station. */
+export function shellWindowFullscreen(): WindowFullscreenDoor | null {
+  if (typeof document === 'undefined') return null;
+  // WebView2 maps DOM fullscreen to the native window. Using the document root
+  // lets a fullscreen media preview return to the fullscreen console.
+  const browser = windowFullscreenDoor(null, document);
+  if (browser.available) return browser;
+  const door = tauri();
+  return door === null
+    ? browser
+    : windowFullscreenDoor((command, args) => door.invoke(command, args), document);
 }
 
 export function nativeFloatingPanels(): FloatingPanelWindowDoor | null {

@@ -44,4 +44,32 @@ test.describe('D-086 Phase B — top-chrome relocation', () => {
     const { html } = await app.exportHtml();
     expect(html).toContain('createRuntime');
   });
+
+  test('View and F11 toggle whole-window fullscreen in the same project', async ({ app }) => {
+    await app.newProject('Fullscreen E2E');
+    const nav = app.page.getByRole('navigation', { name: 'Application menu' });
+    const view = nav.getByRole('button', { name: 'View', exact: true });
+    const enter = app.page.getByRole('menuitem', { name: /^Enter fullscreen/ });
+    const exit = app.page.getByRole('menuitem', { name: /^Exit fullscreen/ });
+    const isFullscreen = () =>
+      app.page.evaluate(() => document.fullscreenElement === document.documentElement);
+
+    await view.click();
+    await expect(enter).toContainText('F11');
+    await enter.click();
+    await expect.poll(isFullscreen).toBe(true);
+
+    await view.click();
+    await expect(exit).toContainText('F11');
+    await exit.click();
+    await expect.poll(isFullscreen).toBe(false);
+
+    await app.page.keyboard.press('F11');
+    await expect.poll(isFullscreen).toBe(true);
+    await app.page.keyboard.press('F11');
+    await expect.poll(isFullscreen).toBe(false);
+
+    await expect(nav.getByTestId('project-name')).toHaveText('Fullscreen E2E');
+    await expect(app.canvas).toBeVisible();
+  });
 });

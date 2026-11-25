@@ -76,8 +76,8 @@ const BACKING_EMITTERS = [
   'updateChanged',
 ] as const;
 
-// The desktop window host exists only when the native shell supplies it.
-type BrowserBridgeSurface = Omit<RuntimeBridge, 'floatingPanels'>;
+// Optional window controls are provided by the local environment, independently of the bridge.
+type BrowserBridgeSurface = Omit<RuntimeBridge, 'floatingPanels' | 'windowFullscreen'>;
 type BridgeMethodName = {
   [K in keyof BrowserBridgeSurface]: BrowserBridgeSurface[K] extends (...args: never[]) => unknown
     ? K
@@ -464,12 +464,15 @@ it('the mock implements every backing method + emitter the bridge routes (B-070)
   expect(BACKING_EMITTERS.filter((name) => !hasEmitter(mock, name))).toEqual([]);
 });
 
-it('keeps the floating panel door unavailable in a browser', () => {
+it('keeps window controls unavailable without a browser document or a shell', () => {
   live = new WebSocketRuntime('ws://127.0.0.1:1/parity-never-connects', {
     createWebSocket: () => inertSocket(),
   });
-  expect(createMockBridge().floatingPanels).toBeNull();
+  const mock = createMockBridge();
+  expect(mock.floatingPanels).toBeNull();
   expect(live.floatingPanels).toBeNull();
+  expect(mock.windowFullscreen).toBeNull();
+  expect(live.windowFullscreen).toBeNull();
 });
 
 it('both bridges expose the required RuntimeBridge methods and the live one can query source presence', () => {

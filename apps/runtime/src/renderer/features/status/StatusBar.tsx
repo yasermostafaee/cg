@@ -6,9 +6,10 @@ import {
   useEngineName,
 } from '../../ui/engineWording.js';
 import { useState } from 'react';
+import { useWindowFullscreen } from '@cg/gesture';
 import type { AuthCapabilities } from '../../../shared/runtime-bridge.js';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
-import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
+import { ArrowLeftRight, Lock, Maximize, Minimize, TriangleAlert } from 'lucide-react';
 import {
   backupMappedSummary,
   ENGINE_SERVER,
@@ -37,6 +38,7 @@ import { IdentityIndicator } from './IdentityIndicator.js';
 import { ReadOnlyIndicator } from './ReadOnlyIndicator.js';
 import { SignOutButton } from '../auth/SignOutButton.js';
 import { Tag } from '../../ui/Tag.js';
+import { reportCommandNotice } from './commandFeedback.js';
 
 /**
  * 🔴 `AUDIT-CLOSE-01` B1 — THIS BAR NO LONGER TAKES THE TWO DOORS, and the record of what they
@@ -383,6 +385,25 @@ export function StatusBar({
   const engineChipText = (server: 'A' | 'B', state: EngineState): string =>
     translateUi(engineChipLabels[state] ?? 'Server {server}', { server });
   const localizeUi = useUiText();
+  const windowFullscreen = useWindowFullscreen(window.cg?.windowFullscreen);
+  const fullscreenLabel = localizeUi(
+    windowFullscreen.active ? 'Exit app fullscreen' : 'Enter app fullscreen',
+  );
+  const fullscreenButton = windowFullscreen.available && (
+    <Button
+      variant="icon"
+      aria-label={fullscreenLabel}
+      title={fullscreenLabel}
+      disabled={windowFullscreen.pending}
+      onClick={() =>
+        void windowFullscreen
+          .toggle()
+          .catch(() => reportCommandNotice('Fullscreen is unavailable.', document))
+      }
+    >
+      <Icon icon={windowFullscreen.active ? Minimize : Maximize} />
+    </Button>
+  );
   const engine = useEngineName();
   const playoutLinked = engine === PLAYOUT_ENGINE_NAME;
   const playoutConnection = connectionMode === 'playout';
@@ -464,6 +485,8 @@ export function StatusBar({
           {localizeUi(stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…')}
         </Tag>
         {programmeRole}
+        <span style={styles.spacer} />
+        {fullscreenButton}
       </footer>
     );
   }
@@ -892,6 +915,7 @@ export function StatusBar({
           {localizeUi('Lock')}
         </Button>
       )}
+      {fullscreenButton}
       {engaging && (
         <EngageLockDialog
           onCancel={() => setEngaging(false)}

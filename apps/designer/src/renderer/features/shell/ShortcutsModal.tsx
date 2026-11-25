@@ -38,6 +38,7 @@ const SHORTCUTS: readonly { keys: string; label: string }[] = [
   { keys: 'Right-click layer', label: 'Layer menu (color, copy, delete…)' },
   { keys: `${MOD} + Scroll`, label: 'Zoom canvas / timeline' },
   { keys: 'R', label: 'Toggle canvas rulers' },
+  { keys: 'F11', label: 'Toggle application fullscreen' },
   { keys: 'Shift + S', label: 'Toggle Safe areas' },
   { keys: 'Drag from ruler', label: 'Add a guide line' },
   { keys: 'Esc', label: 'Deselect · cancel · close menu' },

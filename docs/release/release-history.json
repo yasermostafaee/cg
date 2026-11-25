@@ -304,6 +304,11 @@
       },
       "features": [
         {
+          "fa": "در CG Designer از منوی View یا کلید F11 وارد حالت تمام‌صفحه شوید و به حالت قبلی برگردید. در CG Control از آیکون تمام‌صفحه کنار Lock استفاده کنید. F11 در CG Control همچنان برای میانبرهای لایه در دسترس است.",
+          "en": "In CG Designer, use the View menu or F11 to enter or exit app fullscreen. In CG Control, use the fullscreen icon beside Lock. F11 in CG Control remains available for layer shortcuts.",
+          "ar": "في CG Designer، استخدم قائمة View أو المفتاح F11 للدخول إلى وضع ملء الشاشة أو الخروج منه. في CG Control، استخدم أيقونة ملء الشاشة بجوار زر القفل. يظل F11 متاحًا لاختصارات الطبقات في CG Control."
+        },
+        {
           "fa": "در پایلوت External CG v2 برای قالب‌های ثابت HTML، فرمان‌های Play، Update، Stop و Clear به مالک فعلی Playout می‌رسند. آزمون روی جفت واقعی .26 نشان داد که Play به A می‌رسد و خود Playout گرافیک را روی B رندر می‌کند. گرافیک پس از انتقال مالکیت روی B باقی ماند و CG Control متن به‌روزشده را پس از راه‌اندازی دوبارهٔ Bridge بازیابی کرد.",
           "en": "In the External CG v2 pilot for static HTML templates, Play, Update, Stop and Clear go to the current Playout owner. On a real .26 pair, Play reached A and Playout rendered the graphic on B. The graphic survived ownership transfer, and CG Control restored the updated caption after a Bridge restart.",
           "ar": "في تجربة External CG v2 لقوالب HTML الثابتة، تصل أوامر Play وUpdate وStop وClear إلى خادم Playout المالك حاليًا. في اختبار على زوج .26 الفعلي، وصل أمر Play إلى A وعرض Playout الرسم على B. ظل الرسم معروضًا بعد نقل الملكية، واستعاد CG Control النص المحدث بعد إعادة تشغيل Bridge."

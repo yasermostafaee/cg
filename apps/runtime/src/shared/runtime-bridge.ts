@@ -7,6 +7,7 @@
  * the contract.
  */
 import type { FloatingPanelWindowDoor } from './floating-panel-window.js';
+import type { WindowFullscreenDoor } from '@cg/gesture';
 import type {
   BackupChannelEntriesSetChannel,
   BackupChannelsState,
@@ -379,6 +380,8 @@ export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
   /** Local workstation windows. The browser has no native workspace window host. */
   readonly floatingPanels?: FloatingPanelWindowDoor | null;
+  /** Change the presentation of the main window without sending station commands. */
+  readonly windowFullscreen?: WindowFullscreenDoor | null;
   /** Open the fixed company site through the installed shell. Returns false in a browser. */
   openCompanySite(): boolean;
 

@@ -46,3 +46,8 @@ export {
   type CloseGuardDoor,
   type ShellInvoke,
 } from './closeGuard.js';
+export {
+  useWindowFullscreen,
+  windowFullscreenDoor,
+  type WindowFullscreenDoor,
+} from './windowFullscreen.js';

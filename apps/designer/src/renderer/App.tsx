@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { resolveProjectOutputRaster } from '@cg/shared-schema';
+import { useWindowFullscreen } from '@cg/gesture';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { SharedLibraryPanel } from './features/sharedLibrary/SharedLibraryPanel.js';
@@ -196,6 +197,22 @@ function LeftRail({
  */
 export function App(): JSX.Element {
   useSharedFontFaces();
+  const { available, active, pending, toggle } = useWindowFullscreen(window.cg.windowFullscreen);
+  const toggleFullscreen = useCallback(() => {
+    void toggle().catch(() => designerStore.showNotice('Fullscreen is unavailable.'));
+  }, [toggle]);
+  useEffect(() => {
+    if (!available) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'F11' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+        return;
+      event.preventDefault();
+      if (!event.repeat) toggleFullscreen();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [available, toggleFullscreen]);
+
   // Deliberately excludes `currentFrame`: the playhead tick fires every frame
   // during playback, and the frame-dependent surfaces (canvas, transport,
   // inspector, timeline) now read it themselves. Keeping App off `currentFrame`
@@ -568,7 +585,11 @@ export function App(): JSX.Element {
     <main className={s.page}>
       <StorageNotice />
       <div className={s.studioTop}>
-        <TopToolbar scene={scene} projectPath={projectPath} />
+        <TopToolbar
+          scene={scene}
+          projectPath={projectPath}
+          fullscreen={available ? { active, pending, toggle: toggleFullscreen } : null}
+        />
       </div>
       <div className={s.shell}>
         <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
