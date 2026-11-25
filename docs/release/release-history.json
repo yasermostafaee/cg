@@ -341,6 +341,11 @@
           "ar": "في Windows، يظل جزء الطبقات ظاهرًا عند الضغط على F5 سواء كان مثبتًا أم عائمًا. يعمل F5 وفق تعيينه للطبقة عند تفعيل الاختصارات."
         },
         {
+          "fa": "خلاصه و هشدارهای بارگذاری پروفایل با زبان پیام‌ها نمایش داده می‌شوند. متن انگلیسی چپ‌به‌راست و متن فارسی و عربی راست‌به‌چپ خوانده می‌شود.",
+          "en": "Profile load summaries and warnings use the configured feedback language and its reading direction.",
+          "ar": "تعرض ملخصات تحميل ملفات التعريف وتحذيراته بلغة الرسائل المحددة واتجاه القراءة المناسب لها."
+        },
+        {
           "fa": "در پیش‌نمایش New live layout، قاب‌های پریست تصویر ورودی NDI مستقیم و تصویر ورودی‌های دارای پیش‌نمایش Playout را با اندازه و برش همان قاب نشان می‌دهند.",
           "en": "New live layout preview frames display direct NDI and available Playout source pictures with the selected preset's fit and crop.",
           "ar": "تعرض معاينة «ترتيب حي جديد» صور NDI المباشرة وصور مصادر Playout المتاحة وفق الملاءمة والاقتصاص في الإعداد المسبق المحدد."

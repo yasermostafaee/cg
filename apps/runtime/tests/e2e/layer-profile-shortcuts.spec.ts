@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createBridge } from '@cg/caspar-bridge';
 import { LayerProfileSchema, type FixedLayerBank, type LayerProfile } from '@cg/shared-ipc';
+import { CONTROL_LANGUAGE_KEY } from '../../src/renderer/i18n/localePreferences.js';
 import { expect, test } from './fixtures/runtime.js';
 
 const bank: FixedLayerBank = {
@@ -13,10 +14,8 @@ const bank: FixedLayerBank = {
   spaceShortcut: { layer: 99, verb: 'clear' },
 };
 
-test('R-024 saves and restores channel shortcuts and reports a Bridge without shortcut restore', async ({
-  page,
-}) => {
-  const bridge = await createBridge({
+function createProfileBridge() {
+  return createBridge({
     port: 0,
     connection: {
       servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
@@ -25,6 +24,12 @@ test('R-024 saves and restores channel shortcuts and reports a Bridge without sh
     },
     fixedLayers: bank,
   });
+}
+
+test('R-024 saves and restores channel shortcuts and reports a Bridge without shortcut restore', async ({
+  page,
+}) => {
+  const bridge = await createProfileBridge();
   try {
     await page.addInitScript((url) => {
       const testWindow = window as unknown as {
@@ -101,3 +106,106 @@ test('R-024 saves and restores channel shortcuts and reports a Bridge without sh
     await bridge.close();
   }
 });
+
+const englishProfileDialog = ['Layer profiles', 'Choose profile…', 'Load profile'] as const;
+const englishWarning = [
+  'Loaded 2 layers.',
+  'Layer 99 · Logo — Clear this layer before replacing it with a profile. Layer 98 · زیرنویس — Clear this layer before replacing it with a profile.',
+] as const;
+
+const profileLanguages = [
+  { ui: 'en', feedback: 'en', dir: 'ltr', dialog: englishProfileDialog, warning: englishWarning },
+  {
+    ui: 'fa',
+    feedback: 'en',
+    dir: 'ltr',
+    dialog: ['پروفایل‌های لایه', 'انتخاب پروفایل…', 'بارگذاری پروفایل'],
+    warning: englishWarning,
+  },
+  {
+    ui: 'en',
+    feedback: 'fa',
+    dir: 'rtl',
+    dialog: englishProfileDialog,
+    warning: [
+      '2 لایه بارگذاری شد.',
+      'لایهٔ 99 · Logo — پیش از جایگزینی با پروفایل، این لایه را پاک کنید. لایهٔ 98 · زیرنویس — پیش از جایگزینی با پروفایل، این لایه را پاک کنید.',
+    ],
+  },
+  {
+    ui: 'en',
+    feedback: 'ar',
+    dir: 'rtl',
+    dialog: englishProfileDialog,
+    warning: [
+      'تم تحميل 2 من الطبقات.',
+      'الطبقة 99 · Logo — امسح هذه الطبقة قبل استبدالها بملف تعريف. الطبقة 98 · زیرنویس — امسح هذه الطبقة قبل استبدالها بملف تعريف.',
+    ],
+  },
+] as const;
+
+for (const { ui, feedback, dir, dialog, warning } of profileLanguages) {
+  test(`B-455 profile load warning follows ${feedback} feedback in the ${ui} interface`, async ({
+    page,
+  }) => {
+    const bridge = await createProfileBridge();
+    try {
+      await page.addInitScript(
+        ({ key, ui, feedback, url }) => {
+          (window as unknown as { __CG_BRIDGE_URL__: string }).__CG_BRIDGE_URL__ = url;
+          localStorage.setItem(key, JSON.stringify({ interface: ui, feedback }));
+        },
+        { key: CONTROL_LANGUAGE_KEY, ui, feedback, url: bridge.url },
+      );
+      await page.goto('/');
+
+      const [profilesName, chooseName, loadName] = dialog;
+      await page.getByRole('button', { name: profilesName, exact: true }).click();
+      const modal = page.getByRole('dialog', { name: profilesName, exact: true });
+      await page.evaluate(() => {
+        window.cg.stack.loadProfile = async () => ({
+          loaded: 2,
+          issues: [
+            { layer: 99, label: 'Logo', reason: 'layer-occupied' },
+            { layer: 98, label: 'زیرنویس', reason: 'layer-occupied' },
+          ],
+        });
+      });
+      const [chooser] = await Promise.all([
+        page.waitForEvent('filechooser'),
+        modal.getByRole('button', { name: chooseName, exact: true }).click(),
+      ]);
+      await chooser.setFiles({
+        name: 'profile.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(
+          JSON.stringify({ kind: 'apasai-cg-layer-profile', version: 1, items: [] }),
+        ),
+      });
+      await modal.getByRole('button', { name: loadName, exact: true }).click();
+      await expect(modal).toHaveCount(0);
+
+      const lines = page.locator('[data-refusal] [data-notice="refusal"] span[dir]');
+      await expect(lines).toHaveCount(2);
+      for (const [index, copy] of warning.entries()) {
+        const line = lines.nth(index);
+        await expect(line).toHaveCSS('direction', dir);
+        const { text, offset } = await line.evaluate((element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const textBounds = range.getBoundingClientRect();
+          const lineBounds = element.getBoundingClientRect();
+          const rtl = getComputedStyle(element).direction === 'rtl';
+          return {
+            text: element.textContent?.replace(/[\u2066-\u2069]/gu, ''),
+            offset: rtl ? lineBounds.right - textBounds.right : textBounds.left - lineBounds.left,
+          };
+        });
+        expect(text).toBe(copy);
+        expect(Math.abs(offset)).toBeLessThan(1);
+      }
+    } finally {
+      await bridge.close();
+    }
+  });
+}

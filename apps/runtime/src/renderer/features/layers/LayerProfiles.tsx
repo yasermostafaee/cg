@@ -1,4 +1,10 @@
-import { useUiText } from '../../i18n/locale.js';
+import {
+  feedback,
+  localeDirection,
+  useFeedbackText,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import { useRef, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import {
@@ -46,15 +52,20 @@ function layerIssue(reason: string): string {
 }
 
 function loadNotice(result: StackLoadProfileResult, includesShortcuts: boolean): string {
-  const loaded = `Loaded ${String(result.loaded)} ${result.loaded === 1 ? 'layer' : 'layers'}.`;
+  const loaded = feedback(
+    result.loaded === 1 ? 'Loaded {count} layer.' : 'Loaded {count} layers.',
+    {
+      count: result.loaded,
+    },
+  );
   if (result.shortcuts?.status === 'admin-required') {
-    return `${loaded} Shortcuts skipped. Station admin access is required.`;
+    return `${loaded} ${feedback('Shortcuts skipped. Station admin access is required.')}`;
   }
   if (result.shortcuts?.status === 'invalid') {
-    return `${loaded} Shortcuts skipped. ${result.shortcuts.message}`;
+    return `${loaded} ${feedback('Shortcuts skipped. {reason}', { reason: feedback(result.shortcuts.message) })}`;
   }
   if (includesShortcuts && result.shortcuts === undefined) {
-    return `${loaded} Shortcuts skipped. This CG Bridge cannot restore them.`;
+    return `${loaded} ${feedback('Shortcuts skipped. This CG Bridge cannot restore them.')}`;
   }
   return loaded;
 }
@@ -70,7 +81,10 @@ function reportLoadedProfile(result: StackLoadProfileResult, includesShortcuts: 
   const detail = result.issues
     .map(({ layer, label, reason }) => {
       const name = label ? ` · ${isolateText(label)}` : '';
-      return `Layer ${String(layer)}${name} — ${layerIssue(reason)}`;
+      return feedback('{row} — {reason}', {
+        row: `${feedback('Layer {layer}', { layer })}${name}`,
+        reason: feedback(layerIssue(reason)),
+      });
     })
     .join(' ');
   reportCommandError(message, { detail });
@@ -84,6 +98,8 @@ export function LayerProfiles({
   snapshot: readonly StackItemState[];
 }): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<{
@@ -286,10 +302,10 @@ export function LayerProfiles({
             </>
           )}
           {result !== null && result.issues.length > 0 && (
-            <ul>
+            <ul dir={feedbackDirection}>
               {result.issues.map(({ layer, label, reason }, index) => (
                 <li key={`${String(layer)}:${String(index)}`}>
-                  {localizeUi('Layer')} {String(layer)}
+                  {localizeFeedback('Layer {layer}', { layer })}
                   {label ? (
                     <>
                       {' '}
@@ -297,7 +313,7 @@ export function LayerProfiles({
                     </>
                   ) : null}
                   {' — '}
-                  {layerIssue(reason)}
+                  {localizeFeedback(layerIssue(reason))}
                 </li>
               ))}
             </ul>

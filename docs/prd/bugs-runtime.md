@@ -14265,3 +14265,13 @@ turns white. Docked and detached panes both use their own WebView2 documents.
 **Expected.** Function keys reach the same guarded layer shortcut handler from the main window
 and every pane. F5 keeps the current Layers document, rows and selection. An assigned key obeys
 the session switch, editing focus and row action safeguards.
+
+## [~] B-455 — Match the layer profile load warning to its feedback language ⟨priority: medium — owner, 2026-11-25⟩ — `openspec/changes/operator-layer-profiles/`
+
+**Repro.** Load a layer profile while prepared layers cannot be replaced. The summary and
+skipped-layer explanations are assembled in English even when the feedback preference is set to
+a right-to-left language, and the English warning is displayed right-to-left.
+
+**Expected.** The load summary and skipped-layer details use the selected feedback language and
+reading direction independently of the interface language. The layer number and operator's name
+remain associated with the explanation.

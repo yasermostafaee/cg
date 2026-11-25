@@ -20,3 +20,10 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
 - [x] Keep old files and operator row loads compatible and report skipped shortcut settings.
 - [x] Verify defaults, roles and compatibility with the Bridge and Windows Chromium.
 - [ ] Record the carrying Linux Playwright result for profile shortcuts.
+
+## Profile load message direction
+
+- [x] Localize the load summary and skipped-layer explanations in the feedback language.
+- [x] Verify English left-to-right and Persian and Arabic right-to-left with an independently selected interface language.
+      Windows Chromium checked the summary, two mixed-script layer labels, and the rendered text alignment in four locale combinations.
+- [ ] Record the carrying Linux Playwright result for the warning direction.

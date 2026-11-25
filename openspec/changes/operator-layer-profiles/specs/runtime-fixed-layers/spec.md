@@ -23,6 +23,12 @@ ask before replacing prepared layers.
 - **AND** the dialog closes once CG Bridge accepts the load and CG Control confirms the result
 - **AND** each skipped layer and any shortcut problem remains visible until dismissed
 
+#### Scenario: Read the profile load warning with different feedback and interface languages
+
+- **WHEN** a profile load skips layers and the interface and feedback language settings differ
+- **THEN** the load summary and skipped-layer explanations follow the feedback language and its reading direction
+- **AND** operator-defined layer names and layer numbers keep their correct order
+
 #### Scenario: File selection and failed profile loads leave the dialog open
 
 - **WHEN** the operator cancels the file chooser, chooses an invalid profile, or a load fails
