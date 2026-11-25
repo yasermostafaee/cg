@@ -1,4 +1,4 @@
-//! Keyboard routing for the installed CG Control window.
+//! Keyboard routing for the installed CG Control workspace.
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -147,7 +147,7 @@ pub fn install(window: &tauri::WebviewWindow) -> tauri::Result<()> {
             Ok(())
         }));
 
-        // The controller owns the callback until the main WebView closes.
+        // The controller owns the callback for its WebView's lifetime.
         let mut token = 0;
         if let Err(error) = unsafe {
             webview

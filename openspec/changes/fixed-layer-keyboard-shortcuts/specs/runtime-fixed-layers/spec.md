@@ -71,6 +71,12 @@ Editable focus, modal dialogs, context menus and repeated keydown events SHALL s
 - **AND** editing, an open modal or menu, a repeated keydown, or an unassigned key produces no notice
 - **AND** ordinary keyboard behavior remains available
 
+#### Scenario: Keep docked and detached Layers open when pressing F5 on Windows
+
+- **WHEN** focus is in the docked or detached native Layers pane and the operator presses F5
+- **THEN** the same pane document, rows and selection stay available
+- **AND** the key follows the same assigned-action, session-switch and editing rules as in the main window
+
 #### Scenario: Operate the assigned layer with the table filtered
 
 - **WHEN** shortcuts are enabled and the operator presses the Play shortcut for a filtered layer or in a fullscreen monitor

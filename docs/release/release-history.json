@@ -336,6 +336,11 @@
           "ar": "تظل صورة NDI الحيّة ظاهرة عند تمرير المؤشر على الإدخال أو الضغط عليه في عرضَي القائمة والشبكة في نافذة اختيار المصدر."
         },
         {
+          "fa": "در ویندوز، فشردن F5 در پنل لایه‌ها، چه متصل و چه شناور، پنل را سفید نمی‌کند. اگر میانبرها فعال باشند، F5 طبق تنظیم لایه عمل می‌کند.",
+          "en": "On Windows, pressing F5 in docked or floating Layers keeps the pane visible. F5 follows its layer assignment when shortcuts are enabled.",
+          "ar": "في Windows، يظل جزء الطبقات ظاهرًا عند الضغط على F5 سواء كان مثبتًا أم عائمًا. يعمل F5 وفق تعيينه للطبقة عند تفعيل الاختصارات."
+        },
+        {
           "fa": "در پیش‌نمایش New live layout، قاب‌های پریست تصویر ورودی NDI مستقیم و تصویر ورودی‌های دارای پیش‌نمایش Playout را با اندازه و برش همان قاب نشان می‌دهند.",
           "en": "New live layout preview frames display direct NDI and available Playout source pictures with the selected preset's fit and crop.",
           "ar": "تعرض معاينة «ترتيب حي جديد» صور NDI المباشرة وصور مصادر Playout المتاحة وفق الملاءمة والاقتصاص في الإعداد المسبق المحدد."

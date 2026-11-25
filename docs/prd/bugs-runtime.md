@@ -14256,3 +14256,12 @@ use its poster until the operator reselects the source or a compatible replaceme
 **Regression.** Verify focused motion in Preview and on stock CasparCG using the prepared clip,
 as well as WebM passthrough, a failed conversion and the legacy still fallback. Track the
 browser and output verification separately in task 2.8.
+
+## [~] B-454 — Keep the Layers panel visible after F5 ⟨priority: high — owner, 2026-11-25⟩ — `openspec/changes/fixed-layer-keyboard-shortcuts/`
+
+**Repro.** In CG Control 1.2.13 build `cf814a95`, focus the Layers pane and press F5. The pane
+turns white. Docked and detached panes both use their own WebView2 documents.
+
+**Expected.** Function keys reach the same guarded layer shortcut handler from the main window
+and every pane. F5 keeps the current Layers document, rows and selection. An assigned key obeys
+the session switch, editing focus and row action safeguards.

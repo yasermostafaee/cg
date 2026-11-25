@@ -24,8 +24,10 @@ and repeat guards shows feedback directing the operator to Layer shortcuts in th
 This path only emits feedback. The key follows normal workspace handling. The message uses the
 feedback language.
 
-The Windows shell lets function-key events reach the console before WebView2 applies its browser
-shortcuts. It forwards F10 before Windows opens a menu. It reserves Alt+F4 while shortcuts are
+Each Windows WebView2 controller in the console registers the same function-key routing when
+created. Reparenting a pane between its docked slot and a floating window preserves that
+controller and its handler. WebView2 passes F5 through as a layer key without reloading the
+pane document. The router forwards F10 before Windows opens a menu. It reserves Alt+F4 while shortcuts are
 enabled and the selected channel can use that binding, or while a shortcut is being recorded.
 With shortcuts off, Alt+F4 follows the normal Windows close and confirmation path outside
 recording. A key handled by the operating system does not reach the workspace notice handler.

@@ -171,7 +171,16 @@ mod native {
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .build()
         {
-            Ok(window) => NewWindowResponse::Create { window },
+            Ok(window) => {
+                // Docked and detached panels both own their keyboard input.
+                if let Err(error) = crate::layer_shortcuts::install(&window) {
+                    crate::shell_log::log(&format!(
+                        "could not route layer shortcut keys on {}: {error}",
+                        panel.label()
+                    ));
+                }
+                NewWindowResponse::Create { window }
+            }
             Err(error) => {
                 crate::shell_log::log(&format!("Could not open {}: {error}", panel.label()));
                 NewWindowResponse::Deny

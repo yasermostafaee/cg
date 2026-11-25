@@ -88,6 +88,57 @@ async function placement(page: Page, panel: FloatingPanelId) {
   return (await arrangement(page, panel))?.placement;
 }
 
+for (const mode of ['docked', 'floating'] as const) {
+  test(`B-454 F5 follows the layer shortcut switch in ${mode} Layers`, async ({ page }) => {
+    await armMockRuntime(page);
+    const documents = await openPanelDocuments(page);
+    const layers = documents.get('layers')!;
+    const app = new RuntimeApp(layers);
+    await expect(app.layerRow(95)).toBeVisible();
+    const loaded = await page.evaluate(() =>
+      window.cg.fixedLayers.load({
+        channel: 1,
+        layer: 95,
+        itemId: 'item-native-f5',
+        templateId: 'ticker',
+        fields: {},
+      }),
+    );
+    expect(loaded.accepted).toBe(true);
+    const documentStart = () => layers.evaluate(() => performance.timeOrigin);
+    const start = await documentStart();
+    const writes = () =>
+      page.evaluate(() => (window as unknown as ProbeWindow).floatingWindowProbe.playoutWrites);
+    const toggle = app.layers.getByRole('switch', { name: 'Layer shortcuts', exact: true });
+    const search = app.layers.getByRole('searchbox', { name: 'Find row or template' });
+    const state = app.layerState(95);
+    const detached = mode === 'floating';
+    if (detached) await layers.getByRole('button', { name: /^Float / }).click();
+    await expect
+      .poll(() => arrangement(page, 'layers'))
+      .toMatchObject({
+        placement: detached ? expect.any(Object) : null,
+      });
+    await expect(state).toHaveText('READY');
+    const beforeKey = await writes();
+    await expect(toggle).not.toBeChecked();
+    await layers.keyboard.press('F5');
+    await expect(layers.getByText(/^Layer shortcuts are off\./)).toBeVisible();
+    expect(await writes()).toBe(beforeKey);
+
+    await toggle.click();
+    await search.focus();
+    await layers.keyboard.press('F5');
+    expect(await writes()).toBe(beforeKey);
+    await expect(search).toBeFocused();
+    await search.blur();
+    await layers.keyboard.press('F5');
+    await expect.poll(writes).toBe(beforeKey + 1);
+    await expect(state).toHaveText('SIM ON AIR');
+    expect(await documentStart()).toBe(start);
+  });
+}
+
 test('R-129 shows and hides each docked monitor independently or together', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await armMockRuntime(page);

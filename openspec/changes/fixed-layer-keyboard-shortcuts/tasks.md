@@ -36,3 +36,11 @@ Windows Chromium passed all 16 focused scenarios. The Bridge integration test pe
 - [ ] Verify physical Alt+F4 outside recording in the Windows shell on this revision.
 - [x] Verify translated headings and number-first layout in English, Persian and Arabic in Chromium.
 - [ ] Record the carrying Linux Playwright E2E result for the session switch and table.
+
+## Native Layers F5
+
+- [x] Install function-key routing in the native pane controllers as well as the main window.
+- [x] Verify F5 in docked and detached Layers with shortcuts off and on, and during editing.
+      Isolated Windows WebView2 reproduced the original reload and kept the same document and 30 rows after the fix.
+      Chromium exercised the enabled action, disabled notice and editing guard in both placements.
+- [ ] Record the carrying Windows installer and Linux Playwright results.
