@@ -20,6 +20,9 @@
 - [x] Test selecting the same row and a different row with Inspector detached in Windows Chromium.
 - [x] Verify main toolbar tooltips stay above intersecting docked panels in Chromium and WebView2.
       The native smoke covered hover, keyboard focus, Escape, click-through and font loading in RTL.
+- [x] Verify command toast position, click-through and single announcement across the docked Layers panel.
+      Windows Chromium reproduced the missing overlay before the fix and passed after it.
+      The regression also covers expiry and detaching Layers.
 - [x] Verify the individual and combined toolbar actions with both monitors docked.
       Windows Edge covered the mixed state, fullscreen and restore, a 760 px toolbar and zero
       playout commands. The local programme-return test kept its connection while PVW toggled and

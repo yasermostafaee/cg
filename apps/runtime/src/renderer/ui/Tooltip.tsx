@@ -1,6 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { panelWindow, usePanelDocument } from './PanelDocument.js';
+import {
+  panelWindow,
+  usePanelDocument,
+  type PanelOverlayBounds,
+  type PanelOverlaySurfaces,
+} from './PanelDocument.js';
 
 /**
  * THE Runtime's tooltip — one global mechanism, inherited by every control that
@@ -104,27 +109,10 @@ interface Tip {
   bottom: number;
 }
 
-export interface TooltipBox {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-interface TooltipSurface {
-  key: string;
-  container: HTMLElement;
-  left: number;
-  top: number;
-  scale: number;
-}
-
-export type TooltipSurfaces = (box: TooltipBox) => readonly TooltipSurface[];
-
 export function Tooltip({
   surfaces,
 }: {
-  surfaces?: TooltipSurfaces | undefined;
+  surfaces?: PanelOverlaySurfaces | undefined;
 } = {}): JSX.Element | null {
   const view = panelWindow(usePanelDocument());
   const [tip, setTip] = useState<Tip | null>(null);
@@ -271,12 +259,12 @@ function Bubble({
   surfaces,
 }: {
   tip: Tip;
-  surfaces: TooltipSurfaces | undefined;
+  surfaces: PanelOverlaySurfaces | undefined;
 }): JSX.Element {
   const owner = usePanelDocument();
   const view = panelWindow(owner);
   const ref = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<(TooltipBox & { fontFamily: string }) | null>(null);
+  const [pos, setPos] = useState<(PanelOverlayBounds & { fontFamily: string }) | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;

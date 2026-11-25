@@ -5499,6 +5499,7 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN a detached PGM or PVW is maximized THEN the window contains the monitor and its own controls. Layers and Inspector remain visible in their existing windows and use the same selection and draft.
 - WHEN PGM or PVW is maximized inside the main window THEN the existing R-111 controls remain available for docked companions. A separately detached Layers or Inspector panel retains its existing placement and a single interactive surface.
 - WHEN a main toolbar tooltip overlaps docked panels THEN its full text remains visible above those panels and the tooltip leaves panel controls clickable.
+- WHEN a command toast overlaps the docked Layers panel or another docked panel THEN its full message remains visible, panel controls remain clickable, and assistive technology receives one announcement.
 - WHEN both monitors are docked THEN the main toolbar offers a combined visibility control and a separate control for each monitor. An individual control changes its own monitor. The combined control hides both when both are visible and shows both when either is hidden.
 - WHEN one monitor is detached THEN the toolbar names and controls the remaining docked monitor. WHEN both are detached THEN monitor visibility controls are absent until a monitor redocks.
 - WHEN PGM or PVW redocks THEN the returning monitor becomes visible in the main window. The other monitor retains its own visibility.

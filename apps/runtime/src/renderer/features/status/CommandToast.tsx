@@ -1,9 +1,11 @@
 import { localeDirection, useFeedbackText, useLanguages } from '../../i18n/locale.js';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Info } from 'lucide-react';
 import { cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
+import type { PanelOverlayBounds } from '../../ui/PanelDocument.js';
+import { useFloatingWorkspace } from '../workspace/floatingWorkspace.js';
 import { onCommandNotice, onCommandSuccess } from './commandFeedback.js';
 
 /*
@@ -42,6 +44,7 @@ const styles = {
     zIndex: 1100,
     display: 'flex' as const,
     alignItems: 'center' as const,
+    pointerEvents: 'none' as const,
     gap: cssVars['--r-toast-gap'],
     boxShadow: cssVars['--r-toast-shadow'],
   },
@@ -54,7 +57,6 @@ const styles = {
     background: cssVars['--r-surface-raised'],
     color: cssVars['--r-text'],
     border: `1px solid ${cssVars['--r-border-strong']}`,
-    pointerEvents: 'none' as const,
   },
 } as const;
 
@@ -105,6 +107,10 @@ export function CommandToast(): JSX.Element | null {
   const message = useFeedbackText();
   const { feedback: feedbackLanguage } = useLanguages();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const surfaces = useFloatingWorkspace()?.overlaySurfaces;
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<(PanelOverlayBounds & { fontFamily: string }) | null>(null);
+  const owner = feedback?.kind === 'notice' ? feedback.owner : document;
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -124,20 +130,87 @@ export function CommandToast(): JSX.Element | null {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element === null || surfaces === undefined || owner !== document) {
+      setBox(null);
+      return;
+    }
+    const measure = () => {
+      const { left, top, width, height } = element.getBoundingClientRect();
+      const { fontFamily } = window.getComputedStyle(element);
+      setBox((last) =>
+        last?.left === left &&
+        last.top === top &&
+        last.width === width &&
+        last.height === height &&
+        last.fontFamily === fontFamily
+          ? last
+          : { left, top, width, height, fontFamily },
+      );
+    };
+    measure();
+    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : undefined;
+    resize?.observe(element, { box: 'border-box' });
+    window.addEventListener('resize', measure);
+    return () => {
+      resize?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [feedback, feedbackLanguage, owner, surfaces]);
+
   if (feedback === null) return null;
+  const style = { ...styles.base, ...styles[feedback.kind] };
+  const direction = localeDirection(feedbackLanguage);
+  const content = (
+    <>
+      <Icon icon={feedback.kind === 'success' ? Check : Info} size={TOAST_ICON_PX} />
+      <span>{message(feedback.message)}</span>
+    </>
+  );
   const toast = (
     <div
-      style={{ ...styles.base, ...styles[feedback.kind] }}
-      dir={localeDirection(feedbackLanguage)}
+      ref={ref}
+      style={style}
+      dir={direction}
       role="status"
       aria-live="polite"
       aria-label={message(feedback.kind === 'success' ? 'Command success' : 'Command notice')}
     >
-      <Icon icon={feedback.kind === 'success' ? Check : Info} size={TOAST_ICON_PX} />
-      <span>{message(feedback.message)}</span>
+      {content}
     </div>
   );
-  return feedback.kind === 'notice' && feedback.owner !== document
-    ? createPortal(toast, feedback.owner.body)
-    : toast;
+  if (owner !== document) return createPortal(toast, owner.body);
+  return (
+    <>
+      {toast}
+      {box !== null &&
+        surfaces?.(box).map(({ key, container, left, top, scale }) =>
+          createPortal(
+            <div
+              data-command-toast-overlay=""
+              aria-hidden="true"
+              dir={direction}
+              style={{
+                ...style,
+                left,
+                top,
+                bottom: 'auto',
+                width: box.width,
+                height: box.height,
+                maxWidth: 'none',
+                boxSizing: 'border-box',
+                fontFamily: box.fontFamily,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              {content}
+            </div>,
+            container,
+            key,
+          ),
+        )}
+    </>
+  );
 }

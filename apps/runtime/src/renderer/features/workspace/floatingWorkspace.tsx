@@ -21,14 +21,14 @@ import {
 } from '../../../shared/floating-panels.js';
 import type { ConfigurableShellLayout } from '../../hooks/useShellLayout.js';
 import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
-import { PanelDocumentProvider } from '../../ui/PanelDocument.js';
-import { Tooltip, type TooltipSurfaces } from '../../ui/Tooltip.js';
+import { PanelDocumentProvider, type PanelOverlaySurfaces } from '../../ui/PanelDocument.js';
+import { Tooltip } from '../../ui/Tooltip.js';
 import type { FloatingPanelDocuments } from './floatingPanelDocuments.js';
 
 interface FloatingWorkspace {
   documents: FloatingPanelDocuments;
   placements: FloatingPanelPlacements;
-  tooltipSurfaces: TooltipSurfaces;
+  overlaySurfaces: PanelOverlaySurfaces;
   dockElement: (panel: FloatingPanelId, element: HTMLDivElement | null) => void;
   detach: (panel: FloatingPanelId) => void;
   redock: (panel: FloatingPanelId) => void;
@@ -44,7 +44,7 @@ export function useFloatingWorkspace(): FloatingWorkspace | null {
 }
 
 export function WorkspaceTooltip(): JSX.Element {
-  return <Tooltip surfaces={useFloatingWorkspace()?.tooltipSurfaces} />;
+  return <Tooltip surfaces={useFloatingWorkspace()?.overlaySurfaces} />;
 }
 
 function boundsOf(element: HTMLDivElement | null | undefined): FloatingPanelDock | null {
@@ -207,7 +207,7 @@ export function FloatingWorkspaceProvider({
           : {
               documents,
               placements: layout.floatingPanels,
-              tooltipSurfaces: (box) => {
+              overlaySurfaces: (box) => {
                 // Docked WebViews paint over the main document regardless of CSS z-index.
                 // Draw the same bubble at the same physical position in each it crosses.
                 const scale = window.devicePixelRatio;

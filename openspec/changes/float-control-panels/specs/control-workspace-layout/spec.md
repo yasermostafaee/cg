@@ -48,6 +48,13 @@ CG Control SHALL allow operators to detach PGM, PVW, Layers and Inspector into i
 - **AND** Escape dismisses the entire tooltip
 - **AND** the tooltip stays inside the main window.
 
+#### Scenario: Read command feedback over docked panels
+
+- **WHEN** the main window displays a command toast that overlaps a docked panel
+- **THEN** the full toast remains visible over the panel and its controls remain clickable
+- **AND** assistive technology receives one announcement
+- **AND** the toast leaves the docked panel when it expires.
+
 #### Scenario: Select a row while Inspector is detached
 
 - **WHEN** the operator clicks the selected row again

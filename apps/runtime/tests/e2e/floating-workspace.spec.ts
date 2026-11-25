@@ -285,6 +285,79 @@ test('R-129 keeps the header tooltip visible across a docked monitor', async ({ 
   await expect(dockTip).toHaveCount(0);
 });
 
+test('R-129 paints command feedback above the docked Layers panel', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await armMockRuntime(page);
+  const documents = await openPanelDocuments(page);
+  const layers = documents.get('layers')!;
+  const dock = page.locator('[data-floating-dock="layers"]');
+  const toast = page.getByRole('status', { name: 'Command success' });
+  const overlay = layers.locator('[data-command-toast-overlay]');
+  const report = (message: string) =>
+    page.evaluate((text) => {
+      (window as unknown as { CG_TEST_SUCCEED: (value: string) => void }).CG_TEST_SUCCEED(text);
+    }, message);
+
+  await expect
+    .poll(() => arrangement(page, 'layers'))
+    .toMatchObject({ visible: true, placement: null });
+  const panel = (await dock.boundingBox())!;
+  // The fake native door opens a normal browser window. Match the actual dock's viewport
+  // before hit-testing the portion of the toast near its bottom edge.
+  await layers.setViewportSize({
+    width: Math.round(panel.width),
+    height: Math.round(panel.height),
+  });
+  await report('Cleared · 2 rows');
+  await expect(toast).toHaveText('Cleared · 2 rows');
+  await expect(toast).toHaveAttribute('aria-live', 'polite');
+  await expect(overlay).toHaveText('Cleared · 2 rows');
+  await expect(overlay).toHaveAttribute('aria-hidden', 'true');
+  await expect(overlay).toHaveCSS('pointer-events', 'none');
+  await expect(layers.getByRole('status', { name: 'Command success' })).toHaveCount(0);
+
+  const main = (await toast.boundingBox())!;
+  const mirror = (await overlay.boundingBox())!;
+  const left = Math.max(main.x, panel.x);
+  const top = Math.max(main.y, panel.y);
+  const right = Math.min(main.x + main.width, panel.x + panel.width);
+  const bottom = Math.min(main.y + main.height, panel.y + panel.height);
+  expect(right).toBeGreaterThan(left);
+  expect(bottom).toBeGreaterThan(top);
+  expect(Math.abs(mirror.x - (main.x - panel.x))).toBeLessThan(1);
+  expect(Math.abs(mirror.y - (main.y - panel.y))).toBeLessThan(1);
+  expect(mirror.width).toBeCloseTo(main.width, 1);
+  expect(mirror.height).toBeCloseTo(main.height, 1);
+
+  const hits = await overlay.evaluate(
+    (element, { x, y }) => {
+      const owner = element.ownerDocument;
+      const underlying = owner.elementFromPoint(x, y);
+      const pointerEvents = element.style.pointerEvents;
+      try {
+        // Hit-test with the overlay enabled to measure which surface paints on top.
+        element.style.pointerEvents = 'auto';
+        return {
+          passesThrough: Boolean(underlying?.closest('[data-floating-panel-content]')),
+          overlaysPanel: element.contains(owner.elementFromPoint(x, y)),
+        };
+      } finally {
+        element.style.pointerEvents = pointerEvents;
+      }
+    },
+    { x: (left + right) / 2 - panel.x, y: (top + bottom) / 2 - panel.y },
+  );
+  expect(hits).toEqual({ passesThrough: true, overlaysPanel: true });
+  await expect(toast).toHaveCount(0);
+  await expect(overlay).toHaveCount(0);
+
+  await layers.getByRole('button', { name: /^Float / }).click();
+  await expect.poll(() => placement(page, 'layers')).toMatchObject({ width: expect.any(Number) });
+  await report('Cleared · 3 rows');
+  await expect(toast).toHaveText('Cleared · 3 rows');
+  await expect(overlay).toHaveCount(0);
+});
+
 test('R-129 floats and redocks stable panel documents with one selection, draft and PVW session', async ({
   page,
 }) => {
