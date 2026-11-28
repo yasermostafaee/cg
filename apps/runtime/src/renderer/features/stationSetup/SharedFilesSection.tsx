@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, feedbackProblem, useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -33,7 +33,8 @@ export function SharedFilesSection({
         if (cancelled) return;
         report({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'Could not read the shared-files path.',
+          text: feedbackFailure(err, 'Could not read the shared-files path.'),
+          ...(err instanceof Error ? { technicalDetail: err.message } : {}),
         });
       });
     return () => {
@@ -41,17 +42,24 @@ export function SharedFilesSection({
     };
   }, [report]);
 
-  const save = async (): Promise<{ accepted: boolean; message?: string }> => {
+  const save = async (): Promise<{ accepted: boolean; operatorMessage?: string }> => {
     const result = await window.cg.sharedFiles.set({ path: draft.trim() });
     if (result.ok && result.path !== undefined) {
       setStored(result.path);
       setDraft(result.path);
-      const message = result.message ?? (checking ? 'CG Bridge can read this folder.' : undefined);
-      report(message === undefined ? null : { role: 'notice', text: message });
+      const message = checking ? 'CG Bridge can read this folder.' : 'Shared-files path saved.';
+      report({ role: 'notice', text: feedbackProblem(result.message, message) });
     }
     return {
       accepted: result.ok,
-      ...(result.ok ? {} : { message: result.message ?? 'The shared-files path was not changed.' }),
+      ...(result.ok
+        ? {}
+        : {
+            operatorMessage: feedbackProblem(
+              result.message,
+              'The shared-files path was not changed.',
+            ),
+          }),
     };
   };
 

@@ -1,4 +1,5 @@
 import { PAGE_MAX_BYTES, probeImage, type ImageProbe } from '@cg/shared-ipc';
+import { feedback } from '../../i18n/locale.js';
 
 /**
  * 🔴 `RUN-NEXT-VERSION-03` 1.2 — **A PAGE IS FITTED, NOT REFUSED** (the owner's decision, 2026-10-21).
@@ -161,12 +162,22 @@ export function fitLine(resized: number, reencoded: number, raster: Raster): str
   const parts: string[] = [];
   if (resized > 0) {
     parts.push(
-      `${resized === 1 ? '1 picture was' : `${String(resized)} pictures were`} resized to fit ${String(raster.width)}×${String(raster.height)}`,
+      feedback(
+        resized === 1
+          ? '1 picture was resized to fit {size}'
+          : '{count} pictures were resized to fit {size}',
+        { count: resized, size: `${String(raster.width)}×${String(raster.height)}` },
+      ),
     );
   }
   if (reencoded > 0) {
     parts.push(
-      `${reencoded === 1 ? '1 picture was' : `${String(reencoded)} pictures were`} made smaller than ${String(PAGE_MAX_BYTES / (1024 * 1024))} MB`,
+      feedback(
+        reencoded === 1
+          ? '1 picture was made smaller than {limit} MB'
+          : '{count} pictures were made smaller than {limit} MB',
+        { count: reencoded, limit: PAGE_MAX_BYTES / (1024 * 1024) },
+      ),
     );
   }
   return parts.length === 0 ? null : parts.join(' · ');

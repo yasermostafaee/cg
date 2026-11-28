@@ -1,4 +1,4 @@
-import { useFeedbackText, useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import {
   LAYER_SHORTCUT_VERBS,
@@ -92,7 +92,7 @@ export function LayerShortcutsDialog({
     } catch (error) {
       setMessage({
         role: 'refusal',
-        text: localizeFeedback(error instanceof Error ? error.message : 'Request failed.'),
+        text: feedbackFailure(error),
       });
     } finally {
       setBusy(false);

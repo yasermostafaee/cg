@@ -66,7 +66,7 @@ import { CalendarSection } from '../calendar/CalendarSection.js';
 import { AuditCalendarSettings } from '../audit/AuditCalendarSettings.js';
 import { LanguageSettings } from './LanguageSettings.js';
 import { WorkspaceSettings } from '../workspace/WorkspaceSettings.js';
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, feedbackProblem, useUiText } from '../../i18n/locale.js';
 import { SharedFilesSection } from './SharedFilesSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
 import { BackupServerDialog } from './BackupServerDialog.js';
@@ -1837,11 +1837,19 @@ export function StationSetupDialog({
                           const result = await window.cg.connections.setConfig(next);
                           if (!result.ok) {
                             setRefusal(
-                              result.message ?? 'The bridge refused the new configuration.',
+                              feedbackProblem(
+                                result.message,
+                                'The bridge refused the new configuration.',
+                              ),
                             );
                             return { accepted: false, errorCode: result.reason ?? 'refused' };
                           }
-                          setStatus(`Applied. ${engineName} A is ${host}.`);
+                          setStatus(
+                            feedback('Applied. {engine} A is {host}.', {
+                              engine: engineName,
+                              host,
+                            }),
+                          );
                           // The line says what is now in force: the check runs again.
                           setRecheck((n) => n + 1);
                           return { accepted: true };
@@ -1912,7 +1920,9 @@ export function StationSetupDialog({
                         try {
                           const result = await window.cg.connections.setConfig(next);
                           if (!result.ok) {
-                            setRefusal(result.message ?? 'The bridge refused backup removal.');
+                            setRefusal(
+                              feedbackProblem(result.message, 'The bridge refused backup removal.'),
+                            );
                             return { accepted: false, errorCode: result.reason ?? 'refused' };
                           }
                           setLoaded(next);
@@ -2239,7 +2249,12 @@ export function StationSetupDialog({
                         setStatus(null);
                         const result = await window.cg.connections.setConfig(validated);
                         if (!result.ok) {
-                          setRefusal(result.message ?? 'The bridge refused the new configuration.');
+                          setRefusal(
+                            feedbackProblem(
+                              result.message,
+                              'The bridge refused the new configuration.',
+                            ),
+                          );
                           return { accepted: false, errorCode: result.reason ?? 'refused' };
                         }
                         /*
@@ -2261,26 +2276,35 @@ export function StationSetupDialog({
                           const fixManagedHost =
                             result.templateServe?.flagOverrides?.serveHost !== undefined ||
                             managedGraphicsHost !== undefined;
+                          const servers = unreachable.join(', ');
                           setRefusal(
                             fixManagedHost
-                              ? `${unreachable.join(', ')} cannot fetch graphics. Check the graphics address in CG Bridge setup.`
+                              ? feedback(
+                                  '{servers} cannot fetch graphics. Check the graphics address in CG Bridge setup.',
+                                  { servers },
+                                )
                               : result.templateServe?.elsewhere === true
-                                ? `Applied, but ${engineName} would fetch graphics from ${result.templateServe.serveHost}, ` +
-                                  `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
-                                  `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
-                                  `still report success. Press Detect automatically, then Apply again — CG ` +
-                                  `Bridge does not need restarting.`
-                                : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
-                                  `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
-                                  `background, no text — and their CG ADD will still report success. Set the ` +
-                                  `graphics Host under Advanced to CG Bridge's address as those servers see it, ` +
-                                  `then Apply again — CG Bridge does not need restarting.`,
+                                ? feedback(
+                                    "Applied, but {engine} would fetch graphics from {host}, another machine than CG Bridge's: {servers} will show live sources with NO TEMPLATE — no background, no text — and their CG ADD will still report success. Press Detect automatically, then Apply again — CG Bridge does not need restarting.",
+                                    {
+                                      engine: engineName,
+                                      host: result.templateServe.serveHost,
+                                      servers,
+                                    },
+                                  )
+                                : feedback(
+                                    "Applied, but the graphics address is loopback-only and {servers} cannot reach it. Those servers will show live sources with NO TEMPLATE — no background, no text — and their CG ADD will still report success. Set the graphics Host under Advanced to CG Bridge's address as those servers see it, then Apply again — CG Bridge does not need restarting.",
+                                    { servers },
+                                  ),
                           );
                           return { accepted: true };
                         }
                         setStatus(
                           result.templateServe?.exposed === true
-                            ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
+                            ? feedback(
+                                'Applied. Template serve is LAN-exposed at {host} (remote server); control stays on 127.0.0.1.',
+                                { host: result.templateServe.serveHost },
+                              )
                             : 'Applied. All listeners remain loopback-only.',
                         );
                         return { accepted: true };

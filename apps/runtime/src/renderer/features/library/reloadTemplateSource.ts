@@ -1,3 +1,5 @@
+import { FeedbackError, feedbackFailure, feedbackProblem } from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import {
   clearFramePlacementDraftsMatching,
@@ -23,14 +25,17 @@ export interface ReloadTemplateResult {
 
 async function readLocalTemplateFile(handle: FileSystemFileHandle): Promise<File> {
   if (!(await ensureTemplateSourcePermission(handle))) {
-    throw new Error(`Access to “${handle.name}” was not granted; the template was not reloaded.`);
+    throw new FeedbackError('Access to “{name}” was not granted; the template was not reloaded.', {
+      name: handle.name,
+    });
   }
   try {
     return await handle.getFile();
   } catch (err) {
-    throw new Error(
-      `Could not read “${handle.name}” from its original location: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw new FeedbackError('Could not read “{name}” from its original location: {reason}', {
+      name: handle.name,
+      reason: feedbackFailure(err, 'The original file is unavailable.'),
+    });
   }
 }
 
@@ -57,14 +62,17 @@ export async function reloadTemplateSource(
     file = await readLocalTemplateFile(source.handle);
   } else {
     if (window.cg.link.bridgeAddress() !== shared.bridgeAddress) {
-      throw new Error(`“${shared.name}” is remembered on another CG Bridge.`);
+      throw new FeedbackError('“{name}” is remembered on another CG Bridge.', {
+        name: shared.name,
+      });
     }
     try {
       file = await readSharedTemplateFile(shared);
     } catch (err) {
-      throw new Error(
-        `Could not read “${shared.name}” from Shared folder: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      throw new FeedbackError('Could not read “{name}” from Shared folder: {reason}', {
+        name: shared.name,
+        reason: feedbackFailure(err, 'CG Bridge could not read this package.'),
+      });
     }
     if (window.cg.link.bridgeAddress() !== shared.bridgeAddress) {
       throw new Error('CG Bridge changed. Open Templates again.');
@@ -87,8 +95,9 @@ export async function reloadTemplateSource(
     ...(channel !== undefined && { channel }),
   });
   if (updated === null) {
-    throw new Error(
-      `“${templateSourceName(source)}” reloaded, but CG Bridge could not read the updated template.`,
+    throw new FeedbackError(
+      '“{name}” reloaded, but CG Bridge could not read the updated template.',
+      { name: templateSourceName(source) },
     );
   }
 
@@ -109,8 +118,16 @@ export async function reloadTemplateSource(
       mergeMode: 'replace',
     });
     if (!answer.accepted) {
-      throw new Error(
-        `The package reloaded, but file defaults reached only ${String(accepted)} of ${String(rows.length)} row(s). ${answer.message ?? answer.errorCode ?? 'CG Bridge refused the row update.'}`,
+      throw new FeedbackError(
+        'The package reloaded, but file defaults reached only {accepted} of {count} row(s). {reason}',
+        {
+          accepted,
+          count: rows.length,
+          reason: refusalFeedback(
+            { code: answer.errorCode, message: answer.message },
+            'CG Bridge refused the row update.',
+          ),
+        },
       );
     }
     if ((row.framePlacements?.length ?? 0) > 0 || row.framePlacementsPendingReset === true) {
@@ -123,8 +140,13 @@ export async function reloadTemplateSource(
             })
           : { accepted: false, message: 'This CG Bridge cannot reset frame placements.' };
       if (!reset.accepted) {
-        throw new Error(
-          `The package and row fields reloaded, but live frames reset on only ${String(accepted)} of ${String(rows.length)} row(s). ${reset.message ?? 'CG Bridge refused the frame reset.'}`,
+        throw new FeedbackError(
+          'The package and row fields reloaded, but live frames reset on only {accepted} of {count} row(s). {reason}',
+          {
+            accepted,
+            count: rows.length,
+            reason: feedbackProblem(reset.message, 'CG Bridge refused the frame reset.'),
+          },
         );
       }
     }

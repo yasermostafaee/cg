@@ -1,4 +1,5 @@
 import { PLAYLIST_AUDIO_LOCKED_REASON, plateList } from '@cg/shared-ipc';
+import { feedback, feedbackLocale } from '../../i18n/locale.js';
 import { colors, cssVars } from '../../theme.js';
 
 /**
@@ -666,18 +667,27 @@ function soloTarget(requested: Record<string, number>): string | null {
  */
 export function refusedPlatesPhrase(labels: readonly (string | undefined)[]): string {
   const named = labels.filter((l): l is string => l !== undefined);
-  if (named.length > 0 && named.length === labels.length) return plateList(named);
-  return `${String(labels.length)} plate${labels.length === 1 ? '' : 's'}`;
+  if (named.length > 0 && named.length === labels.length) {
+    return feedbackLocale() === 'en'
+      ? plateList(named)
+      : new Intl.ListFormat(feedbackLocale()).format(named);
+  }
+  return feedback(labels.length === 1 ? '{count} plate' : '{count} plates', {
+    count: labels.length,
+  });
 }
 
 /** `that plate is` / `those plates are` — `unchanged` follows. */
 export function platesUnchanged(count: number): string {
-  return count === 1 ? 'that plate is unchanged' : 'those plates are unchanged';
+  return feedback(count === 1 ? 'that plate is unchanged' : 'those plates are unchanged');
 }
 
 /** `B-309` — the Live plates tab's toast for a refused audio change. */
 export function refusedAudioSentence(labels: readonly (string | undefined)[]): string {
-  return `Audio not applied to ${refusedPlatesPhrase(labels)} — ${platesUnchanged(labels.length)}.`;
+  return feedback('Audio not applied to {plates} — {result}.', {
+    plates: refusedPlatesPhrase(labels),
+    result: platesUnchanged(labels.length),
+  });
 }
 
 export function announcePlateAudio(

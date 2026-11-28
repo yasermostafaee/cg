@@ -1,5 +1,7 @@
 import type { MissingPlateSources } from '@cg/shared-ipc';
-import { feedback } from '../i18n/locale.js';
+import { feedbackFailure } from '../i18n/locale.js';
+import { refusalFeedback } from './errorCodeMessage.js';
+
 /**
  * R-007 — the async-feedback state machine for a bridge-round-trip button,
  * framework-free so it unit-tests with an injected scheduler. The React
@@ -14,12 +16,6 @@ import { feedback } from '../i18n/locale.js';
 
 export type AsyncPhase = 'idle' | 'busy' | 'success' | 'error';
 
-import {
-  errorCodeMessage,
-  missingPlateSourcesFeedback,
-  prefersOwnMessage,
-} from './errorCodeMessage.js';
-
 export interface AsyncView {
   phase: AsyncPhase;
   showSpinner: boolean;
@@ -32,14 +28,10 @@ export interface AsyncView {
 export interface AsyncResult {
   accepted: boolean;
   errorCode?: string | undefined;
-  /**
-   * C-015 phase 6 (6.0) — the refusal's OWN sentence, when the bridge supplied
-   * one. Preferred over `errorCodeMessage(errorCode)` because it is the more
-   * SPECIFIC of the two: a Live Source refusal names which plate is unassigned,
-   * and a code is a fixed string that cannot. Absent for every refusal that has
-   * only a code, which is all of them except the take's plate refusals.
-   */
+  /** Diagnostic wording from the bridge, resolved into operator feedback. */
   message?: string | undefined;
+  /** Operator wording already localized by the action. */
+  operatorMessage?: string | undefined;
   missingPlateSources?: MissingPlateSources | undefined;
   /**
    * True when the action's own confirm gate was CANCELLED (see `withConfirm` in
@@ -60,6 +52,11 @@ export interface AsyncResult {
   refusalOnRow?: boolean | undefined;
 }
 
+export interface AsyncFailureDetails {
+  code?: string | null;
+  detail?: string | null;
+}
+
 export interface AsyncButtonConfig {
   onChange: (view: AsyncView) => void;
   /** Returns a cancel fn. Real component: setTimeout/clearTimeout. Tests: fake. */
@@ -75,13 +72,12 @@ export interface AsyncButtonConfig {
    * in a tight row where an inline error would break the layout — the message is
    * unchanged, only its placement.
    */
-  onError?: (message: string) => void;
+  onError?: (message: string, details: AsyncFailureDetails) => void;
 }
 
 /**
- * The operator-facing message a settled action should surface, or `null` when it
- * succeeded. B-070 — prefer the bridge's REASON over the generic fallback: a
- * refusal that cannot explain itself is the bug the operator hit.
+ * The operator-facing message for a failed action. Buttons and context menus
+ * share the same refusal wording.
  *
  * Exported because the CONTEXT MENU triggers the same actions as the buttons and
  * must report a refusal identically. Two spellings of "what went wrong" would
@@ -96,58 +92,20 @@ export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted
   if (res.accepted) return null;
   // `FIELD-FIXES-01` B — the row says this refusal itself; no second surface repeats it.
   if (res.refusalOnRow === true) return null;
-  const assignment = missingPlateSourcesFeedback(
-    res.errorCode,
-    res.message,
-    res.missingPlateSources,
+  if (res.operatorMessage?.trim()) return res.operatorMessage;
+  return refusalFeedback(
+    {
+      code: res.errorCode,
+      message: res.message,
+      missingPlateSources: res.missingPlateSources,
+    },
+    notAccepted,
   );
-  if (assignment !== undefined) return assignment;
-  /*
-    🔴 `CONSOLE-LOOK-06` DELTA R — **THE ORDER IS REVERSED FOR THE CODES THAT NEED IT.**
-
-    This preferred the BRIDGE's sentence. That sentence is written for a developer: the one
-    the owner photographed reads
-
-        exactly one multi-box template may be on air per channel:
-        "e506e319-6e68-4603-a5f4-290b21616250" (3 boxes, item
-        "item-0d9a8b6c-427c-4001-ad89-8e4eb2849dd2") is already on air on channel 1
-        — take it off air first
-
-    — a template UUID, an item UUID and "channel 1", when the row is called Bed 1, the
-    template is called 3ghab and the console spells the channel CH 1 three inches away.
-    Golden rule 11, and the same class as the `rowIsShown` defect: a value written for one
-    audience answering another audience's question.
-
-    ⚠ AND THE GOOD SENTENCE ALREADY EXISTED. `errorCodeMessage` has carried operator copy for
-    `multibox-already-on-air` all along — "Another multi-box graphic is already on air on this
-    channel, and only one may be. Take that row off air first — this is a crosstalk guard, not
-    a layer shortage." It was being overridden by the line below it, which is why this is a
-    preference inversion and not a rewrite: the console's own words win wherever it has them.
-
-    ⭐ THE OPERATOR READS A SENTENCE; THE LOG KEEPS THE IDS. The bridge's text is not thrown
-    away — it rides `detail` on the refusal banner and the audit log keeps its own copy. It
-    is demoted from the sentence, not deleted.
-
-    ⚠ AND IT IS PER-CODE, NOT BLANKET — the first cut of this fix inverted the order for
-    everything and `asyncButton.test.ts` caught what that costs: for `live-source-unassigned`
-    the bridge's sentence names the PLATE (`Plate 3` — its position, since `B-308`, never its
-    id) and that is the only part of the refusal they can act on. Our generic sentence cannot say it. So
-    `prefersOwnMessage` lists the codes whose bridge text identifies things by UUID, and
-    everything else keeps the old order.
-
-    ⚠ The set is a LIST rather than a test on the text, because deciding from the prose would
-    be string-matching a contract nobody wrote down (§6) — it breaks the first time a message
-    is edited, and silently.
-  */
-  const ours = errorCodeMessage(res.errorCode);
-  if (ours !== null && prefersOwnMessage(res.errorCode)) return feedback(ours);
-  if (res.message !== undefined && res.message !== '') return feedback(res.message);
-  return feedback(ours ?? notAccepted);
 }
 
 /** The message for a REJECTED action (e.g. the link is down). Shared, see above. */
 export function asyncRejectionMessage(err: unknown): string {
-  return feedback(err instanceof Error ? err.message : 'Request failed.');
+  return feedbackFailure(err);
 }
 
 const IDLE: AsyncView = {
@@ -166,7 +124,9 @@ export class AsyncButtonController {
   #cancels: (() => void)[] = [];
   #spinnerShown = false;
   #floorElapsed = false;
-  #settled: { error: string | null; cancelled: boolean; onRow: boolean } | undefined;
+  #settled:
+    | { error: string | null; details: AsyncFailureDetails; cancelled: boolean; onRow: boolean }
+    | undefined;
   #disposed = false;
 
   constructor(cfg: AsyncButtonConfig) {
@@ -218,13 +178,19 @@ export class AsyncButtonController {
       (res) => {
         this.#settled = {
           error: asyncResultMessage(res, this.#cfg.notAcceptedMessage),
+          details: { code: res.errorCode ?? null, detail: res.message ?? null },
           cancelled: res.cancelled === true,
           onRow: !res.accepted && res.refusalOnRow === true,
         };
         this.#tryFinish();
       },
       (err: unknown) => {
-        this.#settled = { error: asyncRejectionMessage(err), cancelled: false, onRow: false };
+        this.#settled = {
+          error: asyncRejectionMessage(err),
+          details: { detail: err instanceof Error ? err.message : null },
+          cancelled: false,
+          onRow: false,
+        };
         this.#tryFinish();
       },
     );
@@ -240,7 +206,7 @@ export class AsyncButtonController {
     // If the spinner is showing, wait out the minimum-visible floor first.
     if (this.#spinnerShown && !this.#floorElapsed) return;
 
-    const { error, cancelled, onRow } = this.#settled;
+    const { error, details, cancelled, onRow } = this.#settled;
     this.#clearTimers();
     this.#spinnerShown = false;
     this.#floorElapsed = false;
@@ -261,7 +227,7 @@ export class AsyncButtonController {
       if (this.#cfg.onError !== undefined) {
         // Routed to a toast/overlay instead of pinned inline (keeps the message out of a
         // tight row's flow). The button returns to idle; the toast carries the feedback.
-        this.#cfg.onError(error);
+        this.#cfg.onError(error, details);
         this.#set({
           phase: 'idle',
           showSpinner: false,

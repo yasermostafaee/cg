@@ -1,5 +1,5 @@
 import type { MissingPlateSources } from '@cg/shared-ipc';
-import { errorCodeMessage, missingPlateSourcesFeedback } from '../../ui/errorCodeMessage.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 
 /**
  * §14.5 / `tasks.md` 7.1 — **operator wording for a refused LOOK SWITCH.**
@@ -25,8 +25,7 @@ import { errorCodeMessage, missingPlateSourcesFeedback } from '../../ui/errorCod
  * plate positions, `lookSwitchBanner` uses them with the selected feedback language.
  */
 export function lookSwitchRefusal(reason: string | undefined, message: string | undefined): string {
-  if (message !== undefined && message !== '') return message;
-  return errorCodeMessage(reason) ?? 'The look switch was not accepted.';
+  return refusalFeedback({ code: reason, message }, 'The look switch was not accepted.');
 }
 
 /**
@@ -48,9 +47,9 @@ export function lookSwitchBanner(res: {
   readonly refusalOnRow?: true | undefined;
 }): string | null {
   if (res.ok || res.refusalOnRow === true) return null;
-  return (
-    missingPlateSourcesFeedback(res.reason, res.message, res.missingPlateSources) ??
-    lookSwitchRefusal(res.reason, res.message)
+  return refusalFeedback(
+    { code: res.reason, message: res.message, missingPlateSources: res.missingPlateSources },
+    'The look switch was not accepted.',
   );
 }
 

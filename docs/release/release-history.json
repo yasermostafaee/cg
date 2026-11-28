@@ -336,6 +336,11 @@
       ],
       "fixes": [
         {
+          "fa": "پیام‌های عملیات CG Control، از جمله خطای رد تنظیمات سرور، با زبان انتخاب‌شده نمایش داده می‌شوند. متن اصلی خطاهای سرور در جزئیات فنی در دسترس است.",
+          "en": "CG Control command and operation messages use the selected feedback language, including server setting refusals. The original server reply remains available in technical details.",
+          "ar": "تتبع رسائل الأوامر والعمليات في CG Control لغة الرسائل المختارة، بما فيها رفض إعدادات الخادم. يبقى رد الخادم الأصلي متاحًا في التفاصيل التقنية."
+        },
+        {
           "fa": "در فهرست و شبکهٔ انتخاب ورودی، تصویر زندهٔ NDI هنگام هاور و کلیک روی ورودی قابل‌مشاهده می‌ماند.",
           "en": "Live NDI pictures remain visible when hovering or pressing the input in the source picker's List and Grid views.",
           "ar": "تظل صورة NDI الحيّة ظاهرة عند تمرير المؤشر على الإدخال أو الضغط عليه في عرضَي القائمة والشبكة في نافذة اختيار المصدر."

@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, useUiText } from '../../i18n/locale.js';
 import { useId, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { templateAdmitsPassTiming, type TemplateInfo } from '@cg/shared-ipc';
@@ -337,7 +337,7 @@ function DelayControl({
             const n = Number(raw);
             // `0` is legal and means no gap, so it is NOT refused here.
             if (!Number.isFinite(n) || n < 0)
-              reportCommandError(`"${raw}" is not a gap in seconds.`);
+              reportCommandError(feedback('"{value}" is not a gap in seconds.', { value: raw }));
           }}
         />
         <span className="cg-unit">s</span>
@@ -420,7 +420,9 @@ function refuseIfNotACount(raw: string): void {
   const s = raw.trim();
   if (s === '') return;
   const n = Number(s);
-  if (!Number.isInteger(n) || n < 0) reportCommandError(`"${s}" is not a pass count.`);
+  if (!Number.isInteger(n) || n < 0) {
+    reportCommandError(feedback('"{value}" is not a pass count.', { value: s }));
+  }
 }
 
 const styles = {

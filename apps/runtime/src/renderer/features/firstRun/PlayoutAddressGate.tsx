@@ -1,4 +1,11 @@
-import { useUiText } from '../../i18n/locale.js';
+import {
+  feedback,
+  feedbackFailure,
+  feedbackProblem,
+  localeDirection,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import { useState } from 'react';
 import { NOT_A_BRIDGE_ADDRESS, NOT_A_PLAYOUT_ADDRESS } from '@cg/shared-ipc';
 import type { PlayoutStationAddress } from '../../../shared/station-address.js';
@@ -72,6 +79,7 @@ export function PlayoutAddressGate({
   reload?: () => void;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const messageDirection = localeDirection(useLanguages().feedback);
   const [fields, setFields] = useState<StationFields>({
     playout: NO_HOST_PORT,
     bridge: NO_HOST_PORT,
@@ -82,7 +90,7 @@ export function PlayoutAddressGate({
 
   const finish = (station: GateStation): void => {
     if (!save(station)) {
-      setError('This console could not save the Playout address.');
+      setError(feedback('This console could not save the Playout address.'));
       return;
     }
     reload();
@@ -92,12 +100,12 @@ export function PlayoutAddressGate({
     if (busy) return;
     const playoutAddress = playoutAddressOf(fields.playout);
     if (playoutAddress === null) {
-      setError(NOT_A_PLAYOUT_ADDRESS);
+      setError(feedback(NOT_A_PLAYOUT_ADDRESS));
       return;
     }
     const bridgeAddress = bridgeAddressOf(fields.bridge, playoutHostOf(playoutAddress));
     if (bridgeAddress === null) {
-      setError(NOT_A_BRIDGE_ADDRESS);
+      setError(feedback(NOT_A_BRIDGE_ADDRESS));
       return;
     }
     const station = { playoutAddress, ...(bridgeAddress === '' ? {} : { bridgeAddress }) };
@@ -108,8 +116,10 @@ export function PlayoutAddressGate({
     */
     setBusy(true);
     setError(null);
-    const silent = await answers(station).catch((err: unknown) =>
-      err instanceof Error ? err.message : String(err),
+    const silent = await answers(station).then(
+      (result) =>
+        result === null ? null : feedbackProblem(result, 'Could not connect to the station.'),
+      (err: unknown) => feedbackFailure(err, 'Could not connect to the station.'),
     );
     setBusy(false);
     if (silent !== null) {
@@ -154,7 +164,7 @@ export function PlayoutAddressGate({
           if (!nothingTyped) void connect();
         }}
       />
-      <div id="cg-playout-address-error" style={styles.error} role="status">
+      <div id="cg-playout-address-error" style={styles.error} role="status" dir={messageDirection}>
         {error === null ? null : playoutEngineWording(error)}
       </div>
     </SignInCard>

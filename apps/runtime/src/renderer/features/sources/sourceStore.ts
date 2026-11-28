@@ -19,6 +19,7 @@ import {
 export type MediaSearchRequest = ChannelRequest<typeof SourcesMediaSearchChannel>;
 /** Its answer: a page, or one of the two named failures. */
 export type MediaSearchResponse = ChannelResponse<typeof SourcesMediaSearchChannel>;
+import { feedbackProblem } from '../../i18n/locale.js';
 import { sourcesReasonMessage, sourcesTransportMessage } from '../../ui/sourcesReasonMessage.js';
 
 /**
@@ -166,10 +167,7 @@ function refusalOf(res: {
   message?: string | undefined;
 }): CommitRefusal {
   const rule = sourcesReasonMessage(res.reason);
-  if (rule !== null) return { text: rule };
-  // No code at all: the bridge's own sentence is the best there is — as the ONE line, never
-  // under another — and a generic fallback is better than an empty region.
-  return { text: res.message ?? 'The change could not be saved.' };
+  return { text: feedbackProblem(rule ?? res.message, 'The change could not be saved.') };
 }
 
 /**
@@ -202,7 +200,9 @@ export async function commitSourceBand(
     bump();
     return null;
   } catch (err) {
-    return { text: sourcesTransportMessage(err) };
+    return {
+      text: feedbackProblem(sourcesTransportMessage(err), 'The change could not be saved.'),
+    };
   }
 }
 
@@ -254,7 +254,9 @@ export async function commitSourceAssignments(
     bump();
     return null;
   } catch (err) {
-    return { text: sourcesTransportMessage(err) };
+    return {
+      text: feedbackProblem(sourcesTransportMessage(err), 'The change could not be saved.'),
+    };
   }
 }
 

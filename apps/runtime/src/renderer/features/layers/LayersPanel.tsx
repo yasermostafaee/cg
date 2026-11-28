@@ -1,4 +1,4 @@
-import { feedback, useUiText } from '../../i18n/locale.js';
+import { feedback, feedbackFailure, useUiText } from '../../i18n/locale.js';
 import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.js';
 import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -792,11 +792,9 @@ export function LayersPanel({
     */
     const ok = await confirm({
       title: localizeUi('Clear all {count} row(s) holding a layer?', { count: String(boundCount) }),
-      body:
-        `Every row that holds a layer is cleared immediately, with no outro — whatever this ` +
-        `console currently believes is on it. That deliberately includes rows that read as ` +
-        `merely loaded: a cued row loses its pre-rolled graphic and will re-load on its next ` +
-        `play. The rows all stay on the stack and can be taken again.`,
+      body: localizeUi(
+        'Every row that holds a layer is cleared immediately, with no outro — whatever this console currently believes is on it. That deliberately includes rows that read as merely loaded: a cued row loses its pre-rolled graphic and will re-load on its next play. The rows all stay on the stack and can be taken again.',
+      ),
       confirmLabel: localizeUi('Clear all'),
       tone: 'clear',
     });
@@ -820,32 +818,36 @@ export function LayersPanel({
       const stuck = res.attempted - res.cleared;
       const refusedNote =
         res.refused.length > 0
-          ? ` · ${String(res.refused.length)} live source layer(s) left alone, not this console's to clear`
+          ? ' · ' +
+            feedback("{count} live source layer(s) left alone, not this console's to clear", {
+              count: res.refused.length,
+            })
           : '';
       if (stuck > 0) {
         reportCommandError(
-          `Cleared ${String(res.cleared)} of ${String(res.attempted)} — ${String(stuck)} did not go ` +
-            `and may still be on air. Try CLEAR on those rows.${refusedNote}`,
+          feedback(
+            'Cleared {cleared} of {attempted} — {stuck} did not go and may still be on air. Try CLEAR on those rows.',
+            {
+              cleared: res.cleared,
+              attempted: res.attempted,
+              stuck,
+            },
+          ) + refusedNote,
         );
       } else if (res.cleared > 0) {
         const cleared = feedback(
           res.cleared === 1 ? 'Cleared · {count} row' : 'Cleared · {count} rows',
           { count: res.cleared },
         );
-        const leftAlone =
-          res.refused.length === 0
-            ? ''
-            : ' · ' +
-              feedback("{count} live source layer(s) left alone, not this console's to clear", {
-                count: res.refused.length,
-              });
-        reportCommandSuccess(cleared + leftAlone);
+        reportCommandSuccess(cleared + refusedNote);
       } else {
         // Never a green "done": nothing was sent, and saying so is the whole point.
-        reportCommandError(`No row holds a layer to clear — nothing was sent.${refusedNote}`);
+        reportCommandError(
+          feedback('No row holds a layer to clear — nothing was sent.') + refusedNote,
+        );
       }
     } catch (err) {
-      reportCommandError(err instanceof Error ? err.message : 'Clear all failed.');
+      reportCommandError(feedbackFailure(err, 'Clear all failed.'));
     }
   }, [confirm, boundCount, bulkScope]);
 
@@ -892,7 +894,7 @@ export function LayersPanel({
         );
       }
     } catch (err) {
-      reportCommandError(err instanceof Error ? err.message : 'Stop all failed.');
+      reportCommandError(feedbackFailure(err, 'Stop all failed.'));
     }
   }, [confirm, onAirCount, bulkScope]);
 
@@ -2045,8 +2047,9 @@ export function LayersPanel({
                 // The ledger names an item the stack no longer carries — the STRANDED case,
                 // whose only verb is RELEASE. Nothing to open, and saying so beats silence.
                 reportCommandError(
-                  'No row on the stack owns this layer, so there is no audio dialog to open — ' +
-                    'release the layer from this tab instead.',
+                  feedback(
+                    'No row on the stack owns this layer, so there is no audio dialog to open — release the layer from this tab instead.',
+                  ),
                 );
                 return;
               }

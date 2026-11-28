@@ -9,6 +9,7 @@ import {
   type TemplateChoice,
 } from '../src/renderer/features/fixedLayers/useTemplatePicker.js';
 import { reloadTemplateSource } from '../src/renderer/features/library/reloadTemplateSource.js';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import type * as TemplateSourceStore from '../src/renderer/features/library/templateSourceStore.js';
 import {
   __resetSourcesForTest,
@@ -190,6 +191,7 @@ afterEach(async () => {
   container = null;
   clearPortals();
   document.body.innerHTML = '';
+  setLanguage('feedback', 'en');
   vi.restoreAllMocks();
 });
 
@@ -239,4 +241,27 @@ describe('R-108 — Reload doors in the template picker', () => {
       ['tpl-two', 'file-defaults'],
     ]);
   });
+
+  it.each([
+    ['fa', 'قالب دوباره بارگذاری نشد.'],
+    ['ar', 'تعذّرت إعادة تحميل القالب.'],
+  ] as const)(
+    'localizes a raw reload refusal in %s with the UI in English',
+    async (locale, message) => {
+      setLanguage('feedback', locale);
+      vi.mocked(reloadTemplateSource).mockRejectedValueOnce(
+        new Error('Legacy peer could not read the package.'),
+      );
+      const dialog = await openPicker();
+      const reload = dialog.querySelector<HTMLButtonElement>('[data-template-reload="tpl-one"]');
+      if (reload === null) throw new Error('reload button not found');
+      await click(reload);
+      await click(buttonByText(dialog, 'Reload and keep current data'));
+
+      expect(dialog.getAttribute('aria-label')).toBe('Load onto Operator 1');
+      const notice = dialog.querySelector('[data-notice="refusal"]');
+      expect(notice?.querySelector('span[dir="rtl"]')?.textContent).toBe(message);
+      expect(notice?.textContent).not.toContain('Legacy peer');
+    },
+  );
 });

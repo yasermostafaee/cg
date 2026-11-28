@@ -1,4 +1,4 @@
-import { feedback } from '../../i18n/locale.js';
+import { feedback, feedbackFailure, FeedbackError } from '../../i18n/locale.js';
 /**
  * Tiny renderer-local feedback channel for operator actions (C-001). When a
  * command is rejected — most importantly while the bridge link is down — the
@@ -22,6 +22,7 @@ import { feedback } from '../../i18n/locale.js';
  */
 
 import { getRefusal, onRefusal, raiseRefusal } from './refusalStore.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 
 type Listener = (message: string) => void;
 type NoticeListener = (message: string, owner: Document) => void;
@@ -80,7 +81,7 @@ export function onCommandSuccess(listener: Listener): () => void {
  */
 export function reportCommandError(
   message: string,
-  opts: { detail?: string | null; code?: string | null; station?: boolean } = {},
+  opts: Parameters<typeof raiseRefusal>[1] = {},
 ): void {
   raiseRefusal(message, opts);
 }
@@ -107,15 +108,34 @@ export function reportCommandNotice(message: string, owner: Document): void {
  * promise (e.g. the link is `disconnected`) is reported, never swallowed and
  * never treated as success.
  */
-export function runCommand(label: string, promise: Promise<{ accepted: boolean }>): void {
+export function runCommand(
+  label: string,
+  promise: Promise<{
+    accepted: boolean;
+    errorCode?: string | undefined;
+    message?: string | undefined;
+  }>,
+): void {
   promise.then(
     (res) => {
-      if (!res.accepted)
+      if (res.accepted) return;
+      if (res.errorCode === undefined && res.message === undefined) {
         reportCommandError(feedback('{action} was not accepted.', { action: label }));
+        return;
+      }
+      reportCommandError(refusalFeedback({ code: res.errorCode, message: res.message }), {
+        code: res.errorCode ?? null,
+        detail: res.message ?? null,
+      });
     },
     (err: unknown) => {
+      if (!(err instanceof Error)) {
+        reportCommandError(feedback('{action} failed.', { action: label }));
+        return;
+      }
       reportCommandError(
-        err instanceof Error ? err.message : feedback('{action} failed.', { action: label }),
+        feedbackFailure(err),
+        err instanceof FeedbackError ? {} : { detail: err.message },
       );
     },
   );

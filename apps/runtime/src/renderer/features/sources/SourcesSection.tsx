@@ -1,4 +1,4 @@
-import { useLanguages, useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
 import { useState, useSyncExternalStore } from 'react';
 import {
   canCheckLiveInput,
@@ -107,6 +107,7 @@ export function SourcesSection({
   channel: number;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
   const { interface: locale } = useLanguages();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { inputCheck } = useInputCheckSurface(channel);
@@ -154,12 +155,15 @@ export function SourcesSection({
     if (start === null || end === null) {
       // `LAYER-BANDS-16` — the example is DERIVED from the suggested band, never restated.
       refuse(
-        `The band is two layer numbers, e.g. ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)} and ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}.`,
+        localizeFeedback('The band is two layer numbers, e.g. {start} and {end}.', {
+          start: SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start,
+          end: SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end,
+        }),
       );
       return;
     }
     if (end < start) {
-      refuse('The band ends before it starts — swap the two numbers.');
+      refuse(localizeFeedback('The band ends before it starts — swap the two numbers.'));
       return;
     }
     setApplyingBand(true);

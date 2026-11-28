@@ -17,6 +17,8 @@ import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { Popover } from '../../ui/Popover.js';
 import { Tag } from '../../ui/Tag.js';
+import { feedbackFailure } from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { formatMediaDuration } from './SourceLabel.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from './sourceStore.js';
@@ -82,8 +84,17 @@ export function MediaPlaybackControl({
     void window.cg.sources
       .setMediaPlayback({ mediaId: entry.id, loop: next.loop, whenHidden: next.whenHidden })
       .then((res) => {
-        if (!res.ok) reportCommandError(res.message ?? 'The clip’s playback was not changed.');
-      });
+        if (!res.ok)
+          reportCommandError(
+            refusalFeedback(
+              { code: res.reason, message: res.message },
+              'The clip’s playback was not changed.',
+            ),
+          );
+      })
+      .catch((error: unknown) =>
+        reportCommandError(feedbackFailure(error, 'The clip’s playback was not changed.')),
+      );
   };
   return (
     <>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
 import { cssVars, NOTICE_PX } from '../../theme.js';
+import { connectionCheckText } from '../firstRun/connectionCheckText.js';
 
 /**
  * 🔴 **`B-153` — THE BRIDGE IS OLDER THAN THIS PAGE, SAID AT CONNECT.**
@@ -72,13 +73,14 @@ const NAMED = 3;
  * and the remedy, and the names ride the `title` — available on hover, out of the way at a
  * glance, and never the thing an operator has to read to know what to do.
  */
-function detailFor(missing: readonly string[]): string {
-  const n = missing.length;
-  return (
-    `${String(n)} command${n === 1 ? '' : 's'} this page can issue ${n === 1 ? 'is' : 'are'} ` +
-    'not available on the bridge that is running. Restart the bridge with a matching build. ' +
-    'Everything else works normally, and nothing has been sent to CasparCG.'
+function detailFor(count: number, localizeUi: ReturnType<typeof useUiText>): string {
+  const unavailable = localizeUi(
+    count === 1
+      ? '1 command this page can issue is not available on the bridge that is running.'
+      : '{count} commands this page can issue are not available on the bridge that is running.',
+    { count },
   );
+  return `${unavailable} ${localizeUi('Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.')}`;
 }
 
 export function BridgeSkewBanner(): JSX.Element | null {
@@ -107,7 +109,7 @@ export function BridgeSkewBanner(): JSX.Element | null {
         <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
         <span style={styles.text}>
           <span style={styles.headline}>{localizeUi('DIFFERENT RELEASES')}</span>
-          <span style={styles.detail}>{mismatch}</span>
+          <span style={styles.detail}>{connectionCheckText(mismatch, localizeUi)}</span>
         </span>
       </div>
     );
@@ -124,7 +126,7 @@ export function BridgeSkewBanner(): JSX.Element | null {
       <span style={styles.text}>
         <span style={styles.headline}>{localizeUi('BRIDGE IS OUT OF DATE')}</span>
         <span style={styles.detail} title={[...missing].slice(0, NAMED).join(', ')}>
-          {playoutEngineWording(detailFor(missing), engine)}
+          {playoutEngineWording(detailFor(missing.length, localizeUi), engine)}
         </span>
       </span>
     </div>

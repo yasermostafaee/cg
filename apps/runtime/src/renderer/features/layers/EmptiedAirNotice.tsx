@@ -1,4 +1,10 @@
-import { useUiText } from '../../i18n/locale.js';
+import {
+  feedback,
+  localeDirection,
+  useFeedbackText,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import type { EmptiedAirNotice as Notice, EmptiedAirRefusal } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
@@ -128,6 +134,8 @@ const REFUSAL_TEXT: Record<EmptiedAirRefusal, string> = {
  */
 export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element | null {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   // Above the idle-quiet early return: hooks cannot be called conditionally.
   const { confirm, confirmDialog } = useConfirm();
   /*
@@ -170,12 +178,20 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
     socket, so a NEW connection makes a restart the likely cause, while the same connection
     coming back with empty layers points at something else clearing the channel.
   */
-  const cause = notice.newConnection
-    ? 'The connection dropped and came back with the layers empty — most likely the playout server restarted.'
-    : 'The connection never dropped, so something else cleared these layers.';
+  const cause = localizeFeedback(
+    notice.newConnection
+      ? 'The connection dropped and came back with the layers empty — most likely the playout server restarted.'
+      : 'The connection never dropped, so something else cleared these layers.',
+  );
   const seats =
     notice.seatsDropped > 0
-      ? ` ${String(notice.seatsDropped)} live source ${notice.seatsDropped === 1 ? 'seat' : 'seats'} went with them.`
+      ? ' ' +
+        localizeFeedback(
+          notice.seatsDropped === 1
+            ? '{count} live source seat went with them.'
+            : '{count} live source seats went with them.',
+          { count: notice.seatsDropped },
+        )
       : '';
 
   return (
@@ -186,13 +202,16 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
         aria-label={localizeUi('Air emptied by the playout server')}
       >
         <div style={styles.row}>
-          <span>
-            {localizeUi('⚠ The channel is alive and carrying nothing —')} {count} {rowWord}{' '}
-            {localizeUi('that')} {count === 1 ? 'was' : 'were'} {localizeUi('on air')}{' '}
-            {count === 1 ? 'is' : 'are'} {localizeUi('gone.')}{' '}
+          <span dir={feedbackDirection}>
+            {localizeFeedback(
+              count === 1
+                ? '⚠ The channel is alive and carrying nothing — {count} row that was on air is gone.'
+                : '⚠ The channel is alive and carrying nothing — {count} rows that were on air are gone.',
+              { count },
+            )}{' '}
             <span style={styles.detail}>
               {cause}
-              {seats} {localizeUi('Nothing has been put back.')}
+              {seats} {localizeFeedback('Nothing has been put back.')}
             </span>
           </span>
           <span style={styles.actions}>
@@ -230,16 +249,22 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
                       leaving the default weak enough to miss nine dialogs.
                     */
                     destructive: false,
-                    body: `This re-takes ${count === 1 ? 'it' : 'them'} and puts ${count === 1 ? 'it' : 'them'} on air now.`,
+                    body: localizeUi(
+                      count === 1
+                        ? 'This re-takes it and puts it on air now.'
+                        : 'This re-takes them and puts them on air now.',
+                    ),
                     confirmLabel: localizeUi('Put back on air'),
                     tone: 'play',
                   });
                   if (!ok) return;
                   runCommand(
-                    localizeUi('Put {count} {rows} back on air', {
-                      count: String(count),
-                      rows: rowWord,
-                    }),
+                    feedback(
+                      count === 1 ? 'Put {count} row back on air' : 'Put {count} rows back on air',
+                      {
+                        count,
+                      },
+                    ),
                     window.cg.emptiedAir
                       .restore({ itemIds: rows.map((r) => r.itemId) })
                       // Anything short of ALL of them is reported, and the strip stays up
@@ -285,9 +310,10 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
                   </>
                 )}
                 {row.refusal !== undefined && (
-                  <span style={styles.refusal}>
+                  <span style={styles.refusal} dir={feedbackDirection}>
                     {' '}
-                    {localizeUi('— not put back:')} {REFUSAL_TEXT[row.refusal]}
+                    {localizeFeedback('— not put back:')}{' '}
+                    {localizeFeedback(REFUSAL_TEXT[row.refusal])}
                   </span>
                 )}
               </li>

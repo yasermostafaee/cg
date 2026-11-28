@@ -1,4 +1,11 @@
-import { useUiText } from '../../i18n/locale.js';
+import {
+  feedbackFailure,
+  feedbackProblem,
+  localeDirection,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight, ListOrdered } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
@@ -100,6 +107,7 @@ export function BookBlock({
   fit = 'contain',
 }: BookBlockProps): JSX.Element {
   const localizeUi = useUiText();
+  const { feedback: feedbackLanguage } = useLanguages();
   const canEdit = managedBook === undefined;
   const loaded = managedBook !== 'authored' && Array.isArray(value);
   const pages = bookPagesOf(loaded ? value : defaults);
@@ -131,6 +139,8 @@ export function BookBlock({
       if (outcome.pages.length > 0) {
         onStage(withPicturesReplaced(pages, outcome.pages) as unknown as FieldValue);
       }
+    } catch (error) {
+      setRefusal(feedbackFailure(error, 'The pictures could not be loaded.'));
     } finally {
       setBusy(null);
     }
@@ -224,7 +234,11 @@ export function BookBlock({
         </div>
       )}
       {canEdit && fitted !== null && (
-        <span className="cg-book-count" data-testid="page-fit-line">
+        <span
+          className="cg-book-count"
+          data-testid="page-fit-line"
+          dir={localeDirection(feedbackLanguage)}
+        >
           {fitted}
         </span>
       )}
@@ -430,8 +444,12 @@ function BookTurn({
     try {
       const r = await window.cg.stack.page({ itemId, field: book.fieldId, to });
       setRefusal(
-        r.accepted ? null : (r.message ?? `The page did not turn (${r.errorCode ?? 'refused'}).`),
+        r.accepted
+          ? null
+          : refusalFeedback({ code: r.errorCode, message: r.message }, 'The page did not turn.'),
       );
+    } catch (error) {
+      setRefusal(feedbackFailure(error, 'The page did not turn.'));
     } finally {
       setBusy(false);
       setTyped(null);
@@ -447,7 +465,9 @@ function BookTurn({
         field: book.fieldId,
         mode,
       });
-      setRefusal(r.ok ? null : (r.message ?? 'The advance mode did not change.'));
+      setRefusal(r.ok ? null : feedbackProblem(r.message, 'The advance mode did not change.'));
+    } catch (error) {
+      setRefusal(feedbackFailure(error, 'The advance mode did not change.'));
     } finally {
       setBusy(false);
     }

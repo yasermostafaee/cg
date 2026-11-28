@@ -1,5 +1,7 @@
 import {
   feedback,
+  feedbackFailure,
+  feedbackProblem,
   localeDirection,
   useFeedbackText,
   useLanguages,
@@ -48,7 +50,10 @@ const issueCopy: Readonly<Record<string, string>> = {
 };
 
 function layerIssue(reason: string): string {
-  return issueCopy[reason] ?? errorCodeMessage(reason) ?? 'Could not load this row.';
+  const issue = issueCopy[reason];
+  return issue === undefined
+    ? (errorCodeMessage(reason, feedback) ?? feedback('Could not load this row.'))
+    : feedback(issue);
 }
 
 function loadNotice(result: StackLoadProfileResult, includesShortcuts: boolean): string {
@@ -62,7 +67,12 @@ function loadNotice(result: StackLoadProfileResult, includesShortcuts: boolean):
     return `${loaded} ${feedback('Shortcuts skipped. Station admin access is required.')}`;
   }
   if (result.shortcuts?.status === 'invalid') {
-    return `${loaded} ${feedback('Shortcuts skipped. {reason}', { reason: feedback(result.shortcuts.message) })}`;
+    return `${loaded} ${feedback('Shortcuts skipped. {reason}', {
+      reason: feedbackProblem(
+        result.shortcuts.message,
+        'The layer shortcuts could not be restored.',
+      ),
+    })}`;
   }
   if (includesShortcuts && result.shortcuts === undefined) {
     return `${loaded} ${feedback('Shortcuts skipped. This CG Bridge cannot restore them.')}`;
@@ -83,11 +93,11 @@ function reportLoadedProfile(result: StackLoadProfileResult, includesShortcuts: 
       const name = label ? ` · ${isolateText(label)}` : '';
       return feedback('{row} — {reason}', {
         row: `${feedback('Layer {layer}', { layer })}${name}`,
-        reason: feedback(layerIssue(reason)),
+        reason: layerIssue(reason),
       });
     })
     .join(' ');
-  reportCommandError(message, { detail });
+  reportCommandError(message, { operatorDetail: detail });
 }
 
 export function LayerProfiles({
@@ -164,10 +174,11 @@ export function LayerProfiles({
         'APASAI CG layer profile',
         '.json',
       );
-      if (outcome.kind === 'saved') setNotice(`Saved ${outcome.handle.name}.`);
-      if (outcome.kind === 'download') setNotice('Profile download started.');
+      if (outcome.kind === 'saved')
+        setNotice(feedback('Saved {file}.', { file: outcome.handle.name }));
+      if (outcome.kind === 'download') setNotice(feedback('Profile download started.'));
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : 'Could not save the profile.');
+      setProblem(feedbackFailure(error, 'Could not save the profile.'));
     } finally {
       setBusy(false);
     }
@@ -225,7 +236,7 @@ export function LayerProfiles({
       reportLoadedProfile(response, selected.profile.layerShortcuts !== undefined);
       setOpen(false);
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : 'Could not load the profile.');
+      setProblem(feedbackFailure(error, 'Could not load the profile.'));
     } finally {
       setBusy(false);
     }
@@ -313,7 +324,7 @@ export function LayerProfiles({
                     </>
                   ) : null}
                   {' — '}
-                  {localizeFeedback(layerIssue(reason))}
+                  {layerIssue(reason)}
                 </li>
               ))}
             </ul>

@@ -344,7 +344,7 @@ export function LiveSourcesPanel({
       reportCommandError(
         res.refused.length > 0
           ? refusedAudioSentence(res.refused.map((id) => plateLabelOf?.(itemId, id)))
-          : 'The audio change was refused.',
+          : feedback('The audio change was refused.'),
       );
     }
     return res;
@@ -468,8 +468,12 @@ export function LiveSourcesPanel({
         and the owning row is named on the panel row beside the toast.
       */
       reportCommandError(
-        `Nothing was sent — ${names} ${many ? 'are' : 'is'} no longer stranded. The row that ` +
-          `owns ${many ? 'them' : 'it'} is back on the stack, so use that row's own verbs.`,
+        feedback(
+          many
+            ? "Nothing was sent — {layers} are no longer stranded. The row that owns them is back on the stack, so use that row's own verbs."
+            : "Nothing was sent — {layers} is no longer stranded. The row that owns it is back on the stack, so use that row's own verbs.",
+          { layers: names },
+        ),
       );
       return { accepted: false, cancelled: true };
     }
@@ -477,7 +481,13 @@ export function LiveSourcesPanel({
     const res = await window.cg.stack.remove({ itemId: row.itemId });
     if (!res.accepted) {
       reportCommandError(
-        `The release of ${names} was not accepted — ${many ? 'they' : 'it'} may still be on air.`,
+        feedback(
+          many
+            ? 'The release of {layers} was not accepted — they may still be on air.'
+            : 'The release of {layers} was not accepted — it may still be on air.',
+          { layers: names },
+        ),
+        { code: res.errorCode ?? null },
       );
       return { accepted: false, cancelled: true };
     }

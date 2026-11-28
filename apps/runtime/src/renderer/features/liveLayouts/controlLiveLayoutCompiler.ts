@@ -1,4 +1,4 @@
-import { feedback } from '../../i18n/locale.js';
+import { FeedbackError } from '../../i18n/locale.js';
 import { probeImage, TEMPLATE_SOURCE_MAX_BYTES } from '@cg/shared-ipc';
 import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
@@ -601,9 +601,7 @@ export function buildControlLiveLayoutScene(
   for (const attachment of allAttachments) {
     const source = attachmentSources?.get(attachment.sourceId);
     if (source === undefined || source.id !== attachment.sourceId)
-      throw new Error(
-        feedback('Plate graphic “{name}” is unavailable.', { name: attachment.name }),
-      );
+      throw new FeedbackError('Plate graphic “{name}” is unavailable.', { name: attachment.name });
     sources.set(source.id, source);
     const definitions = byFrame.get(attachment.frameId) ?? [];
     definitions.push({ attachment, source });
@@ -896,14 +894,12 @@ export async function compileControlLiveLayout(
   }
   for (const { id, fallback, file } of fallbackImages) {
     if (file === undefined || file.size === 0)
-      throw new Error(
-        feedback('Choose the fallback image “{name}” again.', { name: fallback.name }),
-      );
+      throw new FeedbackError('Choose the fallback image “{name}” again.', { name: fallback.name });
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (!hasFallbackImageFormat(bytes, fallback.mime))
-      throw new Error(
-        feedback('The fallback image “{name}” does not match its format.', { name: fallback.name }),
-      );
+      throw new FeedbackError('The fallback image “{name}” does not match its format.', {
+        name: fallback.name,
+      });
     const sha256 = sha256Hex(bytes);
     const path = `assets/image/${sha256}.${mediaFormat(fallback.mime).extension}`;
     assetIndex.push({
@@ -920,16 +916,16 @@ export async function compileControlLiveLayout(
   for (const font of fontAssets) {
     const file = fontFiles?.get(font.id);
     if (file === undefined)
-      throw new Error(feedback('Choose the font file “{name}” again.', { name: font.name }));
+      throw new FeedbackError('Choose the font file “{name}” again.', { name: font.name });
     const format = Object.entries(FONT_FORMATS).find(([, { mime }]) => mime === font.mime);
     if (format === undefined)
-      throw new Error(feedback('The font format of “{name}” is unavailable.', { name: font.name }));
+      throw new FeedbackError('The font format of “{name}” is unavailable.', { name: font.name });
     const [extension, { signatures }] = format;
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (!fontSignatureMatches(bytes, signatures) || sha256Hex(bytes) !== font.id)
-      throw new Error(
-        feedback('The font file “{name}” does not match the saved font.', { name: font.name }),
-      );
+      throw new FeedbackError('The font file “{name}” does not match the saved font.', {
+        name: font.name,
+      });
     const path = `fonts/${font.id}.${extension}`;
     fontIndex.push({
       id: font.id,
@@ -1020,16 +1016,14 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
     if (attachments.has(sourceId)) continue;
     const raw = files.get(frameAttachmentArchivePath(sourceId));
     if (raw === undefined || sha256Hex(raw) !== sourceId)
-      throw new Error(feedback('The saved plate graphic “{name}” is unavailable.', { name: name }));
+      throw new FeedbackError('The saved plate graphic “{name}” is unavailable.', { name: name });
     attachments.set(sourceId, await unpackControlLiveLayoutFrameAttachment(raw));
   }
   for (const font of layout.fonts ?? []) {
     const entry = manifest.assetIndex.find(({ id, kind }) => id === font.id && kind === 'font');
     const data = entry === undefined ? undefined : files.get(entry.path);
     if (data === undefined || entry?.mime !== font.mime || sha256Hex(data) !== font.id)
-      throw new Error(
-        feedback('The saved font file “{name}” is unavailable.', { name: font.name }),
-      );
+      throw new FeedbackError('The saved font file “{name}” is unavailable.', { name: font.name });
     fonts.set(font.id, new Blob([new Uint8Array(data)], { type: font.mime }));
   }
   for (const { id, fallback } of layout.frames) {
@@ -1047,9 +1041,9 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
       sha256Hex(data) !== entry.sha256.toLowerCase() ||
       !hasFallbackImageFormat(data, fallback.mime)
     )
-      throw new Error(
-        feedback('The saved fallback image “{name}” is unavailable.', { name: fallback.name }),
-      );
+      throw new FeedbackError('The saved fallback image “{name}” is unavailable.', {
+        name: fallback.name,
+      });
     fallbackFiles.set(id, new Blob([new Uint8Array(data)], { type: fallback.mime }));
   }
   if (layout.background.kind === 'color' || layout.background.kind === 'none')

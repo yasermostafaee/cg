@@ -843,7 +843,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           // A refusal the bridge answered for a row this render did not yet see on air (a race,
           // or another console's take) — said in the row's own name, like the disabled title.
           return res.errorCode === TAKE_ON_AIR_CODE
-            ? { ...res, message: takeOnAirReason(deps.rowName, feedback) }
+            ? { ...res, operatorMessage: takeOnAirReason(deps.rowName, feedback) }
             : res;
         },
         Play,

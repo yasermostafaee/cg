@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
@@ -200,6 +200,7 @@ export function PlayoutConnection({
   onAnswer?: ((answer: SetupCheckAnswer | null) => void) | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const messageDirection = localeDirection(useLanguages().feedback);
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
   const engines = useEngineSessions();
@@ -485,7 +486,7 @@ export function PlayoutConnection({
       await window.cg.setup.setPlayoutAddress(typed, bridgeTyped);
       setDraft(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(feedbackFailure(err, 'Could not connect to the station.'));
     } finally {
       setBusy(null);
     }
@@ -675,7 +676,7 @@ export function PlayoutConnection({
         />
       )}
       {error !== null && (
-        <div style={styles.error} role="status">
+        <div style={styles.error} role="status" dir={messageDirection}>
           {playoutEngineWording(error)}
         </div>
       )}

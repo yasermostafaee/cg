@@ -1,4 +1,11 @@
-import { feedback, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
+import {
+  feedback,
+  feedbackFailure,
+  localeDirection,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 import { templateTypeLabel } from '../library/templateName.js';
 import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
@@ -513,7 +520,9 @@ export function LayerRow({
       // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
       // channel's view only, so no banner repeats it (`lookSwitchBanner`).
       const banner = lookSwitchBanner(res);
-      if (banner !== null) reportCommandError(banner);
+      if (banner !== null) {
+        reportCommandError(banner, { code: res.reason ?? null, detail: res.message ?? null });
+      }
     } catch (err) {
       reportCommandError(
         lookSwitchRefusal(undefined, err instanceof Error ? err.message : undefined),
@@ -534,7 +543,7 @@ export function LayerRow({
     item?.takeRefusal !== undefined
       ? takeRefusalLine(operatorName?.names[0] ?? rowName, item.takeRefusal, {
           // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
-          plateLabel: plateLabelOf(template, item.takeRefusal.plateId),
+          plateLabel: plateLabelOf(template, item.takeRefusal.plateId, feedback),
           entry: currentSourceCatalog().sources.find((s) => s.id === item.takeRefusal?.sourceId),
           channel: slot.channel,
           engineName: engine,
@@ -612,11 +621,14 @@ export function LayerRow({
   const toggleTemplateSound = async (itemId: string, muted: boolean): Promise<void> => {
     try {
       const res = await window.cg.stack.setSoundMuted({ itemId, muted });
-      if (!res.ok) reportCommandError(res.message ?? 'The template sound could not be changed.');
+      if (!res.ok) {
+        reportCommandError(
+          refusalFeedback({ message: res.message }, 'The template sound could not be changed.'),
+          { detail: res.message ?? null },
+        );
+      }
     } catch (err) {
-      reportCommandError(
-        err instanceof Error ? err.message : 'The template sound could not be changed.',
-      );
+      reportCommandError(feedbackFailure(err, 'The template sound could not be changed.'));
     }
   };
 
@@ -979,6 +991,7 @@ export function LayerRow({
 
   const state = rowState({
     binding: stateBinding,
+    localizeFeedback: feedback,
     pending: item?.pending === true,
     observed: slot.observed,
     linkDown,

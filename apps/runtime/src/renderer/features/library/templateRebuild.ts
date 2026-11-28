@@ -145,9 +145,14 @@ export function rebuildFailedLine(
   if (failed.length === 0) return null;
   const names = failed.map((f) => `“${templateDisplayName(f.template)}”`);
   return failed.length === 1
-    ? `${names[0] ?? ''} could not be rebuilt for this CG Control, so it plays as before. Import it again.`
-    : `${String(failed.length)} templates could not be rebuilt for this CG Control, so they play as ` +
-        `before: ${names.join(', ')}. Import them again.`;
+    ? feedback(
+        '{names} could not be rebuilt for this CG Control, so it plays as before. Import it again.',
+        { names: names[0] ?? '' },
+      )
+    : feedback(
+        '{count} templates could not be rebuilt for this CG Control, so they play as before: {names}. Import them again.',
+        { count: failed.length, names: names.join(', ') },
+      );
 }
 
 /**

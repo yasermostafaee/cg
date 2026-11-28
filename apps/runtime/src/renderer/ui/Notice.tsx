@@ -131,6 +131,7 @@ export function Notice({
   noticeRole,
   text,
   detail,
+  technicalDetail,
   aria,
   onDismiss,
   dismissLabel,
@@ -141,6 +142,7 @@ export function Notice({
   noticeRole: NoticeRole;
   text: string;
   detail?: string;
+  technicalDetail?: string;
   aria?: 'alert' | 'status' | 'note';
   /**
    * 🔴 `CONSOLE-LOOK-06` DELTA R ADDENDUM A §A2 — **A MESSAGE'S DISMISS CONTROL IS PART OF
@@ -201,6 +203,16 @@ export function Notice({
   const { feedback } = useLanguages();
   const messageDirection = localeDirection(feedback);
   const dismissable = onDismiss !== undefined;
+  const diagnostics =
+    technicalDetail && technicalDetail !== text ? (
+      <details
+        dir={messageDirection}
+        style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}
+      >
+        <summary>{presentMessage('Technical details')}</summary>
+        <bdi style={{ overflowWrap: 'anywhere' }}>{technicalDetail}</bdi>
+      </details>
+    ) : null;
   /*
     A mark or a title makes the box a ROW with a column inside it, exactly as a dismiss does —
     so the three share one wrapper decision rather than three. Without any of them the markup
@@ -251,9 +263,10 @@ export function Notice({
               dir={messageDirection}
               style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}
             >
-              {detail}
+              {presentMessage(detail)}
             </span>
           )}
+          {diagnostics}
           {remedies !== undefined && (
             /*
               The remedies sit UNDER the sentence, inside the same box: one refusal, one
@@ -282,9 +295,10 @@ export function Notice({
               dir={messageDirection}
               style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}
             >
-              {detail}
+              {presentMessage(detail)}
             </span>
           )}
+          {diagnostics}
         </>
       )}
       {dismissable && (

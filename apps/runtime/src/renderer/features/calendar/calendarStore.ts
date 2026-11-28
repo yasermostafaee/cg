@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { CalendarSettings } from '@cg/shared-ipc';
 import { clampLunarAdjust } from '@cg/text-shaping';
 import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../../shared/bridgeSkew.js';
+import { feedback, feedbackFailure, feedbackProblem } from '../../i18n/locale.js';
 
 /**
  * `DELTA-RUN-NEXT-VERSION-01-C` §1 — the renderer's view of the station's Lunar Hijri day
@@ -74,15 +75,18 @@ export function initCalendar(bridge: {
 export async function setLunarAdjustDays(days: number): Promise<string | null> {
   try {
     const res = await window.cg.calendar.set({ lunarAdjustDays: days });
-    if (!res.ok) return res.message ?? 'The Lunar Hijri adjustment could not be saved.';
+    if (!res.ok) return feedbackProblem(res.message, 'The Lunar Hijri adjustment could not be saved.');
     publish({ lunarAdjustDays: days });
     return null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (isBridgeSkewMessage(message)) {
-      return `${BRIDGE_SKEW_MESSAGE} The Lunar Hijri adjustment can be read, but not changed.`;
+      return [
+        feedback(BRIDGE_SKEW_MESSAGE),
+        feedback('The Lunar Hijri adjustment can be read, but not changed.'),
+      ].join(' ');
     }
-    return message === '' ? 'The Lunar Hijri adjustment could not be saved.' : message;
+    return feedbackFailure(err, 'The Lunar Hijri adjustment could not be saved.');
   }
 }
 

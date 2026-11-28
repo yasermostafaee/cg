@@ -5422,6 +5422,8 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 **Acceptance:**
 
 - WHEN the operator keeps the interface in English and selects Persian or Arabic feedback THEN action confirmations and refusals use that language.
+- WHEN CG Bridge or Playout rejects an operation THEN CG Control uses the feedback language for the explanation, including all recognized reasons, even when the reply carries English diagnostic text.
+- WHEN an operation returns an unrecognized diagnostic THEN the operator sees a localized summary and technical details remain available to diagnose the cause.
 - WHEN the operator selects Persian or Arabic as the interface language THEN the settings, labels, fields and tables flow right to left and numeric transport fields and authored names retain their own direction.
 - WHEN a field shows a translated placeholder THEN it follows the interface direction. Entered values retain the direction set for their content.
 - WHEN Persian or Arabic is the interface language THEN modal tabs, Inspector fields, option labels, tooltips, confirmations and statuses use that language, while action messages use the selected feedback language.

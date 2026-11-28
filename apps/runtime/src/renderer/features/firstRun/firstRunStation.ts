@@ -18,6 +18,8 @@ import {
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import type { AuthSessionState, RuntimeBridge } from '../../../shared/runtime-bridge.js';
+import { feedback, feedbackFailure, feedbackProblem, feedbackLocale } from '../../i18n/locale.js';
+import { fixedLayersReasonMessage } from '../../ui/fixedLayersReasonMessage.js';
 
 /**
  * `DESKTOP-APPS-01` §2E — **WHAT FIRST-RUN WRITES, as plain functions.**
@@ -108,10 +110,13 @@ async function declareWithFallback(
   const first = await write(banks);
   if (first.ok) return null;
   if (first.reason !== 'untick-unknown' && first.reason !== 'untick-occupied') {
-    return first.message ?? refusal;
+    return feedbackLocale() === 'en'
+      ? feedbackProblem(first.message, refusal)
+      : (fixedLayersReasonMessage(first.reason, {}, feedback) ??
+          feedbackProblem(first.message, refusal));
   }
   const second = await write(allShown);
-  return second.ok ? null : (second.message ?? refusal);
+  return second.ok ? null : feedbackProblem(second.message, refusal);
 }
 
 /**
@@ -205,10 +210,10 @@ export function signInBlocker(lines: readonly ShownCheckLine[] | null): ShownChe
 export function inSetupWords(err: unknown, bridgeAddress: string | null): string {
   if (err instanceof Error && err.name === 'BridgeDisconnectedError') {
     return bridgeAddress === null
-      ? 'CG Bridge is not answering.'
-      : `CG Bridge is not answering at ${bridgeAddress}.`;
+      ? feedback('CG Bridge is not answering.')
+      : feedback('CG Bridge is not answering at {address}.', { address: bridgeAddress });
   }
-  return err instanceof Error ? err.message : String(err);
+  return feedbackFailure(err, 'Could not connect to the station.');
 }
 
 /**
@@ -459,7 +464,7 @@ export async function writeFirstRunConnection(
   const applied = await bridge.connections.setConfig(
     firstRunConnection(current, choice.casparHost, choice.serveHost),
   );
-  return applied.ok ? null : (applied.message ?? 'The CasparCG host was not applied.');
+  return applied.ok ? null : feedbackProblem(applied.message, 'The CasparCG host was not applied.');
 }
 
 /** First-run's second write: the channel, declared. `null` on success, else the bridge's sentence. */
@@ -491,7 +496,7 @@ export async function declareFirstRunChannels(
   choices: readonly ChannelChoice[],
 ): Promise<string | null> {
   const [only, ...rest] = choices;
-  if (only === undefined) return 'No channel was chosen.';
+  if (only === undefined) return feedback('No channel was chosen.');
   if (rest.length === 0) return declareFirstRunChannel(bridge, only);
   const banks: FixedLayerBank[] = [];
   for (const c of choices)
@@ -546,7 +551,7 @@ export async function declareChannelSet(
     if (bankForChannel(banks, c) === null) read.set(c, await readOccupancy(bridge, c));
   }
   const next = nextChannelSet(banks, channels, (c) => read.get(c) ?? null);
-  if (next.length === 0) return 'No channel was chosen.';
+  if (next.length === 0) return feedback('No channel was chosen.');
   return declareWithFallback(
     ([only, ...rest]) =>
       only === undefined
@@ -581,7 +586,13 @@ export async function commitFirstRun(
  * block — at a client, CG graphics do belong on the programme channel, above the Playout's layers.
  */
 export function onAirWarning(channel: number, layers: readonly number[]): string {
-  const where =
-    layers.length === 1 ? `layer ${String(layers[0])}` : `layers ${layers.map(String).join(', ')}`;
-  return ` · CH ${String(channel)} is already on air — another system is playing on ${where}.`;
+  return layers.length === 1
+    ? feedback(' · CH {channel} is already on air — another system is playing on layer {layers}.', {
+        channel,
+        layers: String(layers[0]),
+      })
+    : feedback(
+        ' · CH {channel} is already on air — another system is playing on layers {layers}.',
+        { channel, layers: layers.join(', ') },
+      );
 }

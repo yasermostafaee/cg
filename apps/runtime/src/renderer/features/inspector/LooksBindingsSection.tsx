@@ -1,4 +1,5 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useUiText } from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { useId, useSyncExternalStore } from 'react';
 import { Check } from 'lucide-react';
@@ -607,10 +608,23 @@ export function LooksBindingsSection({
                                 sourceId: null,
                                 ...inputTransitionRequest(item.itemId, layout),
                               })
-                              .then((res) => {
-                                if (!res.ok)
-                                  reportCommandError(res.message ?? 'Could not clear the patch.');
-                              });
+                              .then(
+                                (res) => {
+                                  if (!res.ok) {
+                                    reportCommandError(
+                                      refusalFeedback(
+                                        { code: res.reason, message: res.message },
+                                        'Could not clear the patch.',
+                                      ),
+                                      { code: res.reason ?? null, detail: res.message ?? null },
+                                    );
+                                  }
+                                },
+                                (error: unknown) =>
+                                  reportCommandError(
+                                    feedbackFailure(error, 'Could not clear the patch.'),
+                                  ),
+                              );
                           }}
                         >
                           {localizeUi('Clear patch')}

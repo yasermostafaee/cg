@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackProblem, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { isPositionLocked } from '../inspector/PositionPicker.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
@@ -172,6 +172,7 @@ export function PreviewPanel({
   hidden?: boolean;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const engine = useEngineName();
   const rehearsals = useRehearse();
   const items = useStack();
@@ -775,8 +776,8 @@ export function PreviewPanel({
         </span>
         {previewAudio.inputs.length > 0 && <PreviewInputAudio audio={previewAudio} />}
         {previewAudio.failure !== undefined && (
-          <span className="cg-monitor-fact" role="status">
-            {previewAudio.failure}
+          <span className="cg-monitor-fact" role="status" dir={feedbackDirection}>
+            {feedbackProblem(previewAudio.failure, 'Input preview sound is unavailable.')}
           </span>
         )}
       </div>

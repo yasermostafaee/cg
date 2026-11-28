@@ -409,16 +409,36 @@ export function isBinaryNumberField(field: NumberConstraint): boolean {
  * the value is safe to commit. `step` remains an editing increment for compatibility, except that
  * the explicit 0/1 preset uses it as part of its binary marker.
  */
-export function numberFieldValueError(field: NumberConstraint, value: number): string | undefined {
-  if (!Number.isFinite(value)) return 'Must be a number.';
+export type FieldValidationText = (
+  source: string,
+  values?: Readonly<Record<string, string | number>>,
+) => string;
+
+export const fieldValidationText: FieldValidationText = (source, values) =>
+  source.replace(/\{(\w+)\}/gu, (token, key: string) =>
+    values?.[key] === undefined ? token : String(values[key]),
+  );
+
+export function numberFieldValueError(
+  field: NumberConstraint,
+  value: number,
+  text = fieldValidationText,
+): string | undefined {
+  if (!Number.isFinite(value)) return text('Must be a number.');
   const allowedValues = numberFieldAllowedValues(field);
   if (allowedValues !== undefined && !allowedValues.includes(value)) {
     const readable = numberFieldAllowedValuesText(field) ?? allowedValues.map(String).join(', ');
-    if (field.allowedValueLabels !== undefined) return `Must be one of: ${readable}.`;
-    return isBinaryNumberField(field) ? 'Must be 0 or 1.' : `Must be one of: ${readable}.`;
+    if (field.allowedValueLabels !== undefined || !isBinaryNumberField(field)) {
+      return text('Must be one of: {choices}.', { choices: readable });
+    }
+    return text('Must be 0 or 1.');
   }
-  if (field.min !== undefined && value < field.min) return `Must be at least ${String(field.min)}.`;
-  if (field.max !== undefined && value > field.max) return `Must be at most ${String(field.max)}.`;
+  if (field.min !== undefined && value < field.min) {
+    return text('Must be at least {limit}.', { limit: field.min });
+  }
+  if (field.max !== undefined && value > field.max) {
+    return text('Must be at most {limit}.', { limit: field.max });
+  }
   return undefined;
 }
 

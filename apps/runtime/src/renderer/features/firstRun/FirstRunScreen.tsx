@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { localeDirection, useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
 import { PLAYOUT_ENGINE_NAME, playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CatalogueChannel, SetupPhase } from '@cg/shared-ipc';
@@ -13,7 +13,7 @@ import { directionOf, IsolatedName } from '../../ui/OperatorNames.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
-import { signInFailureLine } from '../auth/signInMessages.js';
+import { signInFailureLine, signInFeedback } from '../auth/signInMessages.js';
 import { airFrom } from '../channels/channelAir.js';
 import { OutputDot } from '../channels/OutputDot.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
@@ -228,6 +228,8 @@ function SignInStep({
   onPlayoutSilent: () => void;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const messageLocale = useLanguages().feedback;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<{
@@ -287,6 +289,8 @@ function SignInStep({
   // What the BRIDGE said about the token it was shown — "not set up yet" for an account that
   // cannot set the station up, "not for this station" for another Playout's. Never a field's fault.
   const shown = error ?? (reason !== undefined ? { text: reason, marksField: false } : null);
+  const presented = shown === null ? null : signInFeedback(shown);
+  const originalLicence = shown?.fromPlayout === true && messageLocale === 'en';
   const locked = busy || refused;
 
   return (
@@ -334,15 +338,21 @@ function SignInStep({
           />
         </div>
       </div>
-      {shown !== null && (
+      {shown !== null && presented !== null && (
         <div
           style={styles.error}
           role="status"
           // `R-082` — the Playout's own words take their own direction: Persian reads right to left.
-          dir={shown.fromPlayout === true ? directionOf(shown.text) : undefined}
+          dir={originalLicence ? directionOf(shown.text) : localeDirection(messageLocale)}
         >
           {/* A4 — the Playout's own words sit in their own isolate (golden rule 11). */}
-          {shown.fromPlayout === true ? <bdi>{shown.text}</bdi> : shown.text}
+          {originalLicence ? <bdi>{presented.text}</bdi> : presented.text}
+          {presented.technicalDetail !== undefined && (
+            <details>
+              <summary>{localizeFeedback('Technical details')}</summary>
+              <bdi>{presented.technicalDetail}</bdi>
+            </details>
+          )}
         </div>
       )}
       <div style={styles.row}>
@@ -450,6 +460,7 @@ export function ChannelStep({
   initial?: readonly ChannelCoordinate[];
 }): JSX.Element {
   const localizeUi = useUiText();
+  const messageDirection = localeDirection(useLanguages().feedback);
   const [catalogue, setCatalogue] = useState<Catalogue>({ state: 'reading' });
   const [picked, setPicked] = useState<readonly ChannelCoordinate[]>(initial);
   const [manualHost, setManualHost] = useState(playoutHost);
@@ -613,7 +624,7 @@ export function ChannelStep({
           <div style={styles.note}>{localizeUi("Reading the Playout's channels…")}</div>
         )}
         {catalogue.state === 'refused' && (
-          <div style={styles.error} role="status">
+          <div style={styles.error} role="status" dir={messageDirection}>
             {playoutEngineWording(catalogue.message)}
           </div>
         )}
@@ -727,13 +738,14 @@ export function ChannelStep({
             style={styles.warning}
             role="alert"
             data-channel-on-air={String(line.channel)}
+            dir={messageDirection}
           >
             <IsolatedName>{line.name}</IsolatedName>
             {onAirWarning(line.channel, line.layers)}
           </div>
         ))}
       {error !== null && (
-        <div style={styles.error} role="status">
+        <div style={styles.error} role="status" dir={messageDirection}>
           {playoutEngineWording(error)}
         </div>
       )}

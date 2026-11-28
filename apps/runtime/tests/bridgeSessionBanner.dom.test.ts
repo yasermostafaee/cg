@@ -12,6 +12,7 @@ import {
 } from '@cg/shared-ipc';
 import { saveStationAddress } from '../src/platform/stationAddress.js';
 import { BridgeSessionBanner } from '../src/renderer/features/status/BridgeSessionBanner.js';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import type { AuthSessionState } from '../src/shared/runtime-bridge.js';
 import { authStub, fillBridgeStub, signedInStub } from './support/authStub.js';
 import { clearPortals, openDialog } from './support/dialog.js';
@@ -255,6 +256,36 @@ describe('CENTRAL-BRIDGE-01 5.1 — a station admin signs the bridge in, once', 
     expect(openDialog()?.textContent).toContain(message);
     expect(password.getAttribute('aria-invalid')).not.toBe('true');
   });
+
+  it.each([
+    ['fa', 'مجوز Playout امکان استفاده از CG Control را نمی‌دهد.'],
+    ['ar', 'ترخيص Playout لا يسمح باستخدام CG Control.'],
+  ] as const)(
+    'uses %s for action feedback with English UI and retains the reason for diagnosis',
+    async (locale, expected) => {
+      setLanguage('interface', 'en');
+      setLanguage('feedback', locale);
+      try {
+        const message = 'The Playout license expired at 12:00 UTC.';
+        await mount({ state: 'needs-admin' }, ADMIN, () =>
+          Promise.resolve({ ok: false, failure: 'cg_not_licensed', message }),
+        );
+        await act(async () => {
+          openButton()?.click();
+        });
+        const password = openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
+        if (password === null || password === undefined) throw new Error('no password field');
+        await type(password, PASSWORD);
+        await press('Sign in');
+        expect(openDialog()?.querySelector('span[dir="rtl"]')?.textContent).toBe(expected);
+        const details = openDialog()?.querySelector('details');
+        expect(details?.open).toBe(false);
+        expect(details?.querySelector('bdi')?.textContent).toBe(message);
+      } finally {
+        await act(async () => setLanguage('feedback', 'en'));
+      }
+    },
+  );
 });
 
 /**

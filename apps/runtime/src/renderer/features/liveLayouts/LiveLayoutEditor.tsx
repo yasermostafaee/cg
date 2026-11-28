@@ -1,4 +1,4 @@
-import { useFeedbackText, useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   AudioLines,
@@ -840,7 +840,7 @@ export function LiveLayoutEditor({
       setAttachmentId(attachment.id);
     } catch (cause) {
       if (request === attachmentRead.current)
-        setRefusal(cause instanceof Error ? cause.message : 'The plate graphic could not be read.');
+        setRefusal(feedbackFailure(cause, 'The plate graphic could not be read.'));
     } finally {
       if (request === attachmentRead.current) setReadingAttachment(false);
     }
@@ -943,7 +943,7 @@ export function LiveLayoutEditor({
       setAsset(file);
     } catch (cause) {
       if (revision === mediaRead.current) {
-        setRefusal(cause instanceof Error ? cause.message : 'The background could not be read.');
+        setRefusal(feedbackFailure(cause, 'The background could not be read.'));
       }
     } finally {
       if (revision === mediaRead.current) setReadingMedia(false);
@@ -973,9 +973,7 @@ export function LiveLayoutEditor({
       updateFrame((candidate) => ({ ...candidate, fallback }));
     } catch (cause) {
       if (fallbackRead.current === request) {
-        setRefusal(
-          cause instanceof Error ? cause.message : 'The fallback image could not be read.',
-        );
+        setRefusal(feedbackFailure(cause, 'The fallback image could not be read.'));
       }
     } finally {
       if (fallbackRead.current === request) {
@@ -1028,7 +1026,7 @@ export function LiveLayoutEditor({
       });
     } catch (cause) {
       if (revision === fontRead.current) {
-        setRefusal(cause instanceof Error ? cause.message : 'The font could not be read.');
+        setRefusal(feedbackFailure(cause, 'The font could not be read.'));
       }
     } finally {
       if (revision === fontRead.current) setReadingFont(false);
@@ -1060,7 +1058,7 @@ export function LiveLayoutEditor({
     try {
       await onSave(draft.data, asset, fontAssets, attachmentAssets, fallbackFiles);
     } catch (cause) {
-      setRefusal(cause instanceof Error ? cause.message : 'The layout could not be saved.');
+      setRefusal(feedbackFailure(cause, 'The layout could not be saved.'));
     } finally {
       saveInFlight.current = false;
       setBusy(false);

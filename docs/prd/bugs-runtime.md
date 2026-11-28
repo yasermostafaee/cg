@@ -14303,3 +14303,15 @@ missing plate sources. The repetition count is Persian but the reason is English
 
 **Expected.** Play and preset actions report missing plate sources in the configured feedback
 language, including the plate numbers when the Bridge supplies them.
+
+## [~] B-459 — Localize action outcomes across CG Control ⟨priority: high — owner, 2026-11-28⟩ — `openspec/changes/control-languages/`
+
+**Repro.** In build `f5ccfa6a`, set both languages to Persian and update an on-air layout.
+An AMCP 402 refusal displays “The server refused a setting in this command.” Other paths
+also expose untranslated Bridge replies or compose sentences before looking them up.
+
+**Expected.** Command, Inspector, library, source, setup, sign-in, and audit feedback use the
+configured feedback language. Translate from structured outcomes and interpolate operator
+names, layer numbers, source names, and paths afterward. Keep untranslated wire diagnostics
+in technical details or the audit record. Use a localized summary when the response has no
+recognized operator wording.

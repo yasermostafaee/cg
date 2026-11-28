@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, feedbackFailure, feedbackProblem, useUiText } from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, Lock, Search, Trash2 } from 'lucide-react';
@@ -508,7 +508,8 @@ function BankEditor({
         setBusy(false);
         report({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'Request failed.',
+          text: feedbackFailure(err),
+          ...(err instanceof Error ? { technicalDetail: err.message } : {}),
         });
       },
     );
@@ -525,9 +526,8 @@ function BankEditor({
 
   function bankRefusal(result: Awaited<ReturnType<typeof saveBank>>): string {
     return (
-      fixedLayersReasonMessage(result.reason, { layer: result.layer }) ??
-      result.message ??
-      'Not accepted.'
+      fixedLayersReasonMessage(result.reason, { layer: result.layer }, feedback) ??
+      feedbackProblem(result.message, 'Not accepted.')
     );
   }
 
@@ -644,14 +644,18 @@ function BankEditor({
         */
         report({
           role: 'refusal',
-          text: errorCodeMessage(res.errorCode) ?? 'The bridge did not accept the removal.',
+          text:
+            errorCodeMessage(res.errorCode, feedback) ?? 'The bridge did not accept the removal.',
           // Golden rule 11: the ROW and the TEMPLATE in the operator's words. The itemId is
           // not in the sentence he reads under pressure.
           detail: `${rowName} · ${name}`,
         });
       }
     } catch (err) {
-      reportCommandError(err instanceof Error ? err.message : 'Remove failed.');
+      reportCommandError(
+        feedbackFailure(err, 'Remove failed.'),
+        err instanceof Error ? { detail: err.message } : {},
+      );
     }
   }
 

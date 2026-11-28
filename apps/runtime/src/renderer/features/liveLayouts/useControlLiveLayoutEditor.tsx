@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useUiText } from '../../i18n/locale.js';
 import { useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { ControlLiveLayout } from '@cg/shared-schema';
@@ -95,7 +95,7 @@ export function useControlLiveLayoutEditor(
       if (generation.current === current) setRequest(next);
     } catch (error) {
       if (generation.current === current) {
-        onError(error instanceof Error ? error.message : 'The live layout could not be opened.');
+        onError(feedbackFailure(error, 'The live layout could not be opened.'));
       }
     } finally {
       if (generation.current === current) setBusy(false);

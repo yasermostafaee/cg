@@ -40,6 +40,8 @@ export interface Refusal {
    * It rides the details affordance; the audit log keeps its own copy (§5).
    */
   readonly detail: string | null;
+  /** Additional operator-facing text, in the feedback language. */
+  readonly operatorDetail?: string;
   /** The refusal code, where the refusal carried one. Shown behind the details affordance. */
   readonly code: string | null;
   /** How many times this same refusal has been raised without being dismissed. */
@@ -85,7 +87,12 @@ export function getRefusal(): Refusal | null {
  */
 export function raiseRefusal(
   message: string,
-  opts: { detail?: string | null; code?: string | null; station?: boolean } = {},
+  opts: {
+    detail?: string | null;
+    operatorDetail?: string;
+    code?: string | null;
+    station?: boolean;
+  } = {},
 ): void {
   const detail = opts.detail ?? null;
   const code = opts.code ?? null;
@@ -97,10 +104,17 @@ export function raiseRefusal(
     re-delivery — `CENTRAL-BRIDGE-01`.)
   */
   const channel = opts.station === true ? null : readMessageScope();
-  current =
-    current !== null && current.message === message && current.channel === channel
-      ? { ...current, count: current.count + 1, detail, code }
-      : { message, detail, code, count: 1, firstSeen: Date.now(), channel };
+  const same =
+    current !== null && current.message === message && current.channel === channel ? current : null;
+  current = {
+    message,
+    detail,
+    code,
+    channel,
+    count: (same?.count ?? 0) + 1,
+    firstSeen: same?.firstSeen ?? Date.now(),
+    ...(opts.operatorDetail !== undefined ? { operatorDetail: opts.operatorDetail } : {}),
+  };
   emit();
 }
 

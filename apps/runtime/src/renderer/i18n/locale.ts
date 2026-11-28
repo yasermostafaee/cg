@@ -123,14 +123,16 @@ function own(messages: Messages, source: string): string | undefined {
   return Object.hasOwn(messages, source) ? messages[source] : undefined;
 }
 
-function translate(
-  prefs: Preferences,
-  scope: LanguageScope,
-  source: string,
-  values?: Values,
-): string {
-  const locale = prefs[scope];
-  const message = own(bundled[locale][scope], source) ?? own(bundled.en[scope], source) ?? source;
+function catalogText(locale: Locale, scope: LanguageScope, source: string): string | undefined {
+  const catalog = bundled[locale];
+  return (
+    own(catalog[scope], source) ??
+    (scope === 'feedback' ? own(catalog.interface, source) : undefined)
+  );
+}
+
+function translate(locale: Locale, scope: LanguageScope, source: string, values?: Values): string {
+  const message = catalogText(locale, scope, source) ?? catalogText('en', scope, source) ?? source;
   if (values === undefined) return message;
   return message.replace(placeholder, (token: string, name: string) => {
     if (!Object.hasOwn(values, name)) return token;
@@ -141,21 +143,62 @@ function translate(
 }
 
 export function useUiText(): (source: string, values?: Values) => string {
-  const prefs = useLanguages();
+  const locale = useLanguages().interface;
   return useCallback(
-    (source: string, values?: Values) => translate(prefs, 'interface', source, values),
-    [prefs],
+    (source: string, values?: Values) => translate(locale, 'interface', source, values),
+    [locale],
   );
 }
 
 export function useFeedbackText(): (source: string, values?: Values) => string {
-  const prefs = useLanguages();
-  return (source, values) => translate(prefs, 'feedback', source, values);
+  const locale = useLanguages().feedback;
+  return (source, values) => translate(locale, 'feedback', source, values);
 }
 
 /** For action callbacks that are not React components. */
 export function feedback(source: string, values?: Values): string {
-  return translate(current, 'feedback', source, values);
+  return translate(current.feedback, 'feedback', source, values);
+}
+
+/** Source wording for diagnostic records and helpers that are independent of the console. */
+export function englishFeedback(source: string, values?: Values): string {
+  return translate('en', 'feedback', source, values);
+}
+
+/** Resolve an exact operator feedback entry without falling back to source prose. */
+export function knownFeedback(source: string): string | undefined {
+  return catalogText(current.feedback, 'feedback', source);
+}
+
+/** Convert raw peer or exception prose to a localized operator message. */
+export function feedbackProblem(source: string | undefined, fallback = 'Request failed.'): string {
+  if (source !== undefined && source.trim() !== '') {
+    if (current.feedback === 'en') return feedback(source);
+    const localized = knownFeedback(source.trim());
+    if (localized !== undefined) return localized;
+  }
+  return current.feedback === 'en'
+    ? feedback(fallback)
+    : (knownFeedback(fallback) ?? feedback('Request failed.'));
+}
+
+/** A translatable application exception carrying its parameters independently of `message`. */
+export class FeedbackError extends Error {
+  constructor(
+    readonly source: string,
+    readonly values?: Values,
+  ) {
+    super(englishFeedback(source, values));
+  }
+}
+
+export function feedbackFailure(error: unknown, fallback?: string): string {
+  if (error instanceof FeedbackError) {
+    return current.feedback === 'en' || knownFeedback(error.source) !== undefined
+      ? feedback(error.source, error.values)
+      : feedbackProblem(undefined, fallback);
+  }
+  return feedbackProblem(error instanceof Error ? error.message : undefined, fallback);
 }
 
 export function feedbackLocale(): Locale {

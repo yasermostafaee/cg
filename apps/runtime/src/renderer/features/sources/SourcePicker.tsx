@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackProblem, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import {
   useCallback,
@@ -911,7 +911,14 @@ function useMediaSearch(): MediaState {
       if (mine !== seq.current) return; // an answer to a query already typed past
       setLoading(false);
       if (!res.ok) {
-        setFailed(res.message);
+        setFailed(
+          feedbackProblem(
+            res.message,
+            res.reason === 'playout-unreachable'
+              ? 'The Playout did not answer.'
+              : 'The Playout rejected the media search.',
+          ),
+        );
         return;
       }
       setItems((prev) => (cursor === null ? res.items : [...prev, ...res.items]));
@@ -1103,6 +1110,7 @@ function MediaTab({
   onViewChange: (view: InputView) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const { feedback: feedbackLanguage } = useLanguages();
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
   const sortAnchor = useRef<HTMLButtonElement>(null);
@@ -1307,7 +1315,7 @@ function MediaTab({
         )}
         {media.failed !== null ? (
           <div className="cg-picker-empty" data-picker-failed="">
-            <span>{localizeUi(media.failed)}</span>
+            <span dir={localeDirection(feedbackLanguage)}>{media.failed}</span>
             <Button variant="neutral" data-picker-retry="" onClick={media.retry}>
               {localizeUi('Retry')}
             </Button>

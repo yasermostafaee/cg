@@ -95,6 +95,9 @@ export function RefusalBanner({
     refusal.count > 1
       ? message('{message} ({count} times)', { message: sentence, count: refusal.count })
       : sentence;
+  const technicalDetail = [refusal.code, refusal.detail]
+    .filter((part): part is string => part !== null && part !== refusal.message)
+    .join(' · ');
 
   return (
     <div className="cg-refusal" data-refusal="" data-refusal-count={String(refusal.count)}>
@@ -110,9 +113,8 @@ export function RefusalBanner({
       <Notice
         noticeRole="refusal"
         text={playoutEngineWording(text, engine)}
-        {...(refusal.detail !== null
-          ? { detail: playoutEngineWording(refusal.detail, engine) }
-          : {})}
+        {...(refusal.operatorDetail !== undefined ? { detail: refusal.operatorDetail } : {})}
+        {...(technicalDetail === '' ? {} : { technicalDetail })}
         onDismiss={clearRefusal}
         dismissLabel={localizeUi('Dismiss this refusal')}
       />

@@ -19,7 +19,7 @@ import { airStateVisual, badgeTone, colors, readyDetail, type BadgeTone } from '
 import { unverifiedTitle } from '../../ui/airStateWording.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
-import type { useUiText } from '../../i18n/locale.js';
+import { englishFeedback, type useUiText } from '../../i18n/locale.js';
 
 type LocalizeUi = ReturnType<typeof useUiText>;
 
@@ -236,6 +236,7 @@ export interface RowStateInput {
   errorLine?: string | undefined;
   engineName?: string | undefined;
   localizeUi?: LocalizeUi | undefined;
+  localizeFeedback?: LocalizeUi | undefined;
   /**
    * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
@@ -343,6 +344,7 @@ export function rowState({
   errorLine,
   engineName = 'CasparCG',
   localizeUi,
+  localizeFeedback = englishFeedback,
 }: RowStateInput): RowStateVisual {
   const t = localizeUi ?? ((source: string) => source);
   const wire = occupancyLabel(observed, linkDown, localizeUi);
@@ -597,14 +599,14 @@ export function rowState({
       status === 'error' && errorLine !== undefined
         ? errorLine
         : playoutEngineWording(
-            t(
-              status === 'unverified'
-                ? unverifiedTitle(oscBlind, linkDown)
-                : status === 'error'
-                  ? (errorCodeMessage(errorCode) ??
-                    'CasparCG did not accept this row, and reported no reason.')
-                  : (readyDetail(status) ?? ''),
-            ),
+            status === 'error'
+              ? (errorCodeMessage(errorCode, localizeFeedback) ??
+                  localizeFeedback('CasparCG did not accept this row, and reported no reason.'))
+              : t(
+                  status === 'unverified'
+                    ? unverifiedTitle(oscBlind, linkDown)
+                    : (readyDetail(status) ?? ''),
+                ),
             engineName,
           ) || undefined,
       wire,

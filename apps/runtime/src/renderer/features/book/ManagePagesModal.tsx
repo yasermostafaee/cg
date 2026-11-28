@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useState, type DragEvent } from 'react';
 import {
   ArrowDownAZ,
@@ -103,6 +103,7 @@ export function ManagePagesModal({
   onClose,
 }: ManagePagesModalProps): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
   const [draft, setDraft] = useState<BookPage[]>(() => [...pages]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<string | null>(null);
@@ -140,6 +141,10 @@ export function ManagePagesModal({
           ? withPicturesReplaced(now, withUniqueIds([], outcome.pages))
           : [...now, ...withUniqueIds(now, outcome.pages)],
       );
+    } catch (error) {
+      setLines([
+        { role: 'refusal', text: feedbackFailure(error, 'The pictures could not be loaded.') },
+      ]);
     } finally {
       setBusy(null);
     }
@@ -184,8 +189,14 @@ export function ManagePagesModal({
             role: 'notice' as const,
             text:
               draft.length === 0
-                ? `Page ${String(current + 1)} is on air and is removed; at Update the book has no pages.`
-                : `Page ${String(current + 1)} is on air and is removed; at Update, page ${String(nextIndex + 1)} takes its place.`,
+                ? localizeFeedback(
+                    'Page {current} is on air and is removed; at Update the book has no pages.',
+                    { current: current + 1 },
+                  )
+                : localizeFeedback(
+                    'Page {current} is on air and is removed; at Update, page {next} takes its place.',
+                    { current: current + 1, next: nextIndex + 1 },
+                  ),
           },
         ]
       : []),

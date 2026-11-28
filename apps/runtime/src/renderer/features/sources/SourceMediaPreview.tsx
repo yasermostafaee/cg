@@ -1,4 +1,10 @@
-import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
+import {
+  feedbackProblem,
+  localeDirection,
+  useFeedbackText,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import {
   useCallback,
   useEffect,
@@ -77,6 +83,7 @@ interface PreviewTransport {
   onTogglePlayback?: (() => void) | undefined;
   controls: ReactNode;
   message?: string;
+  messageIsFailure?: boolean;
 }
 
 interface PlateTransport {
@@ -107,6 +114,8 @@ function MediaPreviewSurface({
   plate?: PlateTransport | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const languages = useLanguages();
   const ownerDocument = usePanelDocument();
   const view = panelWindow(ownerDocument);
   const surface = useRef<HTMLElement>(null);
@@ -181,6 +190,7 @@ function MediaPreviewSurface({
     const audio = plate.audible ? 'Mute preview' : 'Listen to preview';
     const toggle = transport?.onTogglePlayback;
     const status = loading ?? transport?.message;
+    const statusIsFailure = loading === undefined && transport?.messageIsFailure;
     return (
       <div className="cg-pvw-media-transport" data-pvw-media-transport="">
         <div hidden>{picture}</div>
@@ -220,7 +230,14 @@ function MediaPreviewSurface({
             <Icon icon={plate.audible ? Volume2 : VolumeX} size={16} />
           </Button>
         )}
-        {status !== undefined && <span role="status">{localizeUi(status)}</span>}
+        {status !== undefined && (
+          <span
+            role="status"
+            dir={localeDirection(statusIsFailure ? languages.feedback : languages.interface)}
+          >
+            {statusIsFailure ? status : localizeUi(status)}
+          </span>
+        )}
       </div>
     );
   }
@@ -270,8 +287,12 @@ function MediaPreviewSurface({
         )}
         {transport === undefined && fullscreenToggle}
         {fullscreenError && (
-          <span className="cg-source-media-preview__fullscreen-error" role="status">
-            {localizeUi('Fullscreen is unavailable.')}
+          <span
+            className="cg-source-media-preview__fullscreen-error"
+            role="status"
+            dir={localeDirection(languages.feedback)}
+          >
+            {localizeFeedback('Fullscreen is unavailable.')}
           </span>
         )}
       </div>
@@ -290,10 +311,11 @@ function MediaPreviewTransport({
   onSeek,
   controls,
   message,
+  messageIsFailure,
   fullscreenToggle,
 }: PreviewTransport & { fullscreenToggle: ReactNode }): JSX.Element {
   const localizeUi = useUiText();
-  const { interface: interfaceLanguage } = useLanguages();
+  const languages = useLanguages();
   const elapsed = formatMediaDuration(Math.floor(positionMs / 1_000) * 1_000);
   const total = durationMs > 0 ? formatMediaDuration(durationMs) : '–:––';
   const played = seekEndMs > 0 ? Math.min(100, Math.max(0, (positionMs / seekEndMs) * 100)) : 0;
@@ -322,9 +344,9 @@ function MediaPreviewTransport({
         <span
           className="cg-source-media-preview__status"
           role="status"
-          dir={localeDirection(interfaceLanguage)}
+          dir={localeDirection(messageIsFailure ? languages.feedback : languages.interface)}
         >
-          {localizeUi(message)}
+          {messageIsFailure ? message : localizeUi(message)}
         </span>
       )}
     </div>
@@ -376,6 +398,7 @@ function matchesReadyPreview(
 
 function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element {
   const localizeUi = useUiText();
+  const { interface: interfaceLanguage } = useLanguages();
   const {
     id,
     name,
@@ -797,16 +820,28 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
       (preview.state === 'ready' && (!showVideo || buffering)));
   let message = '';
   if (intent !== 'stopped') {
-    if (playerError !== null) message = playerError;
+    if (playerError !== null) message = feedbackProblem(playerError, 'Preview unavailable');
     else if (preview === null) message = 'Loading preview…';
     else if (preview.state === 'preparing' && intent === 'playing') {
-      message =
-        preview.message ??
-        (preview.preparationPhase === 'waiting-for-capacity'
+      const fallback =
+        preview.preparationPhase === 'waiting-for-capacity'
           ? 'Waiting for proxy capacity…'
-          : 'Preparing preview…');
+          : 'Preparing preview…';
+      const progress = preview.message;
+      const retry = progress?.match(/^Playout will retry this media proxy in about (\d+) min\.$/);
+      if (retry?.[1] !== undefined) {
+        message = localizeUi('Playout will retry this media proxy in about {minutes} min.', {
+          minutes: retry[1],
+        });
+      } else {
+        const translated = progress === undefined ? undefined : localizeUi(progress);
+        message =
+          translated !== undefined && (interfaceLanguage === 'en' || translated !== progress)
+            ? translated
+            : fallback;
+      }
     } else if (preview.state === 'unavailable' || preview.state === 'error') {
-      message = preview.message ?? 'Preview unavailable';
+      message = feedbackProblem(preview.message, 'Preview unavailable');
     } else if (loading) message = 'Loading…';
   }
   const originKey =
@@ -960,7 +995,11 @@ function FileSourceMediaPreview(props: FileSourceMediaPreviewProps): JSX.Element
           setPositionMs(nextPosition);
           if (video.current !== null) video.current.currentTime = nextPosition / 1_000;
         },
-        ...(!loading && { message }),
+        ...(!loading && {
+          message,
+          messageIsFailure:
+            playerError !== null || preview?.state === 'unavailable' || preview?.state === 'error',
+        }),
         controls: (
           <>
             <Button
@@ -1211,7 +1250,10 @@ function SampledSourceMediaPreview({
               seekEndMs: end,
               onTogglePlayback: foreground ? togglePlayback : undefined,
               onSeek: (nextPosition) => start(nextPosition, playing),
-              ...(status === 'unavailable' && { message: 'Preview unavailable' }),
+              ...(status === 'unavailable' && {
+                message: feedbackProblem(undefined, 'Preview unavailable'),
+                messageIsFailure: true,
+              }),
               ...(plate !== undefined && status === 'ready' && { message: 'Silent preview' }),
               controls: (
                 <>

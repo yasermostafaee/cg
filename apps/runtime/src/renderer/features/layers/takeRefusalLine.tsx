@@ -1,10 +1,11 @@
-import { useFeedbackText } from '../../i18n/locale.js';
+import { feedback, feedbackLocale, knownFeedback } from '../../i18n/locale.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   CG_UNLICENSED_CODE,
+  isolateText,
   notShowableWords,
   ownOutputWords,
-  plateLabel,
+  plateNumber,
   SOURCE_OWN_OUTPUT_CODE,
   unseatableWords,
   type SourceDefinition,
@@ -12,7 +13,7 @@ import {
 } from '@cg/shared-ipc';
 import type { TakeRefusal } from '@cg/shared-schema';
 import { amcpCommandFacts, amcpRefusalWords } from '../../ui/amcpRefusal.js';
-import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
+import { errorCodeMessage, refusalFeedback } from '../../ui/errorCodeMessage.js';
 
 /**
  * 🔴 `FIELD-FIXES-01` B — **A REFUSED TAKE IS SAID ON ITS ROW, IN ONE LINE**, `design.md` §29
@@ -100,70 +101,78 @@ export function takeRefusalLine(
   } = {},
 ): TakeRefusalLine {
   const engineName = context.engineName ?? 'CasparCG';
+  const titleName = feedbackLocale() === 'en' ? (name: string) => name : isolateText;
+  const titleRow = titleName(rowName);
   if (refusal.code === NOT_SHOWABLE_CODE && context.channel !== undefined) {
     // `“ورودی ۴” can't be shown on CH 2.` — the bridge's own clause (`notShowableWords`).
     const words = notShowableWords(
-      refusal.sourceName ?? context.entry?.name ?? 'the source',
+      refusal.sourceName ?? context.entry?.name ?? feedback('the source'),
       context.channel,
+      feedback,
     );
     const plate = context.plateLabel ?? null;
-    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const who = plate === null ? titleRow : `${titleRow} · ${plate}`;
     const clause = `“${words.name}”${words.rest}`;
     return {
       row: rowName,
       source: null,
       input: null,
       clause,
-      text: `${who}: ${clause}`,
+      text: `${who}: “${titleName(words.name)}”${words.rest}`,
       unseatable: { plate, name: words.name, rest: words.rest },
     };
   }
   if (refusal.code === SOURCE_OWN_OUTPUT_CODE && context.channel !== undefined) {
     // `B-298` — `“NDI کانالِ ۱” is the own output of CH 1 (would loop).` — the bridge's own clause.
     const words = ownOutputWords(
-      refusal.sourceName ?? context.entry?.name ?? 'the source',
+      refusal.sourceName ?? context.entry?.name ?? feedback('the source'),
       context.channel,
+      feedback,
     );
     const plate = context.plateLabel ?? null;
-    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const who = plate === null ? titleRow : `${titleRow} · ${plate}`;
     const clause = `“${words.name}”${words.rest}`;
     return {
       row: rowName,
       source: null,
       input: null,
       clause,
-      text: `${who}: ${clause}`,
+      text: `${who}: “${titleName(words.name)}”${words.rest}`,
       unseatable: { plate, name: words.name, rest: words.rest },
     };
   }
   if (refusal.code === CG_UNLICENSED_CODE && refusal.message !== undefined) {
     // `PLAYOUT-FEATURES-01` D — CG is not licensed on the row's channel: the Playout's own words.
-    const playoutWords = playoutEngineWording(refusal.message, engineName);
+    const playoutWords = playoutEngineWording(
+      refusalFeedback({ code: refusal.code, message: refusal.message }),
+      engineName,
+    );
     return {
       row: rowName,
       source: null,
       input: null,
       clause: playoutWords,
-      text: `${rowName}: ${playoutWords}`,
+      text: `${titleRow}: ${playoutWords}`,
       playoutWords,
     };
   }
   if (refusal.code === NO_BAND_CODE) {
+    const clause = feedback(NO_BAND_CLAUSE);
     return {
       row: rowName,
       source: null,
       input: null,
-      clause: NO_BAND_CLAUSE,
-      text: `${rowName}: ${NO_BAND_CLAUSE}`,
+      clause,
+      text: `${titleRow}: ${clause}`,
     };
   }
   if (refusal.code === ROUTE_WAITING_CODE || refusal.code === ROUTE_ENGINE_UNSUPPORTED_CODE) {
     const plate = context.plateLabel ?? null;
-    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const who = plate === null ? titleRow : `${titleRow} · ${plate}`;
     const clause =
       refusal.code === ROUTE_ENGINE_UNSUPPORTED_CODE
-        ? 'this Playout input cannot be routed to backup engine B.'
-        : "waiting for the Playout's input list.";
+        ? feedback('this Playout input cannot be routed to backup engine B.')
+        : feedback("waiting for the Playout's input list.");
     return { row: rowName, source: null, input: null, clause, text: `${who}: ${clause}`, plate };
   }
   if (UNSEATABLE_CODES.has(refusal.code)) {
@@ -176,40 +185,46 @@ export function takeRefusalLine(
     const unavailable = refusal.code === 'source-unavailable';
     const still =
       entry !== undefined && entry.status === (unavailable ? 'unavailable' : 'unusable');
-    const words = unseatableWords({
-      name: refusal.sourceName ?? entry?.name ?? 'the source',
-      origin: refusal.sourceOrigin ?? entry?.origin,
-      status: unavailable ? 'unavailable' : 'unusable',
-      ...(still && entry.departed === true ? { departed: true as const } : {}),
-      ...(!still && unavailable ? { departed: true as const } : {}),
-      ...(still && entry.reason !== undefined
-        ? { reason: playoutEngineWording(entry.reason, engineName) }
-        : {}),
-    });
+    const reason =
+      still && entry.reason !== undefined
+        ? playoutEngineWording(entry.reason, engineName)
+        : undefined;
+    const words = unseatableWords(
+      {
+        name: refusal.sourceName ?? entry?.name ?? feedback('the source'),
+        origin: refusal.sourceOrigin ?? entry?.origin,
+        status: unavailable ? 'unavailable' : 'unusable',
+        ...((still ? entry.departed === true : unavailable) && { departed: true as const }),
+        reason: reason === undefined || feedbackLocale() === 'en' ? reason : knownFeedback(reason),
+      },
+      feedback,
+    );
     const plate = context.plateLabel ?? null;
-    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const who = plate === null ? titleRow : `${titleRow} · ${plate}`;
     const clause = `“${words.name}”${words.rest}`;
     return {
       row: rowName,
       source: null,
       input: null,
       clause,
-      text: `${who}: ${clause}`,
+      text: `${who}: “${titleName(words.name)}”${words.rest}`,
       unseatable: { plate, name: words.name, rest: words.rest },
     };
   }
-  const words = amcpRefusalWords(refusal.code, refusal.command);
+  const words = amcpRefusalWords(refusal.code, refusal.command, feedback);
   const clause =
     words?.clause ??
     playoutEngineWording(
-      lowerFirst(errorCodeMessage(refusal.code) ?? 'the take was refused.'),
+      lowerFirst(errorCodeMessage(refusal.code, feedback) ?? feedback('the take was refused.')),
       engineName,
     );
   const deck = amcpCommandFacts(refusal.command).decklink;
   const source = refusal.sourceName ?? null;
   const input = source !== null && deck !== null ? `DeckLink ${String(deck)}` : null;
   const who =
-    source === null ? rowName : `${rowName} · ${source}${input === null ? '' : ` (${input})`}`;
+    source === null
+      ? titleRow
+      : `${titleRow} · ${titleName(source)}${input === null ? '' : ` (${titleName(input)})`}`;
   return { row: rowName, source, input, clause, text: `${who}: ${clause}` };
 }
 
@@ -221,9 +236,13 @@ export function takeRefusalLine(
 export function plateLabelOf(
   template: TemplateInfo | null | undefined,
   plateId: string | undefined,
+  localize?: typeof feedback,
 ): string | undefined {
   if (plateId === undefined) return undefined;
-  return plateLabel(template?.liveSources?.sources, plateId);
+  const number = plateNumber(template?.liveSources?.sources, plateId);
+  return number === undefined
+    ? undefined
+    : (localize?.('Plate {number}', { number }) ?? `Plate ${String(number)}`);
 }
 
 /**
@@ -239,11 +258,10 @@ function lowerFirst(sentence: string): string {
 
 /**
  * The line as rendered. Golden rule 11: the row's name and the source's name are OPERATOR DATA
- * (Persian as often as not), so each is isolated in its own `<bdi>`; the line itself is LTR
- * chrome, so the English clause is never flipped by the name beside it.
+ * is Persian as often as not), so each is isolated in its own `<bdi>`; the line uses the
+ * action feedback language and direction.
  */
 export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Element {
-  const t = useFeedbackText();
   if (line.playoutWords !== undefined) {
     // The row and the Playout's sentence are both data, each isolated; only `: ` is chrome.
     return (
@@ -281,7 +299,7 @@ export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Elemen
         </>
       )}
       {': '}
-      <bdi>{t(line.clause)}</bdi>
+      <bdi>{line.clause}</bdi>
     </>
   );
 }

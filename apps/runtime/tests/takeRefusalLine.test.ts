@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import {
   takeRefusalChannels,
   takeRefusalLine,
@@ -25,6 +26,23 @@ const OWNERS_CASE = {
 };
 
 describe('the line', () => {
+  it.each(['fa', 'ar'] as const)(
+    'uses %s feedback for the row and tooltip and keeps the designated input',
+    (locale) => {
+      setLanguage('interface', 'en');
+      setLanguage('feedback', locale);
+      try {
+        const line = takeRefusalLine('Bed 59', OWNERS_CASE);
+        expect(line.clause).toMatch(/\p{Script=Arabic}/u);
+        expect(line.text).toContain(line.clause);
+        expect(line.text).toContain('DeckLink 1');
+        expect(line.text).not.toContain('the server has no such input');
+      } finally {
+        setLanguage('feedback', 'en');
+      }
+    },
+  );
+
   it('🔴 the owner’s case, word for word', () => {
     expect(takeRefusalLine('Bed 59', OWNERS_CASE).text).toBe(
       'Bed 59 · studio1 (DeckLink 1): the server has no such input, or it is in use.',

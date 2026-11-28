@@ -676,8 +676,14 @@ export function ownOutputTitle(channel: number): string {
 export function ownOutputWords(
   name: string,
   channel: number,
+  localize?: (source: string, values?: { channel: number }) => string,
 ): { readonly name: string; readonly rest: string } {
-  return { name, rest: ` is the own output of CH ${String(channel)} (would loop).` };
+  return {
+    name,
+    rest:
+      localize?.(' is the own output of CH {channel} (would loop).', { channel }) ??
+      ` is the own output of CH ${String(channel)} (would loop).`,
+  };
 }
 
 /** The refusal code a take, a switch or a swap carries for an input that would loop (`B-298`). */
@@ -704,8 +710,14 @@ export const PLAYLIST_AUDIO_LOCKED_REASON = 'Programme sound is already on air';
 export function notShowableWords(
   name: string,
   channel: number,
+  localize?: (source: string, values?: { channel: number }) => string,
 ): { readonly name: string; readonly rest: string } {
-  return { name, rest: ` can't be shown on CH ${String(channel)}.` };
+  return {
+    name,
+    rest:
+      localize?.(" can't be shown on CH {channel}.", { channel }) ??
+      ` can't be shown on CH ${String(channel)}.`,
+  };
 }
 
 /**
@@ -719,29 +731,37 @@ export function notShowableWords(
  *
  * ONE spelling, for the bridge's refusal message and the console's row line alike.
  */
-export function unseatableWords(source: {
-  readonly name: string;
-  readonly origin?: 'input' | 'media' | undefined;
-  readonly status?: SourceDefinition['status'];
-  readonly departed?: true | undefined;
-  readonly reason?: string | undefined;
-}): { readonly name: string; readonly rest: string } {
+export function unseatableWords(
+  source: {
+    readonly name: string;
+    readonly origin?: 'input' | 'media' | undefined;
+    readonly status?: SourceDefinition['status'];
+    readonly departed?: true | undefined;
+    readonly reason?: string | undefined;
+  },
+  localize?: (source: string, values?: { reason: string }) => string,
+): { readonly name: string; readonly rest: string } {
   if (source.status === 'unavailable' && source.departed === true) {
-    return {
-      name: source.name,
-      rest:
-        source.origin === 'media'
-          ? ' is not available in the Playout right now.'
-          : " is not in the Playout's input list.",
-    };
+    const rest =
+      source.origin === 'media'
+        ? ' is not available in the Playout right now.'
+        : " is not in the Playout's input list.";
+    return { name: source.name, rest: localize?.(rest) ?? rest };
   }
   if (source.status === 'unavailable') {
+    const fallback = 'the Playout reports it so.';
+    const reason = source.reason ?? localize?.(fallback) ?? fallback;
     return {
       name: source.name,
-      rest: ` is unavailable: ${source.reason ?? 'the Playout reports it so.'}`,
+      rest: localize?.(' is unavailable: {reason}', { reason }) ?? ` is unavailable: ${reason}`,
     };
   }
-  return { name: source.name, rest: ` cannot be played: ${source.reason ?? 'it is not usable.'}` };
+  const fallback = 'it is not usable.';
+  const reason = source.reason ?? localize?.(fallback) ?? fallback;
+  return {
+    name: source.name,
+    rest: localize?.(' cannot be played: {reason}', { reason }) ?? ` cannot be played: ${reason}`,
+  };
 }
 
 /** {@link unseatableWords} as one line: `“name” clause`. */

@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { localeDirection, useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
 import { useRef, useState } from 'react';
 import { FolderOpen, Image as ImageIcon } from 'lucide-react';
 import {
@@ -67,6 +67,8 @@ export function ImageFieldControl({
     : authoredPictures[assetId];
   const uploadInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const localizeFeedback = useFeedbackText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const [pickerOpen, setPickerOpen] = useState(false);
   const authoredOptions = field.assetOptions ?? [];
   const selectedOption = authoredOptions.find((option) => option.assetId === assetId);
@@ -133,8 +135,8 @@ export function ImageFieldControl({
         </>
       )}
       {error !== null && (
-        <span className="cg-field-refusal" role="alert">
-          {error}
+        <span className="cg-field-refusal" role="alert" dir={feedbackDirection}>
+          {localizeFeedback(error)}
         </span>
       )}
       {pickerOpen && (

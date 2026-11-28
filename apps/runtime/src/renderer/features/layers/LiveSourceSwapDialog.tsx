@@ -1,4 +1,5 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useUiText } from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState, useSyncExternalStore } from 'react';
@@ -77,7 +78,7 @@ export interface LiveSourceSwapDialogProps {
   onSwap: (
     plateId: string,
     sourceId: string | null,
-  ) => Promise<{ ok: boolean; message?: string | undefined }>;
+  ) => Promise<{ ok: boolean; reason?: string | undefined; message?: string | undefined }>;
   onClose: () => void;
 }
 
@@ -114,9 +115,16 @@ export function LiveSourceSwapDialog({
     setRefusal(null);
     // The empty option is REVERT, not "no source": it puts the plate back on the
     // template's assignment, which is the way out of an emergency patch.
-    void onSwap(plateId, value === '' ? null : value).then((res) => {
-      if (!res.ok) setRefusal(res.message ?? 'The swap was refused.');
-    });
+    void onSwap(plateId, value === '' ? null : value).then(
+      (res) => {
+        if (!res.ok) {
+          setRefusal(
+            refusalFeedback({ code: res.reason, message: res.message }, 'The swap was refused.'),
+          );
+        }
+      },
+      (error: unknown) => setRefusal(feedbackFailure(error, 'The swap was refused.')),
+    );
   };
 
   return (

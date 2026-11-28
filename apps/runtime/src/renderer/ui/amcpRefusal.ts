@@ -1,3 +1,5 @@
+import { englishFeedback } from '../i18n/locale.js';
+
 /**
  * 🔴 `FIELD-FIXES-01` A — **THE ONE PLACE AN AMCP FAILURE BECOMES THE OPERATOR'S WORDS.** Every
  * surface that has to say why CasparCG refused something asks here: `errorCodeMessage` (the
@@ -116,49 +118,47 @@ export function amcpCommandFacts(command: string | undefined): AmcpCommandFacts 
 export function amcpRefusalWords(
   errorCode: string | undefined,
   command?: string,
+  localize = englishFeedback,
 ): AmcpRefusalWords | null {
   const code = amcpReplyCode(errorCode);
   if (code === null) return null;
   const facts = amcpCommandFacts(command);
+  const same = (source: string, values?: Parameters<typeof localize>[1]): AmcpRefusalWords => {
+    const sentence = localize(source, values);
+    return { sentence, clause: sentence.charAt(0).toLowerCase() + sentence.slice(1) };
+  };
 
   if (facts.decklink !== null && (code === 403 || code === 404)) {
-    return words(
-      `The server has no DeckLink input ${String(facts.decklink)}, or it is in use.`,
-      'the server has no such input, or it is in use.',
-    );
+    return {
+      sentence: localize('The server has no DeckLink input {device}, or it is in use.', {
+        device: facts.decklink,
+      }),
+      clause: localize('the server has no such input, or it is in use.'),
+    };
   }
   if (code === 404 && facts.file !== null) {
-    return same(`the server cannot find the file ${facts.file}.`);
+    return same('The server cannot find the file {file}.', { file: facts.file });
   }
   // `PLAYOUT-SOURCES-01` §1.E — a refused stream is named by its SOURCE on the row's line, never by
   // its address here.
-  if (code === 404 && facts.stream) return same('the server could not open the stream.');
-  if (code === 404 && facts.cgAdd) return same('the server could not load the graphic.');
+  if (code === 404 && facts.stream) return same('The server could not open the stream.');
+  if (code === 404 && facts.cgAdd) return same('The server could not load the graphic.');
   if (code === 400) {
     return facts.channel === null
-      ? same('the server did not understand this command.')
-      : same(
-          `the server has no channel ${String(facts.channel)}, or did not understand this command.`,
-        );
+      ? same('The server did not understand this command.')
+      : same('The server has no channel {channel}, or did not understand this command.', {
+          channel: facts.channel,
+        });
   }
   if (code === 401) {
     return facts.channel === null
-      ? same('the server has no such channel.')
-      : same(`the server has no channel ${String(facts.channel)}.`);
+      ? same('The server has no such channel.')
+      : same('The server has no channel {channel}.', { channel: facts.channel });
   }
-  if (code === 402 || code === 403) return same('the server refused a setting in this command.');
-  if (code === 404) return same('the server cannot find what this command names.');
+  if (code === 402 || code === 403) return same('The server refused a setting in this command.');
+  if (code === 404) return same('The server cannot find what this command names.');
   if (code === 503)
-    return same('the server refused this command: another client holds the channel.');
-  if (code >= 500) return same('the server failed while running this command.');
-  return same('the server refused this command.');
-}
-
-function words(sentence: string, clause: string): AmcpRefusalWords {
-  return { sentence, clause };
-}
-
-/** One fact, as a clause and as the sentence that opens with it. */
-function same(clause: string): AmcpRefusalWords {
-  return { sentence: clause.charAt(0).toUpperCase() + clause.slice(1), clause };
+    return same('The server refused this command: another client holds the channel.');
+  if (code >= 500) return same('The server failed while running this command.');
+  return same('The server refused this command.');
 }

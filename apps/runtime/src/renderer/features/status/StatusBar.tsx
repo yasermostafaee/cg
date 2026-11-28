@@ -1,5 +1,5 @@
 import { connectionCheckText } from '../firstRun/connectionCheckText.js';
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, useUiText } from '../../i18n/locale.js';
 import {
   PLAYOUT_ENGINE_NAME,
   playoutEngineWording,
@@ -398,7 +398,7 @@ export function StatusBar({
       onClick={() =>
         void windowFullscreen
           .toggle()
-          .catch(() => reportCommandNotice('Fullscreen is unavailable.', document))
+          .catch(() => reportCommandNotice(feedback('Fullscreen is unavailable.'), document))
       }
     >
       <Icon icon={windowFullscreen.active ? Minimize : Maximize} />

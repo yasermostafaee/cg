@@ -4,6 +4,7 @@ import {
   UNATTRIBUTED_ACTOR,
   type TemplateAct,
 } from '@cg/shared-ipc';
+import { feedback, feedbackLocale } from '../../i18n/locale.js';
 import { isolateText } from '../../ui/OperatorNames.js';
 import { displayLabel } from './templateName.js';
 
@@ -113,9 +114,18 @@ export function noteOwnRemoval(templateId: string, channel: number | undefined):
  */
 export function removedElsewhereLine(act: TemplateAct): string {
   const name = displayLabel(act);
-  const what = name === undefined ? 'A template' : `“${isolateText(name)}”`;
+  const label =
+    name === undefined ? undefined : feedbackLocale() === 'en' ? isolateText(name) : name;
   const nobody = [CONSOLE_ACTOR, UNATTRIBUTED_ACTOR, TEMPLATE_ACTOR].includes(act.actor);
-  return `${what} was removed on another console${nobody ? '' : ` by ${isolateText(act.actor)}`}.`;
+  const user = feedbackLocale() === 'en' ? isolateText(act.actor) : act.actor;
+  if (label === undefined) {
+    return nobody
+      ? feedback('A template was removed on another console.')
+      : feedback('A template was removed on another console by {user}.', { user });
+  }
+  return nobody
+    ? feedback('“{name}” was removed on another console.', { name: label })
+    : feedback('“{name}” was removed on another console by {user}.', { name: label, user });
 }
 
 /** Tests only: forget every mark, removal, listener and subscription. */

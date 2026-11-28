@@ -4,6 +4,7 @@ import {
   type DelimiterOption,
 } from '@cg/shared-ipc';
 import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../../shared/bridgeSkew.js';
+import { feedback, feedbackFailure, feedbackProblem } from '../../i18n/locale.js';
 
 /**
  * R-034 — the renderer's view of the station's delimiter list.
@@ -150,7 +151,7 @@ export async function resetDelimiters(): Promise<string | null> {
 async function commit(next: DelimiterOption[]): Promise<string | null> {
   try {
     const res = await window.cg.delimiters.set({ delimiters: next });
-    if (!res.ok) return res.message ?? 'The delimiter list could not be saved.';
+    if (!res.ok) return feedbackProblem(res.message, 'The delimiter list could not be saved.');
     publish(next);
     return null;
   } catch (err) {
@@ -180,9 +181,12 @@ function describeCommitFailure(err: unknown): string {
     What stays is the sentence's own tail — what a skewed bridge costs THIS feature.
   */
   if (isBridgeSkewMessage(message)) {
-    return `${BRIDGE_SKEW_MESSAGE} Delimiters can still be selected, but not changed.`;
+    return [
+      feedback(BRIDGE_SKEW_MESSAGE),
+      feedback('Delimiters can still be selected, but not changed.'),
+    ].join(' ');
   }
-  return message === '' ? 'The delimiter list could not be saved.' : message;
+  return feedbackFailure(err, 'The delimiter list could not be saved.');
 }
 
 /** Test seam — restore the pre-boot state. */

@@ -1,5 +1,6 @@
 import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { structuredRowsXlsxToCsv } from '@cg/vcg-format';
+import { feedback, feedbackProblem } from '../../i18n/locale.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { effectiveValue, stageFieldBatch, valueAt, type FieldPath } from './draftStore.js';
 import { contentToFieldValue, type FromFileFieldKind } from './fromFileContent.js';
@@ -46,9 +47,12 @@ async function readCurrentValue(
   } catch (err) {
     if (fromFileState(itemId, path)?.source !== source) return null;
     const reason = err instanceof Error ? err.message : String(err);
-    const message = `Could not read “${source.name}” — the current value is kept. (${reason})`;
+    const message = feedback('Could not read “{name}” — the current value is kept. ({reason})', {
+      name: source.name,
+      reason: feedbackProblem(reason, 'Could not read the file.'),
+    });
     setFromFileError(itemId, path, message);
-    reportCommandError(message);
+    reportCommandError(message, { detail: reason });
     return null;
   }
   if (fromFileState(itemId, path)?.source !== source) return null;
@@ -63,9 +67,12 @@ async function readCurrentValue(
     return value;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    const message = `Could not use “${source.name}” — the current value is kept. (${reason})`;
+    const message = feedback('Could not use “{name}” — the current value is kept. ({reason})', {
+      name: source.name,
+      reason: feedbackProblem(reason, 'The file data is not valid.'),
+    });
     setFromFileError(itemId, path, message);
-    reportCommandError(message);
+    reportCommandError(message, { detail: reason });
     return null;
   }
 }
@@ -117,10 +124,13 @@ export async function stageFromFile(
         : value;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    const source = fromFileState(itemId, targetPath)?.source.name ?? 'file';
-    const message = `Could not use “${source}” — the current value is kept. (${reason})`;
+    const source = fromFileState(itemId, targetPath)?.source.name ?? feedback('file');
+    const message = feedback('Could not use “{name}” — the current value is kept. ({reason})', {
+      name: source,
+      reason: feedbackProblem(reason, 'The file data is not valid.'),
+    });
     setFromFileError(itemId, targetPath, message);
-    reportCommandError(message);
+    reportCommandError(message, { detail: reason });
     return false;
   }
   stageFieldBatch(

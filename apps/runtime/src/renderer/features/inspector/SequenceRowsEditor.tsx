@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, feedbackFailure, feedbackProblem, useUiText } from '../../i18n/locale.js';
 import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   CircleCheck,
@@ -563,9 +563,12 @@ function SequenceRowsFileControl({
         setFromFileError(item.itemId, path, null);
       } catch (cause) {
         const reason = cause instanceof Error ? cause.message : String(cause);
-        const message = `Could not reload “${source.name}”: ${reason}`;
+        const message = feedback('Could not reload “{name}”: {reason}', {
+          name: source.name,
+          reason: feedbackProblem(reason, 'Could not read the file.'),
+        });
         setFromFileError(item.itemId, path, message);
-        reportCommandError(message);
+        reportCommandError(message, { detail: reason });
       }
     },
     [item.itemId, onRows, path, rows, set.field.itemFields],
@@ -625,7 +628,7 @@ function SequenceRowsFileControl({
         schemaSignature: currentSchemaSignature,
       });
     } catch (cause) {
-      reportCommandError(cause instanceof Error ? cause.message : String(cause));
+      reportCommandError(feedbackFailure(cause, 'Could not save the workbook.'));
     }
   };
 
@@ -794,7 +797,7 @@ export function SequenceRowsEditor({
     try {
       stageRows(item, set, next);
     } catch (cause) {
-      reportCommandError(cause instanceof Error ? cause.message : String(cause));
+      reportCommandError(feedbackFailure(cause, 'Could not update the page rows.'));
     }
   };
 

@@ -1,5 +1,11 @@
 import { connectionCheckText } from './connectionCheckText.js';
-import { useUiText } from '../../i18n/locale.js';
+import {
+  feedbackFailure,
+  feedbackProblem,
+  localeDirection,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import { useEffect, useRef, useState } from 'react';
 import { cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -89,6 +95,7 @@ export function LocalBridgeHelp({
   onFixed: () => void;
 }): JSX.Element | null {
   const localizeUi = useUiText();
+  const messageDirection = localeDirection(useLanguages().feedback);
   const [state, setState] = useState<LocalBridgeState | null>(null);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
@@ -113,13 +120,17 @@ export function LocalBridgeHelp({
   const act = async (offer: NonNullable<LocalBridgeLine['offer']>): Promise<void> => {
     setBusy(true);
     setSaid(null);
-    const outcome = await window.cg.setup.localBridgeAct(
-      offer.action,
-      offer.action === 'free' ? offer.pid : undefined,
-    );
+    const words = await window.cg.setup
+      .localBridgeAct(offer.action, offer.action === 'free' ? offer.pid : undefined)
+      .then(
+        (outcome) => {
+          const line = outcomeLine(outcome);
+          return line === null ? null : feedbackProblem(line, 'CG Bridge did not start.');
+        },
+        (error: unknown) => feedbackFailure(error, 'CG Bridge did not start.'),
+      );
     if (!alive.current) return;
     setBusy(false);
-    const words = outcomeLine(outcome);
     setSaid(words);
     await read();
     if (words === null) onFixed();
@@ -144,8 +155,8 @@ export function LocalBridgeHelp({
         </div>
       )}
       {said !== null && (
-        <div style={styles.line} role="status" data-local-bridge-outcome="">
-          {connectionCheckText(said, localizeUi)}
+        <div style={styles.line} role="status" data-local-bridge-outcome="" dir={messageDirection}>
+          {said}
         </div>
       )}
     </div>

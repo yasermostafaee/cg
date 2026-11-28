@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { feedback, setLanguage } from '../src/renderer/i18n/locale.js';
 import { amcpCommandFacts, amcpRefusalWords } from '../src/renderer/ui/amcpRefusal.js';
 import { errorCodeMessage } from '../src/renderer/ui/errorCodeMessage.js';
 
@@ -125,6 +126,53 @@ describe('every surface asks the same mapping', () => {
     expect(errorCodeMessage('amcp-403')).not.toMatch(/AMCP/i);
     // CONTROL — the codes with their own sentences keep them.
     expect(errorCodeMessage('amcp-timeout')).toMatch(/did not answer the command in time/);
+  });
+
+  it.each([
+    ['fa', 'سرور یکی از تنظیمات این فرمان را نپذیرفت.'],
+    ['ar', 'رفض الخادم أحد إعدادات هذا الأمر.'],
+  ] as const)('covers the server refusal mappings in %s feedback', (locale, invalidSetting) => {
+    setLanguage('feedback', locale);
+    try {
+      expect(errorCodeMessage('amcp-402', feedback)).toBe(invalidSetting);
+      expect(errorCodeMessage('amcp-403', feedback)).toBe(invalidSetting);
+
+      const refusals = [
+        ['amcp-400', 'CG 3-59 ADD 0 "http://x/template/a" 0 "…"'],
+        ['amcp-400', 'VERSION'],
+        ['amcp-401', 'MIXER 3-60 VOLUME 1'],
+        ['amcp-401', undefined],
+        ['amcp-403', DECKLINK_1],
+        ['amcp-404', 'PLAY 2-60 "studio-loop.mp4" LOOP'],
+        ['amcp-404', 'PLAY 2-60 "rtmp://feed.local/live"'],
+        ['amcp-404', 'CG 2-59 ADD 0 "http://x/template/a" 0 "…"'],
+        ['amcp-404', 'REMOVE 2 SCREEN'],
+        ['amcp-410', undefined],
+        ['amcp-500', undefined],
+        ['amcp-503', 'CG 2-59 PLAY 0'],
+      ] as const;
+      for (const [code, command] of refusals) {
+        const words = amcpRefusalWords(code, command, feedback);
+        const english = amcpRefusalWords(code, command);
+        expect(words?.sentence.replace(/[\u2068\u2069]/g, ''), command ?? code).not.toBe(
+          english?.sentence,
+        );
+        expect(words?.clause.replace(/[\u2068\u2069]/g, ''), command ?? code).not.toBe(
+          english?.clause,
+        );
+      }
+      expect(amcpRefusalWords('amcp-403', DECKLINK_1, feedback)?.sentence).toContain(
+        '\u20681\u2069',
+      );
+      expect(
+        amcpRefusalWords('amcp-404', 'PLAY 2-60 "studio-loop.mp4" LOOP', feedback)?.sentence,
+      ).toContain('\u2068studio-loop.mp4\u2069');
+      expect(
+        amcpRefusalWords('amcp-404', 'PLAY 2-60 "rtmp://feed.local/live"', feedback)?.sentence,
+      ).not.toContain('rtmp://');
+    } finally {
+      setLanguage('feedback', 'en');
+    }
   });
 });
 

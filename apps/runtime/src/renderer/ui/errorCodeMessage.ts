@@ -13,7 +13,13 @@
 import { REMOVE_ON_AIR_CODE, TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
 import type { MissingPlateSources } from '@cg/shared-ipc';
 import { REMOVE_ON_AIR_REASON, takeOnAirReason } from '../features/layers/layerRowActions.js';
-import { feedback, feedbackLocale } from '../i18n/locale.js';
+import {
+  englishFeedback,
+  feedback,
+  feedbackLocale,
+  feedbackProblem,
+  knownFeedback,
+} from '../i18n/locale.js';
 import { amcpRefusalWords } from './amcpRefusal.js';
 
 const MESSAGES: Readonly<Record<string, string>> = {
@@ -98,9 +104,6 @@ const MESSAGES: Readonly<Record<string, string>> = {
     the context menu on a stale render, the template picker's orphan remedy, a race.
   */
   [REMOVE_ON_AIR_CODE]: REMOVE_ON_AIR_REASON,
-  // `FIELD-FIXES-01-A` Decision 2 — the row's own verb says it in the row's name
-  // (`takeOnAirReason`); this is the same sentence for a surface that has no row to name.
-  [TAKE_ON_AIR_CODE]: takeOnAirReason('That row'),
   'upcoming-programs-unapplied': 'Apply the upcoming programs before Take.',
   'upcoming-programs-on-air': 'Stop the row before preparing its upcoming programs.',
   'upcoming-programs-invalid': 'The upcoming program list is not valid for this template.',
@@ -243,7 +246,7 @@ export function missingPlateSourcesFeedback(
 ): string | undefined {
   if (code !== 'live-source-unassigned') return undefined;
   const locale = feedbackLocale();
-  if (locale === 'en' && message) return message;
+  if (locale === 'en' && message?.trim()) return message;
   if (issues === undefined || (issues.unassigned.length === 0 && issues.stale.length === 0)) {
     // Older Bridges give the details in English only.
     return locale === 'en'
@@ -273,16 +276,45 @@ export function missingPlateSourcesFeedback(
 }
 
 /** A human message for a refusal, or `null` when there is no code to explain. */
-export function errorCodeMessage(errorCode: string | undefined): string | null {
+export function errorCodeMessage(
+  errorCode: string | undefined,
+  localize = englishFeedback,
+): string | null {
   if (errorCode === undefined || errorCode === '') return null;
-  const known = MESSAGES[errorCode];
-  if (known !== undefined) return known;
+  if (errorCode === TAKE_ON_AIR_CODE) return takeOnAirReason(localize('That row'), localize);
+  const known = Object.hasOwn(MESSAGES, errorCode) ? MESSAGES[errorCode] : undefined;
+  if (known !== undefined) return localize(known);
   /*
     🔴 `FIELD-FIXES-01` A — a server reply (`amcp-403` et al) in the operator's words, from the ONE
     mapping (`amcpRefusal.ts`). The code and the command go to the log; "AMCP 403" never reaches
     this sentence. With no command to tailor it by, each code says its generic line.
   */
-  const amcp = amcpRefusalWords(errorCode);
+  const amcp = amcpRefusalWords(errorCode, undefined, localize);
   if (amcp !== null) return amcp.sentence;
-  return `Not accepted (${errorCode}).`;
+  return localize('Not accepted ({code}).', { code: errorCode });
+}
+
+/** Select operator wording for a structured refusal. Technical details remain with its reply. */
+export function refusalFeedback(
+  {
+    code,
+    message,
+    missingPlateSources,
+  }: {
+    code?: string | undefined;
+    message?: string | undefined;
+    missingPlateSources?: MissingPlateSources | undefined;
+  },
+  fallback = 'Not accepted.',
+): string {
+  const assignment = missingPlateSourcesFeedback(code, message, missingPlateSources);
+  if (assignment !== undefined) return assignment;
+  const mapped = errorCodeMessage(code, feedback);
+  if (mapped !== null && prefersOwnMessage(code)) return mapped;
+  if (message !== undefined && message.trim() !== '') {
+    if (feedbackLocale() === 'en') return feedback(message);
+    const localized = knownFeedback(message.trim());
+    if (localized !== undefined) return localized;
+  }
+  return mapped ?? feedbackProblem(undefined, fallback);
 }

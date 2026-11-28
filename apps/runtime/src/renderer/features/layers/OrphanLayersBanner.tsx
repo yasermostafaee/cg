@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, useUiText } from '../../i18n/locale.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { useMemo } from 'react';
 import {
@@ -277,7 +277,7 @@ export function OrphanLayersBanner({
       });
       if (!ok) return;
       runCommand(
-        localizeUi('Clear layer {layer}', { layer: name }),
+        feedback('Clear layer {layer}', { layer: name }),
         window.cg.layers
           .clear({ channel: o.channel, layer: o.layer })
           .then((r) => ({ accepted: r.ok })),
@@ -306,7 +306,7 @@ export function OrphanLayersBanner({
       });
       if (!ok) return;
       runCommand(
-        `Clear layers ${names.join(', ')}`,
+        feedback('Clear layers {layers}', { layers: names.join(', ') }),
         (async () => {
           let accepted = true;
           for (const o of targets) {

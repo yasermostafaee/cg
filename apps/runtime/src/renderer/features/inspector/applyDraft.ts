@@ -11,8 +11,8 @@ import {
 import { withChannelDefaults, type TemplateInfo } from '@cg/shared-ipc';
 import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { errorCodeMessage, missingPlateSourcesFeedback } from '../../ui/errorCodeMessage.js';
-import { feedback } from '../../i18n/locale.js';
+import { refusalFeedback } from '../../ui/errorCodeMessage.js';
+import { feedback, feedbackFailure, feedbackProblem } from '../../i18n/locale.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
@@ -73,9 +73,18 @@ export function applyDraft(
   const sent = snapshotDraft(item.itemId);
   const upcoming = upcomingProgramsDraftOf(item.itemId);
   // Check the whole draft before any part of Update can change the row.
-  const first = template === undefined ? undefined : operatorFieldRefusals(template, sent)[0];
+  const first =
+    template === undefined
+      ? undefined
+      : operatorFieldRefusals(template, sent, undefined, feedback)[0];
   if (first !== undefined) {
-    reportCommandError(`Not sent: ${first.label} — ${first.line}`);
+    reportCommandError(
+      feedback('Not sent: {field} — {reason}', {
+        field: first.label,
+        reason: first.line,
+      }),
+      { code: first.code },
+    );
     return Promise.resolve({ accepted: false, errorCode: first.code });
   }
   const appliedPosition = appliedPositionOf(item, template?.liveSources?.defaultPosition);
@@ -89,7 +98,7 @@ export function applyDraft(
       (raw) => raw.trim() === '' || !Number.isFinite(Number(raw)),
     )
   ) {
-    reportCommandError('Enter valid X and Y offsets to update the on-air position.');
+    reportCommandError(feedback('Enter valid X and Y offsets to update the on-air position.'));
     return Promise.resolve({ accepted: false, errorCode: 'invalid-position' });
   }
   const plates = snapshotPlateDraft(item.itemId);
@@ -224,14 +233,18 @@ export function applyDraft(
             ...(transition !== undefined && { transition }),
           });
           if (!placed.accepted) {
-            reportCommandError(placed.message ?? 'CG Bridge could not apply the frame placement.');
+            reportCommandError(
+              refusalFeedback(
+                { code: placed.errorCode, message: placed.message },
+                'CG Bridge could not apply the frame placement.',
+              ),
+              { code: placed.errorCode ?? null, detail: placed.message ?? null },
+            );
             return placed;
           }
           frame.accept();
         } catch (error) {
-          reportCommandError(
-            error instanceof Error ? error.message : 'Frame placement update failed.',
-          );
+          reportCommandError(feedbackFailure(error, 'Frame placement update failed.'));
           return { accepted: false };
         }
       }
@@ -242,14 +255,18 @@ export function applyDraft(
             placements: masks.placements,
           });
           if (!placed.accepted) {
-            reportCommandError(placed.message ?? 'CG Bridge could not apply the mask placement.');
+            reportCommandError(
+              refusalFeedback(
+                { code: placed.errorCode, message: placed.message },
+                'CG Bridge could not apply the mask placement.',
+              ),
+              { code: placed.errorCode ?? null, detail: placed.message ?? null },
+            );
             return placed;
           }
           masks.accept();
         } catch (error) {
-          reportCommandError(
-            error instanceof Error ? error.message : 'Mask placement update failed.',
-          );
+          reportCommandError(feedbackFailure(error, 'Mask placement update failed.'));
           return { accepted: false };
         }
       }
@@ -273,9 +290,9 @@ async function prepareUpcomingPrograms(
       return true;
     }
     reportCommandError(
-      feedback(
-        errorCodeMessage(result.errorCode) ??
-          'The upcoming program list is not valid for this template.',
+      refusalFeedback(
+        { code: result.errorCode },
+        'The upcoming program list is not valid for this template.',
       ),
     );
   } catch {
@@ -316,11 +333,12 @@ async function applyPreviewCropDrafts(
       crop.accept('guide');
       return true;
     }
-    reportCommandError(result.message ?? 'CG Bridge did not confirm the preview framing update.');
-  } catch (error) {
     reportCommandError(
-      error instanceof Error ? error.message : 'The preview framing update failed.',
+      feedbackProblem(result.message, 'CG Bridge did not confirm the preview framing update.'),
+      { detail: result.message ?? null },
     );
+  } catch (error) {
+    reportCommandError(feedbackFailure(error, 'The preview framing update failed.'));
   }
   return false;
 }
@@ -379,17 +397,17 @@ function sendTiming(
         if (patch.passes !== undefined) recordSentPasses(item.itemId);
         return true;
       }
-      /*
-        `setPassTiming` answers with a SENTENCE of its own (unlike `setPosition`, which carries
-        a reason code), so it is reported as written rather than re-worded here: the bridge
-        knows whether CasparCG refused the command or the row left the stack, and this side
-        does not.
-      */
-      reportCommandError(res.message ?? 'The timing change was not accepted.');
+      reportCommandError(
+        refusalFeedback(
+          { code: res.reason, message: res.message },
+          'The timing change was not accepted.',
+        ),
+        { code: res.reason ?? null, detail: res.message ?? null },
+      );
       return false;
     },
     (err: unknown) => {
-      reportCommandError(err instanceof Error ? err.message : 'The timing change failed.');
+      reportCommandError(feedbackFailure(err, 'The timing change failed.'));
       return false;
     },
   );
@@ -427,11 +445,14 @@ function sendPosition(item: StackItemState, applied: Position): Promise<boolean>
           old `Apply position` button read — the message the operator saw before this move
           is the message they see now.
         */
-        reportCommandError(errorCodeMessage(res.reason) ?? 'The position was not accepted.');
+        reportCommandError(
+          refusalFeedback({ code: res.reason }, 'The position was not accepted.'),
+          { code: res.reason ?? null },
+        );
         return false;
       },
       (err: unknown) => {
-        reportCommandError(err instanceof Error ? err.message : 'The position could not be sent.');
+        reportCommandError(feedbackFailure(err, 'The position could not be sent.'));
         return false;
       },
     );
@@ -577,15 +598,20 @@ function sendUpdate(
         // BM-2 — the refusal's OWN sentence wins when it has one: a binding refusal names the
         // two frames and the look, and no fixed code can carry that.
         reportCommandError(
-          missingPlateSourcesFeedback(res.errorCode, res.message, res.missingPlateSources) ??
-            res.message ??
-            errorCodeMessage(res.errorCode) ??
+          refusalFeedback(
+            {
+              code: res.errorCode,
+              message: res.message,
+              missingPlateSources: res.missingPlateSources,
+            },
             'Update was not accepted.',
+          ),
+          { code: res.errorCode ?? null, detail: res.message ?? null },
         );
         return res;
       },
       (err: unknown) => {
-        reportCommandError(err instanceof Error ? err.message : 'Update failed.');
+        reportCommandError(feedbackFailure(err, 'Update failed.'));
         throw err instanceof Error ? err : new Error('Update failed.');
       },
     );

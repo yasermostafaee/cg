@@ -1,11 +1,11 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useId, useRef, useState } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
-import { directionOf, OperatorNames } from '../../ui/OperatorNames.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
 import type { OperatorRowName } from '../../ui/operatorNaming.js';
 import { Popover } from '../../ui/Popover.js';
 import { isRowError } from '../stack/onAir.js';
@@ -41,6 +41,7 @@ export function RowErrorsBadge({ items, nameOf }: RowErrorsBadgeProps): JSX.Elem
 
 function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Element {
   const localizeUi = useUiText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const engineName = useEngineName();
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -86,7 +87,7 @@ function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Elemen
                     {name.layer !== null && ` · ${name.layer}`}
                   </span>
                   <span className="cg-row-errors__why" data-row-error-why="">
-                    <bdi dir={directionOf(why)}>{why}</bdi>
+                    <bdi dir={feedbackDirection}>{why}</bdi>
                   </span>
                   <AsyncButton
                     variant="neutral"
@@ -110,7 +111,7 @@ function reasonOf(item: StackItemState, rowName: string, engineName: string): st
   if (item.takeRefusal !== undefined)
     return takeRefusalLine(rowName, item.takeRefusal, { engineName }).clause;
   return playoutEngineWording(
-    errorCodeMessage(item.errorCode) ?? 'The last command was refused.',
+    errorCodeMessage(item.errorCode, feedback) ?? feedback('The last command was refused.'),
     engineName,
   );
 }

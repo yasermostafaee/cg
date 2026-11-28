@@ -99,6 +99,46 @@ test('shows the complete missing-source refusal in Persian with English chrome',
   expect(readable).not.toContain('this installation');
 });
 
+for (const scenario of [
+  { language: 'fa', message: 'سرور یکی از تنظیمات این فرمان را نپذیرفت.', details: 'جزئیات فنی' },
+  { language: 'ar', message: 'رفض الخادم أحد إعدادات هذا الأمر.', details: 'تفاصيل تقنية' },
+]) {
+  test(`shows the server's Update refusal in ${scenario.language} with English controls`, async ({
+    app,
+  }) => {
+    const { page } = app;
+    const layer = await app.importVcg('feedback.vcg', await buildValidVcg('tpl-feedback-update'));
+    await app.selectLayerRow(layer);
+    await app.layerRow(layer).getByRole('button', { name: 'PLAY', exact: true }).click();
+    const commit = app.inspector.locator('[data-inspector-commit]');
+    await expect(commit).toHaveText('Update on air');
+
+    await openGeneral(page);
+    await page.locator('#cg-feedback-language').selectOption(scenario.language);
+    await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+    const rawReply = 'The server refused a setting in this command.';
+    await page.evaluate((message) => {
+      window.cg.stack.update = async () => ({
+        accepted: false,
+        errorCode: 'amcp-402',
+        message,
+      });
+    }, rawReply);
+    const field = app.inspector.getByRole('textbox', { name: 'anchor' });
+    await field.fill('Changed field');
+    await commit.click();
+
+    const banner = page.locator('[data-refusal]').getByRole('alert');
+    await expect(banner.getByText(scenario.message, { exact: true })).toHaveCSS('direction', 'rtl');
+    await expect(banner.getByText(rawReply, { exact: false })).toBeHidden();
+    await banner.getByText(scenario.details, { exact: true }).click();
+    await expect(banner.getByText(rawReply, { exact: false })).toBeVisible();
+    await expect(field).toHaveValue('Changed field');
+  });
+}
+
 test('anchors PGM audio at the end of the strip as the console width and language change', async ({
   app,
 }) => {

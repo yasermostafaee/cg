@@ -190,6 +190,36 @@ describe('Inspector feedback is toast-only (#334)', () => {
 });
 
 describe('the applyDraft path toasts exactly ONCE', () => {
+  it.each(['fa', 'ar'] as const)(
+    'localizes the server setting refusal with English controls and %s feedback',
+    async (locale) => {
+      const messages: string[] = [];
+      const unsub = onCommandError((message) => messages.push(message));
+      const subject = itemWith();
+      setLanguage('interface', 'en');
+      setLanguage('feedback', locale);
+      try {
+        stubBridge({
+          update: async () => ({
+            accepted: false,
+            errorCode: 'amcp-403',
+            message: 'The server refused a setting in this command.',
+          }),
+        });
+        stageField(subject.itemId, ['title'], 'edited');
+        expect((await applyDraft(subject)).accepted).toBe(false);
+
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toMatch(/\p{Script=Arabic}/u);
+        expect(messages[0]).not.toMatch(/server|refused|403/i);
+      } finally {
+        clearDraft(subject.itemId);
+        setLanguage('feedback', 'en');
+        unsub();
+      }
+    },
+  );
+
   it('reports a missing-source refusal in the selected feedback language', async () => {
     const messages: string[] = [];
     const unsub = onCommandError((message) => messages.push(message));

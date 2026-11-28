@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { lookSwitchBanner } from '../src/renderer/features/layers/lookSwitch.js';
-import { setLanguage } from '../src/renderer/i18n/locale.js';
+import {
+  feedback,
+  FeedbackError,
+  feedbackProblem,
+  setLanguage,
+} from '../src/renderer/i18n/locale.js';
 import {
   AsyncButtonController,
+  asyncRejectionMessage,
   asyncResultMessage,
   type AsyncView,
 } from '../src/renderer/ui/asyncButtonController.js';
@@ -286,6 +292,49 @@ describe('asyncResultMessage — the shared button/menu wording', () => {
     const byCode = asyncResultMessage({ accepted: false, errorCode: 'live-source-unassigned' });
     expect(byCode).toContain('Sources');
   });
+
+  it.each([
+    ['fa', 'نمایش رمز عبور', 'سرور یکی از تنظیمات این فرمان را نپذیرفت.'],
+    ['ar', 'إظهار كلمة المرور', 'رفض الخادم أحد إعدادات هذا الأمر.'],
+  ] as const)(
+    'uses %s feedback independently of the interface and keeps raw diagnostics separate',
+    async (locale, passwordWording, refusedSetting) => {
+      setLanguage('interface', 'en');
+      setLanguage('feedback', locale);
+      try {
+        const raw = 'The engine returned an undocumented error payload.';
+        expect(feedback('Show password')).toBe(passwordWording);
+        expect(feedbackProblem('Show password')).toBe(passwordWording);
+        expect(asyncResultMessage({ accepted: false, message: raw })).toBe(
+          feedback('Not accepted.'),
+        );
+        expect(asyncRejectionMessage(new Error(raw))).toBe(feedback('Request failed.'));
+
+        const parameterized = new FeedbackError('Not accepted ({code}).', { code: 'future-code' });
+        expect(parameterized.message).toBe('Not accepted (future-code).');
+        expect(asyncRejectionMessage(parameterized)).toContain('\u2068future-code\u2069');
+        expect(asyncRejectionMessage(new FeedbackError(raw))).toBe(feedback('Request failed.'));
+        expect(asyncResultMessage({ accepted: false, operatorMessage: passwordWording })).toBe(
+          passwordWording,
+        );
+
+        const clock = new FakeClock();
+        const reports: unknown[] = [];
+        const ctrl = new AsyncButtonController({
+          onChange: vi.fn(),
+          schedule: clock.schedule,
+          onError: (message, details) => reports.push({ message, details }),
+        });
+        ctrl.press(async () => ({ accepted: false, errorCode: 'amcp-403', message: raw }));
+        await tick();
+        expect(reports).toEqual([
+          { message: refusedSetting, details: { code: 'amcp-403', detail: raw } },
+        ]);
+      } finally {
+        setLanguage('feedback', 'en');
+      }
+    },
+  );
 
   it.each([
     ['fa', 'منبع قاب 1 تعیین نشده است.', 'قاب 2 و قاب 3', 'دیگر در این ایستگاه در دسترس نیست.'],

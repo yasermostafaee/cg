@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { localeDirection, useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useRef, useState } from 'react';
 import { colors, cssVars } from '../../theme.js';
@@ -19,7 +19,7 @@ import {
   type ShownCheckLine,
 } from '../firstRun/firstRunStation.js';
 import { SetUpAgain } from '../shell/SetUpAgain.js';
-import { signInFailureLine } from './signInMessages.js';
+import { signInFailureLine, signInFeedback } from './signInMessages.js';
 
 /**
  * 🔴 `R-066` / `C-037` — **THE SIGN-IN, OVER THE LIVE STACK.**
@@ -128,6 +128,8 @@ export function SignInOverlay({
   reload?: () => void;
 }): JSX.Element | null {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const messageLocale = useLanguages().feedback;
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
   const [username, setUsername] = useState('');
@@ -166,7 +168,9 @@ export function SignInOverlay({
   const bridgeReason = auth.kind === 'signed-out' ? auth.reason : undefined;
   const message =
     error ?? (bridgeReason !== undefined ? { text: bridgeReason, marksField: false } : null);
-  const messageText = message === null ? null : playoutEngineWording(message.text, engineName);
+  const presented = message === null ? null : signInFeedback(message);
+  const messageText = presented === null ? null : playoutEngineWording(presented.text, engineName);
+  const originalLicence = message?.fromPlayout === true && messageLocale === 'en';
 
   /*
     The trap arms and disarms WITH the gate, exactly as `LockOverlay`'s does with the lock:
@@ -328,9 +332,15 @@ export function SignInOverlay({
         id="cg-signin-error"
         style={styles.error}
         role="status"
-        dir={message?.fromPlayout === true ? directionOf(message.text) : undefined}
+        dir={originalLicence ? directionOf(message.text) : localeDirection(messageLocale)}
       >
-        {message?.fromPlayout === true ? <bdi>{messageText}</bdi> : messageText}
+        {originalLicence ? <bdi>{messageText}</bdi> : messageText}
+        {presented?.technicalDetail !== undefined && (
+          <details>
+            <summary>{localizeFeedback('Technical details')}</summary>
+            <bdi>{presented.technicalDetail}</bdi>
+          </details>
+        )}
       </div>
     </SignInCard>
   );

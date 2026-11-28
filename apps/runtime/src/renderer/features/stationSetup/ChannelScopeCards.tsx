@@ -1,4 +1,10 @@
-import { useUiText } from '../../i18n/locale.js';
+import {
+  feedbackFailure,
+  feedbackProblem,
+  localeDirection,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import { useEffect, useState } from 'react';
 import type { ConnectionConfig, StationStray } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
@@ -127,6 +133,7 @@ export function useStrays(): readonly StationStray[] {
 /** j — On air on another channel. Absent when there is none. */
 export function StraysCard(): JSX.Element | null {
   const localizeUi = useUiText();
+  const messageDirection = localeDirection(useLanguages().feedback);
   const strays = useStrays();
   const { confirm, confirmDialog } = useConfirm();
   const [error, setError] = useState<string | null>(null);
@@ -151,9 +158,9 @@ export function StraysCard(): JSX.Element | null {
         casparChannel: stray.casparChannel,
         layer: stray.layer,
       });
-      if (!res.ok) setError(res.message ?? 'It was not taken off air.');
+      if (!res.ok) setError(feedbackProblem(res.message, 'It was not taken off air.'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(feedbackFailure(err, 'It was not taken off air.'));
     } finally {
       setBusy(null);
     }
@@ -188,7 +195,7 @@ export function StraysCard(): JSX.Element | null {
           );
         })}
         {error !== null && (
-          <div style={styles.error} role="status">
+          <div style={styles.error} role="status" dir={messageDirection}>
             {error}
           </div>
         )}

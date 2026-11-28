@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackProblem, useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { Move, RotateCcw } from 'lucide-react';
@@ -220,7 +220,10 @@ export function PreviewPanRow({
               cropMessage={
                 cropRead?.message === undefined
                   ? undefined
-                  : playoutEngineWording(cropRead.message, engineName)
+                  : playoutEngineWording(
+                      feedbackProblem(cropRead.message, 'Practice changes stay in Preview.'),
+                      engineName,
+                    )
               }
               guide={target !== undefined}
               onAir={onAir}
@@ -335,31 +338,33 @@ function PreviewPanDraft({
   const travelY = Math.max(0, 1 - crop.height);
   const horizontal = travelX > 1e-6;
   const vertical = travelY > 1e-6;
-  const instructions =
+  const instructions = localizeUi(
     horizontal && vertical
       ? 'Drag or use the arrow keys.'
       : horizontal
         ? 'Drag or use the left and right arrows.'
         : vertical
           ? 'Drag or use the up and down arrows.'
-          : 'The image fits this plate.';
-  const resizeHint = resizable ? ' Drag a corner to resize.' : '';
-  const updateHint = onAir
-    ? 'Press Update on air to apply this crop.'
-    : 'Press Update to save this crop for Take.';
-  const label = state === 'saved' && onAir ? 'Crop applied' : CROP_LABEL[state];
+          : 'The image fits this plate.',
+  );
+  const resizeHint = resizable ? ' ' + localizeUi('Drag a corner to resize.') : '';
+  const updateHint = localizeUi(
+    onAir ? 'Press Update on air to apply this crop.' : 'Press Update to save this crop for Take.',
+  );
+  const label = localizeUi(state === 'saved' && onAir ? 'Crop applied' : CROP_LABEL[state]);
   const measured =
     sourcePicture?.geometry !== undefined &&
     Math.abs(sourcePicture.aspect / sourceAspect - 1) < 1e-6;
-  const pictureHint =
+  const pictureHint = localizeUi(
     sourcePicture === undefined
       ? 'The guide uses bars.'
       : measured
         ? 'This is the measured source picture.'
-        : 'This is the available preview picture.';
+        : 'This is the available preview picture.',
+  );
   const description = guide
     ? `${instructions}${resizeHint} ${pictureHint} ${updateHint}`
-    : `${instructions}${resizeHint} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
+    : `${instructions}${resizeHint} ${localizeUi('Press Update to keep this practice crop in this console.')} ${cropMessage ?? localizeUi('Practice changes stay in Preview.')}`;
 
   function pointerFocus(origin: PointerOrigin, x: number, y: number): LiveCropFocus {
     const dx = x - origin.x;
@@ -438,12 +443,13 @@ function PreviewPanDraft({
         variant="ghost"
         className="cg-pan-draft__handle"
         aria-label={localizeUi('Pan {picture} in {plate}', {
-          picture:
+          picture: localizeUi(
             sourcePicture !== undefined
               ? 'source picture'
               : guide
                 ? 'crop guide'
                 : 'practice image',
+          ),
           plate: plateLabel,
         })}
         aria-disabled={blocked || (!horizontal && !vertical)}

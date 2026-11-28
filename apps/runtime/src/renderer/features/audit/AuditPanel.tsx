@@ -1,4 +1,4 @@
-import { useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
+import { localeDirection, useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
 import { writeFieldDigits } from '@cg/text-shaping';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -102,7 +102,7 @@ function outcomeTag(outcome: AuditEntry['outcome']): string {
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const localizeUi = useUiText();
   const localizeFeedback = useFeedbackText();
-  const { interface: locale } = useLanguages();
+  const { interface: locale, feedback: messageLocale } = useLanguages();
   const calendar = useAuditCalendar();
   const lunarAdjust = useLunarAdjustDays();
   const format: AuditCalendarFormat = { calendar, lunarAdjust, digits: AUDIT_DIGITS[locale] };
@@ -191,7 +191,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     cursor: AuditCursor | undefined,
     targetPage: number,
     selectFirst = false,
-  ): Promise<{ accepted: boolean; message?: string }> => {
+  ): Promise<{ accepted: boolean; operatorMessage?: string }> => {
     asked.current += 1;
     const ask = asked.current;
     setBusy(true);
@@ -238,7 +238,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     } catch (error) {
       if (ask !== asked.current) return { accepted: true };
       setRead({ kind: 'failed', detail: error instanceof Error ? error.message : String(error) });
-      return { accepted: false, message: localizeFeedback(READ_FAILED_TEXT) };
+      return { accepted: false, operatorMessage: localizeFeedback(READ_FAILED_TEXT) };
     } finally {
       if (ask === asked.current) setBusy(false);
     }
@@ -281,9 +281,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     return result;
   };
 
-  const refresh = (): Promise<{ accepted: boolean; message?: string }> => {
+  const refresh = (): Promise<{ accepted: boolean; operatorMessage?: string }> => {
     if (rangeError)
-      return Promise.resolve({ accepted: false, message: localizeFeedback(rangeMessage) });
+      return Promise.resolve({ accepted: false, operatorMessage: localizeFeedback(rangeMessage) });
     void loadTotal();
     return loadPage(cursors[pageIndex], pageIndex);
   };
@@ -554,16 +554,16 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         )}
       </div>
       {canDownload && savedLogPath !== undefined && (
-        <Notice
-          noticeRole="notice"
-          aria="status"
-          text={localizeUi('Audit logs saved')}
-          detail={savedLogPath}
-        />
+        <Notice noticeRole="notice" aria="status" text="Audit logs saved" detail={savedLogPath} />
       )}
       {rangeError && (
-        <p className="cg-audit-range-error" role="status" data-audit-range-error="">
-          {localizeUi(rangeMessage)}
+        <p
+          className="cg-audit-range-error"
+          role="status"
+          data-audit-range-error=""
+          dir={localeDirection(messageLocale)}
+        >
+          {localizeFeedback(rangeMessage)}
         </p>
       )}
       <div className="cg-audit-browser" data-audit-details-open={String(selected !== null)}>
@@ -659,18 +659,23 @@ function EmptyState({
   rangeError: boolean;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const { interface: locale } = useLanguages();
+  const localizeFeedback = useFeedbackText();
+  const { interface: locale, feedback: messageLocale } = useLanguages();
   const number = (value: number): string => writeFieldDigits(String(value), AUDIT_DIGITS[locale]);
   if (rangeError)
-    return <p className="cg-audit-empty">{localizeUi('Choose a possible date range.')}</p>;
+    return (
+      <p className="cg-audit-empty" dir={localeDirection(messageLocale)}>
+        {localizeFeedback('Choose a possible date range.')}
+      </p>
+    );
   if (read.kind === 'failed') {
     return (
       <div className="cg-audit-fault">
         <Notice
           noticeRole="refusal"
           aria="status"
-          text={localizeUi(READ_FAILED_TEXT)}
-          detail={read.detail}
+          text={READ_FAILED_TEXT}
+          technicalDetail={read.detail}
         />
       </div>
     );
@@ -684,8 +689,8 @@ function EmptyState({
         <Notice
           noticeRole="refusal"
           aria="status"
-          text={localizeUi('No audit record is configured, so nothing has been written.')}
-          detail={localizeUi('Audit recording is unavailable.')}
+          text="No audit record is configured, so nothing has been written."
+          detail="Audit recording is unavailable."
         />
       </div>
     );
@@ -696,13 +701,15 @@ function EmptyState({
         <Notice
           noticeRole="refusal"
           aria="status"
-          text={localizeUi(
+          text={localizeFeedback(
             health.errorCount === 1
               ? 'Some audit entries may be missing ({count} write failure).'
               : 'Some audit entries may be missing ({count} write failures).',
             { count: number(health.errorCount) },
           )}
-          detail={[health.lastError, health.path].filter((detail) => detail !== null).join(' — ')}
+          technicalDetail={[health.lastError, health.path]
+            .filter((detail) => detail !== null)
+            .join(' — ')}
         />
       </div>
     );

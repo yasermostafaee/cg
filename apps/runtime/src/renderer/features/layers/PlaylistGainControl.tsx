@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useState } from 'react';
 import {
   PLAYLIST_GAIN_MAX_DB,
@@ -83,7 +83,8 @@ function PlaylistGainDialog({
   const [saving, setSaving] = useState(false);
   const fieldId = useId();
   const state = reply?.ok === true ? reply.state : reply?.current;
-  const failure = reply?.ok === false ? refusal[reply.reason] : undefined;
+  const localizeFeedback = useFeedbackText();
+  const failure = reply?.ok === false ? localizeFeedback(refusal[reply.reason]) : undefined;
   const draftValue = draft ?? (state === undefined ? '' : String(state.gainDb));
   const parsed = draftValue.trim() === '' ? NaN : Number(draftValue);
   const canApply =

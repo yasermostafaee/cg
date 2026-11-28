@@ -24,7 +24,6 @@ import {
   templateTimingOf,
   upcomingProgramsTemplateMetadataOf,
   runtimeShortfall,
-  runtimeShortfallMessage,
   withListLimits,
   withPageLists,
   type Manifest,
@@ -45,6 +44,7 @@ import {
   pageRuntimeBuild,
   type ImageAssetSource,
 } from '@cg/single-file-export';
+import { FeedbackError, feedbackFailure, feedbackProblem } from '../../i18n/locale.js';
 import { pickTemplateName, templateDisplayName } from './templateName.js';
 import { bytesToBase64 } from './packageBytes.js';
 import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
@@ -76,13 +76,16 @@ export function templateImportFrameBytes(template: TemplateInfo, html: string): 
 }
 
 /** `B-351` — the refusal, after the file's name. Sizes in MB as Windows counts them (1024²). */
-export function templateTooLargeSentence(frameBytes: number): string {
-  const mb = (n: number): string => String(Math.ceil(n / (1024 * 1024)));
-  return (
-    `is too large for CG Bridge: its page is ${mb(frameBytes)} MB, and one template can be at ` +
-    `most ${mb(WS_MAX_FRAME_BYTES)} MB. Export it again from the Designer with fewer or smaller ` +
-    `pictures.`
+function templateTooLarge(frameBytes: number): FeedbackError {
+  const mb = (n: number): number => Math.ceil(n / (1024 * 1024));
+  return new FeedbackError(
+    'is too large for CG Bridge: its page is {size} MB, and one template can be at most {limit} MB. Export it again from the Designer with fewer or smaller pictures.',
+    { size: mb(frameBytes), limit: mb(WS_MAX_FRAME_BYTES) },
   );
+}
+
+export function templateTooLargeSentence(frameBytes: number): string {
+  return templateTooLarge(frameBytes).message;
 }
 
 /**
@@ -270,8 +273,9 @@ export async function assertTemplateRuntimeCompatibility(
   const shortfall = runtimeShortfall(header.minRuntimeVersion, availableRuntimeVersion);
   if (shortfall === null) return;
 
-  throw new Error(
-    runtimeShortfallMessage(pickTemplateName(header.name, undefined) ?? 'This template', shortfall),
+  throw new FeedbackError(
+    '"{name}" needs template runtime {required}. CG Control on this station provides {available}. Update this station or re-export the template from a Designer matching it.',
+    { name: pickTemplateName(header.name, undefined) ?? 'This template', ...shortfall },
   );
 }
 
@@ -309,14 +313,21 @@ export async function produceTemplateDelivery(
       console.warn(`[import] not a readable template: ${result.errors.join('; ')}`);
       throw new Error(TEMPLATE_DAMAGED);
     }
-    throw new Error(`failed verification: ${result.errors.join('; ')}`);
+    throw new FeedbackError('failed verification: {reason}', {
+      reason: feedbackProblem(
+        result.errors.join('; '),
+        'Try exporting the package again from Designer.',
+      ),
+    });
   }
 
   let unpacked, manifest, files;
   try {
     ({ scene: unpacked, manifest, files } = await unpack(bytes));
   } catch (err) {
-    throw new Error(`could not be unpacked: ${err instanceof Error ? err.message : String(err)}`);
+    throw new FeedbackError('could not be unpacked: {reason}', {
+      reason: feedbackFailure(err, 'Try exporting the package again from Designer.'),
+    });
   }
   /*
     🔴 `B-353` — **A PACKAGE'S BOOKS ARE READ AS BOOKS, WITHOUT A RE-EXPORT.** The owner's
@@ -470,7 +481,9 @@ export async function produceTemplateDelivery(
       listFieldTargets: collectListFieldTargets(scene, scene),
     };
   } catch (err) {
-    throw new Error(`could not be rendered: ${err instanceof Error ? err.message : String(err)}`);
+    throw new FeedbackError('could not be rendered: {reason}', {
+      reason: feedbackFailure(err, 'Check the template in Designer and export it again.'),
+    });
   }
 }
 
@@ -537,7 +550,7 @@ export async function deliverTemplateImport(
     a refused import leaves nothing behind on CG Bridge.
   */
   const frameBytes = templateImportFrameBytes(template, html);
-  if (frameBytes > WS_MAX_FRAME_BYTES) throw new Error(templateTooLargeSentence(frameBytes));
+  if (frameBytes > WS_MAX_FRAME_BYTES) throw templateTooLarge(frameBytes);
   /*
     🔴 `PAGE-REBUILD-01` (`C-034`) — the bytes just VERIFIED are the ones kept, and the page names
     the runtime that built it. Kept BEFORE the import, in a frame of its own (the page fills most of
@@ -567,8 +580,13 @@ export async function deliverTemplateImport(
       expectedControlLayoutSource: opts.expectedControlLayoutSource,
     }),
   });
-  if (needsSource && !registered.registered) {
-    throw new Error(registered.message ?? 'CG Bridge could not register the layout.');
+  if (!registered.registered) {
+    throw new Error(
+      registered.message ??
+        (needsSource
+          ? 'CG Bridge could not register the layout.'
+          : 'CG Bridge could not register the template.'),
+    );
   }
   const thumbnail = delivery.thumbnailPng;
   if (

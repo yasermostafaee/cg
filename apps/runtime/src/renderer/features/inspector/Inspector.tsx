@@ -1,4 +1,10 @@
-import { localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
+import {
+  feedback,
+  localeDirection,
+  useFeedbackText,
+  useLanguages,
+  useUiText,
+} from '../../i18n/locale.js';
 import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -823,7 +829,7 @@ export function Inspector({
             <TakeRefusalText
               line={takeRefusalLine(heading, item.takeRefusal, {
                 // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
-                plateLabel: plateLabelOf(resolvedInfo, item.takeRefusal.plateId),
+                plateLabel: plateLabelOf(resolvedInfo, item.takeRefusal.plateId, feedback),
                 entry: currentSourceCatalog().sources.find(
                   (s) => s.id === item.takeRefusal?.sourceId,
                 ),
@@ -1111,6 +1117,8 @@ function FieldEditor({
 }): JSX.Element {
   const localizeUi = useUiText();
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
+  const localizeFeedback = useFeedbackText();
+  const direction = localeDirection(useLanguages().feedback);
   const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
   // sees it inside its group, and the group's own label carries the namespace.
@@ -1136,7 +1144,9 @@ function FieldEditor({
     isFieldDirty(itemId, target, valueAt(item.fields, target)),
   );
   const fieldRefusal =
-    dirty && kind !== 'number' && field !== null ? operatorFieldError(field, value) : undefined;
+    dirty && kind !== 'number' && field !== null
+      ? operatorFieldError(field, value, localizeFeedback)
+      : undefined;
   const unstage = (): void => {
     if (titlePaths === undefined) unstageField(itemId, path);
     else unstageFieldBatch(itemId, titlePaths);
@@ -1280,7 +1290,7 @@ function FieldEditor({
             with a second footer control to share a row with. */}
         {fromFileKind !== undefined && (kind !== 'list' || fileOnly) && fromFile}
         {fieldRefusal !== undefined && (
-          <p style={styles.refusal} data-field-refusal={fieldId}>
+          <p style={styles.refusal} data-field-refusal={fieldId} dir={direction}>
             {fieldRefusal.line}
           </p>
         )}
@@ -1499,6 +1509,8 @@ function NumberField({
   onUnstage: () => void;
 }): JSX.Element {
   const refusalId = useId();
+  const localizeFeedback = useFeedbackText();
+  const direction = localeDirection(useLanguages().feedback);
   const digits = fieldDigitsOf(field);
   const [text, setText] = useState(typeof value === 'number' ? String(value) : '');
   const [seen, setSeen] = useState(value);
@@ -1517,12 +1529,12 @@ function NumberField({
   const constraintRefusal =
     field?.type === 'number'
       ? reading.kind === 'number'
-        ? operatorFieldError(field, reading.value)?.line
+        ? operatorFieldError(field, reading.value, localizeFeedback)?.line
         : dirty && shown.trim() === ''
-          ? operatorFieldError(field, '')?.line
+          ? operatorFieldError(field, '', localizeFeedback)?.line
           : undefined
       : undefined;
-  const refusal = reading.kind === 'invalid' ? NOT_A_NUMBER : constraintRefusal;
+  const refusal = reading.kind === 'invalid' ? localizeFeedback(NOT_A_NUMBER) : constraintRefusal;
   const refused = refusal !== undefined;
   // R-020 — the shared NumericInput (type="text" under the hood: a `type="number"` box drops
   // Persian digits before script sees them). `step`/`min`/`max` are not rendered: on the old
@@ -1579,7 +1591,7 @@ function NumberField({
         aria-label={fieldId}
       />
       {refused && (
-        <p id={refusalId} className="cg-field-refusal" data-field-refusal="">
+        <p id={refusalId} className="cg-field-refusal" data-field-refusal="" dir={direction}>
           {refusal}
         </p>
       )}

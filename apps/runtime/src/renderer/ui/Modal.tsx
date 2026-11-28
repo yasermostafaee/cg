@@ -654,6 +654,8 @@ export interface ModalMessage {
   text: string;
   /** The specifics, when there are any — the bridge's own message, which names the layer. */
   detail?: string;
+  /** Original wire or exception wording for diagnosis. */
+  technicalDetail?: string;
   /**
    * 🔴 `MODAL-CHROME-10` ADDENDUM C §C4(e) — the CONTROLS that resolve this message, seated
    * inside it. See `Notice`'s `remedies` for why a control slot does not reopen §3's "the
@@ -1104,6 +1106,9 @@ export function Modal({
                     noticeRole={m.role}
                     text={m.text}
                     {...(m.detail !== undefined ? { detail: m.detail } : {})}
+                    {...(m.technicalDetail !== undefined
+                      ? { technicalDetail: m.technicalDetail }
+                      : {})}
                     {...(m.remedies !== undefined ? { remedies: m.remedies } : {})}
                   />
                 ))}

@@ -1,4 +1,10 @@
-import { feedback, useFeedbackText, useUiText } from '../../i18n/locale.js';
+import {
+  feedback,
+  feedbackFailure,
+  feedbackProblem,
+  useFeedbackText,
+  useUiText,
+} from '../../i18n/locale.js';
 import { templateTypeLabel } from '../library/templateName.js';
 import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
@@ -788,9 +794,7 @@ export function useTemplatePicker(
         void readReimport(onChannel);
         void refreshTemplateSources(onChannel);
       } catch (err) {
-        reportCommandError(
-          err instanceof Error ? err.message : 'The template list could not be opened.',
-        );
+        reportCommandError(feedbackFailure(err, 'The template list could not be opened.'));
       }
     },
     [readUsage, readReimport, refreshTemplateSources],
@@ -878,7 +882,7 @@ export function useTemplatePicker(
           // is still there — the two together are the honest report.
           setMessage({
             role: 'refusal',
-            text: res.message ?? 'The template could not be removed.',
+            text: feedbackProblem(res.message, 'The template could not be removed.'),
           });
           // `B-212` — and the places, each with its remedy, under the list. The bank is
           // read now, for these names; see the note at `bank`.
@@ -895,7 +899,7 @@ export function useTemplatePicker(
         withdraw();
         setMessage({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'The template could not be removed.',
+          text: feedbackFailure(err, 'The template could not be removed.'),
         });
       }
     },
@@ -1022,7 +1026,7 @@ export function useTemplatePicker(
           setMessage({
             role: 'refusal',
             text:
-              errorCodeMessage(res.errorCode) ??
+              errorCodeMessage(res.errorCode, feedback) ??
               feedback('The item {place} could not be removed.', { place }),
             detail: feedback('The item {place}.', { place }),
           });
@@ -1042,7 +1046,7 @@ export function useTemplatePicker(
       } catch (err) {
         setMessage({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'The item could not be removed.',
+          text: feedbackFailure(err, 'The item could not be removed.'),
         });
       }
     },
@@ -1142,7 +1146,7 @@ export function useTemplatePicker(
       } catch (err) {
         setMessage({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'The package could not be selected.',
+          text: feedbackFailure(err, 'The package could not be selected.'),
         });
         return;
       }
@@ -1178,7 +1182,7 @@ export function useTemplatePicker(
         */
         setMessage({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'The package could not be imported.',
+          text: feedbackFailure(err, 'The package could not be imported.'),
         });
       } finally {
         setImportBusy(false);
@@ -1234,7 +1238,7 @@ export function useTemplatePicker(
     } catch (error) {
       setMessage({
         role: 'refusal',
-        text: error instanceof Error ? error.message : 'The layout could not be exported.',
+        text: feedbackFailure(error, 'The layout could not be exported.'),
       });
     } finally {
       setImportBusy(false);
@@ -1277,7 +1281,7 @@ export function useTemplatePicker(
             reloaded += 1;
             resetRows += result.resetRows;
           } catch (err) {
-            failures.push(err instanceof Error ? err.message : String(err));
+            failures.push(feedbackFailure(err, 'The template could not be reloaded.'));
           }
         }
         await refreshTemplateSources(channel);
@@ -1313,6 +1317,11 @@ export function useTemplatePicker(
               : feedback('current row data kept');
           reportCommandSuccess(`${reload} · ${rows}`);
         }
+      } catch (error) {
+        setMessage({
+          role: 'refusal',
+          text: feedbackFailure(error, 'The template list could not be refreshed.'),
+        });
       } finally {
         setImportBusy(false);
         setImportingFileName(null);

@@ -1,4 +1,5 @@
 import { LAYER_BANDS, type FIXED_LAYERS_SET_CONFIG_REASONS } from '@cg/shared-ipc';
+import { englishFeedback } from '../i18n/locale.js';
 
 /**
  * R-021 stage 2b — operator wording for a refused `fixedLayers.set-config`,
@@ -25,15 +26,23 @@ export interface FixedLayersRefusalFacts {
   readonly layer?: number | undefined;
 }
 
-const whichLayer = (facts: FixedLayersRefusalFacts): string =>
-  facts.layer === undefined ? 'that layer' : `layer ${String(facts.layer)}`;
+const whichLayer = (facts: FixedLayersRefusalFacts, localize = englishFeedback): string =>
+  facts.layer === undefined
+    ? localize('that layer')
+    : localize('layer {layer}', { layer: facts.layer });
 
 /** The two refusals that keep a row shown, named after the layer they are about. */
-const occupiedRefusal = (facts: FixedLayersRefusalFacts): string =>
-  `Refused — ${whichLayer(facts)} is not empty, so it stays shown.`;
-const unknownRefusal = (facts: FixedLayersRefusalFacts): string =>
-  `Refused — what is on ${whichLayer(facts)} cannot be verified right now, so it stays shown.`;
-const HIDE_REFUSALS: Readonly<Record<string, (facts: FixedLayersRefusalFacts) => string>> = {
+const occupiedRefusal = (facts: FixedLayersRefusalFacts, localize = englishFeedback): string =>
+  localize('Refused — {target} is not empty, so it stays shown.', {
+    target: whichLayer(facts, localize),
+  });
+const unknownRefusal = (facts: FixedLayersRefusalFacts, localize = englishFeedback): string =>
+  localize('Refused — what is on {target} cannot be verified right now, so it stays shown.', {
+    target: whichLayer(facts, localize),
+  });
+const HIDE_REFUSALS: Readonly<
+  Record<string, (facts: FixedLayersRefusalFacts, localize: typeof englishFeedback) => string>
+> = {
   'untick-occupied': occupiedRefusal,
   'untick-unknown': unknownRefusal,
 };
@@ -49,7 +58,7 @@ const MESSAGES = {
    * bank was illegal. A band bound written a second time cannot notice when the first
    * one moves, which is `layer-bands.ts`'s own warning about a coordinate in a message.
    */
-  'exceeds-ceiling': `The bank would extend past layer ${String(LAYER_BANDS.template.end)} — the fixed-layer ceiling.`,
+  'exceeds-ceiling': 'The bank would extend past layer {layer} — the fixed-layer ceiling.',
   'overlaps-policy':
     'The bank would overlap a dynamic template-type range — the two must stay disjoint.',
   'overlaps-reserved':
@@ -77,9 +86,17 @@ const MESSAGES = {
 export function fixedLayersReasonMessage(
   reason: string | undefined,
   facts: FixedLayersRefusalFacts = {},
+  localize = englishFeedback,
 ): string | null {
   if (reason === undefined || reason === '') return null;
   const hide = HIDE_REFUSALS[reason];
-  if (hide !== undefined) return hide(facts);
-  return (MESSAGES as Readonly<Record<string, string>>)[reason] ?? `Not accepted (${reason}).`;
+  if (hide !== undefined) return hide(facts, localize);
+  if (reason === 'exceeds-ceiling')
+    return localize(MESSAGES[reason], { layer: LAYER_BANDS.template.end });
+  const source = Object.hasOwn(MESSAGES, reason)
+    ? (MESSAGES as Readonly<Record<string, string>>)[reason]
+    : undefined;
+  return source === undefined
+    ? localize('Not accepted ({code}).', { code: reason })
+    : localize(source);
 }

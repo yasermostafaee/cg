@@ -8,6 +8,8 @@ import { patternPresetOf } from './field-patterns.js';
 import {
   type DynamicField,
   type FieldValues,
+  type FieldValidationText,
+  fieldValidationText,
   ListItemSchema,
   numberFieldValueError,
 } from './fields.js';
@@ -31,17 +33,21 @@ function invalid(line: string): OperatorFieldIssue {
   return { code: 'invalid-field', line };
 }
 
-export function operatorPatternRefusalLine(pattern: string): string {
+export function operatorPatternRefusalLine(pattern: string, text = fieldValidationText): string {
   const preset = patternPresetOf(pattern);
   return preset === undefined
-    ? 'Not in the form this field takes.'
-    : `Not a ${preset.label}, e.g. ${preset.example}.`;
+    ? text('Not in the form this field takes.')
+    : text('Not a {format}, e.g. {example}.', {
+        format: text(preset.label),
+        example: preset.example,
+      });
 }
 
 /** The author's constraints on one value, including localized digits in numbers and patterns. */
 export function operatorFieldError(
   field: DynamicField,
   value: unknown,
+  text = fieldValidationText,
 ): OperatorFieldIssue | undefined {
   const assetId =
     typeof value === 'object' && value !== null && 'assetId' in value ? value.assetId : value;
@@ -51,61 +57,74 @@ export function operatorFieldError(
     (typeof value === 'string' && value.trim() === '') ||
     (field.type === 'image' && assetId === '') ||
     (field.type === 'list' && Array.isArray(value) && value.length === 0);
-  if (empty) return field.required ? invalid('A value is required.') : undefined;
+  if (empty) return field.required ? invalid(text('A value is required.')) : undefined;
 
   switch (field.type) {
     case 'text':
     case 'multiline': {
-      if (typeof value !== 'string') return invalid('Must be text.');
+      if (typeof value !== 'string') return invalid(text('Must be text.'));
       const length = [...value].length;
       if (field.minLength !== undefined && length < field.minLength) {
-        return invalid(`Enter at least ${String(field.minLength)} characters.`);
+        return invalid(text('Enter at least {limit} characters.', { limit: field.minLength }));
       }
       if (field.type === 'text' && field.maxLength !== undefined && length > field.maxLength) {
-        return invalid(`Enter at most ${String(field.maxLength)} characters.`);
+        return invalid(text('Enter at most {limit} characters.', { limit: field.maxLength }));
       }
       if (
         field.type === 'multiline' &&
         field.maxLines !== undefined &&
         value.split(/\r\n?|\n/u).length > field.maxLines
       ) {
-        return invalid(`Enter at most ${String(field.maxLines)} lines.`);
+        return invalid(text('Enter at most {limit} lines.', { limit: field.maxLines }));
       }
       return field.pattern === undefined || valueMatchesPattern(field.pattern, value)
         ? undefined
-        : { code: 'pattern', line: operatorPatternRefusalLine(field.pattern) };
+        : { code: 'pattern', line: operatorPatternRefusalLine(field.pattern, text) };
     }
     case 'number': {
       const number = typeof value === 'string' ? parseLocalizedNumber(value) : value;
       const error =
-        typeof number === 'number' ? numberFieldValueError(field, number) : 'Must be a number.';
+        typeof number === 'number'
+          ? numberFieldValueError(field, number, text)
+          : text('Must be a number.');
       return error === undefined ? undefined : invalid(error);
     }
     case 'select':
       return field.options.some((option) => option.value === value)
         ? undefined
-        : invalid(`Choose one of: ${field.options.map((option) => option.label).join(', ')}.`);
+        : invalid(
+            text('Choose one of: {choices}.', {
+              choices: field.options.map((option) => option.label).join(', '),
+            }),
+          );
     case 'boolean':
-      return typeof value === 'boolean' ? undefined : invalid('Must be true or false.');
+      return typeof value === 'boolean' ? undefined : invalid(text('Must be true or false.'));
     case 'color':
-      return HexColorSchema.safeParse(value).success ? undefined : invalid('Must be a hex color.');
+      return HexColorSchema.safeParse(value).success
+        ? undefined
+        : invalid(text('Must be a hex color.'));
     case 'image':
-      return typeof assetId === 'string' ? undefined : invalid('Choose a picture.');
+      return typeof assetId === 'string' ? undefined : invalid(text('Choose a picture.'));
     case 'list': {
-      if (!Array.isArray(value)) return invalid('Must be a list.');
+      if (!Array.isArray(value)) return invalid(text('Must be a list.'));
       if (field.maxItems !== undefined && value.length > field.maxItems) {
-        return invalid(`Use at most ${String(field.maxItems)} items.`);
+        return invalid(text('Use at most {limit} items.', { limit: field.maxItems }));
       }
       if (field.itemFields === undefined) return undefined;
       for (const [index, raw] of value.entries()) {
         const row = ListItemSchema.safeParse(raw);
-        if (!row.success) return invalid(`Row ${String(index + 1)} must be a list item.`);
+        if (!row.success)
+          return invalid(text('Row {row} must be a list item.', { row: index + 1 }));
         for (const cell of field.itemFields) {
-          const issue = operatorFieldError(cell, row.data[cell.id]);
+          const issue = operatorFieldError(cell, row.data[cell.id], text);
           if (issue !== undefined) {
             return {
               ...issue,
-              line: `Row ${String(index + 1)} · ${cell.label || cell.id}: ${issue.line}`,
+              line: text('Row {row} · {field}: {reason}', {
+                row: index + 1,
+                field: cell.label || cell.id,
+                reason: issue.line,
+              }),
             };
           }
         }
@@ -130,6 +149,7 @@ function collectRefusals(
   previous: FieldValues | undefined,
   defaults: FieldValues,
   out: OperatorFieldRefusal[],
+  text: FieldValidationText,
 ): void {
   for (const field of form.fields) {
     const value = values[field.id];
@@ -141,6 +161,7 @@ function collectRefusals(
     const issue = operatorFieldError(
       field,
       previous === undefined ? value : (value ?? defaults[field.id]),
+      text,
     );
     if (issue !== undefined) out.push({ label: field.label || field.id, ...issue });
   }
@@ -153,6 +174,7 @@ function collectRefusals(
       previous === undefined ? undefined : (scope(previous[group.name]) ?? {}),
       scope(defaults[group.name]) ?? {},
       out,
+      text,
     );
   }
 }
@@ -166,13 +188,14 @@ export function operatorFieldRefusals(
   form: OperatorFieldForm,
   values: FieldValues,
   applied?: FieldValues,
+  text = fieldValidationText,
 ): OperatorFieldRefusal[] {
   const out: OperatorFieldRefusal[] = [];
   const defaults =
     applied === undefined
       ? {}
       : defaultNestedValues({ fields: form.fields, groups: form.groups ?? [] });
-  collectRefusals(form, values, applied, defaults, out);
+  collectRefusals(form, values, applied, defaults, out, text);
   return out;
 }
 

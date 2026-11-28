@@ -1,4 +1,4 @@
-import { feedback } from '../../i18n/locale.js';
+import { FeedbackError, feedback, feedbackFailure } from '../../i18n/locale.js';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
 import {
@@ -36,7 +36,7 @@ import appFontsCss from '../../fonts.css?inline';
  *
  * **Throws** with the operator-facing message, registering nothing — the R-001
  * "bad input → clear error, nothing registered" invariant. The thrown text
- * already names the file, so callers surface it verbatim.
+ * carries the file name along with a reason, so callers can localize the failure.
  */
 export interface ImportedVcg {
   templateId: string;
@@ -91,9 +91,10 @@ export async function importVcgFile(
   try {
     bytes = new Uint8Array(await file.arrayBuffer());
   } catch (err) {
-    throw new Error(
-      `Could not read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw new FeedbackError('Could not read {name}: {reason}', {
+      name: file.name,
+      reason: feedbackFailure(err, 'The original file is unavailable.'),
+    });
   }
 
   const opts = {
@@ -109,7 +110,10 @@ export async function importVcgFile(
   // verification: …"); the file name is added here. R-004 — `file.name` is the label the operator
   // recognises, and this is the only place it exists (the bytes cannot carry it).
   const named = (err: unknown): Error =>
-    new Error(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
+    new FeedbackError('“{name}” {reason}', {
+      name: file.name,
+      reason: feedbackFailure(err, 'could not be imported.'),
+    });
   let delivery: TemplateDelivery;
   try {
     delivery = await produceTemplateDelivery(bytes, opts);
@@ -119,8 +123,9 @@ export async function importVcgFile(
   const packageId = delivery.template.templateId;
   if (reload !== undefined && packageId !== reload.packageId) {
     if (reload.approvePackageChange === undefined) {
-      throw new Error(
-        `“${file.name}” contains a different package. Reload it individually to review the replacement.`,
+      throw new FeedbackError(
+        '“{name}” contains a different package. Reload it individually to review the replacement.',
+        { name: file.name },
       );
     }
     // Ask about the exact verified bytes we hold. Re-reading the share after approval could
@@ -141,8 +146,9 @@ export async function importVcgFile(
   });
   if (reload !== undefined) {
     if (existing === null) {
-      throw new Error(
-        `The template for “${file.name}” is no longer on this channel. Use Import to add it.`,
+      throw new FeedbackError(
+        'The template for “{name}” is no longer on this channel. Use Import to add it.',
+        { name: file.name },
       );
     }
     // Keep the channel's catalogue identity, label, loaded rows and per-plate Source defaults.

@@ -1,14 +1,12 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useFeedbackText, useLanguages, useUiText } from '../../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useState } from 'react';
 import { KeyRound, TriangleAlert } from 'lucide-react';
 import {
   BRIDGE_NEEDS_ADMIN_LINE,
   BRIDGE_SESSION_DEFAULT_ACCOUNT,
-  CG_BRIDGE_ACCOUNT,
   ENGINE_LABEL,
   ENGINE_PASSWORD_WHERE,
-  enginePasswordLead,
   engineStateText,
   holdsPermissionClass,
   suggestedBridgeAccount,
@@ -30,7 +28,8 @@ import { PasswordInput } from '../../ui/PasswordInput.js';
 import { AppVersionLine, SignInBrand } from '../../ui/SignInCard.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { cssVars, NOTICE_PX } from '../../theme.js';
-import { signInFailureLine, signInMessage } from '../auth/signInMessages.js';
+import { signInFailureLine, signInFeedback, signInMessage } from '../auth/signInMessages.js';
+import { connectionCheckText } from '../firstRun/connectionCheckText.js';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE HAS NO PLAYOUT SESSION OF ITS
@@ -47,8 +46,9 @@ import { signInFailureLine, signInMessage } from '../auth/signInMessages.js';
  *
  * `CENTRAL-BRIDGE-01-A` A2 — `refused`: the Playout refused to renew the bridge's session BEFORE
  * using its token (`cg_not_licensed`, `no_cg_access`, a disabled account). Nothing is lost — the
- * bridge keeps the token and asks again every minute — so the line is the Playout's own reason,
- * after "CG Bridge:", isolated (it is the Playout's language, not ours). A station admin still gets
+ * bridge keeps the token and asks again every minute. The English console shows the Playout's
+ * reason in an isolate. Other locales show a translated status with the original reason available.
+ * A station admin still gets
  * the sign-in: an account that lost its access is fixed by signing the bridge in as another.
  */
 
@@ -83,6 +83,7 @@ function backupNeedsAdmin(engines: EngineSessions | null): boolean {
 
 export function BridgeSessionBanner(): JSX.Element | null {
   const localizeUi = useUiText();
+  const interfaceLanguage = useLanguages().interface;
   const engineName = useEngineName();
   const auth = useAuthSession();
   const engines = useEngineSessions();
@@ -118,6 +119,8 @@ export function BridgeSessionBanner(): JSX.Element | null {
   if (!primaryNeeds && !backupNeeds) return null;
   const admin =
     auth.kind === 'signed-in' && holdsPermissionClass(auth.principal.roles, 'station-admin');
+  const renewalReason = session?.state === 'refused' ? session.message : undefined;
+  const showOriginalReason = interfaceLanguage === 'en' && renewalReason !== undefined;
 
   return (
     <div
@@ -128,18 +131,32 @@ export function BridgeSessionBanner(): JSX.Element | null {
       data-tone="caution"
     >
       <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
-      <span style={styles.text}>
+      <div style={styles.text}>
         {session?.state === 'refused' ? (
           <>
             {localizeUi('CG Bridge:')}{' '}
-            <bdi>{playoutEngineWording(session.message ?? '', engineName)}</bdi>
+            {showOriginalReason ? (
+              <bdi>{playoutEngineWording(renewalReason, engineName)}</bdi>
+            ) : (
+              localizeUi(
+                session.failure === 'cg_not_licensed'
+                  ? 'CG not licensed on this engine.'
+                  : 'The Playout did not renew the session.',
+              )
+            )}
+            {!showOriginalReason && renewalReason !== undefined && (
+              <details>
+                <summary>{localizeUi('Technical details')}</summary>
+                <bdi>{renewalReason}</bdi>
+              </details>
+            )}
           </>
         ) : primaryNeeds ? (
-          BRIDGE_NEEDS_ADMIN_LINE
+          localizeUi(BRIDGE_NEEDS_ADMIN_LINE)
         ) : (
-          localizeUi('{message} on the backup engine', { message: BRIDGE_NEEDS_ADMIN_LINE })
+          localizeUi('CG Bridge needs a station admin to sign in on the backup engine')
         )}
-      </span>
+      </div>
       {admin && (
         <Button variant="neutral" onClick={() => setDialogOpen(true)}>
           {localizeUi('Sign in CG Bridge…')}
@@ -227,6 +244,8 @@ function BridgeSignInDialog({
   onClose: () => void;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
+  const interfaceLanguage = useLanguages().interface;
   const engineName = useEngineName();
   const signInUrl = useAuthCapabilities()?.signInUrl ?? null;
   const lines: readonly EngineLine[] =
@@ -240,7 +259,11 @@ function BridgeSignInDialog({
   const [username, setUsername] = useState(offered);
   const [typed, setTyped] = useState(false);
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<{ text: string; marksField: boolean } | null>(null);
+  const [error, setError] = useState<{
+    text: string;
+    marksField: boolean;
+    technicalDetail?: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   // C3 — the account follows the chosen engine's version, until the admin types one of their own.
   useEffect(() => {
@@ -266,16 +289,21 @@ function BridgeSignInDialog({
         onClose();
         return;
       }
-      // `CENTRAL-BRIDGE-01-A` A4 — `cg_not_licensed` carries the Playout's own message, shown as it is
-      // (the message region renders each line in its own `dir="auto"` isolate).
       const line = signInFailureLine(answer.failure ?? 'unexpected', answer.message ?? null);
-      // `RELEASE-0112-01` — with two engines, the line names which one refused.
-      const text = lines.length > 1 ? `${ENGINE_LABEL[engine]}: ${line.text}` : line.text;
-      setError({ text, marksField: line.marksField });
+      const description = signInFeedback(line);
+      const text =
+        lines.length > 1
+          ? localizeFeedback('{engine}: {message}', {
+              engine: localizeFeedback(ENGINE_LABEL[engine]),
+              message: description.text,
+            })
+          : description.text;
+      setError({ ...description, text, marksField: line.marksField });
     } catch (err) {
       setError({
-        text: err instanceof Error ? err.message : signInMessage('unexpected'),
+        text: feedbackFailure(err, signInMessage('unexpected')),
         marksField: false,
+        ...(err instanceof Error ? { technicalDetail: err.message } : {}),
       });
     } finally {
       // The password is never kept, not even for a retry after a refusal.
@@ -297,6 +325,9 @@ function BridgeSignInDialog({
             message: {
               role: 'refusal' as const,
               text: playoutEngineWording(error.text, engineName),
+              ...(error.technicalDetail !== undefined
+                ? { technicalDetail: error.technicalDetail }
+                : {}),
             },
           }
         : {})}
@@ -330,14 +361,21 @@ function BridgeSignInDialog({
             const address = engineDisplayAddress(line, signInUrl);
             return (
               <div key={line.engine} style={styles.engineRow} data-engine-row={line.engine}>
-                <span style={styles.engineName}>{ENGINE_LABEL[line.engine]}</span>
+                <span style={styles.engineName}>{localizeUi(ENGINE_LABEL[line.engine])}</span>
                 {address !== null && (
                   <bdi style={styles.engineAddress} dir="ltr">
                     {address}
                   </bdi>
                 )}
                 <span style={styles.engineState} data-engine-state={line.state}>
-                  {engineStateText(line)}
+                  {connectionCheckText(
+                    engineStateText(
+                      line.state === 'refused' && interfaceLanguage !== 'en'
+                        ? { state: line.state }
+                        : line,
+                    ),
+                    localizeUi,
+                  )}
                 </span>
               </div>
             );
@@ -346,7 +384,10 @@ function BridgeSignInDialog({
       )}
       {lines.length > 1 ? (
         <Tabs
-          tabs={lines.map((line) => ({ id: line.engine, label: ENGINE_LABEL[line.engine] }))}
+          tabs={lines.map((line) => ({
+            id: line.engine,
+            label: localizeUi(ENGINE_LABEL[line.engine]),
+          }))}
           activeId={engine}
           onSelect={(id) => choose(id as Engine)}
           ariaLabel={localizeUi('Sign in on')}
@@ -371,8 +412,8 @@ function BridgeSignInDialog({
             LTR chrome around it (golden rule 11).
           */
           <p style={styles.where} data-password-where="">
-            {enginePasswordLead(offered === CG_BRIDGE_ACCOUNT ? CG_BRIDGE_ACCOUNT : 'cg-admin')}{' '}
-            <bdi>{ENGINE_PASSWORD_WHERE}</bdi>
+            {localizeUi("Each engine's {account} password:", { account: offered })}{' '}
+            <bdi>{localizeUi(ENGINE_PASSWORD_WHERE)}</bdi>
           </p>
         )}
         <label htmlFor="cg-bridge-signin-user" style={styles.field}>

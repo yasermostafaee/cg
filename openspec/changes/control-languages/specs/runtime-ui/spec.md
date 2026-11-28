@@ -16,6 +16,13 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 
 - **WHEN** an operator changes either language in Settings **THEN** the console uses the new choice immediately and restores it after restart, until the operator changes it again or explicitly selects a language in a later installation
 
+#### Scenario: Translate feedback from command and server results
+
+- **WHEN** a command, template or file operation, station change, sign-in, or audit action reports an outcome
+- **THEN** the visible result uses the action feedback language and recognized refusal reasons retain their meaning
+- **AND** contextual names and technical values are substituted after translation and keep their reading direction
+- **AND** an unfamiliar diagnostic has a localized operator summary, with original details available for troubleshooting where the reply is retained.
+
 #### Scenario: Developer catalog edits
 
 - **WHEN** a developer edits an English, Persian or Arabic JSON catalog at the source path documented in README and builds CG Control **THEN** the updated values are bundled with the app

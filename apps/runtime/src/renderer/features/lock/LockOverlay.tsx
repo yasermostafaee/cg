@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Lock } from 'lucide-react';
 import { colors, cssVars, LOCK_PX } from '../../theme.js';
@@ -221,6 +221,7 @@ export function LockCard({
   submitLabel: string;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const messageDirection = localeDirection(useLanguages().feedback);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [wrongAttempts, setWrongAttempts] = useState(0);
@@ -247,11 +248,11 @@ export function LockCard({
         setWrongAttempts((n) => n + 1);
         setError(
           wrongAttempts === 0
-            ? 'Incorrect PIN.'
-            : `Incorrect PIN (${String(wrongAttempts + 1)} attempts).`,
+            ? feedback('Incorrect PIN.')
+            : feedback('Incorrect PIN ({count} attempts).', { count: wrongAttempts + 1 }),
         );
       } else {
-        setError('Could not release lock.');
+        setError(feedback('Could not release lock.'));
       }
       setPin('');
       inputRef.current?.focus();
@@ -298,7 +299,7 @@ export function LockCard({
           }}
           aria-label="PIN"
         />
-        <div style={styles.error} role="status">
+        <div style={styles.error} role="status" dir={messageDirection}>
           {error}
         </div>
       </div>

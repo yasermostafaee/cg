@@ -1,4 +1,4 @@
-import { feedback } from '../../i18n/locale.js';
+import { englishFeedback, feedback } from '../../i18n/locale.js';
 import { ledgerChannels, type LiveLayerState } from '@cg/shared-ipc';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 
@@ -31,31 +31,26 @@ export type PanicScope =
   | { kind: 'every' };
 
 /** The clause that names the scope, appended to the sentence; empty for the one-channel PANIC. */
-function scopeClause(scope: PanicScope, localized = false): string {
+function scopeClause(scope: PanicScope): string {
   switch (scope.kind) {
     case 'station':
       return '';
     case 'channel':
-      return (
-        ' · ' +
-        (localized
-          ? feedback('CH {channel}', { channel: scope.channel })
-          : `CH ${String(scope.channel)}`)
-      );
+      return ' · ' + feedback('CH {channel}', { channel: scope.channel });
     case 'every':
-      return ' · ' + (localized ? feedback('every channel') : 'every channel');
+      return ' · ' + feedback('every channel');
   }
 }
 
 /** Where the bridge found nothing to silence, in the scope's own words. */
-function nothingWhere(scope: PanicScope): string {
+function nothingWhere(scope: PanicScope, localize = feedback): string {
   switch (scope.kind) {
     case 'station':
-      return 'the bridge holds no live plates';
+      return localize('the bridge holds no live plates');
     case 'channel':
-      return `channel ${String(scope.channel)} holds no live plates`;
+      return localize('channel {channel} holds no live plates', { channel: scope.channel });
     case 'every':
-      return 'no channel holds a live plate';
+      return localize('no channel holds a live plate');
   }
 }
 
@@ -82,14 +77,22 @@ export function readPanicReport(
     const where = scopeClause(scope);
     const names = res.failed.map((f) => f.plateId).join(', ');
     reportCommandError(
-      `Silenced ${String(res.silenced)} plate(s)${where}, but ${names} did not take — those ` +
-        `may still be audible.`,
+      feedback(
+        'Silenced {count} plate(s){scope}, but {names} did not take — those may still be audible.',
+        {
+          count: res.silenced,
+          scope: where,
+          names,
+        },
+      ),
     );
     return { accepted: false, cancelled: true };
   }
   if (!res.ok || res.recorded === 0) {
     reportCommandError(
-      `Nothing was sent — ${nothingWhere(scope)}, so there was nothing to silence.`,
+      feedback('Nothing was sent — {reason}, so there was nothing to silence.', {
+        reason: nothingWhere(scope),
+      }),
     );
     return { accepted: false, cancelled: true };
   }
@@ -99,7 +102,7 @@ export function readPanicReport(
       plates: res.silenced,
       rows: res.rows.length,
     }) +
-      scopeClause(scope, true) +
+      scopeClause(scope) +
       (held > 0
         ? ' · ' +
           feedback('{count} already silent in the current look, now armed silent too', {
@@ -127,7 +130,7 @@ export function nothingToSilence(scope: PanicScope, localizeUi?: typeof feedback
         return localizeUi('Nothing to silence — no channel holds a live plate.');
     }
   }
-  return `Nothing to silence — ${nothingWhere(scope)}.`;
+  return `Nothing to silence — ${nothingWhere(scope, englishFeedback)}.`;
 }
 
 /**

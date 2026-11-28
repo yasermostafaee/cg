@@ -1,3 +1,4 @@
+import { localeDirection, useLanguages } from '../i18n/locale.js';
 import { playoutEngineWording, useEngineName } from './engineWording.js';
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
@@ -5,6 +6,7 @@ import { buttonClass, type ButtonVariant } from './Button.js';
 import { Icon } from './Icon.js';
 import {
   AsyncButtonController,
+  type AsyncFailureDetails,
   type AsyncResult,
   type AsyncView,
 } from './asyncButtonController.js';
@@ -22,7 +24,7 @@ const INITIAL: AsyncView = {
  *  recreate one after a StrictMode dispose without re-declaring the config. */
 function createController(
   onChange: (view: AsyncView) => void,
-  onError?: (message: string) => void,
+  onError?: (message: string, details: AsyncFailureDetails) => void,
 ): AsyncButtonController {
   return new AsyncButtonController({
     onChange,
@@ -44,7 +46,7 @@ type Props = {
    * instead of rendered inline beside the button. Use for buttons in a tight row where an
    * inline error would break the layout.
    */
-  onError?: (message: string) => void;
+  onError?: (message: string, details: AsyncFailureDetails) => void;
   /** R-028 — a decorative lucide glyph beside the label. */
   icon?: LucideIcon;
   /**
@@ -90,6 +92,7 @@ export function AsyncButton({
   const [view, setView] = useState<AsyncView>(INITIAL);
   const reduced = usePrefersReducedMotion();
   const engineName = useEngineName();
+  const messageLanguage = useLanguages().feedback;
   // Hold the latest onError so the long-lived controller always calls the current handler.
   // Read via the ref (not the prop) inside the once-only effect so it stays a known-stable
   // dependency, exactly like `setView` — the routing decision is stable per button.
@@ -99,7 +102,7 @@ export function AsyncButton({
   if (ctrlRef.current === null) {
     ctrlRef.current = createController(
       setView,
-      onError !== undefined ? (msg) => onErrorRef.current?.(msg) : undefined,
+      onError !== undefined ? (msg, details) => onErrorRef.current?.(msg, details) : undefined,
     );
   }
   // StrictMode double-invokes effects in dev (setup → cleanup → setup); the
@@ -109,7 +112,9 @@ export function AsyncButton({
     if (ctrlRef.current === null || ctrlRef.current.isDisposed) {
       ctrlRef.current = createController(
         setView,
-        onErrorRef.current !== undefined ? (msg) => onErrorRef.current?.(msg) : undefined,
+        onErrorRef.current !== undefined
+          ? (msg, details) => onErrorRef.current?.(msg, details)
+          : undefined,
       );
     }
     return () => ctrlRef.current?.dispose();
@@ -157,7 +162,12 @@ export function AsyncButton({
         <span className={iconOnly ? 'cg-visually-hidden' : 'cg-btn__label'}>{children}</span>
       </button>
       {view.errorMessage !== null && (
-        <span className="cg-btn-error" role="alert">
+        <span
+          className="cg-btn-error"
+          role="alert"
+          lang={messageLanguage}
+          dir={localeDirection(messageLanguage)}
+        >
           {playoutEngineWording(view.errorMessage, engineName)}
         </span>
       )}

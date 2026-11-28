@@ -132,7 +132,12 @@ Native CG Control setup strings are in [tools/setup-ui/src](tools/setup-ui/src),
 The `interface` section covers labels, tooltips, descriptions and standing status. The
 `feedback` section covers action results, warnings and toasts. Change the translated values
 and preserve the keys and placeholders such as `{row}`. Check the catalogs with
-`pnpm --filter @cg/runtime exec vitest run tests/controlLocale.test.ts` before building.
+`pnpm --filter @cg/runtime exec vitest run tests/controlLocale.test.ts tests/feedbackCatalogCoverage.test.ts` before building.
+
+Add new action feedback in all three catalogs. Use `feedback` or `useFeedbackText`
+with a stable template key and pass names or quantities as substitutions. Use
+`refusalFeedback` for structured command replies and `feedbackProblem` for raw
+transport messages. Keep original diagnostic prose in technical details when available.
 
 Settings → General → Language selects the interface and feedback languages independently.
 

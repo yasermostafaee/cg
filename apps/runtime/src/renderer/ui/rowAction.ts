@@ -4,6 +4,7 @@ import type { ContextMenuItem } from './ContextMenu.js';
 import {
   asyncRejectionMessage,
   asyncResultMessage,
+  type AsyncFailureDetails,
   type AsyncResult,
 } from './asyncButtonController.js';
 import { reportCommandError } from '../features/status/commandFeedback.js';
@@ -40,7 +41,7 @@ export interface RowAction {
    * A no-op here means the handler already reports for itself — the Inspector's
    * `applyDraft` does — and a second report would double-toast.
    */
-  onError: (message: string) => void;
+  onError: (message: string, details: AsyncFailureDetails) => void;
   /**
    * R-028 (5.2) — WHERE this action appears. `'button'` (the default) renders a
    * button AND a menu item; `'menu'` renders the menu item only.
@@ -128,9 +129,15 @@ export function runRowAction(action: RowAction): void {
   action.run().then(
     (res) => {
       const message = asyncResultMessage(res);
-      if (message !== null) action.onError(message);
+      if (message !== null) {
+        action.onError(message, { code: res.errorCode ?? null, detail: res.message ?? null });
+      }
     },
-    (err: unknown) => action.onError(asyncRejectionMessage(err)),
+    (err: unknown) => {
+      action.onError(asyncRejectionMessage(err), {
+        detail: err instanceof Error ? err.message : null,
+      });
+    },
   );
 }
 

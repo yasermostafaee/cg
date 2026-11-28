@@ -1,4 +1,5 @@
-import { PAGE_MAX_BYTES, PAGES_MAX_PER_ROW, pageRefusalMessage } from '@cg/shared-ipc';
+import { PAGE_MAX_BYTES, PAGES_MAX_PER_ROW } from '@cg/shared-ipc';
+import { feedback, feedbackLocale, knownFeedback } from '../../i18n/locale.js';
 import { naturalCompare } from '@cg/text-shaping';
 import { fitLine, fitPicture, type Raster } from './fitPicture.js';
 import { rememberPicture } from './pagePictures.js';
@@ -73,10 +74,17 @@ export function notLoadedLine(
   if (tooLarge.length > 0) {
     const mb = String(PAGE_MAX_BYTES / (1024 * 1024));
     parts.push(
-      `${namesOf(tooLarge)} could not be made smaller than ${mb} MB and ${tooLarge.length === 1 ? 'was' : 'were'} not loaded.`,
+      feedback(
+        tooLarge.length === 1
+          ? '{names} could not be made smaller than {limit} MB and was not loaded.'
+          : '{names} could not be made smaller than {limit} MB and were not loaded.',
+        { names: namesOf(tooLarge), limit: mb },
+      ),
     );
   }
-  for (const name of notPictures) parts.push(pageRefusalMessage('page-not-a-picture', { name }));
+  for (const name of notPictures) {
+    parts.push(feedback('{name} is not a PNG, JPEG or WebP picture.', { name }));
+  }
   return parts.length === 0 ? null : parts.join(' ');
 }
 
@@ -165,7 +173,10 @@ export async function loadPictureFiles(
     return {
       pages: [],
       fitted: null,
-      refusal: pageRefusalMessage('page-too-many', { count: candidates.length }),
+      refusal: feedback('{count} pages is more than a row can hold ({limit}).', {
+        count: candidates.length,
+        limit: PAGES_MAX_PER_ROW,
+      }),
     };
   }
   const files = [...candidates].sort((a, b) => naturalCompare(a.path, b.path));
@@ -188,11 +199,15 @@ export async function loadPictureFiles(
     if (fit.reencoded) reencoded += 1;
     const put = await window.cg.pages.put({ name: file.name, base64: toBase64(fit.bytes) });
     if (!put.accepted || put.sha256 === undefined) {
-      // The bridge's own check is the guard: its refusal stops the load, in its own words.
+      // Keep the file name with the refusal if a different console supplied it.
       return {
         pages: [],
         fitted: null,
-        refusal: put.message ?? `${file.name} was not accepted by CG Bridge.`,
+        refusal:
+          put.message && feedbackLocale() === 'en'
+            ? put.message
+            : (put.message && knownFeedback(put.message)) ||
+              feedback('{name} was not accepted by CG Bridge.', { name: file.name }),
       };
     }
     // `RUN-NEXT-VERSION-03` 1.1 — the bytes just sent, kept under the hash the bridge answered, so PVW

@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackProblem, useUiText } from '../../i18n/locale.js';
 import {
   useCallback,
   useEffect,
@@ -182,7 +182,10 @@ export function LiveInputCheckTile({
     view.engine === undefined
       ? status
       : localizeUi('{status} · Server {server}', { status, server: view.engine });
-  const detail = view.message ? localizeUi(view.message) : undefined;
+  const detail =
+    view.message === undefined
+      ? undefined
+      : feedbackProblem(view.message, 'No current input picture.');
   const handleButtonKey = (event: KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
   };

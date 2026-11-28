@@ -1,4 +1,4 @@
-import { useFeedbackText, useUiText } from '../../i18n/locale.js';
+import { feedbackFailure, useUiText } from '../../i18n/locale.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownWideNarrow,
@@ -123,7 +123,6 @@ export function SharedTemplateFolder({
   onImport: (file: File, source?: SharedTemplateSource) => void;
 }): JSX.Element {
   const localizeUi = useUiText();
-  const localizeFeedback = useFeedbackText();
   const [folder, setFolder] = useState(recentFolder);
   const [revision, setRevision] = useState(0);
   const [listing, setListing] = useState<FolderListing | null>(null);
@@ -165,9 +164,10 @@ export function SharedTemplateFolder({
       (error: unknown) => {
         if (!active) return;
         setProblem(
-          error instanceof Error && error.message.startsWith('CG Bridge ')
-            ? error.message
-            : 'CG Bridge could not read this folder. Check the Shared files path in Station setup.',
+          feedbackFailure(
+            error instanceof Error && error.message.startsWith('CG Bridge ') ? error : undefined,
+            'CG Bridge could not read this folder. Check the Shared files path in Station setup.',
+          ),
         );
         setLoading(false);
       },
@@ -190,7 +190,7 @@ export function SharedTemplateFolder({
       }
       onImport(file, bridgeAddress === null ? undefined : { ...path, bridgeAddress });
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : 'CG Bridge could not read this package.');
+      setProblem(feedbackFailure(error, 'CG Bridge could not read this package.'));
       setReading(false);
     }
   }
@@ -204,7 +204,7 @@ export function SharedTemplateFolder({
       onClose={() => {
         if (!reading) onClose();
       }}
-      message={problem === null ? [] : { role: 'refusal', text: localizeFeedback(problem) }}
+      message={problem === null ? [] : { role: 'refusal', text: problem }}
       footer={
         <>
           <ModalAction actionRole="cancel" disabled={reading} onClick={onClose}>

@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { useFeedbackText, useUiText } from '../../i18n/locale.js';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -167,6 +167,7 @@ export function FromFilePreviewDialog({
   itemFields?: readonly ListItemField[] | undefined;
 }): JSX.Element | null {
   const localizeUi = useUiText();
+  const localizeFeedback = useFeedbackText();
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const state = fromFileState(item.itemId, path);
@@ -229,7 +230,9 @@ export function FromFilePreviewDialog({
         : {
             message: {
               role: 'refusal' as const,
-              text: error === null ? 'The file data is not valid.' : 'Could not read the file.',
+              text: localizeFeedback(
+                error === null ? 'The file data is not valid.' : 'Could not read the file.',
+              ),
               detail: modalError,
             },
           })}

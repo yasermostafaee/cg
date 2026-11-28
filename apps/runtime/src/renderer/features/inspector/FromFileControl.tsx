@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedback, feedbackFailure, useUiText } from '../../i18n/locale.js';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   CircleCheck,
@@ -250,7 +250,7 @@ export function FromFileControl({
       // The operator's activation belongs to this Inspector's WebView, even when it is docked.
       source = await pickTextFileSource(pickerWindow, { includeExcel: structured });
     } catch (err) {
-      reportCommandError(err instanceof Error ? err.message : String(err));
+      reportCommandError(feedbackFailure(err, 'Could not open the file chooser.'));
       return;
     }
     if (source === null) return; // operator cancelled — not an error
@@ -294,7 +294,7 @@ export function FromFileControl({
         schemaSignature: currentSchemaSignature,
       });
     } catch (cause) {
-      reportCommandError(cause instanceof Error ? cause.message : String(cause));
+      reportCommandError(feedbackFailure(cause, 'Could not save the workbook.'));
     }
   };
 
@@ -404,7 +404,7 @@ export function FromFileControl({
     const result = await requestReadPermission(handle);
     setFromFilePermission(itemId, path, result);
     if (result === 'denied') {
-      reportCommandError(`Access to “${state.source.name}” was refused.`);
+      reportCommandError(feedback('Access to “{name}” was refused.', { name: state.source.name }));
     }
   };
 

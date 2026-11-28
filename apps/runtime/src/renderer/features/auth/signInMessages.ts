@@ -1,4 +1,5 @@
 import type { SignInFailure } from '../../../platform/playoutSession.js';
+import { feedback, feedbackLocale } from '../../i18n/locale.js';
 
 /**
  * 🔴 `R-066` — **WHAT THE SIGN-IN SAYS WHEN IT DID NOT WORK. Eight sentences, and no ninth.**
@@ -121,4 +122,14 @@ export function signInFailureLine(
     marksField: signInMarksField(code),
     keepsForm: licence,
   };
+}
+
+/** Keep the original licence reason accessible when the operator needs a translated summary. */
+export function signInFeedback(
+  line: Pick<SignInFailureLine, 'text'> & { fromPlayout?: boolean | undefined },
+): { text: string; technicalDetail?: string } {
+  if (line.fromPlayout === true && feedbackLocale() !== 'en') {
+    return { text: feedback(signInMessage('cg_not_licensed')), technicalDetail: line.text };
+  }
+  return { text: feedback(line.text) };
 }
