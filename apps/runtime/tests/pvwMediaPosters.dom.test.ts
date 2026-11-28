@@ -5,6 +5,7 @@ import type { ConsoleSourceCatalog } from '@cg/shared-ipc';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PvwMediaPosters } from '../src/renderer/features/monitors/pvwMediaPosters.js';
 import { usePvwSourceFrames } from '../src/renderer/features/monitors/usePvwSourceFrames.js';
+import { searchPlayoutMedia } from '../src/renderer/features/sources/sourceStore.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 
 const media = 'md-file';
@@ -55,6 +56,7 @@ function fixture() {
     sources: {
       config: vi.fn(async () => config),
       mediaThumbnail,
+      mediaSearch: vi.fn<RuntimeBridge['sources']['mediaSearch']>(),
       onConfigChanged: (listener: (next: ConsoleSourceCatalog) => void) => {
         configListeners.add(listener);
         return () => configListeners.delete(listener);
@@ -260,6 +262,47 @@ it('revalidates the content identity after the official poster read even without
   expect(posters.frames()).toEqual([]);
   expect(f.api.sources.config).toHaveBeenCalledTimes(2);
   posters.setDemand(undefined, []);
+});
+
+it('reads the official poster for an unsaved editor selection observed in the picker', async () => {
+  const f = fixture();
+  const draft = 'md-editor-draft';
+  vi.mocked(f.api.sources.mediaSearch).mockResolvedValue({
+    ok: true,
+    items: [{ id: draft, name: 'Draft clip', durationMs: 12_000 }],
+    total: 1,
+    nextCursor: null,
+  });
+  await searchPlayoutMedia({ q: 'Draft clip' });
+
+  const posters = new PvwMediaPosters(f.api, vi.fn());
+  try {
+    posters.setDemand(1, [draft]);
+    posters.request(draft);
+    await flush();
+    expect(f.mediaThumbnail).not.toHaveBeenCalled();
+
+    posters.setDemand(1, [draft], [draft]);
+    posters.request(draft);
+    await flush();
+    expect(f.mediaThumbnail.mock.calls).toEqual([[{ id: draft, channel: 1 }]]);
+    expect(posters.frames()).toEqual([
+      {
+        sourceId: draft,
+        signal: 'unknown',
+        jpegBase64,
+        width: 64,
+        height: 36,
+        engine: 'B',
+        snapshotOnly: true,
+      },
+    ]);
+
+    posters.setDemand(1, [draft]);
+    expect(posters.frames()).toEqual([]);
+  } finally {
+    posters.setDemand(undefined, []);
+  }
 });
 
 it.each(['failed', 'malformed', 'unknown-fingerprint'] as const)(

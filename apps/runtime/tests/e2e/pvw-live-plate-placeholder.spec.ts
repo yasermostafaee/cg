@@ -244,6 +244,10 @@ test('New live layout separates NDI pictures from explicit plate video playback'
     context.fillRect(0, 0, image.width, image.height);
     const jpeg = image.toDataURL('image/jpeg').split(',')[1]!;
     const picture = Uint8Array.from(atob(jpeg), (byte) => byte.charCodeAt(0));
+    window.cg.sources.mediaThumbnail = async ({ id }) =>
+      id === 'md-m-clip-001'
+        ? { ok: true, dataUrl: 'data:image/jpeg;base64,' + jpeg }
+        : { ok: false };
     window.cg.sourcePreviews.ndiTargets = async ({ sourceIds }) => ({
       targets: sourceIds.map((sourceId) =>
         sourceId === 'in-studio-1'
@@ -280,6 +284,15 @@ test('New live layout separates NDI pictures from explicit plate video playback'
   const firstReset = first.getByRole('button', { name: 'Reset preview in Plate 1' });
   await expect(firstPlay).toBeEnabled();
   await expect(secondPlay).toBeEnabled();
+  await expect(first.locator('.cg-live-layout-shot-picture img')).toHaveJSProperty(
+    'naturalWidth',
+    320,
+  );
+  await expect(second.locator('.cg-live-layout-shot-picture img')).toHaveJSProperty(
+    'naturalWidth',
+    320,
+  );
+  await expect(editor.locator('.cg-live-layout-shot-transport video')).toHaveCount(0);
   await expect(firstReset).toHaveCount(0);
   expect((await readProof()).opens).toHaveLength(0);
   await firstPlay.click();
@@ -314,6 +327,54 @@ test('New live layout separates NDI pictures from explicit plate video playback'
   await expect(inputPicture).toBeVisible();
   await expect.poll(ndiPixels).toBe(true);
   await expect.poll(async () => (await readProof()).closes.length).toBeGreaterThan(0);
+
+  const arrange = editor.getByRole('region', { name: 'Arrange', exact: true });
+  const resetArrange = arrange.getByRole('button', { name: 'Reset to defaults', exact: true });
+  await expect(resetArrange).toBeDisabled();
+  const presetMargin = arrange
+    .getByRole('group', { name: 'Preset margins (px)' })
+    .getByLabel('Left', { exact: true });
+  const focusMargin = arrange
+    .getByRole('group', { name: 'Focus margins (px)' })
+    .getByLabel('Top', { exact: true });
+  const gap = arrange.getByLabel('Horizontal gap', { exact: true });
+  const setNumber = async (field: typeof gap, value: string) => {
+    await field.fill(value);
+    await field.press('Tab');
+  };
+  const initialMargin = await presetMargin.inputValue();
+  const initialGap = await gap.inputValue();
+  const fit = arrange.getByRole('combobox', { name: 'Preset input fit' });
+  const aspect = arrange.getByRole('combobox', { name: 'Preset plate aspect ratio' });
+  const arrangement = arrange.getByRole('group', { name: 'Arrangement', exact: true });
+  await fit.selectOption('cover');
+  await aspect.selectOption('custom');
+  await setNumber(arrange.getByLabel('Custom width ÷ height'), '1.3');
+  await setNumber(presetMargin, '144');
+  await setNumber(focusMargin, '72');
+  await setNumber(gap, '100');
+  const fill = arrange.getByRole('checkbox', { name: 'Fill available area' });
+  await fill.check();
+  const reverse = arrange.getByRole('button', { name: 'Reverse order' });
+  await reverse.click();
+  await arrangement.getByRole('button', { name: 'Custom', exact: true }).click();
+  const placement = arrange.getByRole('group', { name: 'Plate position and size (px)' });
+  await setNumber(placement.getByLabel('Width', { exact: true }), '480');
+  await expect(placement.getByLabel('Width', { exact: true })).toHaveValue('480');
+  await resetArrange.click();
+  await expect(resetArrange).toBeDisabled();
+  await expect(arrangement.getByRole('button', { name: 'Side by side' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(placement).toHaveCount(0);
+  await expect(presetMargin).toHaveValue(initialMargin);
+  await expect(focusMargin).toHaveValue('0');
+  await expect(gap).toHaveValue(initialGap);
+  await expect(fill).not.toBeChecked();
+  await expect(reverse).toHaveAttribute('aria-pressed', 'false');
+  await expect(fit).toHaveValue('');
+  await expect(aspect).toHaveValue('');
 
   await secondPlay.click();
   await expect(second.locator('.cg-live-layout-shot-picture canvas')).toBeVisible();

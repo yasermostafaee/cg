@@ -186,6 +186,13 @@ Inspector edit — `Discard` and `Update` keep their meaning and nothing reaches
 removes the page on air, the dialog SHALL say which page takes its place at Update. The dialog SHALL fit at 1280×720,
 at 200 % text and at 200 % browser zoom on a screen that shows the Inspector, in RTL, its footer inside it.
 
+#### Scenario: Identify page actions in the toolbar
+
+- **WHEN** the operator opens Manage pages
+- **THEN** Add pages, Replace pictures and Organize pages form separate labeled groups
+- **AND** icons and button variants distinguish addition, replacement and removal, and the
+  groups wrap within the dialog in English, Persian and Arabic.
+
 #### Scenario: The owner's check
 
 - **WHEN** the operator moves page 3 earlier, removes page 1, sorts by name, adds a text page, moves it after the

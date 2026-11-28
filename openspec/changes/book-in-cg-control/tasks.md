@@ -229,3 +229,7 @@
 - [x] Verify numbered Sequences with real pictures in Windows Chromium and focused Bridge integration. All seven
       browser cases passed, including layer Stop, natural Auto completion, and same-index picture replacement.
 - [ ] Record the carrying Linux Playwright E2E result and target station verification.
+
+## Manage pages action groups
+
+- [x] Verify recognizable Add, Replace and Organize groups, short text and distinct action styles in Windows Chromium. The folder replacement still stages the expected pages.

@@ -104,6 +104,12 @@ export const StackLoadProfileChannel = defineChannel(
 );
 export type StackLoadProfileResult = z.infer<typeof StackLoadProfileChannel.response>;
 
+const MissingPlateSourcesSchema = z.object({
+  unassigned: z.array(z.number().int().positive()),
+  stale: z.array(z.number().int().positive()),
+});
+export type MissingPlateSources = z.infer<typeof MissingPlateSourcesSchema>;
+
 export const StackTakeChannel = defineChannel(
   'stack.take',
   z.object({
@@ -125,10 +131,12 @@ export const StackTakeChannel = defineChannel(
      * a generic sentence and the specific one stopped at the bridge's stderr.
      *
      * OPTIONAL and ADDITIVE: every existing refusal keeps answering with its code
-     * alone, and `errorCodeMessage` keeps supplying the wording for those. When
-     * both are present the message wins — it is the more specific of the two.
+     * alone, and `errorCodeMessage` keeps supplying the wording for those.
+     * A localized missing-source refusal uses the plate positions below.
      */
     message: z.string().optional(),
+    /** One-based positions of the affected plates, for localized action feedback. */
+    missingPlateSources: MissingPlateSourcesSchema.optional(),
     /**
      * 🔴 `FIELD-FIXES-01` B — the refusal is CARRIED ON THE ROW: the take reached the wire, was
      * refused, and the bridge recorded it as the item's `takeRefusal`, which the row and its
@@ -186,6 +194,7 @@ export const StackUpdateChannel = defineChannel(
     errorCode: z.string().optional(),
     /** The refusal's own sentence, when it has one the operator can act on. */
     message: z.string().optional(),
+    missingPlateSources: MissingPlateSourcesSchema.optional(),
   }),
 );
 
@@ -497,6 +506,7 @@ export const StackSetActiveLookChannel = defineChannel(
     ok: z.boolean(),
     reason: z.string().optional(),
     message: z.string().optional(),
+    missingPlateSources: MissingPlateSourcesSchema.optional(),
     /**
      * 🔴 `LOOK-SWITCH-01` / `B-273` — the switch was refused because CasparCG refused a PLATE its
      * look needs, and the bridge recorded it as the item's `takeRefusal` — `FIELD-FIXES-01`'s one

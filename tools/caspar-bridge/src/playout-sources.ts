@@ -316,6 +316,8 @@ export interface PlayoutSourcesOptions {
   /** D4's join, for an input's `casparHost` and for `compatibleChannels` (§0.9). */
   readonly hostIsOurs: (casparHost: string) => boolean;
   readonly channelFor: (casparHost: string, casparChannel: number) => number | null;
+  /** D11 IDs referenced by the defaults of saved live layouts. */
+  readonly authoredMediaIds?: () => ReadonlySet<string>;
   /** The persisted stores; absent = memory only (tests, embedders). */
   readonly inputsPath?: string | undefined;
   readonly boundMediaPath?: string | undefined;
@@ -332,6 +334,7 @@ export class PlayoutSources {
   readonly #signedIn: () => boolean;
   readonly #hostIsOurs: (casparHost: string) => boolean;
   readonly #channelFor: (casparHost: string, casparChannel: number) => number | null;
+  readonly #authoredMediaIds: PlayoutSourcesOptions['authoredMediaIds'];
   readonly #inputsPath: string | undefined;
   readonly #boundMediaPath: string | undefined;
   readonly #now: () => number;
@@ -345,7 +348,10 @@ export class PlayoutSources {
   readonly #media = new Map<string, BoundMediaItem>();
   readonly #mediaObservationById = new Map<string, number>();
   #mediaObservation = 0;
-  readonly #recent = new Map<string, PlayoutMediaItem>();
+  readonly #recent = new Map<
+    string,
+    { readonly item: PlayoutMediaItem; readonly observation: number }
+  >();
   readonly #mediaPresence = new Map<
     string,
     {
@@ -371,6 +377,7 @@ export class PlayoutSources {
     this.#signedIn = options.signedIn;
     this.#hostIsOurs = options.hostIsOurs;
     this.#channelFor = options.channelFor;
+    this.#authoredMediaIds = options.authoredMediaIds;
     this.#inputsPath = options.inputsPath;
     this.#boundMediaPath = options.boundMediaPath;
     this.#now = options.now ?? ((): number => Date.now());
@@ -412,7 +419,7 @@ export class PlayoutSources {
   mediaForPresence(sourceId: string) {
     const id = playoutMediaIdOf(sourceId);
     if (id === null) return null;
-    const media = this.#media.get(id) ?? this.#recent.get(id);
+    const media = this.#media.get(id) ?? this.#recent.get(id)?.item;
     if (media === undefined) return null;
     const observed = this.#mediaPresence.get(id);
     return {
@@ -556,10 +563,11 @@ export class PlayoutSources {
 
   #refreshMedia(floorMs: number): Promise<void> {
     if (this.#mediaInFlight !== null) return this.#mediaInFlight;
-    if (this.#media.size === 0) return Promise.resolve();
     if (this.#now() - this.#lastMediaReadMs < floorMs) return Promise.resolve();
+    const ids = new Set([...this.#media.keys(), ...(this.#authoredMediaIds?.() ?? [])]);
+    if (ids.size === 0) return Promise.resolve();
     this.#lastMediaReadMs = this.#now();
-    this.#mediaInFlight = this.#readBound([...this.#media.keys()], HTTP_TIMEOUT_MS)
+    this.#mediaInFlight = this.#readBound([...ids], HTTP_TIMEOUT_MS)
       .then(() => undefined)
       .finally(() => {
         this.#mediaInFlight = null;
@@ -603,6 +611,7 @@ export class PlayoutSources {
         (envelope.total === undefined || envelope.total === envelope.items.length) &&
         envelope.items.length === listed.size &&
         page.items.every((item) => batch.includes(item.id));
+      const authored = this.#authoredMediaIds?.();
       for (const id of batch) {
         const fresh = listed.get(id);
         if (fresh === undefined && !complete) {
@@ -610,7 +619,7 @@ export class PlayoutSources {
           continue;
         }
         this.#recordMediaPresence(id, fresh, observation);
-        changed = this.#observeBoundMedia(id, fresh, observation) || changed;
+        changed = this.#observeBoundMedia(id, fresh, observation, authored) || changed;
       }
     }
     if (changed) {
@@ -624,9 +633,22 @@ export class PlayoutSources {
     id: string,
     fresh: PlayoutMediaItem | undefined,
     observation: number,
+    authored?: ReadonlySet<string>,
   ): boolean {
     const held = this.#media.get(id);
-    if (held === undefined || observation < (this.#mediaObservationById.get(id) ?? 0)) return false;
+    if (held === undefined) {
+      if (
+        fresh === undefined ||
+        authored?.has(id) !== true ||
+        observation < (this.#mediaPresence.get(id)?.observation ?? 0)
+      ) {
+        return false;
+      }
+      this.#mediaObservationById.set(id, observation);
+      this.#media.set(id, toBoundMedia(fresh, new Date(this.#now()).toISOString()));
+      return true;
+    }
+    if (observation < (this.#mediaObservationById.get(id) ?? 0)) return false;
     this.#mediaObservationById.set(id, observation);
     const next =
       fresh === undefined
@@ -635,6 +657,30 @@ export class PlayoutSources {
     if (JSON.stringify(next) === JSON.stringify(held)) return false;
     this.#media.set(id, next);
     return true;
+  }
+
+  /** Resolve a just-saved layout's new bindings without making its import depend on D11. */
+  async resolveAuthoredMedia(sourceIds: readonly string[]): Promise<void> {
+    if (this.#provider === null || !this.#signedIn()) return;
+    const authored = this.#authoredMediaIds?.();
+    const lookup: string[] = [];
+    let changed = false;
+    for (const sourceId of new Set(sourceIds)) {
+      const id = playoutMediaIdOf(sourceId);
+      if (id === null || this.#media.has(id) || authored?.has(id) !== true) continue;
+      const recent = this.#recent.get(id);
+      const observation = this.#mediaPresence.get(id);
+      if (recent === undefined || observation?.observation !== recent.observation) {
+        lookup.push(id);
+      } else {
+        changed = this.#observeBoundMedia(id, recent.item, recent.observation, authored) || changed;
+      }
+    }
+    if (changed) {
+      this.#saveMedia();
+      this.#rebuild();
+    }
+    if (lookup.length > 0) await this.#readBound(lookup, HTTP_TIMEOUT_MS);
   }
 
   /** Search D11 on the Playout's side; the answer is kept for binding, the `clip` never sent on. */
@@ -660,9 +706,10 @@ export class PlayoutSources {
       return { ok: false, reason: 'playout-unreachable', message: 'The Playout did not answer.' };
     }
     let changed = false;
+    const authored = this.#authoredMediaIds?.();
     for (const item of page.items) {
       this.#remember(item, observation);
-      changed = this.#observeBoundMedia(item.id, item, observation) || changed;
+      changed = this.#observeBoundMedia(item.id, item, observation, authored) || changed;
     }
     if (changed) {
       this.#saveMedia();
@@ -695,7 +742,7 @@ export class PlayoutSources {
     if (id === null) return null;
     const bound = this.#media.get(id);
     if (bound?.unavailable === true) return null;
-    const item = this.#recent.get(id) ?? bound;
+    const item = this.#recent.get(id)?.item ?? bound;
     if (atMs === undefined) return item?.type === 'video' || item?.type === 'still' ? id : null;
     return item?.type === 'video' && item.durationMs !== undefined && atMs < item.durationMs
       ? id
@@ -708,7 +755,7 @@ export class PlayoutSources {
     if (playoutId === null || provider?.readMediaThumbnail === undefined || !this.#signedIn()) {
       return { ok: false };
     }
-    const recent = this.#recent.get(playoutId);
+    const recent = this.#recent.get(playoutId)?.item;
     const bound = this.#media.get(playoutId);
     if (recent === undefined && bound?.unavailable === true) return { ok: false };
     const fingerprint = (recent ?? bound)?.fingerprint;
@@ -720,9 +767,10 @@ export class PlayoutSources {
   }
 
   #remember(item: PlayoutMediaItem, observation: number): void {
+    if (observation < (this.#mediaPresence.get(item.id)?.observation ?? 0)) return;
     this.#recordMediaPresence(item.id, item, observation);
     this.#recent.delete(item.id);
-    this.#recent.set(item.id, item);
+    this.#recent.set(item.id, { item, observation });
     while (this.#recent.size > RECENT_ANSWERS_MAX) {
       const oldest = this.#recent.keys().next().value;
       if (oldest === undefined) break;
@@ -765,7 +813,7 @@ export class PlayoutSources {
       this.#rebuild();
       return { ok: true };
     }
-    let item = this.#recent.get(playoutId);
+    let item = this.#recent.get(playoutId)?.item;
     if (item === undefined && this.#provider !== null) {
       this.#mediaReads += 1;
       const observation = ++this.#mediaObservation;

@@ -1133,6 +1133,7 @@ it('🔴 an ON-AIR row with an EMPTY ledger still reconciles — status, not sea
   const refused = await r.setActiveLook('item-1', 'two');
   expect(refused.ok, 'the reconcile RAN — a short-circuit would have said ok').toBe(false);
   expect(refused.reason).toBe('live-source-unassigned');
+  expect(refused.missingPlateSources).toEqual({ unassigned: [1, 2], stale: [] });
   expect(playsIn(await since(before)), 'and a refused switch seats nothing').toEqual([]);
   // 🔴 …and the row did NOT move: a refused switch records nothing (`tasks.md` 7.9).
   expect(r.activeLookId('item-1')).toBe('empty');

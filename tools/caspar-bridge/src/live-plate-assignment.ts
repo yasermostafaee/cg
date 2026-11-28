@@ -4,11 +4,13 @@ import {
   ownOutputWords,
   plateLabel,
   plateList,
+  plateNumber,
   SOURCE_OWN_OUTPUT_CODE,
   sourceLoopsOn,
   sourceSeatable,
   sourceShowableOn,
   unseatableWords,
+  type MissingPlateSources,
   type SourceAssignments,
   type SourceCatalog,
   type SourceDefinition,
@@ -79,6 +81,7 @@ export interface PlateAssignmentRefusal {
   readonly message: string;
   /** The plates that could not be resolved, in declaration order. */
   readonly plateIds: readonly string[];
+  readonly missingPlateSources?: MissingPlateSources;
   /**
    * `PLAYOUT-SOURCES-01` — for an unavailable or unusable entry, the FIRST such plate and the entry
    * it is bound to, so the row can say which (only that plate is named: the take stops there).
@@ -263,11 +266,17 @@ export function resolvePlateAssignments(input: {
   }
 
   const plateIds = [...unassigned, ...stale];
+  const numbers = (ids: readonly string[]): number[] =>
+    ids.flatMap((id) => plateNumber(numbering, id) ?? []);
+  const missingPlateSources = { unassigned: numbers(unassigned), stale: numbers(stale) };
   return {
     ok: false,
     errorCode: LIVE_PLATE_UNASSIGNED,
     plateIds,
     message: refusalMessage(unassigned.map(named), stale.map(named)),
+    ...(missingPlateSources.unassigned.length + missingPlateSources.stale.length === plateIds.length
+      ? { missingPlateSources }
+      : {}),
   };
 }
 

@@ -5,9 +5,9 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  FilePlus2,
-  FolderOpen,
+  FolderPlus,
   FolderSync,
+  ImagePlus,
   Images,
   Pencil,
   Square,
@@ -261,50 +261,107 @@ export function ManagePagesModal({
           role="toolbar"
           aria-label={localizeUi('{name} — page tools', { name: title })}
         >
-          <Button variant="neutral" disabled={busy !== null} onClick={() => void add(false, false)}>
-            <Icon icon={FilePlus2} size={13} />
-            {busy === null
-              ? localizeUi('Add pictures…')
-              : localizeUi('Loading {done} / {total}…', {
-                  done: String(busy.done),
-                  total: String(busy.total),
-                })}
-          </Button>
-          <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, false)}>
-            <Icon icon={FolderOpen} size={13} />
-            {localizeUi('Add folder…')}
-          </Button>
-          <Button variant="neutral" disabled={busy !== null} onClick={() => void add(false, true)}>
-            <Icon icon={Images} size={13} />
-            {localizeUi('Replace with pictures…')}
-          </Button>
-          <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, true)}>
-            <Icon icon={FolderSync} size={13} />
-            {localizeUi('Replace with folder…')}
-          </Button>
-          <Button variant="neutral" disabled={busy !== null} onClick={addTextPage}>
-            <Icon icon={Type} size={13} />
-            {localizeUi('Add text page')}
-          </Button>
-          <Button
-            variant="neutral"
-            disabled={busy !== null || draft.filter(isPicturePage).length < 2}
-            onClick={() => setDraft((now) => withPicturesSortedByName(now))}
+          <div className="cg-pages__tool-group" role="group" aria-label={localizeUi('Add pages')}>
+            <span className="cg-pages__tool-title" aria-hidden="true">
+              {localizeUi('Add pages')}
+            </span>
+            <div className="cg-pages__tool-actions">
+              <Button
+                variant="add"
+                aria-label={localizeUi('Add pictures…')}
+                disabled={busy !== null}
+                onClick={() => void add(false, false)}
+              >
+                <Icon icon={ImagePlus} size={15} />
+                {localizeUi('Pictures…')}
+              </Button>
+              <Button
+                variant="add"
+                aria-label={localizeUi('Add folder…')}
+                disabled={busy !== null}
+                onClick={() => void add(true, false)}
+              >
+                <Icon icon={FolderPlus} size={15} />
+                {localizeUi('Folder…')}
+              </Button>
+              <Button
+                variant="add"
+                aria-label={localizeUi('Add text page')}
+                disabled={busy !== null}
+                onClick={addTextPage}
+              >
+                <Icon icon={Type} size={15} />
+                {localizeUi('Text page')}
+              </Button>
+            </div>
+          </div>
+          <div
+            className="cg-pages__tool-group"
+            role="group"
+            aria-label={localizeUi('Replace pictures')}
           >
-            <Icon icon={ArrowDownAZ} size={13} />
-            {localizeUi('Sort by name')}
-          </Button>
-          <Button
-            variant="neutral"
-            disabled={selected.size === 0}
-            onClick={() => removeIds(selected)}
+            <span className="cg-pages__tool-title" aria-hidden="true">
+              {localizeUi('Replace pictures')}
+            </span>
+            <div className="cg-pages__tool-actions">
+              <Button
+                variant="caution"
+                aria-label={localizeUi('Replace with pictures…')}
+                disabled={busy !== null}
+                onClick={() => void add(false, true)}
+              >
+                <Icon icon={Images} size={15} />
+                {localizeUi('Pictures…')}
+              </Button>
+              <Button
+                variant="caution"
+                aria-label={localizeUi('Replace with folder…')}
+                disabled={busy !== null}
+                onClick={() => void add(true, true)}
+              >
+                <Icon icon={FolderSync} size={15} />
+                {localizeUi('Folder…')}
+              </Button>
+            </div>
+          </div>
+          <div
+            className="cg-pages__tool-group"
+            role="group"
+            aria-label={localizeUi('Organize pages')}
           >
-            <Icon icon={Trash2} size={13} />
-            {selected.size === 0
-              ? localizeUi('Remove selected')
-              : localizeUi('Remove {count} selected', { count: String(selected.size) })}
-          </Button>
+            <span className="cg-pages__tool-title" aria-hidden="true">
+              {localizeUi('Organize pages')}
+            </span>
+            <div className="cg-pages__tool-actions">
+              <Button
+                variant="neutral"
+                disabled={busy !== null || draft.filter(isPicturePage).length < 2}
+                onClick={() => setDraft((now) => withPicturesSortedByName(now))}
+              >
+                <Icon icon={ArrowDownAZ} size={15} />
+                {localizeUi('Sort by name')}
+              </Button>
+              <Button
+                variant="danger"
+                disabled={selected.size === 0}
+                onClick={() => removeIds(selected)}
+              >
+                <Icon icon={Trash2} size={15} />
+                {selected.size === 0
+                  ? localizeUi('Remove selected')
+                  : localizeUi('Remove {count} selected', { count: String(selected.size) })}
+              </Button>
+            </div>
+          </div>
         </div>
+        {busy !== null && (
+          <div className="cg-pages__tool-title" role="status">
+            {localizeUi('Loading {done} / {total}…', {
+              done: String(busy.done),
+              total: String(busy.total),
+            })}
+          </div>
+        )}
         <ol className="cg-pages__grid" aria-label={localizeUi('{name} — pages', { name: title })}>
           {draft.map((page, i) => {
             const n = i + 1;

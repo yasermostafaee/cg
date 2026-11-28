@@ -97,6 +97,7 @@ class PreviewFeed {
     const readers = [...this.#readers].reverse();
     const primary = readers.find(({ mode }) => mode === 'editor') ?? readers[0];
     const channel = primary?.channel;
+    const editorSourceIds = primary?.mode === 'editor' ? primary.sourceIds : [];
     const sourceIds =
       primary === undefined
         ? []
@@ -118,7 +119,7 @@ class PreviewFeed {
             channel,
             sourceIds,
             liveSourceIds,
-            key: JSON.stringify([channel, sourceIds, liveSourceIds]),
+            key: JSON.stringify([channel, sourceIds, editorSourceIds]),
           };
     if (demand?.key === this.#demand?.key) return;
     // Closing/reopening effects in the same render can briefly remove the last reader.
@@ -134,7 +135,7 @@ class PreviewFeed {
       }
     }
     this.#demand = demand;
-    if (demand !== undefined) this.#posters.setDemand(channel, sourceIds);
+    if (demand !== undefined) this.#posters.setDemand(channel, sourceIds, editorSourceIds);
     for (const ids of [this.#readCompleted, this.#missingSnapshots])
       for (const id of ids) if (!sourceIds.includes(id)) ids.delete(id);
     for (const id of sourceIds) if (!liveSourceIds.includes(id)) this.#readCompleted.add(id);

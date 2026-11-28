@@ -243,6 +243,7 @@ import {
   type MediaPlateState,
   type MediaPlateTransportAction,
   type LiveSourceLayerRange,
+  type MissingPlateSources,
   type SourceAssignments,
   type SourceCatalog,
   type SourceDefinition,
@@ -1582,6 +1583,7 @@ type LiveSeatingPlan =
       readonly ok: false;
       readonly errorCode: string;
       readonly message: string;
+      readonly missingPlateSources?: MissingPlateSources;
       /**
        * `PLAYOUT-SOURCES-01` — for `source-unavailable` / `source-unusable`, the plate the refusal
        * stopped on and its entry, so the row can carry its one line (`FIELD-FIXES-01` B).
@@ -2149,16 +2151,18 @@ function restoreSkipNaming(item: RetainedStackItem): Pick<RestoreSkip, 'template
   };
 }
 
-/**
- * A take's answer. `FIELD-FIXES-01` B — `refusalOnRow` is set exactly where the take reached the
- * wire, was refused and RECORDED the refusal on the item (`#recordTakeRefusal`): the row and its
- * Inspector say it, so no other surface repeats it. A refusal that never reached the wire (on air,
- * rehearsing, disconnected, an unassigned plate) keeps its own surface and never carries it.
- */
-interface TakeVerdict {
+interface StackCommandVerdict {
   accepted: boolean;
   errorCode?: string;
   message?: string;
+  missingPlateSources?: MissingPlateSources;
+}
+
+/**
+ * A take's answer. `FIELD-FIXES-01` B — `refusalOnRow` marks a refusal recorded on the item
+ * (`#recordTakeRefusal`), where the row and Inspector display it in place of the banner.
+ */
+interface TakeVerdict extends StackCommandVerdict {
   refusalOnRow?: true;
 }
 
@@ -8591,7 +8595,14 @@ export class CasparRuntime {
       // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
       // two aspects disagree, are the facts that make these refusals actionable,
       // and no fixed code can carry them — see `StackTakeChannel`.
-      return { accepted: false as const, errorCode: refused.errorCode, message: refused.message };
+      return {
+        accepted: false as const,
+        errorCode: refused.errorCode,
+        message: refused.message,
+        ...(refused.missingPlateSources !== undefined && {
+          missingPlateSources: refused.missingPlateSources,
+        }),
+      };
     };
     let plan = planTake();
     if (!plan.ok) return refusePlan(plan);
@@ -9426,7 +9437,7 @@ export class CasparRuntime {
     lookBindings?: LookSourceBindings,
     position?: Position,
     inputTransition?: InputTransition,
-  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+  ): Promise<StackCommandVerdict> {
     if (this.#managedCg !== undefined) {
       return this.#audited('update', this.#itemDetail(itemId), async () => {
         if (lookBindings !== undefined || position !== undefined || inputTransition !== undefined) {
@@ -9857,7 +9868,7 @@ export class CasparRuntime {
     mergeMode: 'merge' | 'replace',
     lookBindings?: LookSourceBindings,
     inputTransition?: InputTransition,
-  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+  ): Promise<StackCommandVerdict> {
     const item = this.#reconciler.get(itemId);
     if (item !== null) {
       const held = this.#templates.heldVersion(itemId);
@@ -9935,6 +9946,9 @@ export class CasparRuntime {
           accepted: false,
           errorCode: applied.reason ?? 'amcp-error',
           ...(applied.message !== undefined && { message: applied.message }),
+          ...(applied.missingPlateSources !== undefined && {
+            missingPlateSources: applied.missingPlateSources,
+          }),
         };
       }
       inputOutput = applied.inputOutput;
@@ -11819,6 +11833,9 @@ export class CasparRuntime {
           ok: false,
           errorCode: refusal.errorCode,
           message: refusal.message,
+          ...(refusal.missingPlateSources !== undefined && {
+            missingPlateSources: refusal.missingPlateSources,
+          }),
           ...(refusal.refused !== undefined ? { refused: refusal.refused } : {}),
         };
       }
@@ -12925,7 +12942,13 @@ export class CasparRuntime {
       bindings: LookSourceBindings | undefined;
     },
     inputTransition?: InputTransition,
-  ): Promise<{ ok: boolean; reason?: string; message?: string; inputOutput?: SettledInputOutput }> {
+  ): Promise<{
+    ok: boolean;
+    reason?: string;
+    message?: string;
+    missingPlateSources?: MissingPlateSources;
+    inputOutput?: SettledInputOutput;
+  }> {
     const refusal = this.#refuseBindingChange(itemId, slot, next);
     if (refusal !== null) return { ok: false, ...refusal };
 
@@ -12982,6 +13005,9 @@ export class CasparRuntime {
         ok: false,
         ...(reconciled.errorCode !== undefined && { reason: reconciled.errorCode }),
         ...(reconciled.message !== undefined && { message: reconciled.message }),
+        ...(reconciled.missingPlateSources !== undefined && {
+          missingPlateSources: reconciled.missingPlateSources,
+        }),
       };
     }
     this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
@@ -19436,7 +19462,13 @@ export class CasparRuntime {
     requestedTransition?: FrameTransition,
     requestedFocusSlide?: InputSlideTransition,
     focusInputTransition?: InputTransition,
-  ): Promise<{ ok: boolean; reason?: string; message?: string; refusalOnRow?: true }> {
+  ): Promise<{
+    ok: boolean;
+    reason?: string;
+    message?: string;
+    refusalOnRow?: true;
+    missingPlateSources?: MissingPlateSources;
+  }> {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const slot = this.#slots.get(itemId);
     if (templateId === undefined || slot === undefined) {
@@ -19899,6 +19931,9 @@ export class CasparRuntime {
           ok: false,
           ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
           ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+          ...(reconciled.missingPlateSources !== undefined && {
+            missingPlateSources: reconciled.missingPlateSources,
+          }),
           ...onRow(),
         };
       }
@@ -20118,6 +20153,7 @@ export class CasparRuntime {
     mixerCommitted?: boolean;
     errorCode?: string;
     message?: string;
+    missingPlateSources?: MissingPlateSources;
     /** `B-209` — the refused line; and `LOOK-SWITCH-01` — the plate and source it named. */
     command?: string;
     refused?: {
@@ -20152,6 +20188,9 @@ export class CasparRuntime {
         ok: false as const,
         errorCode: failed.errorCode,
         message: failed.message,
+        ...(failed.missingPlateSources !== undefined && {
+          missingPlateSources: failed.missingPlateSources,
+        }),
         ...(refused !== undefined
           ? {
               refused: {

@@ -139,3 +139,10 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 - **THEN** the hint uses the interface direction. Entered values keep their content direction, including explicitly left-to-right technical values.
 - **AND** the template search reserves room for its magnifier on the leading side of the interface while the query direction changes.
 - **AND** at narrow window widths the template toolbar wraps and the search stays at its usual height.
+
+#### Scenario: Read why a plate source blocked playback
+
+- **WHEN** the operator tries Play, switches preset or updates bindings and one or more plate sources are unavailable
+- **THEN** the warning uses the feedback language even when the interface is English
+- **AND** the warning includes plate numbers when supplied by the Bridge. With an older Bridge,
+  the localized generic message is available.

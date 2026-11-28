@@ -1,6 +1,13 @@
 import { useUiText } from '../../i18n/locale.js';
-import { useId } from 'react';
-import { ArrowLeftRight, LayoutGrid, Move, MoveHorizontal, MoveVertical } from 'lucide-react';
+import { useId, useState } from 'react';
+import {
+  ArrowLeftRight,
+  LayoutGrid,
+  Move,
+  MoveHorizontal,
+  MoveVertical,
+  RotateCcw,
+} from 'lucide-react';
 import {
   DEFAULT_LIVE_CROP_FOCUS,
   controlLiveLayoutFocusRect,
@@ -17,6 +24,7 @@ import {
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { Icon } from '../../ui/Icon.js';
+import { defaultControlLiveLayoutArrangement } from './controlLiveLayoutCompiler.js';
 import { LiveLayoutEditorCropControls } from './LiveLayoutEditorCropControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import { LiveLayoutGeometryThumbnail } from './LiveLayoutGeometryThumbnail.js';
@@ -119,10 +127,25 @@ export function LiveLayoutEditorArrange({
 }): JSX.Element | null {
   const localizeUi = useUiText();
   const fillId = useId();
+  // Restart the aspect selector's local custom-entry mode on a factory reset.
+  const [resetCount, setResetCount] = useState(0);
   const count = preset.frameIds.length;
   if (count === 0) return null;
   const { width, height } = layout.resolution;
   const custom = preset.arrangement === 'custom';
+  const defaults = {
+    ...defaultControlLiveLayoutArrangement(layout.resolution),
+    margins: undefined,
+    focusMargins: undefined,
+    fill: undefined,
+    customRects: undefined,
+    plateAspectRatio: undefined,
+    plateFitMode: undefined,
+    plateCropFocus: undefined,
+  };
+  const canReset = (Object.keys(defaults) as (keyof typeof defaults)[]).some(
+    (key) => preset[key] !== defaults[key],
+  );
 
   function changeGeometry(patch: Partial<ControlLiveLayoutPreset>): void {
     const proposed = { ...preset, ...patch };
@@ -139,26 +162,38 @@ export function LiveLayoutEditorArrange({
         <h3>
           <Icon icon={LayoutGrid} size={16} /> {localizeUi('Arrange')}
         </h3>
-        {custom && (
+        <div className="cg-live-layout-arrange-actions">
+          {custom && (
+            <Button
+              variant="neutral"
+              active={editingPlacement}
+              aria-pressed={editingPlacement}
+              onClick={() => onEditingPlacementChange(!editingPlacement)}
+            >
+              <Icon icon={Move} size={14} /> {localizeUi('Edit plate layout')}
+            </Button>
+          )}
+          {count > 1 && !custom && (
+            <Button
+              variant="neutral"
+              active={preset.reverse}
+              aria-pressed={preset.reverse}
+              onClick={() => changeGeometry({ reverse: !preset.reverse })}
+            >
+              <Icon icon={ArrowLeftRight} size={14} /> {localizeUi('Reverse order')}
+            </Button>
+          )}
           <Button
             variant="neutral"
-            active={editingPlacement}
-            aria-pressed={editingPlacement}
-            onClick={() => onEditingPlacementChange(!editingPlacement)}
+            disabled={!canReset}
+            onClick={() => {
+              changeGeometry(defaults);
+              setResetCount((count) => count + 1);
+            }}
           >
-            <Icon icon={Move} size={14} /> {localizeUi('Edit plate layout')}
+            <Icon icon={RotateCcw} size={14} /> {localizeUi('Reset to defaults')}
           </Button>
-        )}
-        {count > 1 && !custom && (
-          <Button
-            variant="neutral"
-            active={preset.reverse}
-            aria-pressed={preset.reverse}
-            onClick={() => changeGeometry({ reverse: !preset.reverse })}
-          >
-            <Icon icon={ArrowLeftRight} size={14} /> {localizeUi('Reverse order')}
-          </Button>
-        )}
+        </div>
       </div>
       {custom && editingPlacement && selectedPlate !== undefined && (
         <div
@@ -186,7 +221,7 @@ export function LiveLayoutEditorArrange({
         </div>
       )}
       <LiveLayoutEditorPlatePresentation
-        key={preset.id}
+        key={preset.id + ':' + resetCount}
         scope="preset"
         value={{ aspectRatio: preset.plateAspectRatio, fitMode: preset.plateFitMode }}
         inheritedAspect={width / height}

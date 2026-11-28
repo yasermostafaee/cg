@@ -559,6 +559,38 @@ describe('§1.C — the one retry of a media PLAY answered 404', () => {
 // ── §1.A — clip freshness ───────────────────────────────────────────────────────────────
 
 describe('§1.A — a bound media item is re-read every 30 s', () => {
+  it('does not bind a removed layout or reuse an older picker path when it is saved again', async () => {
+    const provider = new LocalPlayoutSources();
+    const authored = new Set<string>();
+    const reader = new PlayoutSources({
+      provider,
+      signedIn: () => true,
+      hostIsOurs: () => true,
+      channelFor: (_host, channel) => channel,
+      authoredMediaIds: () => authored,
+    });
+    sources = reader;
+    const mediaId = FAKE_MEDIA_IDS.khabar1405;
+    expect(await reader.searchMedia({ q: 'خبر 1405' })).toMatchObject({
+      ok: true,
+      items: expect.arrayContaining([expect.objectContaining({ id: MEDIA_KHABAR })]),
+    });
+    const moved = provider.setMediaClip(mediaId, 'C:/Media/moved.mp4');
+    authored.add(mediaId);
+    const refresh = reader.refresh(0);
+    authored.clear();
+    await refresh;
+    expect(reader.catalog().sources.some(({ id }) => id === MEDIA_KHABAR)).toBe(false);
+
+    authored.add(mediaId);
+    await reader.resolveAuthoredMedia([MEDIA_KHABAR]);
+    expect(reader.catalog().sources.find(({ id }) => id === MEDIA_KHABAR)?.producer).toEqual({
+      kind: 'media',
+      file: moved,
+    });
+    expect(provider.idsReads).toEqual([[mediaId], [mediaId]]);
+  });
+
   it('🔴 the Playout moves the clip, and within 30 s the next take plays the new path', async () => {
     const provider = new LocalPlayoutSources();
     const station = await boot({

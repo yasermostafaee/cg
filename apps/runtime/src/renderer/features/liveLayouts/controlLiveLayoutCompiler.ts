@@ -95,6 +95,17 @@ export const CONTROL_LIVE_LAYOUT_FONT_ACCEPT = Object.keys(FONT_FORMATS)
   .map((extension) => '.' + extension)
   .join(',');
 
+export function defaultControlLiveLayoutArrangement({
+  width,
+  height,
+}: Resolution): Pick<
+  ControlLiveLayoutPreset,
+  'arrangement' | 'horizontalGap' | 'verticalGap' | 'reverse'
+> {
+  const gap = Math.round(Math.min(width, height) * 0.025);
+  return { arrangement: 'side-by-side', horizontalGap: gap, verticalGap: gap, reverse: false };
+}
+
 export function createControlLiveLayout(
   resolution: Resolution = { width: 1920, height: 1080 },
   frameRate: FrameRate = 25,
@@ -109,7 +120,6 @@ export function createControlLiveLayout(
     }),
   );
   const presetId = 'preset-' + uuid();
-  const gap = Math.round(Math.min(resolution.width, resolution.height) * 0.025);
   return {
     id: uuid(),
     name: 'New live layout',
@@ -139,10 +149,7 @@ export function createControlLiveLayout(
         id: presetId,
         name: 'Two-up',
         frameIds: frames.map(({ id }) => id),
-        arrangement: 'side-by-side',
-        horizontalGap: gap,
-        verticalGap: gap,
-        reverse: false,
+        ...defaultControlLiveLayoutArrangement(resolution),
         hiddenTitles: [],
         hiddenFocusTitles: [],
       },

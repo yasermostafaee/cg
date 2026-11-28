@@ -4819,6 +4819,8 @@ deleted unless another row names them; WHEN a second console looks THEN it sees 
 WHEN a Sequence field is selected THEN the Inspector shows one `Manage pages…` entry beside its existing
 thumbnails and page navigation, and picture or folder replacement is available in the dialog
 (`openspec/changes/book-in-cg-control/`).
+WHEN the operator opens Manage pages THEN adding pages, replacing pictures and organizing
+pages have distinct groups and accessible names. Replacement and removal are visually distinct.
 WHEN a numbered Sequence with authored or operator-loaded pictures ends naturally on PGM or accepts a layer Stop
 THEN the layer and Inspector counters return to `1 / total`, the next Play starts at page 1, and the reset
 sends no page turn or Play to PGM. A playing PVW keeps its current picture through the reset.
@@ -5460,6 +5462,10 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN Reset is pressed after playback then only that video's local preview returns to the start and pauses.
 - WHEN a preset contains both an NDI input and a video THEN each plate displays only its assigned source. Video preview transport appears only on the video plate.
 - WHEN the operator opens the Plate tab THEN the Layout effects disclosure is available there and its choices apply across the layout.
+- WHEN the operator chooses a known library video in New/Edit live layout THEN its poster
+  appears before local Play. A saved layout with an available library video displays it in PVW.
+- WHEN the operator chooses Reset to defaults in Arrange THEN the selected preset returns
+  to its factory arrangement, including gap, margins and placement, and retains its sources.
 
 ## [~] R-126 — Group everyday CG Control settings in General ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/organize-control-general-settings/`
 

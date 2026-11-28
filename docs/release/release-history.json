@@ -351,6 +351,26 @@
           "ar": "تظهر النصوص الإرشادية في الحقول الفارغة باتجاه لغة الواجهة. تنتقل أزرار شريط القوالب إلى سطر جديد في النوافذ الضيقة لإتاحة مساحة للبحث."
         },
         {
+          "fa": "ویدئوی تخصیص‌یافته به قابِ چیدمان زنده از کتابخانهٔ Playout شناسایی می‌شود. تصویر بندانگشتی در ویرایشگر و PVW نمایش داده می‌شود و پخش روی آنتن از همان فایل تأییدشده استفاده می‌کند.",
+          "en": "Live layouts resolve assigned clips against the Playout library. The editor and PVW show available posters, and Programme plays the verified file.",
+          "ar": "تتحقق الترتيبات الحية من المقاطع المعينة في مكتبة Playout. يعرض المحرر والمعاينة الصور المصغرة المتاحة، ويُشغَّل الملف المتحقق منه على الهواء."
+        },
+        {
+          "fa": "هشدار منبع قاب برای پخش یا تعویض پریست به زبان پیام‌ها نمایش داده می‌شود. وقتی CG Bridge شمارهٔ قاب‌ها را بفرستد، شماره‌ها در هشدار می‌آیند.",
+          "en": "Source warnings on Play or preset changes follow the feedback language and include plate numbers when provided by CG Bridge.",
+          "ar": "تظهر تحذيرات مصدر الإطار عند التشغيل أو تبديل الإعداد المسبق بلغة الرسائل، مع أرقام الإطارات عند توفرها من CG Bridge."
+        },
+        {
+          "fa": "در بخش چیدمان، «بازنشانی به پیشفرض» حاشیه‌ها، فاصله‌ها و جای‌گذاری پریست جاری را برمی‌گرداند و منابع قاب‌ها را حفظ می‌کند.",
+          "en": "Reset to defaults in Arrange restores the selected preset’s margins, gaps and placement while keeping its plate sources.",
+          "ar": "يعيد خيار الاستعادة إلى الإعدادات الافتراضية في قسم الترتيب هوامش الإعداد المسبق المحدد وفجواته ومواضعه، مع إبقاء مصادر الإطارات."
+        },
+        {
+          "fa": "در مدیریت صفحات، افزودن، جایگزینی و مرتب‌سازی در گروه‌های جدا هستند. رنگ و آیکون به تشخیص سریع جایگزینی و حذف کمک می‌کنند.",
+          "en": "Manage pages groups adding, replacing and organizing. Button colors and icons distinguish replacement and removal.",
+          "ar": "تُجمع أدوات الإضافة والاستبدال والتنظيم في مجموعات منفصلة في إدارة الصفحات. تميّز ألوان الأزرار وأيقوناتها الاستبدال والحذف."
+        },
+        {
           "fa": "در پیش‌نمایش New live layout، قاب‌های پریست تصویر ورودی NDI مستقیم و تصویر ورودی‌های دارای پیش‌نمایش Playout را با اندازه و برش همان قاب نشان می‌دهند.",
           "en": "New live layout preview frames display direct NDI and available Playout source pictures with the selected preset's fit and crop.",
           "ar": "تعرض معاينة «ترتيب حي جديد» صور NDI المباشرة وصور مصادر Playout المتاحة وفق الملاءمة والاقتصاص في الإعداد المسبق المحدد."

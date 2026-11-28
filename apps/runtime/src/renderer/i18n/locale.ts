@@ -157,3 +157,7 @@ export function useFeedbackText(): (source: string, values?: Values) => string {
 export function feedback(source: string, values?: Values): string {
   return translate(current, 'feedback', source, values);
 }
+
+export function feedbackLocale(): Locale {
+  return current.feedback;
+}

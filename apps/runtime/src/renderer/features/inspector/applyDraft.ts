@@ -11,7 +11,7 @@ import {
 import { withChannelDefaults, type TemplateInfo } from '@cg/shared-ipc';
 import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
+import { errorCodeMessage, missingPlateSourcesFeedback } from '../../ui/errorCodeMessage.js';
 import { feedback } from '../../i18n/locale.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import { appliedPositionOf } from '../stack/defaultPositionStore.js';
@@ -577,7 +577,10 @@ function sendUpdate(
         // BM-2 — the refusal's OWN sentence wins when it has one: a binding refusal names the
         // two frames and the look, and no fixed code can carry that.
         reportCommandError(
-          res.message ?? errorCodeMessage(res.errorCode) ?? 'Update was not accepted.',
+          missingPlateSourcesFeedback(res.errorCode, res.message, res.missingPlateSources) ??
+            res.message ??
+            errorCodeMessage(res.errorCode) ??
+            'Update was not accepted.',
         );
         return res;
       },

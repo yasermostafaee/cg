@@ -260,6 +260,7 @@ import {
   reservedLayerNumbers,
   sortBanks,
   consoleSourceCatalog,
+  controlLiveLayoutDefaults,
   migrateAssignmentsToChannels,
   validateSourceCatalogAgainstBanks,
   type AnyChannel,
@@ -3031,6 +3032,20 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           hostIsOurs,
           channelFor: (host, channel) =>
             hostIsOurs(host) && runtime.isDeclaredChannel(channel) ? channel : null,
+          authoredMediaIds: () => {
+            const ids = new Set<string>();
+            for (const channel of runtime.declaredChannels()) {
+              for (const template of runtime.templateList(channel)) {
+                for (const sourceId of Object.values(
+                  controlLiveLayoutDefaults(template.controlLiveLayout) ?? {},
+                )) {
+                  const id = playoutMediaIdOf(sourceId);
+                  if (id !== null) ids.add(id);
+                }
+              }
+            }
+            return ids;
+          },
           inputsPath: options.playoutInputsPath,
           boundMediaPath: options.boundMediaPath,
           layerRange: declaredBand,
@@ -6900,21 +6915,26 @@ export function buildRoutes(
       TemplatesImportChannel,
       'operator',
       'operator',
-      (r: {
-        template: never;
-        html: string;
-        channel?: number;
-        build?: PageBuild;
-        sourceSha256?: string;
-        expectedControlLayoutSource?: string;
-      }) =>
-        b.templateImport(r.template, r.html, r.channel, {
+      async (r: ChannelRequest<typeof TemplatesImportChannel>) => {
+        const result = b.templateImport(r.template, r.html, r.channel, {
           ...(r.build !== undefined && { build: r.build }),
           ...(r.sourceSha256 !== undefined && { sourceSha256: r.sourceSha256 }),
           ...(r.expectedControlLayoutSource !== undefined && {
             expectedControlLayoutSource: r.expectedControlLayoutSource,
           }),
-        }),
+        });
+        if (result.registered && r.template.controlLiveLayout !== undefined) {
+          const defaults = controlLiveLayoutDefaults(r.template.controlLiveLayout);
+          try {
+            await playoutSources?.resolveAuthoredMedia(Object.values(defaults ?? {}));
+          } catch (error) {
+            process.stderr.write(
+              `[caspar-bridge] could not update live layout media: ${String(error)}\n`,
+            );
+          }
+        }
+        return result;
+      },
     ),
     // `PAGE-REBUILD-01` (`C-034`) — the verified package kept for a rebuild, read back for one,
     // what a console's runtime should rebuild, and one rebuilt page (or why it could not be built).

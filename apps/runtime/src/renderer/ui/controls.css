@@ -3151,7 +3151,7 @@ textarea.cg-field--autogrow {
   color: var(--r-text-muted);
 }
 /*
- * `RUN-NEXT-VERSION-03` 1.5 — `Manage pages…` (`ManagePagesModal`): the tools on one wrapping line, then
+ * `Manage pages…`: the related page actions wrap together above
  * a grid of numbered tiles that fills the dialog's width (the dialog's own frame scrolls it), then a
  * text page's editor. A tile is a face (the strip's `.cg-book-thumb__frame`), its name, and one line of
  * icon controls. The selected tile and the tile being dragged are marked on its edge, never by colour
@@ -3165,10 +3165,36 @@ textarea.cg-field--autogrow {
 }
 .cg-pages__tools {
   display: flex;
+  align-items: stretch;
   flex-wrap: wrap;
   gap: var(--r-space-2);
 }
-.cg-pages__tools .cg-btn,
+.cg-pages__tool-group {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--r-space-1);
+  padding: var(--r-space-2);
+  border: 1px solid var(--r-border-soft);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-raised);
+}
+.cg-pages__tool-title {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+  font-weight: var(--r-weight-bold);
+}
+.cg-pages__tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-1);
+}
+.cg-pages__tools .cg-btn {
+  min-height: 30px;
+  max-inline-size: 100%;
+  padding-block: var(--r-space-1);
+  white-space: normal;
+}
 .cg-pages__editor .cg-btn {
   height: 28px;
   min-height: 28px;

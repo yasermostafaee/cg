@@ -426,7 +426,7 @@ export function LiveLayoutEditor({
   }
 
   function rebuildArrangement(changes: Partial<ControlLiveLayoutPreset>): void {
-    if (!('focusMargins' in changes)) setFocusId(undefined);
+    if (changes.arrangement !== undefined || !('focusMargins' in changes)) setFocusId(undefined);
     if (changes.arrangement !== undefined && changes.arrangement !== 'custom')
       setPlacementEditing(false);
     updatePreset(changes);

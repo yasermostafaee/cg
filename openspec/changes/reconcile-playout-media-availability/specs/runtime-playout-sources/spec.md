@@ -51,3 +51,12 @@ still reports an older availability state.
 - **THEN** valid matches refresh their bound entries and omitted IDs keep their prior availability
 - **WHEN** an older by-ID read completes after a newer search observed the same ID
 - **THEN** the older observation cannot overwrite the newer one
+
+#### Scenario: A live layout stores a media source in one of its plates
+
+- **WHEN** a live layout is saved with a video from the Media picker, or an existing layout
+  holds its exact media ID
+- **THEN** the bridge resolves the stored media ID through the station library and exposes the
+  available entry to Preview and normal Programme source validation
+- **AND** a missing ID remains unassigned for playback until the library verifies it. Another
+  file does not take its place automatically.

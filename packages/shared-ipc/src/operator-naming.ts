@@ -147,8 +147,16 @@ export function plateLabel(
   plates: readonly { readonly sourceId: string }[] | undefined,
   plateId: string,
 ): string | undefined {
+  const number = plateNumber(plates, plateId);
+  return number === undefined ? undefined : `Plate ${String(number)}`;
+}
+
+export function plateNumber(
+  plates: readonly { readonly sourceId: string }[] | undefined,
+  plateId: string,
+): number | undefined {
   const index = (plates ?? []).findIndex((p) => p.sourceId === plateId);
-  return index < 0 ? undefined : `Plate ${String(index + 1)}`;
+  return index < 0 ? undefined : index + 1;
 }
 
 /** `B-308` — `Plate 1`, `Plate 1 and Plate 3`, `Plate 1, Plate 2 and Plate 3`. */

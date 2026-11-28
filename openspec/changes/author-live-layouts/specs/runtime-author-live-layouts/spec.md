@@ -166,8 +166,14 @@ command.
 #### Scenario: A plate clip starts only on request and resets to its start
 
 - **WHEN** the editor preview shows two plates assigned video
-- **THEN** each shows Play and no clip starts automatically
+- **THEN** each shows its library poster if available and offers Play without starting automatically
 - **WHEN** the operator starts or pauses the first plate
 - **THEN** only the first plate's clip responds
 - **WHEN** the operator resets the first plate after playing
 - **THEN** it pauses at the first frame and the second plate retains its current state
+
+#### Scenario: Restore the selected preset's arrangement
+
+- **WHEN** the operator edits gaps, margins, aspect, fit or custom placement and selects Reset to defaults in Arrange
+- **THEN** the selected preset returns to the standard arrangement for its plate count, with the standard gaps, margins, fit and aspect
+- **AND** the layout retains the selected preset's sources, artwork and plate-specific settings.

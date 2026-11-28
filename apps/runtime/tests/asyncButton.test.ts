@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { lookSwitchBanner } from '../src/renderer/features/layers/lookSwitch.js';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import {
   AsyncButtonController,
   asyncResultMessage,
@@ -284,6 +286,42 @@ describe('asyncResultMessage — the shared button/menu wording', () => {
     const byCode = asyncResultMessage({ accepted: false, errorCode: 'live-source-unassigned' });
     expect(byCode).toContain('Sources');
   });
+
+  it.each([
+    ['fa', 'منبع قاب 1 تعیین نشده است.', 'قاب 2 و قاب 3', 'دیگر در این ایستگاه در دسترس نیست.'],
+    ['ar', 'لا يوجد مصدر معيّن في الإطار 1.', 'الإطار 2 والإطار 3', 'متاحةً في هذه المحطة.'],
+  ] as const)(
+    'uses %s feedback and plate positions for both Play and a preset switch',
+    (locale, unassigned, stale, reason) => {
+      setLanguage('feedback', locale);
+      try {
+        const code = 'live-source-unassigned';
+        const message =
+          'Plate 2 and Plate 3 are assigned to a source this installation no longer has. Assign them in CG Control, then take again.';
+        const missingPlateSources = { unassigned: [1], stale: [2, 3] };
+        const take = asyncResultMessage({
+          accepted: false,
+          errorCode: code,
+          message,
+          missingPlateSources,
+        });
+        const readable = take?.replace(/[\u2068\u2069]/g, '');
+        expect(readable).toContain(unassigned);
+        expect(readable).toContain(stale);
+        expect(readable).toContain(reason);
+        expect(readable).toContain('CG Control');
+        expect(readable).not.toContain('this installation');
+        expect(lookSwitchBanner({ ok: false, reason: code, message, missingPlateSources })).toBe(
+          take,
+        );
+        const legacy = asyncResultMessage({ accepted: false, errorCode: code, message });
+        expect(legacy).toMatch(locale === 'fa' ? /^یک یا چند قاب/ : /^يفتقد إطار واحد أو أكثر/);
+        expect(lookSwitchBanner({ ok: false, reason: code, message })).toBe(legacy);
+      } finally {
+        setLanguage('feedback', 'en');
+      }
+    },
+  );
 
   it('an EMPTY message is not a message — the code still explains the refusal', () => {
     // A blank string is the shape a stripped/serialised field arrives in, and

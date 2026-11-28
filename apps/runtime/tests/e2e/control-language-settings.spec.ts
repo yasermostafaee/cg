@@ -64,6 +64,41 @@ test('chooses English chrome and Persian command outcomes independently, and rem
   await expect(page.locator('#cg-feedback-language')).toHaveValue('fa');
 });
 
+test('shows the complete missing-source refusal in Persian with English chrome', async ({
+  app,
+}) => {
+  const { page } = app;
+  await openGeneral(page);
+  await page.locator('#cg-feedback-language').selectOption('fa');
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.evaluate(() => {
+    window.cg.stack.take = async () => ({
+      accepted: false,
+      errorCode: 'live-source-unassigned',
+      message:
+        'Plate 2 and Plate 3 are assigned to a source this installation no longer has. Assign them in CG Control, then take again.',
+      missingPlateSources: { unassigned: [], stale: [2, 3] },
+    });
+  });
+
+  const play = app.layerRow(96).getByRole('button', { name: 'PLAY', exact: true });
+  await play.click();
+  const banner = page.locator('[data-refusal]');
+  await expect(banner).toHaveAttribute('data-refusal-count', '1');
+  await play.click();
+  await expect(banner).toHaveAttribute('data-refusal-count', '2');
+  const sentence = banner.getByRole('alert').getByText(/منبع انتخاب‌شده/);
+  await expect(sentence).toHaveCSS('direction', 'rtl');
+  const readable = (await sentence.innerText()).replace(/[\u2068\u2069]/g, '');
+  expect(readable).toContain(
+    'منبع انتخاب‌شده برای قاب 2 و قاب 3 دیگر در این ایستگاه در دسترس نیست.',
+  );
+  expect(readable).toContain('در CG Control برای این قاب‌ها منبع انتخاب کنید');
+  expect(readable).toContain('(2 بار)');
+  expect(readable).not.toContain('this installation');
+});
+
 test('anchors PGM audio at the end of the strip as the console width and language change', async ({
   app,
 }) => {

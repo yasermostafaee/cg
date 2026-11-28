@@ -6,11 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
+import { clearDraft, stageField } from '../src/renderer/features/inspector/draftStore.js';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
 import {
   onCommandError,
   reportCommandError,
 } from '../src/renderer/features/status/commandFeedback.js';
+import { setLanguage } from '../src/renderer/i18n/locale.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
 import { fillBridgeStub } from './support/authStub.js';
 
@@ -188,6 +190,35 @@ describe('Inspector feedback is toast-only (#334)', () => {
 });
 
 describe('the applyDraft path toasts exactly ONCE', () => {
+  it('reports a missing-source refusal in the selected feedback language', async () => {
+    const messages: string[] = [];
+    const unsub = onCommandError((message) => messages.push(message));
+    const subject = itemWith();
+    setLanguage('feedback', 'fa');
+    try {
+      stubBridge({
+        update: async () => ({
+          accepted: false,
+          errorCode: 'live-source-unassigned',
+          message:
+            'Plate 2 is assigned to a source this installation no longer has. Assign it in CG Control, then take again.',
+          missingPlateSources: { unassigned: [], stale: [2] },
+        }),
+      });
+      stageField(subject.itemId, ['title'], 'edited');
+      expect((await applyDraft(subject)).accepted).toBe(false);
+
+      expect(messages).toHaveLength(1);
+      const readable = messages[0]?.replace(/[\u2068\u2069]/g, '');
+      expect(readable).toContain('منبع انتخاب‌شده برای قاب 2 دیگر در این ایستگاه در دسترس نیست.');
+      expect(readable).not.toContain('this installation');
+    } finally {
+      clearDraft(subject.itemId);
+      setLanguage('feedback', 'en');
+      unsub();
+    }
+  });
+
   it('a refused Update produces ONE toast (applyDraft owns it) and nothing inline', async () => {
     const messages: string[] = [];
     const unsub = onCommandError((m) => messages.push(m));

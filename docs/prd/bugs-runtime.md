@@ -14285,3 +14285,21 @@ text direction can display the same mismatch.
 **Expected.** Translated placeholders follow the interface direction. Entered text still
 follows the field's content direction. The template search keeps its normal height and
 reserves room for the magnifier, with the toolbar wrapping on narrow windows.
+
+## [~] B-457 — Play media assigned as a live-layout source ⟨priority: high — owner, 2026-11-28⟩ — `openspec/changes/reconcile-playout-media-availability/`
+
+**Repro.** A video plays in the Media picker, but a layout using that video as an authored
+plate source is refused on Play or preset switch. PVW shows an unassigned placeholder and
+New/Edit live layout can show a blank frame before Play.
+
+**Expected.** A newly saved or existing layout resolves the exact stored media ID using the
+station library. Preview displays a poster and offers local manual playback. Programme can
+play a verified file and still refuses a genuinely missing source.
+
+## [~] B-458 — Localize the missing plate source warning ⟨priority: medium — owner, 2026-11-28⟩ — `openspec/changes/control-languages/`
+
+**Repro.** With English interface and Persian action feedback, try to take a preset containing
+missing plate sources. The repetition count is Persian but the reason is English.
+
+**Expected.** Play and preset actions report missing plate sources in the configured feedback
+language, including the plate numbers when the Bridge supplies them.

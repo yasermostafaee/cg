@@ -60,4 +60,6 @@
 - [x] Add a browser scenario for manual Play, Pause and Reset.
 - [x] Windows Chromium verified manual Play, Pause and Reset in the editor with no automatic playback or Take.
 - [x] Verify a mixed NDI and media preset uses separate preview transports, and Layout effects opens from the Plate tab. Windows Chromium passed.
+- [x] Verify Arrange Reset restores the selected preset's factory values and preserves the assigned NDI input and clip. Windows Chromium passed.
+- [x] Windows Chromium decoded both draft plate posters before Play; the existing manual editor and PVW checks also passed.
 - [ ] Record the Linux E2E run.

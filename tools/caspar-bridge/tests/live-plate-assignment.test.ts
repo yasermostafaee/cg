@@ -132,6 +132,7 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     expect(out.message).toMatch(/Plate 1 has no live source assigned/);
     expect(out.message).toMatch(/Plate 2 is assigned to a source .* no longer has/);
     expect(out.message).not.toMatch(/guest-/);
+    expect(out.missingPlateSources).toEqual({ unassigned: [1], stale: [2] });
   });
 
   it('🔴 `B-308` — a plate is numbered in its TEMPLATE, not in the subset asked to resolve', () => {
@@ -148,6 +149,7 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     expect(out.ok).toBe(false);
     if (out.ok) return;
     expect(out.message).toMatch(/^Plate 3 has no live source assigned/);
+    expect(out.missingPlateSources).toEqual({ unassigned: [3], stale: [] });
     // Control: without the whole declaration it is numbered from what it was given.
     const narrowed = resolve([plate('guest-3')], assignments());
     expect(!narrowed.ok && narrowed.message).toMatch(/^Plate 1 /);

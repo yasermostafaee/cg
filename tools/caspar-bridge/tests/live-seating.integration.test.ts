@@ -8517,6 +8517,7 @@ it('an UNASSIGNED plate refuses the take by name, and NOTHING reaches the wire',
 
   expect(verdict.accepted).toBe(false);
   expect(verdict.errorCode).toBe('live-source-unassigned');
+  expect(verdict.missingPlateSources).toEqual({ unassigned: [1], stale: [] });
   // A refused take mutates NOTHING: no producer, no mixer, and no CG PLAY.
   expect((await recvLines()).slice(before)).toEqual([]);
   expect(r.liveLayers().has('item-1')).toBe(false);

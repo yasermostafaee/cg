@@ -8,6 +8,10 @@ import { AmcpTransport, CommandQueue, DEFAULT_LAYER_POLICY } from '@cg/caspar-cl
 import {
   AUTHZ_ROLE_REFUSAL,
   LOCK_ENGAGED_REFUSAL,
+  FixedLayersLoadChannel,
+  SourcesMediaSearchChannel,
+  StackTakeChannel,
+  TemplatesImportChannel,
   authzChannelRefusal,
   fixedBanksSlots,
   inputSourceId,
@@ -20,8 +24,12 @@ import {
   type SourceCatalog,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import { isOnAirStatus, type AuditEntry } from '@cg/shared-schema';
-import type { BridgeHandle } from '../src/index.js';
+import {
+  CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  isOnAirStatus,
+  type AuditEntry,
+} from '@cg/shared-schema';
+import { createBridge, type BridgeHandle } from '../src/index.js';
 import { CasparRuntime, PLATE_VOLUME_RAMP_FRAMES } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { LIVE_PLATE_NO_LAYER } from '../src/live-plate-seating.js';
@@ -207,6 +215,133 @@ const OWNERS_CASE = bind([
   ['one-first', 'l2', PROMO_ID],
   ['single', 'p1', NEWSCAM],
 ]);
+
+describe('Control live layout authored media bindings', () => {
+  it.each(['picker', 'by-ID import', 'saved layout'] as const)(
+    'takes the exact media clip from %s without an Inspector reassignment',
+    async (origin) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-layout-media-'));
+      dirs.push(dir);
+      const trace = path.join(dir, 'wire.ndjson');
+      const sourceCatalogPath = path.join(dir, 'source-catalog.json');
+      fs.writeFileSync(sourceCatalogPath, JSON.stringify({ sources: [], layerRange: BAND }));
+      const oscPort = await freeUdpPort();
+      const mock = await createMock({
+        amcpPort: 0,
+        oscPort,
+        oscHost: '127.0.0.1',
+        channels: 2,
+        tracePath: trace,
+      });
+      mocks.push(mock);
+      const mediaWithDuplicateName = [PROMO, { ...STING, name: PROMO.name }];
+      const start = (media: readonly FakeMediaItem[]) =>
+        createBridge({
+          port: 0,
+          connection: {
+            servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
+            strategy: 'mirror-sync',
+            autoFailoverEnabled: false,
+          },
+          fixedLayers: BANK,
+          templatesDir: path.join(dir, 'templates'),
+          sourceCatalogPath,
+          boundMediaPath: path.join(dir, 'bound-media.json'),
+          playoutSources: new LocalPlayoutSources({ media: [...media] }),
+        });
+      handle = await start(origin === 'saved layout' ? [] : mediaWithDuplicateName);
+      let client = await openClient(handle);
+      if (origin === 'picker') {
+        expect(
+          (await client.ask('search', SourcesMediaSearchChannel.name, { q: '' })).payload,
+        ).toMatchObject({
+          ok: true,
+          items: expect.arrayContaining([
+            expect.objectContaining({ id: PROMO_ID }),
+            expect.objectContaining({ id: STING_ID }),
+          ]),
+        });
+      }
+      expect(handle.runtime.sourceCatalog().sources.some(({ id }) => id === PROMO_ID)).toBe(false);
+      const packageBytes = Buffer.from('authored layout source').toString('base64');
+      const kept = handle.runtime.templateSourcePut(packageBytes);
+      expect(kept.stored).toBe(true);
+      const template: TemplateInfo = {
+        ...TWO_BOX,
+        controlLiveLayoutSource: kept.sha256,
+        controlLiveLayout: {
+          id: TWO_BOX.templateId,
+          name: 'Media Panel',
+          resolution: SCENE,
+          frameRate: 25,
+          frames: [
+            { id: 'l1', title: 'Studio', sourceId: STUDIO },
+            { id: 'l2', title: 'Clip', sourceId: PROMO_ID },
+          ],
+          presets: [
+            {
+              id: 'two',
+              name: 'Two-up',
+              frameIds: ['l1', 'l2'],
+              arrangement: 'side-by-side',
+              horizontalGap: 0,
+              verticalGap: 0,
+              hiddenTitles: [],
+              hiddenFocusTitles: [],
+              reverse: false,
+            },
+          ],
+          defaultPresetId: 'two',
+          background: { kind: 'color', color: '#000000' },
+          effects: structuredClone(CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS),
+        },
+      };
+      const imported = await client.ask('import', TemplatesImportChannel.name, {
+        channel: BED.channel,
+        template,
+        html: '<!doctype html><html><body>Media panel</body></html>',
+        sourceSha256: kept.sha256,
+      });
+      expect(imported).toMatchObject({ payload: { registered: true } });
+      if (origin === 'saved layout') {
+        expect(handle.runtime.sourceCatalog().sources.some(({ id }) => id === PROMO_ID)).toBe(
+          false,
+        );
+        client.ws.close();
+        await handle.close();
+        handle = await start(mediaWithDuplicateName);
+        client = await openClient(handle);
+        await handle.playoutSources?.refresh(0);
+      }
+
+      const runtime = handle.runtime;
+      const source = runtime.sourceCatalog().sources.find(({ id }) => id === PROMO_ID);
+      expect(source).toMatchObject({ producer: { kind: 'media', file: PROMO.clip } });
+      expect(source?.status).toBeUndefined();
+      expect(runtime.sourceCatalog().sources.some(({ id }) => id === STING_ID)).toBe(false);
+      expect(runtime.sourceAssignments().assignments).toEqual([]);
+      await runtime.whenServerHealthy(HEALTH_MS);
+      expect(
+        (
+          await client.ask('load', FixedLayersLoadChannel.name, {
+            ...BED,
+            itemId: ROW,
+            templateId: template.templateId,
+            fields: {},
+          })
+        ).payload,
+      ).toMatchObject({ accepted: true });
+      const before = (await linesOf(mock, trace)).length;
+      expect(
+        (await client.ask('take', StackTakeChannel.name, { itemId: ROW })).payload,
+      ).toMatchObject({ accepted: true });
+      expect((await linesOf(mock, trace)).slice(before)).toContain(
+        `PLAY 2-${layerOf(runtime, 'l2')} "${PROMO.clip}"`,
+      );
+      client.ws.close();
+    },
+  );
+});
 
 // ── The rig ──────────────────────────────────────────────────────────────────────────────────
 

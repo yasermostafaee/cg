@@ -11,7 +11,9 @@
  * reason the operator can quote to an engineer beats a generic dead end.
  */
 import { REMOVE_ON_AIR_CODE, TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
+import type { MissingPlateSources } from '@cg/shared-ipc';
 import { REMOVE_ON_AIR_REASON, takeOnAirReason } from '../features/layers/layerRowActions.js';
+import { feedback, feedbackLocale } from '../i18n/locale.js';
 import { amcpRefusalWords } from './amcpRefusal.js';
 
 const MESSAGES: Readonly<Record<string, string>> = {
@@ -231,6 +233,43 @@ const PREFER_OURS: ReadonlySet<string> = new Set([
 /** Does the console's own sentence win over the bridge's for this code? */
 export function prefersOwnMessage(errorCode: string | undefined): boolean {
   return errorCode !== undefined && PREFER_OURS.has(errorCode);
+}
+
+/** Translate a missing-source refusal using the affected plates from the Bridge. */
+export function missingPlateSourcesFeedback(
+  code: string | undefined,
+  message: string | undefined,
+  issues: MissingPlateSources | undefined,
+): string | undefined {
+  if (code !== 'live-source-unassigned') return undefined;
+  const locale = feedbackLocale();
+  if (locale === 'en' && message) return message;
+  if (issues === undefined || (issues.unassigned.length === 0 && issues.stale.length === 0)) {
+    // Older Bridges give the details in English only.
+    return locale === 'en'
+      ? undefined
+      : feedback(
+          'One or more plates have no usable source assigned. Choose their sources in CG Control, then try again.',
+        );
+  }
+  const format = new Intl.ListFormat(locale);
+  const labels = (numbers: readonly number[]) =>
+    format.format(numbers.map((number) => feedback('Plate {number}', { number })));
+  const sentences = [];
+  if (issues.unassigned.length > 0) {
+    sentences.push(
+      feedback('For {plates}, no source is assigned.', { plates: labels(issues.unassigned) }),
+    );
+  }
+  if (issues.stale.length > 0) {
+    sentences.push(
+      feedback('The sources assigned to {plates} are no longer available on this station.', {
+        plates: labels(issues.stale),
+      }),
+    );
+  }
+  sentences.push(feedback('Choose sources for these plates in CG Control, then try again.'));
+  return sentences.join(' ');
 }
 
 /** A human message for a refusal, or `null` when there is no code to explain. */

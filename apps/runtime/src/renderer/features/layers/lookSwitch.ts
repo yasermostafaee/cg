@@ -1,4 +1,5 @@
-import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
+import type { MissingPlateSources } from '@cg/shared-ipc';
+import { errorCodeMessage, missingPlateSourcesFeedback } from '../../ui/errorCodeMessage.js';
 
 /**
  * §14.5 / `tasks.md` 7.1 — **operator wording for a refused LOOK SWITCH.**
@@ -14,13 +15,14 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
  * `amcp-*` and `template-serve-down` are already worded. A second table would be that
  * vocabulary spelled twice, and the two would drift.
  *
- * ── MESSAGE FIRST, ALWAYS ───────────────────────────────────────────────────
+ * ── KEEP THE BRIDGE'S DETAILS ────────────────────────────────────────────────
  *
  * The bridge sends a sentence with almost every refusal here, and its sentences carry
  * the SPECIFICS this side cannot know — which look, which template is already on air,
  * how many boxes it has. `LiveSourceSwapDialog` set the precedent
  * (`res.message ?? '…'`) and `errorCodeMessage`'s own doc records the rule for the take
- * path: the code's sentence is the FALLBACK, not the answer.
+ * path: the code's sentence is the FALLBACK. When a missing-source refusal carries
+ * plate positions, `lookSwitchBanner` uses them with the selected feedback language.
  */
 export function lookSwitchRefusal(reason: string | undefined, message: string | undefined): string {
   if (message !== undefined && message !== '') return message;
@@ -42,10 +44,14 @@ export function lookSwitchBanner(res: {
   readonly ok: boolean;
   readonly reason?: string | undefined;
   readonly message?: string | undefined;
+  readonly missingPlateSources?: MissingPlateSources | undefined;
   readonly refusalOnRow?: true | undefined;
 }): string | null {
   if (res.ok || res.refusalOnRow === true) return null;
-  return lookSwitchRefusal(res.reason, res.message);
+  return (
+    missingPlateSourcesFeedback(res.reason, res.message, res.missingPlateSources) ??
+    lookSwitchRefusal(res.reason, res.message)
+  );
 }
 
 /**

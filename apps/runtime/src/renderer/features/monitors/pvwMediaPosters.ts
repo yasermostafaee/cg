@@ -2,13 +2,15 @@ import {
   MAX_MEDIA_THUMBNAIL_BYTES,
   playoutMediaIdOf,
   probeImage,
+  type ConsoleMediaItem,
   type ConsoleSourceCatalog,
 } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
+import { seenMediaItem } from '../sources/sourceStore.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 
 interface PosterRead {
-  identity?: string | null;
+  identity?: string | ConsoleMediaItem | null;
   frame?: PvwSourceFrame;
 }
 
@@ -18,6 +20,7 @@ export class PvwMediaPosters {
   readonly #stops: (() => void)[] = [];
   #channel: number | undefined;
   #ids = new Set<string>();
+  #editorIds = new Set<string>();
   #scope = '';
 
   constructor(
@@ -25,7 +28,11 @@ export class PvwMediaPosters {
     private readonly changed: () => void,
   ) {}
 
-  setDemand(channel: number | undefined, ids: readonly string[]): void {
+  setDemand(
+    channel: number | undefined,
+    ids: readonly string[],
+    editorIds: readonly string[] = [],
+  ): void {
     if (channel !== this.#channel) {
       this.#reads.clear();
       for (const stop of this.#stops.splice(0)) stop();
@@ -34,7 +41,15 @@ export class PvwMediaPosters {
       if (channel !== undefined) this.#watch();
     }
     this.#ids = new Set(ids.filter((id) => playoutMediaIdOf(id) !== null));
-    for (const id of this.#reads.keys()) if (!this.#ids.has(id)) this.#reads.delete(id);
+    const nextEditorIds = new Set(editorIds);
+    for (const [id, read] of this.#reads) {
+      if (
+        !this.#ids.has(id) ||
+        (typeof read.identity !== 'string' && this.#editorIds.has(id) !== nextEditorIds.has(id))
+      )
+        this.#reads.delete(id);
+    }
+    this.#editorIds = nextEditorIds;
   }
 
   frames(): readonly PvwSourceFrame[] {
@@ -70,12 +85,12 @@ export class PvwMediaPosters {
       try {
         const before = await this.api.sources.config();
         if (!current()) return;
-        read.identity = mediaIdentity(before, id, channel);
+        read.identity = this.#identity(before, id);
         if (read.identity === null) return;
         const reply = await this.api.sources.mediaThumbnail({ id, channel });
         if (!current() || !reply.ok || reply.dataUrl === undefined) return;
         const after = await this.api.sources.config();
-        if (!current() || mediaIdentity(after, id, channel) !== read.identity) return;
+        if (!current() || this.#identity(after, id) !== read.identity) return;
         const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(reply.dataUrl);
         const jpegBase64 = match?.[1];
         if (
@@ -110,6 +125,25 @@ export class PvwMediaPosters {
     ]);
   }
 
+  #identity(catalog: ConsoleSourceCatalog, id: string): string | ConsoleMediaItem | null {
+    const source = catalog.sources.find((candidate) => candidate.id === id);
+    if (source === undefined) {
+      // The picker and the poster endpoint already support unsaved media selections.
+      // Use that exact observed item only in the editor, before the layout creates a binding.
+      return this.#editorIds.has(id) ? (seenMediaItem(id) ?? null) : null;
+    }
+    const fingerprint = source.media?.fingerprint;
+    if (
+      source.origin !== 'media' ||
+      fingerprint === undefined ||
+      fingerprint.length === 0 ||
+      (source.channels !== undefined &&
+        (this.#channel === undefined || !source.channels.includes(this.#channel)))
+    )
+      return null;
+    return JSON.stringify([id, fingerprint, source.producer]);
+  }
+
   #watch(): void {
     const ownerChanged = (): void => {
       const scope = this.#owner();
@@ -123,10 +157,7 @@ export class PvwMediaPosters {
     const configStop = this.api.sources?.onConfigChanged?.((catalog) => {
       let changed = false;
       for (const [id, read] of this.#reads) {
-        if (
-          read.identity !== undefined &&
-          mediaIdentity(catalog, id, this.#channel) !== read.identity
-        ) {
+        if (read.identity !== undefined && this.#identity(catalog, id) !== read.identity) {
           this.#reads.delete(id);
           changed = true;
         }
@@ -136,21 +167,4 @@ export class PvwMediaPosters {
     for (const stop of [authStop, linkStop, configStop])
       if (stop !== undefined) this.#stops.push(stop);
   }
-}
-
-function mediaIdentity(
-  catalog: ConsoleSourceCatalog,
-  id: string,
-  channel: number | undefined,
-): string | null {
-  const source = catalog.sources.find((candidate) => candidate.id === id);
-  const fingerprint = source?.media?.fingerprint;
-  if (
-    source?.origin !== 'media' ||
-    fingerprint === undefined ||
-    fingerprint.length === 0 ||
-    (source.channels !== undefined && (channel === undefined || !source.channels.includes(channel)))
-  )
-    return null;
-  return JSON.stringify([id, fingerprint, source.producer]);
 }

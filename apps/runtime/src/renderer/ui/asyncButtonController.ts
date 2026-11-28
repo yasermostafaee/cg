@@ -1,3 +1,4 @@
+import type { MissingPlateSources } from '@cg/shared-ipc';
 import { feedback } from '../i18n/locale.js';
 /**
  * R-007 — the async-feedback state machine for a bridge-round-trip button,
@@ -13,7 +14,11 @@ import { feedback } from '../i18n/locale.js';
 
 export type AsyncPhase = 'idle' | 'busy' | 'success' | 'error';
 
-import { errorCodeMessage, prefersOwnMessage } from './errorCodeMessage.js';
+import {
+  errorCodeMessage,
+  missingPlateSourcesFeedback,
+  prefersOwnMessage,
+} from './errorCodeMessage.js';
 
 export interface AsyncView {
   phase: AsyncPhase;
@@ -35,6 +40,7 @@ export interface AsyncResult {
    * only a code, which is all of them except the take's plate refusals.
    */
   message?: string | undefined;
+  missingPlateSources?: MissingPlateSources | undefined;
   /**
    * True when the action's own confirm gate was CANCELLED (see `withConfirm` in
    * `rowAction.ts`). A cancel is neither a success nor an error: the operator
@@ -90,6 +96,12 @@ export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted
   if (res.accepted) return null;
   // `FIELD-FIXES-01` B — the row says this refusal itself; no second surface repeats it.
   if (res.refusalOnRow === true) return null;
+  const assignment = missingPlateSourcesFeedback(
+    res.errorCode,
+    res.message,
+    res.missingPlateSources,
+  );
+  if (assignment !== undefined) return assignment;
   /*
     🔴 `CONSOLE-LOOK-06` DELTA R — **THE ORDER IS REVERSED FOR THE CODES THAT NEED IT.**
 

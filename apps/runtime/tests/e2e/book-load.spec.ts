@@ -77,6 +77,20 @@ test('the Inspector opens Manage pages to replace pictures or a folder', async (
   for (const name of ['Add pictures…', 'Add folder…', 'Replace with pictures…', 'Add text page']) {
     await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible();
   }
+  const toolbar = dialog.getByRole('toolbar');
+  const add = toolbar.getByRole('group', { name: 'Add pages' });
+  const replace = toolbar.getByRole('group', { name: 'Replace pictures' });
+  const organize = toolbar.getByRole('group', { name: 'Organize pages' });
+  const addPicture = add.getByRole('button', { name: 'Add pictures…' });
+  const replacePicture = replace.getByRole('button', { name: 'Replace with pictures…' });
+  await expect(addPicture).toHaveText('Pictures…');
+  await expect(replacePicture).toHaveText('Pictures…');
+  expect(await addPicture.evaluate((button) => getComputedStyle(button).color)).not.toBe(
+    await replacePicture.evaluate((button) => getComputedStyle(button).color),
+  );
+  await expect(organize.getByRole('button', { name: 'Sort by name' })).toBeVisible();
+  await expect(organize.getByRole('button', { name: 'Remove selected' })).toBeDisabled();
+  await expect(organize).toBeVisible();
 
   const { dir, folder } = folderOf('REPLACEMENT', ['b.png', 'a.png']);
   try {
