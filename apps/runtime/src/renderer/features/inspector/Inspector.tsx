@@ -6,8 +6,16 @@ import {
   useUiText,
 } from '../../i18n/locale.js';
 import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
-import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  useEffect,
+  useId,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -16,6 +24,7 @@ import { useOperatorNames } from '../../hooks/useOperatorNames.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
+  authoredLookEffect,
   authoredFileDelimiter,
   authoredFileFormat,
   bridgeTextSourcePath,
@@ -39,6 +48,7 @@ import {
 import {
   activeLookOf,
   controlLiveLayoutFieldDefaults,
+  lookOperatorFrames,
   templateFocusTarget,
   type TemplateInfo,
 } from '@cg/shared-ipc';
@@ -81,7 +91,7 @@ import { BookBlock } from '../book/BookBlock.js';
 import { bookTitle } from '../book/bookFacts.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
-import { LooksBindingsSection } from './LooksBindingsSection.js';
+import { inputBindingLookOf, LooksBindingsSection } from './LooksBindingsSection.js';
 import { retainedLookFields, type RetainedLookFields } from './retainedLookOwnership.js';
 import { indexSharedFrameTitles, type SharedFrameTitleIndex } from './sharedFrameTitles.js';
 import { TimingSection } from './TimingSection.js';
@@ -89,7 +99,14 @@ import { appliedPlateSources } from './livePlates.js';
 import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { PositionPicker } from './PositionPicker.js';
-import { LiveFrameAdjustments } from './LiveFrameAdjustments.js';
+import { InspectorPresetEffect, LiveFrameAdjustments } from './LiveFrameAdjustments.js';
+import { InputEffectControls } from './InputEffectControls.js';
+import {
+  InspectorSection,
+  OPEN_INSPECTOR_SECTIONS,
+  type InspectorDisclosureState,
+  type InspectorSectionId,
+} from './InspectorSection.js';
 import { Tag } from '../../ui/Tag.js';
 import {
   draftsVersion,
@@ -193,9 +210,8 @@ interface Props {
   rehearsing?: boolean | undefined;
   previewOnly?: boolean | undefined;
   disclosures?: {
-    layerDetails: { open: boolean; toggle: () => void };
-    position: { open: boolean; toggle: () => void };
-    timing: { open: boolean; toggle: () => void };
+    state: InspectorDisclosureState;
+    onChange: Dispatch<SetStateAction<InspectorDisclosureState>>;
   };
 }
 
@@ -366,9 +382,26 @@ export function Inspector({
 }: Props): JSX.Element {
   const localizeUi = useUiText();
   const feedbackDirection = localeDirection(useLanguages().feedback);
-  const [detailsOpen, setDetailsOpen] = useState(true);
-  const layerDetailsOpen = disclosures?.layerDetails.open ?? detailsOpen;
+  const [localDisclosures, setLocalDisclosures] =
+    useState<InspectorDisclosureState>(OPEN_INSPECTOR_SECTIONS);
+  const sectionState = disclosures?.state ?? localDisclosures;
+  const setSectionState = disclosures?.onChange ?? setLocalDisclosures;
+  const sectionOpen = (id: InspectorSectionId): boolean =>
+    sectionState.overrides[id] ?? sectionState.defaultOpen;
+  const disclosureFor = (id: InspectorSectionId) => ({
+    open: sectionOpen(id),
+    toggle: () =>
+      setSectionState((previous) => ({
+        ...previous,
+        overrides: {
+          ...previous.overrides,
+          [id]: !(previous.overrides[id] ?? previous.defaultOpen),
+        },
+      })),
+  });
+  const layerDetails = disclosureFor('layerDetails');
   const layerDetailsId = useId();
+  const bodyId = useId();
   const [lookup, setLookup] = useState<{
     templateId: string;
     channel: number | undefined;
@@ -618,6 +651,37 @@ export function Inspector({
     (lookCarrier === undefined
       ? undefined
       : activeLookOf(lookCarrier, programmeFocus?.presetId ?? item.activeLookId));
+  const liveLayout = resolvedInfo?.controlLiveLayout;
+  const hasLiveFrames = lookCarrier !== undefined && lookCarrier.sources.length > 0;
+  const presetLook =
+    lookCarrier === undefined
+      ? undefined
+      : activeLookOf(lookCarrier, (rehearsing ? previewPin : undefined) ?? item.activeLookId);
+  const authoredPresetEffect = liveLayout?.effects.focus ?? authoredLookEffect(presetLook?.entered);
+  const showPresetEffect =
+    hasLiveFrames &&
+    looks.length > 1 &&
+    (rehearsing === true || !isOnAirStatus(item) || item.onAirPresetTransition === true);
+  const showMoveEffect =
+    lookCarrier !== undefined &&
+    hasLiveFrames &&
+    (item.onAirFrameTransition === true ||
+      (rehearsing === true &&
+        Object.keys(lookOperatorFrames(lookCarrier, previewPin ?? item.activeLookId)).length > 0));
+  const sharedEffect = showPresetEffect && authoredPresetEffect === undefined;
+  const showInputEffect =
+    lookCarrier !== undefined &&
+    inputBindingLookOf(lookCarrier, liveLayout, editingLook) !== undefined;
+  const sections: InspectorSectionId[] = ['layerDetails', 'position', 'fields'];
+  if (resolvedInfo !== null) sections.push('timing');
+  if (showPresetEffect || showInputEffect) sections.push('effects');
+  if (hasLiveFrames && looks.length === 0) sections.push('livePlates');
+  if (showInputEffect) sections.push('plateInputs');
+  const upcomingSectionId = (elementId: string): InspectorSectionId =>
+    `upcoming:${item.templateId}:${elementId}`;
+  for (const { id } of upcoming?.elements ?? []) sections.push(upcomingSectionId(id));
+  const collapseAll = sections.some(sectionOpen);
+  const toggleAllLabel = localizeUi(collapseAll ? 'Collapse all sections' : 'Expand all sections');
   const legacyOwnership = currentLookup?.retained?.ownership;
   const instanceOf = (look: (typeof looks)[number]): string | undefined =>
     look.instanceId ?? legacyOwnership?.get(look.id);
@@ -743,13 +807,24 @@ export function Inspector({
       title={localizeUi('INSPECTOR')}
       ariaLabel={localizeUi('Inspector')}
       onClose={onClose}
+      actions={
+        <Button
+          variant="icon"
+          aria-label={toggleAllLabel}
+          title={toggleAllLabel}
+          aria-controls={bodyId}
+          onClick={() => setSectionState({ defaultOpen: !collapseAll, overrides: {} })}
+        >
+          <Icon icon={collapseAll ? ChevronsDownUp : ChevronsUpDown} size={15} />
+        </Button>
+      }
     >
       {/*
         `cg-inspector-body` on THIS branch too. It was only on the empty branch above, so the
         container query `controls.css` writes against it (`@container inspector`) matched no
         field the operator could ever see — and the Phase 5 field-box rules scope to it.
       */}
-      <div className="cg-inspector-body" style={styles.scroll}>
+      <div id={bodyId} className="cg-inspector-body" style={styles.scroll}>
         <div className="cg-inspector-identity">
           <div className="cg-inspector-identity__summary">
             <button
@@ -757,13 +832,13 @@ export function Inspector({
               className="cg-inspector-disclosure"
               aria-label={localizeUi('Layer details')}
               aria-controls={layerDetailsId}
-              aria-expanded={layerDetailsOpen}
-              onClick={disclosures?.layerDetails.toggle ?? (() => setDetailsOpen((open) => !open))}
+              aria-expanded={layerDetails.open}
+              onClick={layerDetails.toggle}
             >
               <Icon
-                icon={layerDetailsOpen ? ChevronDown : ChevronRight}
+                icon={layerDetails.open ? ChevronDown : ChevronRight}
                 size={14}
-                flipRtl={!layerDetailsOpen}
+                flipRtl={!layerDetails.open}
               />
             </button>
             <div className="cg-inspector-identity__names">
@@ -799,7 +874,7 @@ export function Inspector({
           <div
             id={layerDetailsId}
             className="cg-inspector-identity__details"
-            hidden={!layerDetailsOpen}
+            hidden={!layerDetails.open}
           >
             {contentTitle !== '' && (
               <div className="cg-inspector-identity__content-title">
@@ -843,31 +918,58 @@ export function Inspector({
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
             operator's passes/gap as controls. Renders nothing for a template imported before
             `TemplateInfo.playout` existed, rather than guessing what it does. */}
-        <TimingSection item={item} info={resolvedInfo} disclosure={disclosures?.timing} />
+        <TimingSection item={item} info={resolvedInfo} disclosure={disclosureFor('timing')} />
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker
           key={`pos-${itemId}`}
           item={item}
           templatePosition={templatePosition}
           canReset={resolvedInfo !== null}
-          disclosure={disclosures?.position}
+          disclosure={disclosureFor('position')}
           adjustments={
             lookCarrier !== undefined &&
-            lookCarrier.sources.length > 0 && (
+            hasLiveFrames && (
               <LiveFrameAdjustments
                 item={item}
                 live={lookCarrier}
                 channel={itemChannel}
                 rehearsing={rehearsing}
                 previewLookId={previewPin}
-                controlLiveLayout={resolvedInfo?.controlLiveLayout}
+                controlLiveLayout={liveLayout}
+                moveEffect={showMoveEffect && !sharedEffect}
               />
             )
           }
         />
+        {(showPresetEffect || showInputEffect) && (
+          <InspectorSection
+            className="cg-inspector-effects"
+            label={localizeUi('Effects')}
+            disclosure={disclosureFor('effects')}
+          >
+            {showPresetEffect && (
+              <InspectorPresetEffect
+                key={`preset:${itemId}:${liveLayout === undefined ? (presetLook?.id ?? '') : ''}`}
+                item={item}
+                channel={itemChannel}
+                authored={authoredPresetEffect}
+                defaultLabel={liveLayout === undefined ? 'Preset default' : undefined}
+                sharedWithMove={showMoveEffect && sharedEffect}
+              />
+            )}
+            {showInputEffect && (
+              <InputEffectControls key={`input:${itemId}`} itemId={itemId} layout={liveLayout} />
+            )}
+          </InspectorSection>
+        )}
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
-        <LivePlatesSection item={item} info={resolvedInfo} channel={itemChannel} />
+        <LivePlatesSection
+          item={item}
+          info={resolvedInfo}
+          channel={itemChannel}
+          disclosure={disclosureFor('livePlates')}
+        />
         {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
             levels read top-down in the order they resolve. */}
         <LooksBindingsSection
@@ -877,6 +979,7 @@ export function Inspector({
           previewOnly={previewOnly}
           channel={itemChannel}
           editingLook={editingLook}
+          disclosure={disclosureFor('plateInputs')}
           onEditLook={(lookId) => {
             setPreviewLookPin(itemId, lookId);
           }}
@@ -888,6 +991,7 @@ export function Inspector({
               key={`${itemId}:${element.id}`}
               itemId={itemId}
               element={element}
+              disclosure={disclosureFor(upcomingSectionId(element.id))}
               rows={effectiveUpcoming?.[element.id] ?? applied}
               appliedRows={applied}
               mediaOptions={upcoming.assets.map(({ id, kind, name }) => ({
@@ -903,8 +1007,11 @@ export function Inspector({
             />
           );
         })}
-        <div className="cg-inspector-section cg-inspector-fields">
-          <h2>{localizeUi('Fields')}</h2>
+        <InspectorSection
+          className="cg-inspector-fields"
+          label={localizeUi('Fields')}
+          disclosure={disclosureFor('fields')}
+        >
           {isEmpty ? (
             <p style={styles.empty}>{localizeUi('No fields.')}</p>
           ) : (
@@ -945,7 +1052,7 @@ export function Inspector({
               ))}
             </>
           )}
-        </div>
+        </InspectorSection>
       </div>
       {/* Keep commit controls after the editable fields in keyboard order. */}
       <footer className="cg-inspector-actions" data-inspector-actions="" style={styles.actions}>

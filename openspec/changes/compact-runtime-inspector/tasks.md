@@ -16,6 +16,11 @@
       stacked preset name and status in Windows Chromium.
 - [ ] Record the carrying Linux E2E run.
 - [x] Check the Position, Preset effect and Input effect groups against the approved color values in Windows Chromium.
+- [x] Group the input and preset effects in a dedicated Inspector section.
+- [x] Add individual disclosures and one header toggle for all sections, with English,
+      Persian and Arabic labels.
+- [x] Windows Chromium verified independent effects, keyboard focus, staged edits, row switching,
+      translated actions, and disclosure state through maximization, floating and redocking.
 
 The [Linux run for c019352a](https://github.com/yasermostafaee/cg/actions/runs/43015973303/job/130509988163)
 found five layout failures that prompted the companion-width and Sequence-width follow-up.

@@ -187,6 +187,99 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await expect(position).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('R-008 — the Inspector header toggles every section without losing a layer draft or focus', async ({
+  app,
+}) => {
+  const { page } = app;
+  await page.setViewportSize(WIDE);
+  const templateId = 'tpl-disclosure-draft';
+  const otherTemplateId = 'tpl-disclosure-other';
+  await app.importVcg('disclosure-draft.vcg', await buildListFieldVcg(templateId));
+  await app.importVcg('disclosure-other.vcg', await buildListFieldVcg(otherTemplateId));
+  await app.selectStackRow(templateId);
+
+  const inspector = app.inspector;
+  const collapse = inspector.getByRole('button', { name: 'Collapse all sections', exact: true });
+  const expand = inspector.getByRole('button', { name: 'Expand all sections', exact: true });
+  const timing = inspector.getByRole('button', { name: 'Timing', exact: true });
+  const offset = inspector.getByLabel('Position offset X');
+  const firstItem = inspector.getByRole('textbox', { name: '_tickerTexts item 1' });
+  const draft = 'عنوان تازه\nNew line';
+  const expectOpen = async (expanded: boolean) => {
+    for (const name of ['Layer details', 'Timing', 'Position', 'Fields']) {
+      await expect(inspector.getByRole('button', { name, exact: true })).toHaveAttribute(
+        'aria-expanded',
+        String(expanded),
+      );
+    }
+  };
+  const readApplied = () =>
+    page.evaluate(
+      async (id) => (await window.cg.stack.snapshot()).find((row) => row.templateId === id),
+      templateId,
+    );
+  const applied = await readApplied();
+  expect(applied).toBeDefined();
+  await offset.fill('42');
+  await firstItem.fill(draft);
+
+  await collapse.press('Space');
+  await expect(expand).toBeFocused();
+  await expectOpen(false);
+  await expect(offset).toBeHidden();
+  await expect(firstItem).toBeHidden();
+  await expect(inspector.locator('[data-inspector-heading]')).toBeVisible();
+  await expect(inspector.locator('[data-inspector-template]')).toContainText('disclosure draft');
+  await expect(inspector.getByText('READY', { exact: true })).toBeVisible();
+  await expect(inspector.getByRole('button', { name: 'Apply staged edits' })).toBeEnabled();
+  await expect(inspector.getByRole('button', { name: 'Discard staged edits' })).toBeEnabled();
+  await expectFootPinned(inspector, 'all sections collapsed');
+
+  await timing.press('Enter');
+  await expect(timing).toHaveAttribute('aria-expanded', 'true');
+  await expect(firstItem).toBeHidden();
+  await collapse.press('Enter');
+  await expect(expand).toBeFocused();
+  await expectOpen(false);
+
+  await app.selectStackRow(otherTemplateId);
+  await expect(inspector.locator('[data-inspector-template]')).toContainText('disclosure other');
+  await expectOpen(false);
+  await app.selectStackRow(templateId);
+  await expect(app.stackRow(templateId)).toHaveAttribute('aria-pressed', 'true');
+  await expectOpen(false);
+
+  await inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
+  await expectOpen(false);
+  await expand.press('Enter');
+  await expect(collapse).toBeFocused();
+  await expectOpen(true);
+  await expect(offset).toHaveValue('42');
+  await expect(firstItem).toHaveValue(draft);
+  expect((await readApplied())?.position).toEqual(applied?.position);
+  expect((await readApplied())?.fields).toEqual(applied?.fields);
+  await inspector.getByRole('button', { name: 'Exit fullscreen INSPECTOR' }).click();
+  await expectOpen(true);
+
+  await app.openStationSetupAt('General');
+  const settings = page.getByRole('dialog');
+  await settings.locator('#cg-interface-language').selectOption('fa');
+  await settings.getByRole('button', { name: 'بستن', exact: true }).last().click();
+  const persian = page.getByRole('complementary', { name: 'ویژگی‌ها', exact: true });
+  await persian.getByRole('button', { name: 'جمع کردن همهٔ بخش‌ها', exact: true }).press('Space');
+  await expect(
+    persian.getByRole('button', { name: 'باز کردن همهٔ بخش‌ها', exact: true }),
+  ).toBeFocused();
+
+  await page.getByRole('button', { name: 'باز کردن تنظیمات ایستگاه', exact: true }).click();
+  await settings.getByRole('tab', { name: 'عمومی', exact: true }).click();
+  await settings.locator('#cg-interface-language').selectOption('ar');
+  await settings.getByRole('button', { name: 'إغلاق', exact: true }).last().click();
+  const arabic = page.getByRole('complementary', { name: 'لوحة الخصائص', exact: true });
+  await arabic.getByRole('button', { name: 'توسيع جميع الأقسام', exact: true }).press('Enter');
+  await expect(arabic.getByRole('button', { name: 'طيّ جميع الأقسام', exact: true })).toBeFocused();
+});
+
 test('Inspector scroll ends before its pinned footer in the split, narrow and fullscreen layouts', async ({
   app,
 }) => {

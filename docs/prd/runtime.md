@@ -292,13 +292,14 @@ the number field, and the ticker item textareas — plus their min-heights and t
 overall Inspector/Library density, now that the shared control primitives are in
 place (R-007).
 
-**Approved Inspector design:** Make Layer details, Position and Timing collapsible. Keep the row name,
-template and current status visible. A collapsed Position shows the effective anchor and offsets
+**Approved Inspector design:** Give every available top-level section its own disclosure and
+provide one header button to collapse all or expand all. Keep the row name, template and current
+status visible. A collapsed Position shows the effective anchor and offsets
 and still marks unapplied changes. Align the labels and values of simple Fields in compact rows.
 Keep space for text areas, item editors and grouped fields. The footer stays at the bottom.
-Timing precedes Position. Group related position and effect controls and put their labels above
-the fields. Use the approved blue-gray fill and outline for the Position, Preset effect and
-Input effect groups. Preset buttons leave room for their title and a second Programme or Preview
+Timing precedes Position. The independent Effects section puts Preset effect and Input effect
+together. Use the approved blue-gray fill and outline for the Position and effect controls.
+Preset buttons leave room for their title and a second Programme or Preview
 status line.
 
 **Why:** After the R-007 design-system rollout the controls read well
@@ -312,10 +313,10 @@ follow-up, not a restyle.
 - WHEN the sizing changes land THEN they build on R-007's `.cg-field` /
   `--r-space-*` tokens (adjust the shared tokens/class, not per-component inline
   styles) and no interaction state or R-003 input behavior regresses
-- WHEN the operator collapses Layer details, Position or Timing THEN the current row and its state remain
-  visible, and staged edits stay available through the existing Update or Discard controls.
-- WHEN the operator selects another layer THEN Layer details, Position and Timing keep their expanded or
-  collapsed state for the current workspace, and their values follow the selected layer.
+- WHEN the operator collapses a section or uses Collapse all sections THEN the current row and
+  its state remain visible, and staged edits stay available through Update or Discard.
+- WHEN the operator selects another layer or changes the Inspector layout THEN the disclosures
+  keep their expansion state for the session, and their values follow the selected layer.
 - WHEN the operator edits complex Fields THEN their editors and grouped content remain available
   in the compact form, including on narrow panels.
 - WHEN the operator scrolls the Inspector THEN only its body moves and its scrollbar ends at the footer.

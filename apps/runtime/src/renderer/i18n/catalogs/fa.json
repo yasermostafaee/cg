@@ -1,6 +1,9 @@
 {
   "locale": "fa",
   "interface": {
+    "Effects": "افکت‌ها",
+    "Collapse all sections": "جمع کردن همهٔ بخش‌ها",
+    "Expand all sections": "باز کردن همهٔ بخش‌ها",
     "Live preview · {source}": "پیش‌نمایش زندهٔ {source}",
     "Start live input preview": "شروع پیش‌نمایش زندهٔ ورودی",
     "Cancel live input preview": "انصراف از پیش‌نمایش زندهٔ ورودی",

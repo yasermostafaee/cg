@@ -412,6 +412,7 @@ test('R-129 paints command feedback above the docked Layers panel', async ({ pag
 test('R-129 floats and redocks stable panel documents with one selection, draft and PVW session', async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   const app = new RuntimeApp(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await armMockRuntime(page);
@@ -457,6 +458,10 @@ test('R-129 floats and redocks stable panel documents with one selection, draft 
   const headline = inspector.getByRole('textbox', { name: 'headline', exact: true });
   await expect(headline).toHaveValue('Original 84');
   await headline.fill('An unapplied edit');
+  const collapse = inspector.getByRole('button', { name: 'Collapse all sections', exact: true });
+  const expand = inspector.getByRole('button', { name: 'Expand all sections', exact: true });
+  await collapse.click();
+  await expect(headline).toBeHidden();
 
   await inspector.getByRole('button', { name: /^Float / }).click();
   await expect
@@ -464,6 +469,9 @@ test('R-129 floats and redocks stable panel documents with one selection, draft 
     .toMatchObject({ width: expect.any(Number) });
   await row(84).locator('[data-row-body]').click();
   await expect(row(84)).toHaveAttribute('aria-pressed', 'true');
+  await expect(expand).toBeVisible();
+  await expect(headline).toBeHidden();
+  await expand.click();
   await expect(headline).toHaveValue('An unapplied edit');
   await row(85).locator('[data-row-body]').click();
   await expect(headline).toHaveValue('Original 85');
@@ -497,8 +505,12 @@ test('R-129 floats and redocks stable panel documents with one selection, draft 
   await pvw.getByRole('button', { name: /^Exit floating / }).click();
   await expect.poll(() => placement(page, 'pvw')).toBeNull();
   await expect(preview).toHaveAttribute('data-running-preview', 'retained');
+  await collapse.click();
   await inspector.getByRole('button', { name: /^Exit floating / }).click();
   await expect.poll(() => placement(page, 'inspector')).toBeNull();
+  await expect(expand).toBeVisible();
+  await expect(headline).toBeHidden();
+  await expand.click();
   await expect(headline).toHaveValue('An unapplied edit');
 
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();

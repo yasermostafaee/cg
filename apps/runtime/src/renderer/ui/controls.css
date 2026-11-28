@@ -2740,6 +2740,10 @@ textarea.cg-field--autogrow {
   margin: 0 0 var(--r-space-3);
 }
 
+.cg-inspector-effects fieldset + fieldset {
+  margin-block-start: var(--r-space-2);
+}
+
 /*
  * A SECTION HEADING — small, wide-tracked, faint, with a rule under it. It names
  * a region; it is not a heading competing with the field labels below it, which

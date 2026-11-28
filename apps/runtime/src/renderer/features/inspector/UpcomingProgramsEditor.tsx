@@ -21,6 +21,7 @@ import { TextInput } from '../../ui/TextInput.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { upcomingProgramMediaInOtherDrafts } from './draftStore.js';
 import { removeUploadedProgramMedia } from './upcomingProgramMedia.js';
+import { InspectorSection, type InspectorDisclosure } from './InspectorSection.js';
 
 export interface UpcomingProgramsMediaOption {
   assetId: string;
@@ -33,6 +34,7 @@ export interface UpcomingProgramsMediaOption {
 interface UpcomingProgramsEditorProps {
   itemId: string;
   element: { id: string; name: string; mediaVisible?: boolean | undefined };
+  disclosure?: InspectorDisclosure | undefined;
   appliedRows: readonly UpcomingProgramsSampleItem[];
   rows: readonly UpcomingProgramsSampleItem[];
   mediaOptions: readonly UpcomingProgramsMediaOption[];
@@ -43,6 +45,7 @@ interface UpcomingProgramsEditorProps {
 export function UpcomingProgramsEditor({
   itemId,
   element,
+  disclosure,
   appliedRows,
   rows,
   mediaOptions,
@@ -104,9 +107,11 @@ export function UpcomingProgramsEditor({
   };
 
   return (
-    <section className="cg-inspector-section" aria-label={localizeUi('Upcoming Programs')}>
-      <div className="cg-section-caption">
-        <h2>
+    <InspectorSection
+      label={localizeUi('Upcoming Programs')}
+      disclosure={disclosure}
+      heading={
+        <>
           {localizeUi('Upcoming Programs')}
           {element.name !== '' && element.name !== 'Upcoming Programs' && (
             <>
@@ -114,7 +119,9 @@ export function UpcomingProgramsEditor({
               · <bdi dir="auto">{element.name}</bdi>
             </>
           )}
-        </h2>
+        </>
+      }
+      actions={
         <Button
           variant="neutral"
           onClick={() => commit([...latestRows.current, { id: uuid(), title: '' }])}
@@ -122,7 +129,8 @@ export function UpcomingProgramsEditor({
           <Icon icon={Plus} />
           {localizeUi('Add program')}
         </Button>
-      </div>
+      }
+    >
       {rows.length === 0 && <span>{localizeUi('No programs.')}</span>}
       {rows.map((row, index) => {
         const number = index + 1;
@@ -216,7 +224,7 @@ export function UpcomingProgramsEditor({
           </div>
         );
       })}
-    </section>
+    </InspectorSection>
   );
 }
 

@@ -13,12 +13,12 @@ import {
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
 import {
-  authoredLookEffect,
   controlLiveLayoutFocusTarget,
   DEFAULT_LIVE_CROP_FOCUS,
   isOnAirStatus,
   sameLiveCropFocus,
   type ControlLiveLayout,
+  type FrameTransition,
   type StackItemState,
 } from '@cg/shared-schema';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
@@ -46,6 +46,49 @@ import {
 import { FrameAutoLayout, frameAutoLayoutAvailability } from './FrameAutoLayout.js';
 import { FrameEffectControls } from './FrameEffectControls.js';
 
+function useCanEditLiveFrames(item: StackItemState, channel: number): boolean {
+  const canOperate = useCanOperate();
+  const lock = useLockCoverage();
+  return (
+    canOperate &&
+    !item.pending &&
+    item.status !== 'exiting' &&
+    lock.kind !== 'all' &&
+    (lock.kind !== 'partial' || !lock.channels.includes(channel))
+  );
+}
+
+export function InspectorPresetEffect({
+  item,
+  channel,
+  authored,
+  defaultLabel,
+  sharedWithMove,
+}: {
+  item: StackItemState;
+  channel: number;
+  authored: FrameTransition | undefined;
+  defaultLabel: string | undefined;
+  sharedWithMove: boolean;
+}): JSX.Element {
+  const canEdit = useCanEditLiveFrames(item, channel);
+  return (
+    <FrameEffectControls
+      disabled={!canEdit}
+      label={sharedWithMove ? 'Move / resize and preset effects' : 'Preset effect'}
+      preset={
+        authored === undefined
+          ? undefined
+          : {
+              itemId: item.itemId,
+              value: authored,
+              ...(defaultLabel !== undefined && { defaultLabel }),
+            }
+      }
+    />
+  );
+}
+
 export function LiveFrameAdjustments({
   item,
   live,
@@ -53,6 +96,7 @@ export function LiveFrameAdjustments({
   rehearsing,
   previewLookId,
   controlLiveLayout,
+  moveEffect = false,
 }: {
   item: StackItemState;
   live: TemplateLiveSources;
@@ -60,11 +104,11 @@ export function LiveFrameAdjustments({
   rehearsing?: boolean | undefined;
   previewLookId?: string | undefined;
   controlLiveLayout?: ControlLiveLayout | undefined;
+  moveEffect?: boolean;
 }): JSX.Element | null {
   const localizeUi = useUiText();
   const capabilities = useAuthCapabilities();
-  const canOperate = useCanOperate();
-  const lock = useLockCoverage();
+  const canEdit = useCanEditLiveFrames(item, channel);
   const preserveAspect = usePreserveFrameAspect();
   const aspectId = useId();
   const [cropRead, setCropRead] = useState<{
@@ -76,18 +120,6 @@ export function LiveFrameAdjustments({
   const sourceRevision = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
 
   const onAir = isOnAirStatus(item);
-  const previewFrameEffect =
-    rehearsing === true &&
-    Object.keys(lookOperatorFrames(live, previewLookId ?? item.activeLookId)).length > 0;
-  const frameEffect = item.onAirFrameTransition === true || previewFrameEffect;
-  const presetEffect =
-    (live.looks?.length ?? 0) > 1 && (rehearsing || !onAir || item.onAirPresetTransition === true);
-  const canEdit =
-    canOperate &&
-    !item.pending &&
-    item.status !== 'exiting' &&
-    lock.kind !== 'all' &&
-    (lock.kind !== 'partial' || !lock.channels.includes(channel));
   const lookId = activeLookOf(live, item.activeLookId)?.id;
   const frames = Object.values(lookOperatorFrames(live, lookId));
   const hasAppliedFrames =
@@ -115,7 +147,6 @@ export function LiveFrameAdjustments({
   const preset = controlLiveLayout?.presets.find(
     ({ id }) => id === (focus?.presetId ?? arrangeLookId),
   );
-  const authoredEffect = authoredLookEffect(activeLookOf(live, arrangeLookId)?.entered);
   const layout =
     capabilities?.liveFramePlacement === true
       ? frameAutoLayoutAvailability(live, arrangeLookId)
@@ -245,43 +276,7 @@ export function LiveFrameAdjustments({
           {localizeUi('Preserve frame aspect ratio')}
         </label>
       )}
-      {controlLiveLayout === undefined ? (
-        <>
-          {(frameEffect || (presetEffect && authoredEffect === undefined)) && (
-            <FrameEffectControls
-              disabled={!canEdit}
-              {...(presetEffect &&
-                authoredEffect === undefined && {
-                  label: frameEffect ? 'Move / resize and preset effects' : 'Preset effect',
-                })}
-            />
-          )}
-          {presetEffect && authoredEffect !== undefined && (
-            <FrameEffectControls
-              key={arrangeLookId}
-              label={localizeUi('Preset effect')}
-              disabled={!canEdit}
-              preset={{
-                itemId: item.itemId,
-                value: authoredEffect,
-                defaultLabel: 'Preset default',
-              }}
-            />
-          )}
-        </>
-      ) : (
-        <>
-          {frameEffect && <FrameEffectControls disabled={!canEdit} />}
-          {presetEffect && (
-            <FrameEffectControls
-              key={item.itemId}
-              label={localizeUi('Preset effect')}
-              disabled={!canEdit}
-              preset={{ itemId: item.itemId, value: controlLiveLayout.effects.focus }}
-            />
-          )}
-        </>
-      )}
+      {moveEffect && <FrameEffectControls disabled={!canEdit} />}
       {layout?.kind === 'permissions' && (
         <p className="cg-frame-auto-layout cg-frame-auto-layout__notice" role="status">
           {localizeUi(

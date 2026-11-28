@@ -54,6 +54,10 @@ import { useShellLayout } from './hooks/useShellLayout.js';
 import { ShellLayoutProvider } from './hooks/shellLayoutContext.js';
 import { LiveInputCheckProvider } from './features/monitors/liveInputCheckContext.js';
 import { Inspector } from './features/inspector/Inspector.js';
+import {
+  OPEN_INSPECTOR_SECTIONS,
+  type InspectorDisclosureState,
+} from './features/inspector/InspectorSection.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
@@ -192,9 +196,8 @@ export function App({
   const emptiedAir = useEmptiedAir();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The Inspector can remount between selections on a narrow screen.
-  const [layerDetailsOpen, setLayerDetailsOpen] = useState(true);
-  const [positionOpen, setPositionOpen] = useState(true);
-  const [timingOpen, setTimingOpen] = useState(true);
+  const [inspectorDisclosures, setInspectorDisclosures] =
+    useState<InspectorDisclosureState>(OPEN_INSPECTOR_SECTIONS);
   // B-427 — a fullscreen panel can unmount LayersPanel without ending the console session.
   const [layerFilter, setLayerFilter] = useState<LayerFilter>(NO_FILTER);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
@@ -465,14 +468,7 @@ export function App({
   const selectedOnPvw = selected !== null && isRehearsing(rehearsals, selected.itemId);
   const renderInspector = (onClose: () => void): JSX.Element => (
     <Inspector
-      disclosures={{
-        layerDetails: {
-          open: layerDetailsOpen,
-          toggle: () => setLayerDetailsOpen((open) => !open),
-        },
-        position: { open: positionOpen, toggle: () => setPositionOpen((open) => !open) },
-        timing: { open: timingOpen, toggle: () => setTimingOpen((open) => !open) },
-      }}
+      disclosures={{ state: inspectorDisclosures, onChange: setInspectorDisclosures }}
       onClose={onClose}
       item={selected}
       // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.

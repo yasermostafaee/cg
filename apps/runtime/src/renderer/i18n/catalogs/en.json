@@ -1,6 +1,9 @@
 {
   "locale": "en",
   "interface": {
+    "Effects": "Effects",
+    "Collapse all sections": "Collapse all sections",
+    "Expand all sections": "Expand all sections",
     "Live preview · {source}": "Live preview · {source}",
     "Start live input preview": "Start live input preview",
     "Cancel live input preview": "Cancel live input preview",

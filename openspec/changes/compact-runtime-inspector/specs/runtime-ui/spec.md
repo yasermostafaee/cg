@@ -2,11 +2,28 @@
 
 ### Requirement: CG Control provides a compact layer Inspector
 
-The Inspector SHALL provide independently collapsible Layer details, Position and Timing sections. The
-selected layer's name, template and current status SHALL remain visible. A collapsed Position
+The Inspector SHALL provide an independent disclosure for every available top-level section and
+a single header button to collapse or expand all sections. The selected layer's name, template
+and current status SHALL remain visible. A collapsed Position
 SHALL summarize the effective anchor and offsets and indicate an unapplied Position change. The
 Inspector SHALL keep Update and Discard in a separate footer outside the scrollport and retain the
-existing field editors. Timing SHALL appear before Position.
+existing field editors. Timing SHALL appear before Position. The independent Effects section
+SHALL group the available Preset effect and Input effect controls together.
+
+#### Scenario: Change an effect with Position and Plate inputs collapsed
+
+- **WHEN** the operator opens the Effects section for a layout that supports both controls
+- **THEN** Preset effect and Input effect are accessible while Position and Plate inputs are collapsed
+- **AND** each effect keeps its existing availability, settings and behavior
+
+#### Scenario: Collapse and expand all Inspector sections
+
+- **WHEN** the operator uses Collapse all sections while any available section is open
+- **THEN** all available sections collapse with the row identity, status and footer still visible
+- **AND** any staged edits remain available to Update or Discard
+- **WHEN** the operator uses Expand all sections
+- **THEN** all available sections reopen with their staged values
+- **AND** the same header control keeps keyboard focus and reports the applicable action
 
 #### Scenario: Match the approved control group colors
 
@@ -40,10 +57,10 @@ existing field editors. Timing SHALL appear before Position.
 
 #### Scenario: Select another layer with sections collapsed
 
-- **WHEN** the operator collapses Layer details, Position or Timing and selects another layer
+- **WHEN** the operator collapses any section and selects another layer or changes the Inspector layout
 - **THEN** each section retains its expanded or collapsed state
 - **AND** the summary and fields reflect the newly selected layer
-- **AND** the same behavior applies after dismissing the narrow Inspector overlay to switch layers
+- **AND** the same behavior applies across the docked, narrow, maximized and floating Inspector
 
 #### Scenario: Collapse Timing while editing a row
 

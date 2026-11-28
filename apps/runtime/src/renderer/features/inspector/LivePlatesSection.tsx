@@ -6,6 +6,7 @@ import { colors } from '../../theme.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
+import { InspectorSection, type InspectorDisclosure } from './InspectorSection.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
 import {
   assignmentsWereCarriedOver,
@@ -110,6 +111,7 @@ export function LivePlatesSection({
   item,
   info,
   channel,
+  disclosure,
 }: {
   item: StackItemState;
   info: TemplateInfo | null;
@@ -118,6 +120,7 @@ export function LivePlatesSection({
    * for the reason `LooksBindingsSection`'s `rehearsing` is one: the Inspector already holds it.
    */
   channel: number;
+  disclosure?: InspectorDisclosure | undefined;
 }): JSX.Element | null {
   const localizeUi = useUiText();
   useSyncExternalStore(subscribeSources, sourcesVersion);
@@ -225,30 +228,21 @@ export function LivePlatesSection({
     what the timing sentence at the bottom is for.
   */
 
+  // Templates without presets use this section for source defaults. Templates with presets
+  // show the same link in Plate inputs and return above.
   return (
-    <div className="cg-inspector-section" aria-label={localizeUi('Live plates')}>
-      {/*
-        ⚠ **THE DOOR IS HERE ONLY WHEN `PLATE INPUTS` IS NOT.** The owner's call is that the
-        link sits above the frames (gh2) and not in a section of its own — so for a template
-        that declares LOOKS it lives there, and this section does not draw a second one.
-
-        🔴 But `LooksBindingsSection` renders nothing for a template WITHOUT looks, and this
-        is the only surface in the product that binds a plate to a source. Without the
-        fallback such a template would have no door at all and every fresh row of it would
-        start unbound with its take refused (`live-source-unassigned`) — the trap session BO
-        fell into and reverted. Exactly one of the two hosts draws it, never both.
-      */}
-      <div className="cg-section-caption">
-        <h2>{localizeUi('Live plates')}</h2>
-        {!hasLooks && (
-          <SourceDefaultsLink
-            templateId={item.templateId}
-            info={info}
-            plates={plates}
-            channel={channel}
-          />
-        )}
-      </div>
+    <InspectorSection
+      label={localizeUi('Live plates')}
+      disclosure={disclosure}
+      actions={
+        <SourceDefaultsLink
+          templateId={item.templateId}
+          info={info}
+          plates={plates}
+          channel={channel}
+        />
+      }
+    >
       {/*
         A9 — a re-import KEEPS the bindings, and it has to SAY so. The owner met it as a
         silent restore: the plates came back bound with no action and no notice, which is
@@ -367,6 +361,6 @@ export function LivePlatesSection({
         said in the dialog's footer, where the change is now made; saying WHEN a change lands
         on a surface that can no longer make one would be a sentence with no subject.
       */}
-    </div>
+    </InspectorSection>
   );
 }

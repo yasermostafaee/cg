@@ -26,8 +26,8 @@ import { appliedPlateSources, frozenPlateSource, onAirPlateSource } from './live
 import { reportCommandError } from '../status/commandFeedback.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
+import { InspectorSection, type InspectorDisclosure } from './InspectorSection.js';
 import { claimsAir } from '../stack/onAir.js';
-import { InputEffectControls } from './InputEffectControls.js';
 import { inputTransitionRequest } from './inputTransitionPreference.js';
 
 /**
@@ -224,6 +224,17 @@ export function badgeFor(
   return { text: null, tone: 'not-on-air', color: styles.selected.color };
 }
 
+export function inputBindingLookOf(
+  carrier: TemplateInfo['liveSources'],
+  layout: TemplateInfo['controlLiveLayout'],
+  editingLook: TemplateLook | undefined,
+): TemplateLook | undefined {
+  const focus = templateFocusTarget(carrier, layout, editingLook?.id);
+  return focus === undefined
+    ? editingLook
+    : carrier?.looks?.find(({ id }) => id === focus.presetId);
+}
+
 export function LooksBindingsSection({
   item,
   info,
@@ -231,12 +242,14 @@ export function LooksBindingsSection({
   previewOnly = false,
   channel,
   editingLook,
+  disclosure,
   onEditLook,
 }: {
   item: StackItemState;
   info: TemplateInfo | null;
   /** The Inspector shares this selection with its dynamic field groups. */
   editingLook: TemplateLook | undefined;
+  disclosure?: InspectorDisclosure | undefined;
   onEditLook: (lookId: string) => void;
   /**
    * `CHANNEL-SOURCES-01` — the row's channel: `Default (…)` names THAT channel's own Source
@@ -266,9 +279,7 @@ export function LooksBindingsSection({
   const looks = (carrier?.looks ?? []).filter(
     ({ id }) => templateFocusTarget(carrier, layout, id) === undefined,
   );
-  const focus = templateFocusTarget(carrier, layout, editingLook?.id);
-  const inputLook =
-    focus === undefined ? editingLook : looks.find(({ id }) => id === focus.presetId);
+  const inputLook = inputBindingLookOf(carrier, layout, editingLook);
   // A template with no LOOKS gets no section — its plates have one answer, and the flat list
   // above already is it. An empty heading is a question the operator did not ask.
   if (carrier === undefined || inputLook === undefined) return null;
@@ -365,25 +376,18 @@ export function LooksBindingsSection({
   );
 
   return (
-    <div className="cg-inspector-section" aria-label={localizeUi('Plate inputs')}>
-      {/*
-        🔴 **THE DEFAULTS LINK LIVES HERE — owner, 2026-09-14 (gh2):** «لینک مودال هم بالای
-        فریمها باشه مثل gh2 نیاز نیست توی دو بخش جدا باشن.» The reference puts it in this
-        section's caption, above the frame selects it configures — not in a section of its own.
-
-        `.section-caption` is the drawing's shape: the heading at one end, a `link-btn` at the
-        other. Sentence case in the source; the CAPS are the stylesheet's (`Inspector.tsx`).
-      */}
-      <div className="cg-section-caption">
-        <h2>{localizeUi('Plate inputs')}</h2>
+    <InspectorSection
+      label={localizeUi('Plate inputs')}
+      disclosure={disclosure}
+      actions={
         <SourceDefaultsLink
           templateId={item.templateId}
           info={info}
           plates={carrier.sources ?? []}
           channel={channel}
         />
-      </div>
-      <InputEffectControls key={item.itemId} itemId={item.itemId} layout={layout} />
+      }
+    >
       {/*
         🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
 
@@ -673,6 +677,6 @@ export function LooksBindingsSection({
           </div>
         );
       })}
-    </div>
+    </InspectorSection>
   );
 }

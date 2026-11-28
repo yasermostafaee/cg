@@ -1,6 +1,9 @@
 {
   "locale": "ar",
   "interface": {
+    "Effects": "التأثيرات",
+    "Collapse all sections": "طيّ جميع الأقسام",
+    "Expand all sections": "توسيع جميع الأقسام",
     "Live preview · {source}": "معاينة مباشرة · {source}",
     "Start live input preview": "بدء المعاينة المباشرة للمدخل",
     "Cancel live input preview": "إلغاء المعاينة المباشرة للمدخل",

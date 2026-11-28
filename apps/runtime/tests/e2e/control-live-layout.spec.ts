@@ -2139,7 +2139,34 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       }
     }
 
-    const inputEffect = inspector.getByRole('combobox', { name: 'Input transition' });
+    const inspectorEffects = inspector.getByRole('region', { name: 'Effects', exact: true });
+    const effectsDisclosure = inspectorEffects.getByRole('button', {
+      name: 'Effects',
+      exact: true,
+    });
+    const positionDisclosure = inspector.getByRole('button', { name: 'Position', exact: true });
+    const plateInputSection = inspector.getByRole('region', { name: 'Plate inputs', exact: true });
+    const plateInputDisclosure = plateInputSection.getByRole('button', {
+      name: 'Plate inputs',
+      exact: true,
+    });
+    const sourceDefaults = plateInputSection.getByText('Source defaults', { exact: true });
+    await expect(sourceDefaults).toBeVisible();
+    await inspector.getByRole('button', { name: 'Collapse all sections', exact: true }).click();
+    await expect(effectsDisclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(positionDisclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(plateInputDisclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(sourceDefaults).toBeHidden();
+    await effectsDisclosure.press('Space');
+    await expect(effectsDisclosure).toHaveAttribute('aria-expanded', 'true');
+    await expect(positionDisclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(plateInputDisclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(
+      inspectorEffects.getByRole('group', { name: 'Preset effect', exact: true }),
+    ).toBeVisible();
+    const inputEffect = inspectorEffects
+      .getByRole('group', { name: 'Input effect', exact: true })
+      .getByRole('combobox', { name: 'Input transition' });
     await expect(inputEffect.locator('option:checked')).toHaveText('Layout default (Push)');
     await inputEffect.selectOption('slide-over');
     await localFocus.getByRole('button', { name: /Focus plate 3 in Preview/ }).click();
@@ -2199,7 +2226,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await programme.getByRole('button', { name: 'Return to Three-up' }).click();
     await expect.poll(active).toBe(origin);
 
-    const presetEffect = inspector
+    const presetEffect = inspectorEffects
       .getByRole('group', { name: 'Preset effect', exact: true })
       .getByRole('combobox', { name: 'Motion', exact: true });
     await expect(presetEffect.locator('option:checked')).toHaveText('Layout default (Linear)');
