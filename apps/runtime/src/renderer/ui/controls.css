@@ -2151,6 +2151,13 @@
     box-shadow var(--r-dur-fast) ease;
 }
 
+/* Auto direction follows the value, which is empty while a translated hint is showing. */
+.cg-field[dir='auto']:placeholder-shown,
+.cg-field--localized-placeholder:placeholder-shown {
+  direction: inherit;
+  text-align: start;
+}
+
 /* R-102 — the delimiter picker moved with the file preview into its wide modal.
  * Keep the control content-sized so it does not consume the entire two-pane row. */
 .cg-file-preview__delimiter {
@@ -8074,6 +8081,7 @@ input[type='checkbox']:disabled:checked {
 .cg-tpl-tools {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--r-tpl-tools-gap);
   padding: var(--r-tpl-tools-pad);
   padding-bottom: var(--r-tpl-tools-pad-bottom);
@@ -8214,6 +8222,9 @@ input[type='checkbox']:disabled:checked {
   flex: 1 1 auto;
   min-width: 0;
 }
+.cg-tpl-search {
+  flex-basis: 12rem;
+}
 .cg-tpl-search > svg,
 .cg-audit-search > svg {
   position: absolute;
@@ -8231,10 +8242,16 @@ input[type='checkbox']:disabled:checked {
   height: var(--r-tpl-search-h);
   min-height: var(--r-tpl-search-h);
   padding-block: var(--r-tpl-search-pad-y);
-  padding-inline: var(--r-tpl-search-pad-start) var(--r-tpl-search-pad-end);
+  padding-left: var(--r-tpl-search-pad-start);
+  padding-right: var(--r-tpl-search-pad-end);
   border-radius: var(--r-tpl-search-radius);
   font-size: var(--r-tpl-search-text);
   line-height: 1.4;
+}
+/* Keep room for the magnifier on the wrapper's leading side while text direction changes. */
+.cg-tpl-search:dir(rtl) .cg-field {
+  padding-left: var(--r-tpl-search-pad-end);
+  padding-right: var(--r-tpl-search-pad-start);
 }
 .cg-tpl-filter {
   display: flex;

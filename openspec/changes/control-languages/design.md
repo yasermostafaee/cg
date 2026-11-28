@@ -10,6 +10,8 @@ Translations keep the product name CG Control in English lettering. The shared p
 
 The Layers preset tooltip isolates the authored preset name within the localized sentence. In English, a Persian or Arabic name keeps its own reading direction. The tooltip presents the name first, then the separator and the complete plate-count phrase.
 
+Shared field styles resolve the direction of an empty auto-direction field to the surrounding interface while the placeholder is visible. Technical fields can use the same behavior for a translated hint while retaining their explicit direction for entered values. The template search reserves space for its magnifier based on the direction of the surrounding toolbar, which can wrap in narrow windows.
+
 ## Verification
 
 Prove the operator path in a fresh Runtime build and preserve the station write behavior and permissions.

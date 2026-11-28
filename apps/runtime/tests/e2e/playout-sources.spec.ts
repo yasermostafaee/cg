@@ -562,6 +562,9 @@ test('centers the source picker header and anchors both lists’ A/B indicators 
 
     await dialog.getByRole('tab', { name: copy.media }).click();
     const media = dialog.locator('[data-picker-tab="media"]');
+    const search = media.locator('[data-picker-search]');
+    await expect(search).toHaveValue('');
+    await expect(search).toHaveCSS('direction', rtl ? 'rtl' : 'ltr');
     const tile = media.locator('[data-picker-media]').first();
     const tilePresence = tile.locator('[data-source-presence]');
     await expect(tilePresence).toBeVisible();

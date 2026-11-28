@@ -132,3 +132,10 @@ CG Control SHALL provide independent English, Persian and Arabic choices for UI 
 
 - **WHEN** an operator points at an available, unknown, connecting or unavailable input preview
 - **THEN** the tooltip and any displayed preview status use the interface language.
+
+#### Scenario: Read a field placeholder and enter a template query
+
+- **WHEN** an empty field shows a translated placeholder
+- **THEN** the hint uses the interface direction. Entered values keep their content direction, including explicitly left-to-right technical values.
+- **AND** the template search reserves room for its magnifier on the leading side of the interface while the query direction changes.
+- **AND** at narrow window widths the template toolbar wraps and the search stays at its usual height.

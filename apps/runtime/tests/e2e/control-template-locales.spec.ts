@@ -131,6 +131,47 @@ for (const strings of locales) {
         await expect(catalogue.locator('[data-modal-subtitle]')).toHaveText(
           strings.channelSubtitle,
         );
+        const search = catalogue.locator('#template-search');
+        await expect(search).toHaveValue('');
+        await expect(search).toHaveCSS('direction', 'rtl');
+        await expect(search).toHaveCSS('text-align', 'start');
+        const searchPadding = () =>
+          search.evaluate((input) => {
+            const style = getComputedStyle(input);
+            return [
+              Number.parseFloat(style.paddingLeft),
+              Number.parseFloat(style.paddingRight),
+            ] as const;
+          });
+        const rtlPadding = await searchPadding();
+        expect(rtlPadding[1]).toBeGreaterThan(rtlPadding[0]);
+        await search.fill('Studio');
+        await expect(search).toHaveCSS('direction', 'ltr');
+        expect(await searchPadding()).toEqual(rtlPadding);
+        await search.fill('میز');
+        await expect(search).toHaveCSS('direction', 'rtl');
+        await search.clear();
+        await expect(search).toHaveCSS('direction', 'rtl');
+
+        const tools = catalogue.locator('[data-template-tools]');
+        const regularHeight = await search.evaluate(
+          (input) => input.getBoundingClientRect().height,
+        );
+        await page.setViewportSize({ width: 520, height: 800 });
+        const narrowTools = await tools.evaluate((row) => {
+          const input = row.querySelector('input')!;
+          return {
+            overflows: row.scrollWidth > row.clientWidth,
+            fieldWidth: input.getBoundingClientRect().width,
+          };
+        });
+        expect(narrowTools.overflows).toBe(false);
+        expect(narrowTools.fieldWidth).toBeGreaterThanOrEqual(192);
+        expect(await search.evaluate((input) => input.getBoundingClientRect().height)).toBe(
+          regularHeight,
+        );
+        await page.setViewportSize({ width: 1600, height: 970 });
+
         await expect(
           catalogue.getByRole('button', { name: strings.graphics, exact: true }),
         ).toBeVisible();

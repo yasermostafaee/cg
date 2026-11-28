@@ -346,6 +346,11 @@
           "ar": "تعرض ملخصات تحميل ملفات التعريف وتحذيراته بلغة الرسائل المحددة واتجاه القراءة المناسب لها."
         },
         {
+          "fa": "متن راهنمای فیلدهای خالی در فارسی و عربی از سمت راست شروع می‌شود. در پنجره‌های باریک، دکمه‌های جست‌وجوی قالب به سطر بعد می‌روند تا فیلد جست‌وجو جا داشته باشد.",
+          "en": "Empty fields show translated placeholders in the interface direction. The template toolbar wraps in narrow windows to keep the search field usable.",
+          "ar": "تظهر النصوص الإرشادية في الحقول الفارغة باتجاه لغة الواجهة. تنتقل أزرار شريط القوالب إلى سطر جديد في النوافذ الضيقة لإتاحة مساحة للبحث."
+        },
+        {
           "fa": "در پیش‌نمایش New live layout، قاب‌های پریست تصویر ورودی NDI مستقیم و تصویر ورودی‌های دارای پیش‌نمایش Playout را با اندازه و برش همان قاب نشان می‌دهند.",
           "en": "New live layout preview frames display direct NDI and available Playout source pictures with the selected preset's fit and crop.",
           "ar": "تعرض معاينة «ترتيب حي جديد» صور NDI المباشرة وصور مصادر Playout المتاحة وفق الملاءمة والاقتصاص في الإعداد المسبق المحدد."

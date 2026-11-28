@@ -2067,7 +2067,7 @@ export function StationSetupDialog({
                           : {})}
                       >
                         <TextInput
-                          className="cg-field--mono"
+                          className="cg-field--mono cg-field--localized-placeholder"
                           dir="ltr"
                           aria-label={localizeUi('Graphics host')}
                           placeholder={localizeUi('Detect automatically')}
@@ -2085,7 +2085,7 @@ export function StationSetupDialog({
                         error={portError(servePort, { min: 0, label: 'Port', blankAllowed: true })}
                       >
                         <NumericInput
-                          className="cg-field cg-field--mono"
+                          className="cg-field cg-field--mono cg-field--localized-placeholder"
                           dir="ltr"
                           allow="digits"
                           aria-label={localizeUi('Graphics port')}

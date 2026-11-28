@@ -14275,3 +14275,13 @@ a right-to-left language, and the English warning is displayed right-to-left.
 **Expected.** The load summary and skipped-layer details use the selected feedback language and
 reading direction independently of the interface language. The layer number and operator's name
 remain associated with the explanation.
+
+## [~] B-456 — Align field placeholders in the interface direction ⟨priority: medium — owner, 2026-11-28⟩ — `openspec/changes/control-languages/`
+
+**Repro.** In the Persian template picker, the empty search field places its translated
+placeholder on the left while the magnifier stays on the right. Other fields with automatic
+text direction can display the same mismatch.
+
+**Expected.** Translated placeholders follow the interface direction. Entered text still
+follows the field's content direction. The template search keeps its normal height and
+reserves room for the magnifier, with the toolbar wrapping on narrow windows.

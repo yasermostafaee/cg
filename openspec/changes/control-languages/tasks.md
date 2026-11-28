@@ -21,4 +21,5 @@
 - [x] Verify both password visibility tooltips and accessible names in English, Persian and Arabic.
       Unit tests covered the shared input, and Windows Chromium verified both RTL sign-in screens.
 - [x] Verify the Layers preset tooltip ordering and plate-count phrase with an authored RTL name in English Chromium. Windows Edge confirmed that «پریست 3» appears before the separator and “3 plates” follows it. The English-only tooltip checks also passed.
+- [x] Verify B-456 in Windows Chromium. The empty template query aligns right in Persian and Arabic, typing either script keeps room for the magnifier, and the toolbar wraps at 520 px without changing the field height. The Media picker placeholder follows English, Persian and Arabic, and the desktop template picker retains its measured geometry.
 - [ ] Record the carrying Linux Playwright result.
