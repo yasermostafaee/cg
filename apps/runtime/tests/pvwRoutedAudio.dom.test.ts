@@ -214,6 +214,105 @@ it('rejects stale audio readiness and does not stop a different check surface', 
   expect(close).toHaveBeenCalledTimes(1);
 });
 
+it('shares one picture and sound lease, keeps picture on mute, and releases only its own check', async () => {
+  const start = vi.fn(async (handle: LivePreviewHandle) => handleStatus(handle, 'ready'));
+  attachBridge(start);
+  const { cancelled, fetchAudio } = installPcm();
+  await render();
+  expect(start).not.toHaveBeenCalled();
+
+  await act(async () => audio.startPicture(source));
+  expect(audio).toMatchObject({
+    pictureAvailable: true,
+    pictureSourceId: source.id,
+    picture: { state: 'ready' },
+    audible: false,
+    pending: false,
+  });
+  const first = start.mock.calls[0]?.[0];
+  if (first === undefined) throw new Error('No picture-preview handle was requested.');
+  expect(events).not.toContain('resume');
+  expect(issued).not.toHaveBeenCalled();
+
+  await act(async () => audio.start(source));
+  expect(audio).toMatchObject({ audible: true, pending: false });
+  expect(issued.mock.calls).toEqual([[{ channel: 1, previewId: first.previewId }, 'audio']]);
+  expect(fetchAudio).toHaveBeenCalledTimes(1);
+  expect(start).toHaveBeenCalledTimes(1);
+
+  await act(async () => audio.mute());
+  expect(audio).toMatchObject({
+    audible: false,
+    pictureSourceId: source.id,
+    picture: { previewId: first.previewId, state: 'ready' },
+  });
+  expect(cancelled).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(end).not.toHaveBeenCalled();
+
+  await act(async () => foreign?.start(other));
+  expect(audio.picture).toBeUndefined();
+  expect(audio.pictureSourceId).toBeUndefined();
+  expect(audio.failure).toBe('The input preview ended.');
+  await act(async () => audio.stall(first.previewId));
+  expect(end.mock.calls).toEqual([[{ channel: 1, previewId: first.previewId }]]);
+  expect(start).toHaveBeenCalledTimes(2);
+});
+
+it('opens a silent picture without Web Audio and releases a stalled lease without retrying', async () => {
+  vi.stubGlobal('AudioContext', undefined);
+  const start = vi.fn(async (handle: LivePreviewHandle) => handleStatus(handle, 'ready'));
+  attachBridge(start);
+  await render();
+  expect(audio).toMatchObject({ pictureAvailable: true, available: false });
+
+  await act(async () => audio.startPicture(source));
+  const first = start.mock.calls[0]?.[0];
+  if (first === undefined) throw new Error('No picture-preview handle was requested.');
+  expect(audio.picture).toMatchObject({ previewId: first.previewId, state: 'ready' });
+  await act(async () => audio.stall(first.previewId));
+  expect(audio.picture).toBeUndefined();
+  expect(audio.pictureSourceId).toBeUndefined();
+  expect(audio.failure).toBe('No current input picture.');
+  expect(issued).not.toHaveBeenCalled();
+  expect(end.mock.calls).toEqual([[{ channel: 1, previewId: first.previewId }]]);
+  expect(start).toHaveBeenCalledTimes(1);
+});
+
+it('retries a busy sound stream on the same picture lease, with a fresh ticket', async () => {
+  const start = vi.fn(async (handle: LivePreviewHandle) => handleStatus(handle, 'ready'));
+  attachBridge(start);
+  const { fetchAudio } = installPcm();
+  await render();
+  await act(async () => audio.startPicture(source));
+  await act(async () => audio.start(source));
+  expect(audio.audible).toBe(true);
+  await act(async () => audio.mute());
+
+  fetchAudio.mockResolvedValueOnce(new Response(null, { status: 409 }));
+  await act(async () => audio.start(source));
+  expect(audio).toMatchObject({ audible: false, pending: true, picture: { state: 'ready' } });
+  expect(fetchAudio).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  expect(audio).toMatchObject({ audible: true, pending: false, picture: { state: 'ready' } });
+  const handle = { channel: 1, previewId: start.mock.calls[0]?.[0].previewId };
+  expect(issued.mock.calls).toEqual([
+    [handle, 'audio'],
+    [handle, 'audio'],
+    [handle, 'audio'],
+  ]);
+  expect(fetchAudio).toHaveBeenCalledTimes(3);
+  expect(start).toHaveBeenCalledTimes(1);
+  expect(end).not.toHaveBeenCalled();
+
+  await act(async () => audio.mute());
+  fetchAudio.mockResolvedValueOnce(new Response(null, { status: 403 }));
+  await act(async () => audio.start(source));
+  await act(async () => vi.advanceTimersByTimeAsync(1_600));
+  expect(fetchAudio).toHaveBeenCalledTimes(4);
+  expect(audio).toMatchObject({ audible: false, pending: false, picture: { state: 'ready' } });
+});
+
 it('ends the local session when the ready input stops delivering PCM', async () => {
   const start = vi.fn(async (handle: LivePreviewHandle) => handleStatus(handle, 'ready'));
   attachBridge(start);

@@ -16,17 +16,24 @@ import {
 import { currentSourceCatalog, subscribeSources } from '../sources/sourceStore.js';
 import { usePictureOriginPublisher } from '../sources/observedPictureOrigins.js';
 
+interface CanvasSource {
+  attach(canvas: HTMLCanvasElement): () => void;
+}
+
 export type PvwSourceFrame = SourcePreviewFrame & {
   snapshotOnly?: true;
   directNdi?: NdiReceiver;
-  mediaPicture?: { attach: (canvas: HTMLCanvasElement) => () => void };
+  mediaPicture?: CanvasSource;
+  livePicture?: CanvasSource;
   isDirectNdi?: true;
 };
 
 export function hasPvwSourcePicture(frame: PvwSourceFrame | undefined): boolean {
   return (
     frame?.jpegBase64 !== undefined ||
-    ((frame?.directNdi !== undefined || frame?.mediaPicture !== undefined) &&
+    ((frame?.directNdi !== undefined ||
+      frame?.mediaPicture !== undefined ||
+      frame?.livePicture !== undefined) &&
       frame.signal === 'present')
   );
 }

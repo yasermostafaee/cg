@@ -11,6 +11,7 @@ import {
   startFakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
 import { expect, test } from './fixtures/runtime.js';
+import { closeLiveLayoutCatalogue, openNewLiveLayout } from './fixtures/live-layout-editor.js';
 
 const picture = '[data-input-picture]';
 const state = '[data-input-check-state]';
@@ -85,7 +86,11 @@ test('C-023 · inspect input picture from source controls without changing a bin
         defaultLookId: 'one',
       },
     };
-    bridge.runtime.templateImport(template, '<!doctype html><html><body>Fixture</body></html>', 1);
+    bridge.runtime.templateImport(
+      template,
+      '<!doctype html><html><body><div data-cg-live-source="plate-1" style="position:absolute;left:240px;top:180px;width:960px;height:540px"></div></body></html>',
+      1,
+    );
     await page.addInitScript(
       ({ url, storage }) => {
         const app = window as unknown as {
@@ -194,9 +199,16 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(card.locator(picture)).toBeVisible();
     const checkedPicture = (await card.locator('[data-input-thumbnail="active"]').boundingBox())!;
     const checkedCard = (await studioRow.boundingBox())!;
-    for (const side of ['x', 'y', 'width', 'height'] as const) {
-      expect(checkedPicture[side]).toBeCloseTo(idlePicture[side], 0);
-      expect(checkedCard[side]).toBeCloseTo(idleCard[side], 0);
+    for (const extent of ['width', 'height'] as const) {
+      expect(checkedPicture[extent]).toBeCloseTo(idlePicture[extent], 0);
+      expect(checkedCard[extent]).toBeCloseTo(idleCard[extent], 0);
+    }
+    // The modal can scroll to the selected input. The picture stays in the same card slot.
+    for (const axis of ['x', 'y'] as const) {
+      expect(checkedPicture[axis] - checkedCard[axis]).toBeCloseTo(
+        idlePicture[axis] - idleCard[axis],
+        0,
+      );
     }
     expect(passiveMeterWidth).toBeLessThan(16);
     const pixels = await card.locator(picture).evaluate((canvas: HTMLCanvasElement) => {
@@ -372,6 +384,94 @@ test('C-023 · inspect input picture from source controls without changing a bin
       { inputId: 'li-studio1' },
     ]);
     await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
+
+    const assignment = { templateId, plateId: 'plate-1', sourceId: 'in-li-multicast' };
+    bridge.runtime.setSourceAssignments({ assignments: [assignment] });
+    await row.getByRole('button', { name: 'OFF PVW', exact: true }).click();
+    await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+    await pv.getByRole('button', { name: 'PLAY', exact: true }).click();
+    const liveButton = pv.getByRole('button', { name: 'Live preview · Multicast', exact: true });
+    const listenButton = pv.getByRole('button', { name: 'Preview audio · Multicast', exact: true });
+    const plateCanvas = pv
+      .frameLocator('iframe[data-rehearsal-frame]')
+      .locator('[data-cg-live-source="plate-1"] [data-cg-pvw-picture-part] canvas');
+    await expect(liveButton).toHaveAttribute('data-preview-plate-picture', 'snapshots');
+    const starts = preview.starts.length;
+    const pictures = preview.pictureOpens;
+    const sounds = preview.audioOpens;
+    const commandOffset = engine.receivedCommands().length;
+    preview.alternatePictures = true;
+    await liveButton.click();
+    await expect(liveButton).toHaveAttribute('data-preview-plate-picture', 'live');
+    await expect(plateCanvas).toBeVisible();
+    const seenPictures = await plateCanvas.evaluate(async (canvas: HTMLCanvasElement) => {
+      const colours = new Set<string>();
+      const drawing = canvas.getContext('2d');
+      if (drawing === null) throw new Error('Missing preview canvas context');
+      const until = performance.now() + 650;
+      while (performance.now() < until) {
+        const pixel = drawing.getImageData(0, 0, 1, 1).data;
+        if (pixel[3] === 255) colours.add(Array.from(pixel).join(','));
+        await new Promise<number>((advance) => requestAnimationFrame(advance));
+      }
+      return colours.size;
+    });
+    expect(seenPictures).toBeGreaterThan(1);
+    expect(preview.starts).toHaveLength(starts + 1);
+    expect(preview.starts.at(-1)?.body).toMatchObject({ inputId: 'li-multicast' });
+    expect(preview.pictureOpens).toBe(pictures + 1);
+    expect(preview.audioOpens).toBe(sounds);
+
+    await listenButton.click();
+    await expect.poll(() => preview.audioOpens).toBe(sounds + 1);
+    const soundCloses = preview.audioCloses;
+    await listenButton.click();
+    await listenButton.click();
+    await expect.poll(() => preview.audioOpens).toBe(sounds + 2);
+    await expect.poll(() => preview.audioCloses).toBe(soundCloses + 1);
+    await listenButton.click();
+    await expect.poll(() => preview.audioCloses).toBe(soundCloses + 2);
+    await expect(liveButton).toHaveAttribute('data-preview-plate-picture', 'live');
+    expect(preview.starts).toHaveLength(starts + 1);
+    expect(preview.pictureOpens).toBe(pictures + 1);
+
+    await liveButton.click();
+    await expect.poll(() => preview.leases.size).toBe(0);
+    await expect(liveButton).toHaveAttribute('data-preview-plate-picture', 'snapshots');
+    await expect(plateCanvas).toHaveCount(0);
+    expect(bridge.runtime.sourceAssignments().assignments).toEqual([assignment]);
+    expect(
+      engine
+        .receivedCommands()
+        .slice(commandOffset)
+        .map(({ line }) => line)
+        .filter((line) => /^(CG|PLAY|LOADBG|STOP|CLEAR|MIXER) /.test(line)),
+    ).toEqual([]);
+    await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
+    await openNewLiveLayout(page);
+    const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+    await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
+    await editor.getByRole('combobox', { name: 'Plate input' }).click();
+    await options.locator('[data-picker-input="in-li-multicast"]').click();
+    await options.getByRole('button', { name: 'Select', exact: true }).click();
+    await expect(options).toBeHidden();
+    await expect.poll(() => preview.leases.size).toBe(0);
+    await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
+
+    const editorPreview = editor.getByRole('button', {
+      name: 'Live preview · Multicast',
+      exact: true,
+    });
+    await editorPreview.click();
+    await expect(editorPreview).toHaveAttribute('data-preview-plate-picture', 'live');
+    await expect(
+      editor.locator('[data-layout-preview-shot] .cg-live-layout-shot-picture canvas'),
+    ).toBeVisible();
+    expect(preview.audioOpens).toBe(sounds + 2);
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect.poll(() => preview.leases.size).toBe(0);
+    await closeLiveLayoutCatalogue(page);
+    expect(bridge.runtime.sourceAssignments().assignments).toEqual([assignment]);
   } finally {
     await bridge.close();
     await engine.stop();

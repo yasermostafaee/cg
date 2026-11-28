@@ -59,7 +59,7 @@ import { PvwMediaPlate } from './PvwMediaPlate.js';
 import { pvwPictureForPlate, pvwPlateMediaKey } from './pvwPlatePictures.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
-import type { PreviewAudioInput } from './previewAudio.js';
+import { usePreviewAudio, type PreviewAudioInput } from './previewAudio.js';
 import {
   hasPvwSourcePicture,
   usePvwSourceFrames,
@@ -425,6 +425,7 @@ export function RehearsalStage({
   const mediaForeground = useModalForeground(fitRef);
   const mediaReadable = useBridgeReadable();
   const sourceCatalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
+  const livePicture = usePreviewAudio()?.livePicture;
   const [mediaPictures, setMediaPictures] = useState<ReadonlyMap<string, PvwSourceFrame>>(
     () => new Map(),
   );
@@ -642,14 +643,15 @@ export function RehearsalStage({
     visible,
   ]);
   const paintFrames = useMemo(() => {
-    if (mediaPictures.size === 0) return sourceFrames;
+    if (mediaPictures.size === 0 && livePicture === undefined) return sourceFrames;
     const combined = new Map(sourceFrames);
+    if (livePicture !== undefined) combined.set(livePicture.sourceId, livePicture);
     for (const { key } of mediaPlates) {
       const media = mediaPictures.get(key);
       if (media !== undefined) combined.set(key, media);
     }
     return combined;
-  }, [mediaPictures, mediaPlates, sourceFrames]);
+  }, [livePicture, mediaPictures, mediaPlates, sourceFrames]);
   const hasSourcePicture = placements.some((plate) =>
     hasPvwSourcePicture(pvwPictureForPlate(plate, paintFrames)),
   );

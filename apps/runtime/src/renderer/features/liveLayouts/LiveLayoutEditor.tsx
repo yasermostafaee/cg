@@ -588,6 +588,7 @@ export function LiveLayoutEditor({
       defaultPresetId: current.defaultPresetId || next.id,
     }));
     choosePreset(next);
+    setSettingsScope('preset');
     requestAnimationFrame(() => {
       presetName.current?.focus();
       presetName.current?.select();
@@ -1169,18 +1170,6 @@ export function LiveLayoutEditor({
                 maxLength={120}
               />
             </label>
-            <div className="cg-form-field cg-live-layout-preset-name">
-              <label htmlFor={`${fieldsId}-preset-name`}>{localizeUi('Preset name')}</label>
-              <TextInput
-                id={`${fieldsId}-preset-name`}
-                ref={presetName}
-                value={preset?.name ?? ''}
-                disabled={preset === undefined}
-                dir="auto"
-                maxLength={80}
-                onChange={(name) => updatePreset({ name })}
-              />
-            </div>
           </div>
           <div className="cg-live-layout-panel-head">
             <h3>
@@ -1353,6 +1342,18 @@ export function LiveLayoutEditor({
                 <div className="cg-live-layout-panel-head">
                   <h3>{localizeUi('Preset settings')}</h3>
                 </div>
+                <label className="cg-live-layout-preset-name" htmlFor={`${fieldsId}-preset-name`}>
+                  {localizeUi('Preset name')}
+                  <TextInput
+                    id={`${fieldsId}-preset-name`}
+                    ref={presetName}
+                    value={preset?.name ?? ''}
+                    disabled={preset === undefined}
+                    dir="auto"
+                    maxLength={80}
+                    onChange={(name) => updatePreset({ name })}
+                  />
+                </label>
                 <div className="cg-form-toolbar">
                   <Button
                     variant="neutral"

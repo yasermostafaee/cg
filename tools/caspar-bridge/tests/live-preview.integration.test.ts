@@ -184,6 +184,14 @@ describe('C-023 preview lease through authenticated Bridge routes', () => {
         .subarray(0, 4)
         .toString(),
     ).toBe('RIFF');
+    const replacementSound = await ask<{ path: string }>(b.client, 'livePreview.ticket', {
+      ...two,
+      stream: 'audio',
+    });
+    const busy = await fetch(base + replacementSound.path);
+    expect(busy.status).toBe(409);
+    expect(busy.headers.get('access-control-allow-origin')).toBe('*');
+    expect(preview.audioOpens).toBe(1);
     b.client.ws.close();
     await waitUntil(
       () => preview.audioCloses === 1 && preview.stops.length === 1,

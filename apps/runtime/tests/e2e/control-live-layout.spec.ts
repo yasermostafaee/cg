@@ -219,9 +219,19 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
     const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
     const presets = editor.getByRole('group', { name: 'Presets', exact: true });
     const cards = presets.locator('[data-layout-preset]');
+    const presetName = editor.getByRole('textbox', { name: 'Preset name', exact: true });
+    await expect(presetName).toHaveCount(0);
+    const addNamedPreset = async (name: string): Promise<void> => {
+      await addPreset.click();
+      const presetTab = editor.getByRole('tabpanel', { name: 'Preset', exact: true });
+      await expect(
+        presetTab.getByRole('textbox', { name: 'Preset name', exact: true }),
+      ).toBeFocused();
+      await presetName.fill(name);
+      await showLayoutSettings(editor, 'Plate');
+    };
     await addPlate.click();
-    await addPreset.click();
-    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('One');
+    await addNamedPreset('One');
     await expect(cards).toHaveCount(1);
     await expect(cards.nth(0).locator('[data-layout-thumbnail-plate]')).toHaveCount(1);
     const arrange = editor.getByRole('region', { name: 'Arrange', exact: true });
@@ -237,8 +247,7 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
     await setNumber(presetMargins.getByLabel('Left', { exact: true }), '96');
     await arrange.getByRole('checkbox', { name: 'Fill available area' }).check();
     expect(await shot(1).evaluate((element) => (element as HTMLElement).style.left)).toBe('5%');
-    await addPreset.click();
-    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Two');
+    await addNamedPreset('Two');
     await addPlate.click();
     await expect(cards.nth(1).locator('[data-layout-thumbnail-plate]')).toHaveCount(2);
     await expect(choices.getByRole('button')).toHaveText([
@@ -251,8 +260,7 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
       'aria-pressed',
       'true',
     );
-    await addPreset.click();
-    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Three');
+    await addNamedPreset('Three');
     await addPlate.click();
     await expect(cards.nth(2).locator('[data-layout-thumbnail-plate]')).toHaveCount(3);
     await expect(choices.getByRole('button')).toHaveText([
@@ -276,12 +284,22 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
     await page.mouse.move(bounds.x + bounds.width / 2 + 12, bounds.y + bounds.height / 2);
     await page.mouse.up();
     await expect.poll(async () => Number(await gap.inputValue())).toBeGreaterThan(20);
-    await addPreset.click();
-    await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Four');
+    await addNamedPreset('Four');
     await addPlate.click();
     await choices.getByRole('button', { name: /Grid/ }).click();
-    await setNumber(gap, '0');
-    await setNumber(editor.getByLabel('Vertical gap', { exact: true }), '0');
+    const verticalGap = editor.getByLabel('Vertical gap', { exact: true });
+    const focusMargins = arrange.getByRole('group', { name: 'Focus margins (px)' });
+    await setNumber(gap, '48');
+    await setNumber(verticalGap, '36');
+    await setNumber(presetMargins.getByLabel('Left', { exact: true }), '96');
+    await setNumber(focusMargins.getByLabel('Top', { exact: true }), '108');
+    const zeroGap = arrange.getByRole('button', { name: 'Zero gap', exact: true });
+    await zeroGap.click();
+    await expect(gap).toHaveValue('0');
+    await expect(verticalGap).toHaveValue('0');
+    await expect(zeroGap).toBeDisabled();
+    await expect(presetMargins.getByLabel('Left', { exact: true })).toHaveValue('96');
+    await expect(focusMargins.getByLabel('Top', { exact: true })).toHaveValue('108');
     await presetMargins.getByRole('button', { name: 'Zero preset margins' }).click();
     const inlineRect = async (number: number): Promise<string[]> =>
       shot(number).evaluate((element) => {
@@ -290,9 +308,34 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
       });
     expect(await inlineRect(1)).toEqual(['0%', '0%', '50%', '50%']);
     expect(await inlineRect(4)).toEqual(['50%', '50%', '50%', '50%']);
+    await editor.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
+    const stage = editor.locator('[data-layout-preview]');
+    const selection = stage.locator('[data-layout-preview-selection]');
+    const selected = shot(3);
+    await expect(selection).toHaveAttribute(
+      'data-layout-preview-selection',
+      (await selected.getAttribute('data-layout-preview-shot'))!,
+    );
+    await expect(selection).toHaveCSS('pointer-events', 'none');
+    const [stageBounds, selectionBounds, plateBounds] = await Promise.all([
+      stage.boundingBox(),
+      selection.boundingBox(),
+      selected.boundingBox(),
+    ]);
+    expect(selectionBounds!.x).toBeCloseTo(stageBounds!.x);
+    expect(selectionBounds!.y + selectionBounds!.height).toBeCloseTo(
+      stageBounds!.y + stageBounds!.height,
+    );
+    expect(selectionBounds!.x + selectionBounds!.width).toBeGreaterThan(
+      plateBounds!.x + plateBounds!.width,
+    );
+    const layers = await stage.evaluate((node) =>
+      [...node.querySelectorAll('[data-layout-preview-shot], [data-layout-preview-selection]')].map(
+        (element) => Number(getComputedStyle(element).zIndex),
+      ),
+    );
+    expect(layers.at(-1)).toBeGreaterThan(Math.max(...layers.slice(0, -1)));
     await shot(1).getByRole('button', { name: 'Focus plate 1', exact: true }).click();
-    const focusMargins = arrange.getByRole('group', { name: 'Focus margins (px)' });
-    await setNumber(focusMargins.getByLabel('Top', { exact: true }), '108');
     expect(await inlineRect(1)).toEqual(['0%', '10%', '100%', '90%']);
     await editor.getByRole('button', { name: /Return to/ }).click();
     await choices.getByRole('button', { name: 'Custom', exact: true }).click();
@@ -386,6 +429,7 @@ test('a masked overlay keeps its relative placement in every preset containing i
     const newPreset = async (name: string) => {
       await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
       await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill(name);
+      await showLayoutSettings(editor, 'Plate');
     };
     const setNumber = async (field: Locator, value: string) => {
       await field.fill(value);
@@ -1084,6 +1128,7 @@ test('layout presets show decoded NDI and Bridge snapshots and keep PVW sound co
 
     await addPreset.click();
     await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Guest only');
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('checkbox', { name: 'Plate 1 in preset', exact: true }).uncheck();
     await expect(first).toHaveAttribute('aria-hidden', 'true');
     await expect(second).toHaveAttribute('aria-hidden', 'false');
@@ -1469,7 +1514,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(await fieldAppearance(editor.getByLabel('Title size (%)', { exact: true }))).toEqual(
       await fieldAppearance(layoutName),
     );
+    await showLayoutSettings(editor, 'Preset');
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Three-up');
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('button', { name: 'Grid · fuller top' }).click();
     const horizontalGap = editor.getByLabel('Horizontal gap', { exact: true });
     const verticalGap = editor.getByLabel('Vertical gap', { exact: true });
@@ -1482,8 +1529,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await showLayoutSettings(editor, 'Preset');
     await expect(startPreset).toBeEnabled();
     expect((await startPreset.boundingBox())!.width).toBeCloseTo(startWidth, 1);
-    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Interview');
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).uncheck();
     const positionPicker = editor.getByRole('group', { name: 'Position in preset', exact: true });
     await frame2.click();
@@ -1497,7 +1544,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const threeUp = editor.getByRole('button', { name: 'Three-up', exact: true });
     const interview = editor.getByRole('button', { name: 'Interview', exact: true });
     await threeUp.click();
+    await showLayoutSettings(editor, 'Preset');
     await editor.getByRole('textbox', { name: 'Preset name' }).focus();
+    await showLayoutSettings(editor, 'Plate');
     await expect(threeUp).toHaveAttribute('aria-pressed', 'true');
     await expect(interview).toHaveAttribute('aria-pressed', 'false');
     await expect(threeUp.locator('[data-layout-thumbnail-plate]')).toHaveCount(3);
@@ -1667,8 +1716,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(await sampleDecorationFade(borderLayer)).toBeCloseTo(0.5, 2);
     await expect(borderLayer).toHaveCSS('opacity', '1');
     await borderInFocus.check();
-    await expect(thirdShot).toHaveCSS('outline-offset', '2px');
-    await expect(thirdShot).toHaveCSS('outline-style', 'solid');
+    await expect(stage.locator('[data-layout-preview-selection]')).toHaveCSS(
+      'border-top-width',
+      '2px',
+    );
+    await expect(stage.locator('[data-layout-preview-selection]')).toHaveCSS(
+      'border-top-style',
+      'solid',
+    );
     const pictureClip = thirdShot.locator('.cg-live-layout-shot-source');
     await expect(pictureClip).toHaveCSS('overflow', 'hidden');
     await expect(pictureClip).toHaveCSS('border-top-left-radius', '0px');
@@ -1781,6 +1836,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(thirdShot).toContainText('علی نظری ۱۲۳');
     await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Studio solo');
+    await showLayoutSettings(editor, 'Plate');
     await editor.getByRole('checkbox', { name: 'Plate 2 in preset' }).uncheck();
     await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).uncheck();
     await editor.getByRole('button', { name: 'Edit plate 1', exact: true }).click();

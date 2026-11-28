@@ -314,6 +314,13 @@ export function LiveLayoutEditorArrange({
             />
             <span aria-hidden="true">{localizeUi('px')}</span>
           </div>
+          <Button
+            variant="neutral"
+            disabled={preset.horizontalGap === 0 && preset.verticalGap === 0}
+            onClick={() => changeGeometry({ horizontalGap: 0, verticalGap: 0 })}
+          >
+            {localizeUi('Zero gap')}
+          </Button>
         </div>
       )}
       {!custom && (

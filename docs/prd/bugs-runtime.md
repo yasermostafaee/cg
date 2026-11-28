@@ -14327,3 +14327,33 @@ Switching between base Focus views and returning to the authored preset works wi
 linked overlay. Previously published overlay-only Focus targets are rejected before taking
 Programme. A row already showing a legacy overlay Focus can leave it by an explicit switch
 or Return. In plate settings, Overlay on follows Focus label.
+
+## [~] B-461 — Show a continuous UDP picture inside PVW and the live layout editor ⟨priority: high — owner, 2026-11-28⟩ — `openspec/changes/preview-live-input-check/`
+
+**Repro.** Assign a UDP input to a plate. The picture in PVW and Edit live layout advances
+in steps. Selecting that same input in Choose a source opens continuous video and audio.
+
+**Expected.** The operator can activate continuous video for a routed plate in PVW or the
+live layout editor. Start without sound. The sound control uses the same preview lease,
+and muting keeps the picture. Compositing keeps the plate mask and authored graphics.
+Other plates retain their passive pictures. An unsupported or lost preview falls back to the
+available snapshot. A closed or covered preview releases its lease without changing PGM
+or a source assignment.
+
+## [~] B-462 — Keep the selected plate outline visible at zero gap ⟨priority: medium — owner, 2026-11-28⟩ — `openspec/changes/author-live-layouts/`
+
+**Repro.** In a four-plate grid with zero or small gaps, select a plate next to another
+one or against the stage edge. Adjacent pictures and stage clipping obscure the outline.
+
+**Expected.** The editor's selection outline stays visible on all four sides and follows
+the selected plate through preview movement. The picture and mask stacking order is
+unchanged. Zero gap sets both gaps in the current preset to zero. Preset name is edited in
+the Preset tab, which opens on Add preset.
+
+## [~] B-463 — Use the local audio status on PVW media plates ⟨priority: medium — owner, 2026-11-28⟩ — `openspec/changes/preview-live-input-check/`
+
+**Repro.** Play a library clip in a PVW plate and turn its sound on. The video transport
+shows the correct playback state while another mute icon remains in the same plate.
+
+**Expected.** The media speaker control represents the clip's local preview sound.
+Programme audio indicators do not appear on the media plate as preview status.

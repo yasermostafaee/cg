@@ -346,6 +346,21 @@
           "ar": "يعرض المحرّر والمعاينة والبرنامج خيارات التركيز للإطارات المستقلة فقط. يعيد الرجوع الإطار المتراكب المرتبط وقناعه مع الإعداد المسبق. يظهر خيار التراكب أسفل تسمية التركيز."
         },
         {
+          "fa": "در PVW و ویرایشگر چیدمان، دکمهٔ دوربین تصویر پیوستهٔ ورودی‌هایی مانند UDP را در همان قاب باز می‌کند. صدا با دکمهٔ بلندگو فعال می‌شود.",
+          "en": "In PVW and the live layout editor, the camera button opens a continuous picture for an eligible input such as UDP inside its plate. The speaker button plays its sound.",
+          "ar": "يفتح زر الكاميرا في المعاينة ومحرّر الترتيب الحي صورة مستمرة للمدخل المؤهّل مثل UDP داخل إطاره. يشغّل زر مكبّر الصوت صوته."
+        },
+        {
+          "fa": "کادر انتخاب قاب با فاصلهٔ صفر هم کامل دیده می‌شود. دکمهٔ «صفر کردن فاصله‌ها» فاصلهٔ افقی و عمودی را یکجا صفر می‌کند. نام پریست در تب «پریست» قرار دارد.",
+          "en": "The selected plate outline stays visible at zero gap. Zero gap clears both directions at once. Preset name is now in the Preset tab.",
+          "ar": "يبقى إطار تحديد اللوحة مرئيًا عند تصفير المسافات. يصفّر زر تصفير المسافات الفاصلين معًا. يظهر اسم الإعداد المسبق في تبويبه."
+        },
+        {
+          "fa": "در PVW، وضعیت صدای کلیپ فقط روی دکمهٔ بلندگوی پخش‌کنندهٔ همان کلیپ نمایش داده می‌شود.",
+          "en": "A PVW clip shows its local sound state on its own speaker control.",
+          "ar": "يعرض مقطع المعاينة حالة صوته المحلي على زر مكبّر الصوت الخاص به."
+        },
+        {
           "fa": "در فهرست و شبکهٔ انتخاب ورودی، تصویر زندهٔ NDI هنگام هاور و کلیک روی ورودی قابل‌مشاهده می‌ماند.",
           "en": "Live NDI pictures remain visible when hovering or pressing the input in the source picker's List and Grid views.",
           "ar": "تظل صورة NDI الحيّة ظاهرة عند تمرير المؤشر على الإدخال أو الضغط عليه في عرضَي القائمة والشبكة في نافذة اختيار المصدر."

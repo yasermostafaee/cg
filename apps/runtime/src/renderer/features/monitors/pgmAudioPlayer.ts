@@ -35,6 +35,7 @@ export const AUDIO_HARD_CAP_MS = 150;
 /** A lost stream is asked for again after 1 s, 2 s, 4 s … up to 10 s. */
 const RETRY_BASE_MS = 1_000;
 const RETRY_MAX_MS = 10_000;
+const BUSY_RETRY_MS = [100, 200, 400, 800];
 
 /** The parts of `AudioBuffer` the player writes. */
 export interface PcmBuffer {
@@ -71,6 +72,8 @@ export interface PgmAudioPlayerOptions {
   readonly now?: () => number;
   readonly onState?: (state: PgmAudioState) => void;
   readonly retry?: boolean;
+  /** A valid input-preview ticket can briefly meet the prior audio request as it closes. */
+  readonly retryWhileBusy?: boolean;
 }
 
 export class PgmAudioPlayer {
@@ -85,12 +88,14 @@ export class PgmAudioPlayer {
   readonly #now: () => number;
   readonly #onState: (state: PgmAudioState) => void;
   readonly #retryOnLoss: boolean;
+  readonly #retryWhileBusy: boolean;
 
   #running = false;
   #state: PgmAudioState = 'stopped';
   #abort: AbortController | null = null;
   #retry: ReturnType<typeof setTimeout> | null = null;
   #failures = 0;
+  #busyRetries = 0;
 
   // Per connection.
   #bufferMs = AUDIO_BUFFER_START_MS;
@@ -108,6 +113,7 @@ export class PgmAudioPlayer {
     this.#now = options.now ?? ((): number => performance.now());
     this.#onState = options.onState ?? ((): void => undefined);
     this.#retryOnLoss = options.retry ?? true;
+    this.#retryWhileBusy = options.retryWhileBusy ?? false;
   }
 
   /** The buffer in force now, in ms — a test's instrument, and the e2e's. */
@@ -135,6 +141,7 @@ export class PgmAudioPlayer {
   start(): void {
     if (this.#running) return;
     this.#running = true;
+    this.#busyRetries = 0;
     this.#connect();
   }
 
@@ -257,18 +264,17 @@ export class PgmAudioPlayer {
     const abort = new AbortController();
     this.#abort = abort;
     void this.#read(abort)
-      .then(
-        () => undefined,
-        () => undefined,
-      )
-      .finally(() => {
+      .catch(() => undefined)
+      .then((result) => {
         if (!this.#running || abort.signal.aborted) return;
-        if (!this.#retryOnLoss) {
+        const busyDelay = result === 'busy' ? BUSY_RETRY_MS[this.#busyRetries] : undefined;
+        if (busyDelay === undefined && !this.#retryOnLoss) {
           this.stop();
           return;
         }
-        const delay = Math.min(RETRY_BASE_MS * 2 ** this.#failures, RETRY_MAX_MS);
-        this.#failures++;
+        const delay = busyDelay ?? Math.min(RETRY_BASE_MS * 2 ** this.#failures, RETRY_MAX_MS);
+        if (busyDelay === undefined) this.#failures++;
+        else this.#busyRetries++;
         this.#setState('connecting');
         this.#retry = setTimeout(() => {
           this.#retry = null;
@@ -277,7 +283,7 @@ export class PgmAudioPlayer {
       });
   }
 
-  async #read(abort: AbortController): Promise<void> {
+  async #read(abort: AbortController): Promise<'busy' | void> {
     const url = await this.#url();
     if (url === null || abort.signal.aborted) return;
     const res = await this.#fetch(url, {
@@ -285,6 +291,10 @@ export class PgmAudioPlayer {
       cache: 'no-store',
       referrerPolicy: 'no-referrer',
     });
+    if (res.status === 409 && this.#retryWhileBusy) {
+      void res.body?.cancel().catch(() => undefined);
+      return 'busy';
+    }
     if (!res.ok || res.body === null) return;
     const reader = res.body.getReader();
     this.resetConnection();

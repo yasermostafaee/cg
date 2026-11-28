@@ -1,6 +1,12 @@
 {
   "locale": "en",
   "interface": {
+    "Live preview · {source}": "Live preview · {source}",
+    "Start live input preview": "Start live input preview",
+    "Cancel live input preview": "Cancel live input preview",
+    "Stop live input preview": "Stop live input preview",
+    "Preview audio · {source}": "Preview audio · {source}",
+    "Zero gap": "Zero gap",
     " — it owns live layer {layer}": " — it owns live layer {layer}",
     " — item {item}": " — item {item}",
     " · {count} maximum": " · {count} maximum",
@@ -2197,6 +2203,7 @@
     "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.": "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG."
   },
   "feedback": {
+    "Live input preview is unavailable.": "Live input preview is unavailable.",
     "An overlay follows its base plate and cannot be focused separately.": "An overlay follows its base plate and cannot be focused separately.",
     "The preset effect stopped. The previous preset was restored.": "The preset effect stopped. The previous preset was restored.",
     "The preset effect could not be confirmed. Check the programme picture.": "The preset effect could not be confirmed. Check the programme picture.",

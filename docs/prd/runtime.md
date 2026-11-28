@@ -5365,6 +5365,9 @@ Adopting an inherited checkpoint and activating the installed Bridge service rem
 - WHEN opening Advanced plate controls THEN Plate appearance contains the authored fit, aspect ratio, border and mask. Operator permissions in CG Control contains access to moving, resizing and editing the mask. The editor uses Plate consistently with Designer.
 - WHEN selecting a saved live layout in Templates THEN Export .vcg saves its verified package as a file. Using Import a .vcg restores the layout, embedded assets and editor access.
 - WHEN setting a plate border THEN the operator can set its color and width. Width zero hides the border. The rectangular border has the same thickness on all edges, follows the plate through presets and Focus, and saves with the VCG. The editor shows its selection outline outside the authored border.
+- WHEN a selected plate touches another plate or the canvas edge THEN the selection outline remains visible on every side without changing picture order.
+- WHEN the operator presses Zero gap THEN both gaps in that preset become zero. The preset's margins, arrangement and assigned plates are preserved.
+- WHEN the operator edits a preset name THEN the field is in the Preset tab. Add preset opens that tab with the name ready to edit.
 - WHEN editing a preset in Arrange THEN the operator can set the default aspect ratio and input fit for that preset. Each plate can override either value in that preset. Aspect ratio sets the shape of the plate. Crop edges fills that shape with a centered crop and Fit whole picture contains the entire input. A portrait panel and a 16:9 single-plate preset can show the same source with different framing. Focus continues to fill the programme canvas.
 - WHEN selecting a position in a preset THEN the selected frame swaps with its occupant. A frame's optional Focus label identifies it on both PVW and PGM controls.
 - WHEN adding text to a frame THEN each text can inherit the frame's style and have its own editable value, position and overrides.
@@ -5466,6 +5469,8 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 - WHEN the operator opens the Plate tab THEN the Layout effects disclosure is available there and its choices apply across the layout.
 - WHEN the operator chooses a known library video in New/Edit live layout THEN its poster
   appears before local Play. A saved layout with an available library video displays it in PVW.
+- WHEN a library video is visible in PVW THEN its local media transport supplies the speaker status.
+  The plate does not repeat the Programme mute state beside the local control.
 - WHEN the operator chooses Reset to defaults in Arrange THEN the selected preset returns
   to its factory arrangement, including gap, margins and placement, and retains its sources.
 

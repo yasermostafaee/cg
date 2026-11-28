@@ -1342,6 +1342,10 @@ Playlist gain have separate acceptance.
 - WHEN the meter is stale THEN it returns to floor independently of current picture delivery
 - WHEN two assigned sources are eligible THEN PVW shows each image inside its own plate,
   preserving authored graphics, masks and fit. Ending rehearsal releases its subscriptions.
+- WHEN the operator activates the continuous picture on an eligible routed plate in PVW or the
+  live layout editor THEN its current live-input lease supplies the picture inside that plate.
+  Sound starts muted and can be toggled within the same lease. Other plate previews retain
+  their existing transport, and measured snapshots remain the source of crop geometry.
 - WHEN a source list shows eligible rows THEN it requests a bounded batch for the visible rows.
   A missing or stale frame leaves the picture slot empty and selection stays independent.
 

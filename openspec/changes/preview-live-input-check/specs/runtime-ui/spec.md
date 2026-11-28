@@ -164,6 +164,32 @@ SHALL release demand as rows become hidden or inaccessible.
 - **AND** fresh black frames still display as valid pictures
 - **AND** closing or filtering the list releases the affected demand and ignores its late frames
 
+### Requirement: A routed plate can show a continuous input picture
+
+An eligible routed plate in PVW or the live layout editor SHALL offer an explicit continuous
+picture action using the existing one-input lease. The decoded picture SHALL use the plate's
+current fit and composition, and its audio SHALL use that same lease when requested.
+
+#### Scenario: Start and listen to a continuous routed preview
+
+- **WHEN** the operator starts the continuous picture for a visible UDP input
+- **THEN** its live picture replaces its passive snapshots inside the plate, under the authored graphics
+- **AND** the source starts muted and opening or muting its audio does not replace the active lease
+- **AND** other sources and PGM keep their respective picture and audio paths.
+
+#### Scenario: End or interrupt a continuous routed preview
+
+- **WHEN** the operator stops the picture, opens another input check, or leaves the view
+- **THEN** the renderer releases the owned preview and closes its picture and optional audio readers
+- **AND** the plate returns to an available snapshot or its normal placeholder
+- **AND** the preview does not change source assignments or programme output.
+
+#### Scenario: Listen to a library clip on a PVW plate
+
+- **WHEN** a library clip is still, playing muted, or playing with sound
+- **THEN** only its media transport represents local preview sound
+- **AND** the Programme mute state does not appear as a second speaker status on that plate.
+
 ### Requirement: A live-input check SHALL be honest about its lifecycle and SHALL never leave a frozen picture
 
 The card SHALL distinguish `connecting`, `ready`, `stalled`, `unavailable`, `conflict`, `replaced`, `expired` and

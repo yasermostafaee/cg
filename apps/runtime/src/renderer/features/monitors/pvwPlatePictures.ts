@@ -27,7 +27,7 @@ export function fullJpegRect(picture: FitRect, activeRect: FitRect): FitRect {
 
 function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSourceFrame>) {
   const frame = pvwPictureForPlate(plate, frames);
-  const canvasSource = frame?.mediaPicture ?? frame?.directNdi;
+  const canvasSource = frame?.livePicture ?? frame?.mediaPicture ?? frame?.directNdi;
   if (
     frame === undefined ||
     (frame.jpegBase64 === undefined && canvasSource === undefined) ||
@@ -52,11 +52,13 @@ function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSource
     canvasSource,
     geometryRevision:
       frame.geometry?.revision ??
-      (frame.mediaPicture !== undefined
-        ? 'plate-media'
-        : frame.directNdi === undefined
-          ? ''
-          : 'direct-ndi'),
+      (frame.livePicture !== undefined
+        ? 'live-input'
+        : frame.mediaPicture !== undefined
+          ? 'plate-media'
+          : frame.directNdi === undefined
+            ? ''
+            : 'direct-ndi'),
   };
 }
 

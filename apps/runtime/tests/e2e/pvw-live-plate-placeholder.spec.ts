@@ -403,6 +403,9 @@ test('PVW plays bound clips independently only when their own frame is started',
   const readProof = await installPlateMediaProof(page);
   await rehearseRow(page, layer);
   await pvwTransport(page, 'PLAY').click();
+  const mediaPlate = page.locator('[data-live-plate="guest-1"]');
+  await expect(mediaPlate).toHaveAttribute('aria-label', 'Media preview · Clip 001');
+  await expect(mediaPlate.locator('[data-live-plate-audio]')).toHaveCount(0);
   const transports = page.locator('[data-pvw-media-transport]');
   await expect(transports).toHaveCount(2);
   const first = transports.nth(0);
@@ -429,6 +432,7 @@ test('PVW plays bound clips independently only when their own frame is started',
   await expect(firstCanvas).toBeVisible();
   await expect(secondCanvas).toHaveCount(0);
   await expect(firstPlayer).toHaveJSProperty('muted', true);
+  await expect(mediaPlate.locator('[data-live-plate-audio]')).toHaveCount(0);
   await expect(first.getByRole('button', { name: /^Listen to preview in / })).toHaveCount(0);
   const firstFrame = await firstCanvas.evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
   await expect

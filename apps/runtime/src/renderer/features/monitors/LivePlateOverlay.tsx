@@ -1,10 +1,9 @@
 import { useUiText } from '../../i18n/locale.js';
 import { Fragment, type CSSProperties } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-import type { ChannelRaster } from '@cg/shared-ipc';
+import { playoutMediaIdOf, type ChannelRaster } from '@cg/shared-ipc';
 import { largestLivePlateMaskRegion } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
-import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { InputAudioMeter, InputAudioRails } from '../sources/InputAudioMeter.js';
 import { useNdiLevels, type NdiReceiver } from '../sources/directNdiPreview.js';
@@ -12,6 +11,7 @@ import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import { usePreviewAudio } from './previewAudio.js';
+import { PreviewInputControls } from './PreviewInputControls.js';
 import { pvwPictureForPlate } from './pvwPlatePictures.js';
 import { hasPvwSourcePicture, type PvwSourceFrame } from './usePvwSourceFrames.js';
 
@@ -197,9 +197,6 @@ function regionCaveat(
   if (preview?.directNdi !== undefined && preview.signal === 'present') {
     return 'Live source ' + plateId + ' — direct NDI.' + fit + ' ' + source + ' ' + sound;
   }
-  if (preview?.mediaPicture !== undefined && preview.signal === 'present') {
-    return 'Media source ' + plateId + ' — local preview.' + fit + ' ' + source;
-  }
   if (preview?.jpegBase64 !== undefined) {
     return `Live source ${plateId} — silent preview snapshots.${fit} ${source} ${sound}`;
   }
@@ -242,7 +239,11 @@ export function LivePlateOverlay({
           sourceFrames === undefined ? undefined : pvwPictureForPlate(p, sourceFrames);
         const hasPicture = hasPvwSourcePicture(preview);
         const localAudio = p.sourceId === null ? undefined : previewAudio?.stateOf(p.sourceId);
-        const programmeAudio = localAudio === undefined ? p.audio : undefined;
+        const localPicture =
+          p.sourceId === null ? undefined : previewAudio?.pictureStateOf(p.sourceId);
+        // The media transport owns local sound, including while its poster is visible.
+        const libraryMedia = p.sourceId !== null && playoutMediaIdOf(p.sourceId) !== null;
+        const programmeAudio = libraryMedia || localAudio !== undefined ? undefined : p.audio;
         const audio = programmeAudio === undefined ? undefined : AUDIO_GLYPH[programmeAudio];
         const region = largestLivePlateMaskRegion(p.mask);
         const roomForLabel = regionFitsCaveat(p.width * (region?.width ?? 0) * fit);
@@ -270,14 +271,23 @@ export function LivePlateOverlay({
               were laid out.
             */
               role="img"
-              aria-label={regionCaveat(
-                plateLabel,
-                p.sourceName,
-                programmeAudio,
-                p.cropEdges,
-                preview,
-                localAudio,
-              )}
+              aria-label={
+                libraryMedia
+                  ? localizeUi('{label} · {alias}', {
+                      label: localizeUi('Media preview'),
+                      alias: p.sourceName ?? plateLabel,
+                    })
+                  : preview?.livePicture !== undefined
+                    ? localizeUi('Live preview · {source}', { source: p.sourceName ?? plateLabel })
+                    : regionCaveat(
+                        plateLabel,
+                        p.sourceName,
+                        programmeAudio,
+                        p.cropEdges,
+                        preview,
+                        localAudio,
+                      )
+              }
               style={{
                 position: 'absolute',
                 left: `${String(p.x)}px`,
@@ -408,38 +418,29 @@ export function LivePlateOverlay({
                 </div>
               )}
             </div>
-            {region !== null && p.sourceId !== null && localAudio !== undefined && (
-              <span
-                style={{
-                  position: 'absolute',
-                  right: raster.width - p.x - p.width + 4 * inv,
-                  top: p.y + 4 * inv,
-                  transform: `scale(${String(inv)})`,
-                  transformOrigin: 'right top',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <Button
-                  variant="icon"
-                  className="cg-preview-plate-audio"
-                  aria-label={'Preview audio · ' + (p.sourceName ?? plateLabel)}
-                  aria-pressed={localAudio === 'audible'}
-                  title={
-                    localAudio === 'connecting'
-                      ? localizeUi('Cancel preview audio')
-                      : localAudio === 'audible'
-                        ? localizeUi('Mute this preview input')
-                        : localizeUi('Listen to this preview input')
-                  }
-                  data-preview-plate-audio={localAudio}
-                  onClick={() => {
-                    if (p.sourceId !== null) previewAudio?.toggle(p.sourceId);
+            {region !== null &&
+              p.sourceId !== null &&
+              previewAudio !== null &&
+              (localAudio !== undefined || localPicture !== undefined) && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: raster.width - p.x - p.width + 4 * inv,
+                    top: p.y + 4 * inv,
+                    transform: `scale(${String(inv)})`,
+                    transformOrigin: 'right top',
+                    pointerEvents: 'auto',
+                    display: 'flex',
+                    gap: '2px',
                   }}
                 >
-                  <Icon icon={localAudio === 'audible' ? Volume2 : VolumeX} size={13} />
-                </Button>
-              </span>
-            )}
+                  <PreviewInputControls
+                    controls={previewAudio}
+                    sourceId={p.sourceId}
+                    name={p.sourceName ?? plateLabel}
+                  />
+                </span>
+              )}
           </Fragment>
         );
       })}

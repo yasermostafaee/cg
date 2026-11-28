@@ -46,6 +46,19 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **THEN** the outline is drawn inside the plate and follows it across preview, presets and Focus
 - **AND** the authored stroke remains equally thick on every side of a landscape or portrait plate
 - **AND** the editor draws its selection outline outside the authored stroke
+
+#### Scenario: Identify a selected plate in a close grid
+
+- **WHEN** the operator selects a plate with a neighboring plate or stage edge touching it
+- **THEN** the editor shows the selection outline above the pictures, clipped inside the stage where needed to show every side
+- **AND** the selection keeps the authored picture, overlay and mask paint order.
+
+#### Scenario: Edit a preset name and clear the gaps
+
+- **WHEN** the operator adds a preset
+- **THEN** its name field is focused in the Preset tab
+- **AND WHEN** the operator presses Zero gap beside the spacing controls
+- **THEN** both gaps in the selected preset become zero and its margin values do not change.
 - **AND** plates and their pictures have square corners, including when reopening a package with a previously saved radius
 - **AND** a zero-width border is hidden
 - **AND** the border is saved in the VCG without changing the input crop or mask

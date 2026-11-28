@@ -71,4 +71,5 @@
 - [x] The compiler round-trip and Bridge AMCP mock verified preset and Focus geometry, independent source bindings, mask and native Programme layer order.
 - [x] The AMCP mock verified matching mixer easing and pacing for plate and mask through a preset resize, Focus and Return, with the corresponding artwork frame motion.
 - [x] Verify B-460. Windows Chromium confirmed focus filtering, base Focus switches, Return with the linked mask, and the Overlay on position in the editor and PVW. Programme component tests covered the Focus strip. The Bridge AMCP mock verified no-wire refusal of the overlay Focus, on-air recovery to a base Focus, and restoration of an older off-air selection.
+- [x] Windows Chromium verified B-462 at zero horizontal and vertical gap. The outline stays inside the stage and above adjacent shots. Zero gap preserves margins and Add preset focuses the name in Preset.
 - [ ] Record the target Playout and carrying Linux results.

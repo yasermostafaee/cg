@@ -1,4 +1,4 @@
-import { useUiText } from '../../i18n/locale.js';
+import { feedbackProblem, localeDirection, useLanguages, useUiText } from '../../i18n/locale.js';
 import {
   useCallback,
   useEffect,
@@ -52,6 +52,8 @@ import { plateDisplayName } from '../../ui/operatorNaming.js';
 import { liveLayoutArtwork } from '../../theme.js';
 import { fullJpegRect, pvwPlateMediaKey } from '../monitors/pvwPlatePictures.js';
 import { PlateMediaPlayer } from '../monitors/PvwMediaPlate.js';
+import { usePreviewAudioControls } from '../monitors/previewAudio.js';
+import { PreviewInputControls } from '../monitors/PreviewInputControls.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
 import { FittedSafeAreaGuides } from '../monitors/SafeAreaGuides.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
@@ -104,6 +106,16 @@ function cssRect(rect: LiveSourceRect, raster: Resolution) {
     top: `${String((rect.y / raster.height) * 100)}%`,
     width: `${String((rect.width / raster.width) * 100)}%`,
     height: `${String((rect.height / raster.height) * 100)}%`,
+  };
+}
+
+function selectionBounds({ left, top, width, height }: Keyframe) {
+  const inset = '4px';
+  return {
+    left: `max(0px, calc(${String(left)} - ${inset}))`,
+    top: `max(0px, calc(${String(top)} - ${inset}))`,
+    right: `max(0px, calc(100% - ${String(left)} - ${String(width)} - ${inset}))`,
+    bottom: `max(0px, calc(100% - ${String(top)} - ${String(height)} - ${inset}))`,
   };
 }
 
@@ -295,7 +307,9 @@ function ShotInput({
       ? [seat]
       : livePlateMaskRegions(mask).map((rect) => liveRevealSceneRect(seat, rect));
   const receiver =
-    source?.signal === 'present' ? (source.directNdi ?? source.mediaPicture) : undefined;
+    source?.signal === 'present'
+      ? (source.livePicture ?? source.directNdi ?? source.mediaPicture)
+      : undefined;
   const jpeg = source?.jpegBase64;
   if (receiver === undefined && jpeg === undefined) {
     const label = largestLivePlateMaskRegion(mask);
@@ -548,7 +562,9 @@ export function LiveLayoutEditorPreview({
   cropEditor?: CropEditor | undefined;
 }): JSX.Element {
   const localizeUi = useUiText();
+  const feedbackDirection = localeDirection(useLanguages().feedback);
   const stage = useRef<HTMLDivElement>(null);
+  const selection = useRef<HTMLDivElement>(null);
   const active = useRef<Animation[]>([]);
   const previous = useRef<View>();
   const catalog = useSyncExternalStore(subscribeSources, currentSourceCatalog);
@@ -588,6 +604,24 @@ export function LiveLayoutEditorPreview({
     focused === undefined
       ? geometry
       : { [focused]: controlLiveLayoutFocusRect(layout, preset) ?? full };
+  const selectedRect = visible[selectedFrameId];
+  const inputPreviews = usePreviewAudioControls(
+    channel,
+    true,
+    editorFrames.flatMap(({ input }) => {
+      const id = input.sourceId;
+      if (id === undefined || visible[input.id] === undefined) return [];
+      const source = labelledSource(id);
+      if (source === null || source.origin !== 'input') return [];
+      return [
+        {
+          id,
+          name: source.name,
+          ...(sourceFrames.get(id)?.isDirectNdi === true && { direct: true as const }),
+        },
+      ];
+    }),
+  );
 
   // The editor has no programme target. Its retained DOM shots can reuse the
   // frame clock and focus effects without calling a play or preset command.
@@ -623,6 +657,28 @@ export function LiveLayoutEditorPreview({
       focused !== undefined &&
       previousSingle !== undefined &&
       focused !== previousSingle;
+    const animateShot = (
+      shot: HTMLElement,
+      id: string,
+      keys: Keyframe[],
+      duration: number,
+    ): void => {
+      if (keys.length === 0 || typeof shot.animate !== 'function') return;
+      active.current.push(shot.animate(keys, { duration }));
+      const ring = selection.current;
+      if (id === selectedFrameId && typeof ring?.animate === 'function') {
+        const ringKeys = keys.map((key) => ({
+          ...selectionBounds(key),
+          ...(key.offset !== undefined && { offset: key.offset }),
+          ...(key.easing !== undefined && { easing: key.easing }),
+          opacity: key.opacity,
+          transform: key.transform,
+          clipPath: key.clipPath,
+        }));
+        active.current.push(ring.animate(ringKeys, { duration }));
+      }
+      animateDecorations(shot, id, duration);
+    };
     const animateDecorations = (shot: HTMLElement, id: string, duration: number): void => {
       if (before.rects[id] === undefined || duration <= 0) return;
       const leaves = visible[id] === undefined;
@@ -689,10 +745,7 @@ export function LiveLayoutEditorPreview({
                     { ...box, clipPath: 'inset(0 0 0 0)' },
                     { ...box, clipPath: focusSlideOcclusion(change.direction) },
                   ];
-        if (typeof shot.animate === 'function') {
-          active.current.push(shot.animate(keys, { duration: change.durationMs }));
-          animateDecorations(shot, id, change.durationMs);
-        }
+        animateShot(shot, id, keys, change.durationMs);
       }
       return;
     }
@@ -743,10 +796,7 @@ export function LiveLayoutEditorPreview({
         zIndex,
         { from: shownBefore ? previousFit : nextFit, to: shownAfter ? nextFit : previousFit },
       );
-      if (keys.length > 0 && typeof shot.animate === 'function') {
-        active.current.push(shot.animate(keys, { duration }));
-        animateDecorations(shot, id, duration);
-      }
+      animateShot(shot, id, keys, duration);
     }
   });
 
@@ -804,12 +854,19 @@ export function LiveLayoutEditorPreview({
               : undefined;
           const passive = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
           const moving = mediaSource === undefined ? undefined : mediaPictures.get(pictureKey);
+          // The leased stream has no calibrated active-pixel mapping. Draw the measured
+          // snapshot in the crop editor so the gesture keeps the existing fit coordinates.
+          const live =
+            cropEditor?.frameId !== id && inputPreviews.livePicture?.sourceId === sourceId
+              ? inputPreviews.livePicture
+              : undefined;
           const preview =
-            moving !== undefined && moving.sourceId === sourceId
+            live ??
+            (moving !== undefined && moving.sourceId === sourceId
               ? moving
               : passive?.sourceId === sourceId
                 ? passive
-                : undefined;
+                : undefined);
           const titleHidden = controlLiveLayoutTitleHidden(
             preset,
             id,
@@ -946,6 +1003,17 @@ export function LiveLayoutEditorPreview({
                   />
                 </div>
               )}
+              {activeShot &&
+                sourceId !== undefined &&
+                inputPreviews.pictureStateOf(sourceId) !== undefined && (
+                  <div className="cg-live-layout-shot-transport cg-live-layout-shot-live-controls">
+                    <PreviewInputControls
+                      controls={inputPreviews}
+                      sourceId={sourceId}
+                      name={source?.name ?? focusLabel}
+                    />
+                  </div>
+                )}
               {activeSingle === undefined &&
                 activeShot &&
                 input.overlay === undefined &&
@@ -965,6 +1033,16 @@ export function LiveLayoutEditorPreview({
             </div>
           );
         })}
+        {selectedRect !== undefined && (
+          <div
+            key={selectedFrameId}
+            ref={selection}
+            aria-hidden="true"
+            className="cg-live-layout-preview-selection"
+            data-layout-preview-selection={selectedFrameId}
+            style={selectionBounds(cssRect(selectedRect, raster))}
+          />
+        )}
         {stagePlacementEditor}
         {guideProfile !== undefined && (
           <FittedSafeAreaGuides
@@ -975,6 +1053,11 @@ export function LiveLayoutEditorPreview({
           />
         )}
       </div>
+      {inputPreviews.failure !== undefined && (
+        <span className="cg-monitor-fact" role="status" dir={feedbackDirection}>
+          {feedbackProblem(inputPreviews.failure, 'Live input preview is unavailable.')}
+        </span>
+      )}
       {activeSingle !== undefined && focusOptions.length > 1 && (
         <div
           className="cg-live-layout-switch"

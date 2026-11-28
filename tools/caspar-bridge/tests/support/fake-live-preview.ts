@@ -30,6 +30,8 @@ export class FakeLivePreview {
   otherMeter = false;
   meterLevels = [-21, -18];
   stalledVideo = false;
+  alternatePictures = false;
+  pictureOpens = 0;
   audioOpens = 0;
   audioCloses = 0;
   renews = 0;
@@ -169,7 +171,9 @@ export class FakeLivePreview {
     });
     res.flushHeaders();
     lease.feeds.add(res);
-    if (!picture) {
+    if (picture) {
+      this.pictureOpens++;
+    } else {
       this.audioOpens++;
       res.write(wavHeader());
     }
@@ -177,7 +181,10 @@ export class FakeLivePreview {
     const tick = (): void => {
       if (picture) {
         if (!this.stalledVideo) {
-          const frame = lease.inputId === 'li-studio1' ? FRAME_A : FRAME_B;
+          const useFirst = this.alternatePictures
+            ? sample++ % 2 === 0
+            : lease.inputId === 'li-studio1';
+          const frame = useFirst ? FRAME_A : FRAME_B;
           res.write(pgmFeedPart(frame));
         }
       } else {

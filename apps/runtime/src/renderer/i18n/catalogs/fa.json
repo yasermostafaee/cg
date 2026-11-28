@@ -1,6 +1,12 @@
 {
   "locale": "fa",
   "interface": {
+    "Live preview · {source}": "پیش‌نمایش زندهٔ {source}",
+    "Start live input preview": "شروع پیش‌نمایش زندهٔ ورودی",
+    "Cancel live input preview": "انصراف از پیش‌نمایش زندهٔ ورودی",
+    "Stop live input preview": "توقف پیش‌نمایش زندهٔ ورودی",
+    "Preview audio · {source}": "صدای پیش‌نمایش · {source}",
+    "Zero gap": "صفر کردن فاصله‌ها",
     " — it owns live layer {layer}": " — مالک لایهٔ زندهٔ {layer}",
     " — item {item}": " — آیتم {item}",
     " · {count} maximum": " · حداکثر {count}",
@@ -2197,6 +2203,7 @@
     "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.": "CG Bridge را با نسخهٔ همسان راه‌اندازی کنید. سایر عملیات عادی است و هیچ فرمانی به CasparCG ارسال نشده است."
   },
   "feedback": {
+    "Live input preview is unavailable.": "پیش‌نمایش زندهٔ ورودی در دسترس نیست.",
     "An overlay follows its base plate and cannot be focused separately.": "قاب رویی به قاب پایه متصل است و فوکوس جداگانه ندارد.",
     "The preset effect stopped. The previous preset was restored.": "افکت تغییر پریست متوقف شد. پریست قبلی بازگردانی شد.",
     "The preset effect could not be confirmed. Check the programme picture.": "اجرای افکت تغییر پریست تأیید نشد. تصویر برنامه را بررسی کنید.",

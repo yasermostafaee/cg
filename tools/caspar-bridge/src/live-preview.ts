@@ -506,10 +506,18 @@ export class LivePreviewService {
       check === undefined ||
       check.req.previewId !== grant.previewId ||
       !this.#usable(check) ||
-      lease?.state !== 'ready' ||
-      check.feeds.has(grant.stream)
+      lease?.state !== 'ready'
     ) {
       res.writeHead(403).end();
+      return;
+    }
+    if (check.feeds.has(grant.stream)) {
+      res
+        .writeHead(409, {
+          'access-control-allow-origin': '*',
+          'cache-control': 'no-store',
+        })
+        .end();
       return;
     }
     const abort = new AbortController();

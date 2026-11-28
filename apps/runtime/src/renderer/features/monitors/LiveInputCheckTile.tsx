@@ -11,13 +11,12 @@ import { Volume2, VolumeX, X } from 'lucide-react';
 import type { LivePreviewStatus } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { liveInputPictures } from './liveInputPicture.js';
+import { useLiveInputPicture } from './useLiveInputPicture.js';
 import { PgmAudioPlayer, PGM_AUDIO_SAMPLE_RATE, type PcmOut } from './pgmAudioPlayer.js';
 import { InputAudioRails } from '../sources/InputAudioMeter.js';
 import './live-input-check-tile.css';
-import type { PreviewEngine, PreviewOriginChanged } from '../sources/usePreviewOrigins.js';
+import type { PreviewOriginChanged } from '../sources/usePreviewOrigins.js';
 
-const PICTURE_TIMEOUT_MS = 2_500;
 const CAPTIONS = {
   connecting: 'Connecting',
   ready: 'Picture received',
@@ -43,83 +42,24 @@ export function LiveInputCheckTile({
   const localizeUi = useUiText();
   const { channel, previewId } = view;
   const canvas = useRef<HTMLCanvasElement>(null);
-  const ready = view.state === 'ready';
-  const [decoded, setDecoded] = useState<{
-    channel: number;
-    previewId: string;
-    engine: PreviewEngine | undefined;
-  }>();
+  const picture = useLiveInputPicture(view, onStall);
+  const attach = picture?.attach;
+  const decodedEngine = picture?.engine;
+  const pictureLive = picture !== undefined;
   const [busCount, setBusCount] = useState(2);
   const measuredBuses = view.dbFs?.length ?? 0;
-  const pictureLive =
-    ready &&
-    decoded?.channel === channel &&
-    decoded.previewId === previewId &&
-    decoded.engine === view.engine;
 
   useEffect(() => {
-    onPreviewEngineChange?.(pictureLive ? decoded?.engine : undefined);
-  }, [pictureLive, decoded?.engine, onPreviewEngineChange]);
+    onPreviewEngineChange?.(decodedEngine);
+  }, [decodedEngine, onPreviewEngineChange]);
 
-  useLayoutEffect(() => setDecoded(undefined), [channel, previewId, ready, view.engine]);
+  useLayoutEffect(() => {
+    return canvas.current === null ? undefined : attach?.(canvas.current);
+  }, [attach]);
 
   useLayoutEffect(() => {
     if (measuredBuses > 0) setBusCount(Math.max(2, measuredBuses));
   }, [measuredBuses]);
-
-  useEffect(() => {
-    if (!ready) return undefined;
-    const drawing = canvas.current;
-    const context = drawing?.getContext('2d');
-    const abort = new AbortController();
-    const failed = (): void => {
-      if (abort.signal.aborted) return;
-      abort.abort();
-      setDecoded(undefined);
-      onStall(previewId);
-    };
-    let deadline = setTimeout(failed, PICTURE_TIMEOUT_MS);
-    const run = async (): Promise<void> => {
-      if (context == null || drawing === null) return;
-      const url = await window.cg.livePreview.url({ channel, previewId }, 'picture');
-      if (url === null || abort.signal.aborted) return;
-      const response = await fetch(url, {
-        signal: abort.signal,
-        cache: 'no-store',
-        referrerPolicy: 'no-referrer',
-      });
-      if (!response.ok || response.body === null) return;
-      for await (const jpeg of liveInputPictures(response.body)) {
-        const bitmap = await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' })).catch(
-          () => null,
-        );
-        if (bitmap === null) continue;
-        try {
-          if (abort.signal.aborted) return;
-          if (drawing.width !== bitmap.width) drawing.width = bitmap.width;
-          if (drawing.height !== bitmap.height) drawing.height = bitmap.height;
-          context.drawImage(bitmap, 0, 0);
-          setDecoded((previous) =>
-            previous?.channel === channel &&
-            previous.previewId === previewId &&
-            previous.engine === view.engine
-              ? previous
-              : { channel, previewId, engine: view.engine },
-          );
-          clearTimeout(deadline);
-          deadline = setTimeout(failed, PICTURE_TIMEOUT_MS);
-        } finally {
-          bitmap.close();
-        }
-      }
-    };
-    void run().then(failed, failed);
-    return () => {
-      abort.abort();
-      clearTimeout(deadline);
-      context?.clearRect(0, 0, drawing?.width ?? 0, drawing?.height ?? 0);
-    };
-  }, [channel, onStall, previewId, ready, view.engine]);
 
   const sound = useRef<{ context: AudioContext; player: PgmAudioPlayer } | null>(null);
   const [audio, setAudio] = useState<'off' | 'connecting' | 'playing' | 'unavailable'>('off');
@@ -162,6 +102,7 @@ export function LiveInputCheckTile({
       url: () => window.cg.livePreview.url({ channel, previewId }, 'audio'),
       out: context as unknown as PcmOut,
       retry: false,
+      retryWhileBusy: true,
       onState: (state) => {
         if (sound.current?.context !== context) return;
         if (state === 'stopped') lost();

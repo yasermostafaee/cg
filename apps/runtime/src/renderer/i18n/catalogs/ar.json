@@ -1,6 +1,12 @@
 {
   "locale": "ar",
   "interface": {
+    "Live preview · {source}": "معاينة مباشرة · {source}",
+    "Start live input preview": "بدء المعاينة المباشرة للمدخل",
+    "Cancel live input preview": "إلغاء المعاينة المباشرة للمدخل",
+    "Stop live input preview": "إيقاف المعاينة المباشرة للمدخل",
+    "Preview audio · {source}": "صوت المعاينة · {source}",
+    "Zero gap": "تصفير المسافات",
     " — it owns live layer {layer}": " — يملك الطبقة المباشرة {layer}",
     " — item {item}": " — العنصر {item}",
     " · {count} maximum": " · الحد الأقصى {count}",
@@ -2197,6 +2203,7 @@
     "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.": "شغّل إصدارًا مطابقًا من CG Bridge. تعمل بقية العمليات كالمعتاد، ولم يُرسَل أي أمر إلى CasparCG."
   },
   "feedback": {
+    "Live input preview is unavailable.": "معاينة المدخل المباشرة غير متاحة.",
     "An overlay follows its base plate and cannot be focused separately.": "يتبع الإطار المتراكب إطاره الأساسي ولا يمكن التركيز عليه منفردًا.",
     "The preset effect stopped. The previous preset was restored.": "توقّف تأثير تبديل الإعداد المسبق. استُعيد الإعداد السابق.",
     "The preset effect could not be confirmed. Check the programme picture.": "تعذّر تأكيد تأثير تبديل الإعداد المسبق. تحقّق من صورة البرنامج.",

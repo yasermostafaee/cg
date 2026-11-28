@@ -75,7 +75,8 @@ export function initCalendar(bridge: {
 export async function setLunarAdjustDays(days: number): Promise<string | null> {
   try {
     const res = await window.cg.calendar.set({ lunarAdjustDays: days });
-    if (!res.ok) return feedbackProblem(res.message, 'The Lunar Hijri adjustment could not be saved.');
+    if (!res.ok)
+      return feedbackProblem(res.message, 'The Lunar Hijri adjustment could not be saved.');
     publish({ lunarAdjustDays: days });
     return null;
   } catch (err) {

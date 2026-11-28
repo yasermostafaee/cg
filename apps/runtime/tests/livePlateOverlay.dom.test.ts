@@ -14,6 +14,8 @@ import type {
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { PreviewPanel } from '../src/renderer/features/monitors/PreviewPanel.js';
+import { LivePlateOverlay } from '../src/renderer/features/monitors/LivePlateOverlay.js';
+import type { PvwSourceFrame } from '../src/renderer/features/monitors/usePvwSourceFrames.js';
 import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js';
 import {
   initSources,
@@ -344,5 +346,47 @@ describe('R-109 — each PVW plate says whether its audio is on', () => {
     expect(muted.querySelector('[data-live-plate-audio="silent"] .lucide-volume-x')).not.toBeNull();
     expect(audible.getAttribute('aria-label')).toContain('audio is on');
     expect(muted.getAttribute('aria-label')).toContain('audio is muted');
+  });
+
+  it('leaves a library video’s audio to its local transport both before and during playback', async () => {
+    stubBridge({ rehearsals: [] });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const sourceId = 'md-preview-clip';
+    const props = {
+      placements: [
+        {
+          elementId: 'video-element',
+          plateId: 'video',
+          sourceId,
+          sourceName: 'Clip',
+          captionInTemplate: true as const,
+          audio: 'silent' as const,
+          x: 0,
+          y: 0,
+          width: 640,
+          height: 360,
+        },
+      ],
+      raster: { width: 1920, height: 1080 },
+      fit: 1,
+      zIndex: 1,
+    };
+    const poster: PvwSourceFrame = { sourceId, signal: 'present', jpegBase64: 'poster' };
+    const video: PvwSourceFrame = {
+      sourceId,
+      signal: 'present',
+      mediaPicture: { attach: () => () => undefined },
+    };
+    for (const picture of [undefined, poster, video]) {
+      const sourceFrames = picture === undefined ? new Map() : new Map([[sourceId, picture]]);
+      await act(async () => {
+        root?.render(createElement(LivePlateOverlay, { ...props, sourceFrames }));
+      });
+      const frame = plate(container, 'video');
+      expect(frame.querySelector('[data-live-plate-audio]')).toBeNull();
+      expect(frame.getAttribute('aria-label')).toBe('Media preview · Clip');
+    }
   });
 });

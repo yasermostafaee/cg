@@ -120,3 +120,12 @@
 - [x] 7.8 Verify a decoded direct NDI picture stays visible on pointer hover in Grid and List.
       The old bundle painted raised button chrome over the centre pixel. A fresh Windows Edge
       run kept the actual image pixel on both views and preserved receiver and Listen behavior.
+
+## 8. Continuous picture inside a plate
+
+- [x] Verify B-461 in Windows Chromium against a simulated Playout and Bridge. PVW decoded multiple
+      live UDP frames inside the plate, started muted, enabled and muted sound on the same lease,
+      and released the lease without changing the source, PGM or AMCP state. The layout editor
+      rendered the same live picture and released its lease on Cancel.
+- [ ] Verify the installed continuous picture and sound on the target station.
+- [x] Verify B-463. Component tests covered a media placeholder, poster and moving canvas with a muted Programme setting, alongside existing live-source glyph behavior.

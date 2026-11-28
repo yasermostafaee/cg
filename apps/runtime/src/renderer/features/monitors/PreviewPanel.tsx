@@ -777,7 +777,7 @@ export function PreviewPanel({
         {previewAudio.inputs.length > 0 && <PreviewInputAudio audio={previewAudio} />}
         {previewAudio.failure !== undefined && (
           <span className="cg-monitor-fact" role="status" dir={feedbackDirection}>
-            {feedbackProblem(previewAudio.failure, 'Input preview sound is unavailable.')}
+            {feedbackProblem(previewAudio.failure, 'Live input preview is unavailable.')}
           </span>
         )}
       </div>
