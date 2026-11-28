@@ -117,3 +117,71 @@ test('places the console panels physically and restores saved UI profiles', asyn
   await dialog.getByRole('button', { name: 'Delete profile', exact: true }).click();
   await expect(profiles.getByRole('option', { name: 'کارگردان' })).toHaveCount(0);
 });
+
+test('regular and live layers share filtering and keep their side-by-side layout in UI profiles', async ({
+  app,
+}) => {
+  const { page } = app;
+  const wide = { width: 2080, height: 900 };
+  await page.setViewportSize(wide);
+  const layers = page.getByRole('region', { name: 'Layers', exact: true });
+  const toggle = layers.getByRole('button', { name: 'Layers side by side', exact: true });
+  const regular = page.locator('[data-layer-group="regular"]');
+  const live = page.locator('[data-layer-group="live"]');
+  const layout = page.locator('[data-layer-groups-layout]');
+  const search = layers.getByRole('searchbox', { name: 'Find row or template' });
+  const selected = regular.locator('[data-layer="80"]');
+
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await toggle.click();
+  await expect(layout).toHaveAttribute('data-layer-groups-layout', 'side-by-side');
+  expect(await startOf(regular, 'x')).toBeLessThan(await startOf(live, 'x'));
+  expect(await startOf(regular, 'y')).toBe(await startOf(live, 'y'));
+  await expect(
+    live.locator('[data-layer="59"]').getByRole('button', { name: 'LOAD', exact: true }),
+  ).toBeVisible();
+
+  await search.fill('Live layer 59');
+  await expect(regular.locator('[data-layer="82"]')).toHaveCount(0);
+  await expect(live.locator('[data-layer="59"]')).toBeVisible();
+  await expect(live.locator('[data-layer="58"]')).toHaveCount(0);
+  await search.clear();
+  await app.selectLayerRow(80);
+  await toggle.click();
+  await expect(layout).toHaveAttribute('data-layer-groups-layout', 'stacked');
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await toggle.click();
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await app.inspector.getByRole('button', { name: 'Close INSPECTOR', exact: true }).click();
+
+  await page.setViewportSize({ width: 700, height: 850 });
+  await expect(layout).toHaveAttribute('data-layer-groups-layout', 'stacked');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await page.setViewportSize(wide);
+  await expect(layout).toHaveAttribute('data-layer-groups-layout', 'side-by-side');
+
+  await app.openStationSetupAt('General');
+  const settings = page.getByRole('dialog', { name: 'Station setup' });
+  await settings.getByRole('textbox', { name: 'Profile name', exact: true }).fill('Layer columns');
+  await settings.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await toggle.click();
+  await app.openStationSetupAt('General');
+  await settings
+    .getByRole('combobox', { name: 'Saved UI profile', exact: true })
+    .selectOption('Layer columns');
+  await settings.getByRole('button', { name: 'Load profile', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(layout).toHaveAttribute('data-layer-groups-layout', 'side-by-side');
+  await page.reload();
+  await expect(layout).toHaveAttribute('data-layer-groups-layout', 'side-by-side');
+
+  await app.openStationSetupAt('General');
+  await settings.locator('#cg-interface-language').selectOption('fa');
+  await page.getByRole('dialog').getByRole('button', { name: 'بستن', exact: true }).last().click();
+  await expect(
+    page.getByRole('button', { name: 'نمایش لایه‌ها کنار هم', exact: true }),
+  ).toBeVisible();
+  await expect(regular.getByText('لایه‌های معمولی', { exact: true })).toBeVisible();
+  expect(await startOf(regular, 'x')).toBeGreaterThan(await startOf(live, 'x'));
+});

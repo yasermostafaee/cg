@@ -1,6 +1,8 @@
 {
   "locale": "en",
   "interface": {
+    "Layers side by side": "Layers side by side",
+    "Regular layers": "Regular layers",
     "Effects": "Effects",
     "Collapse all sections": "Collapse all sections",
     "Expand all sections": "Expand all sections",

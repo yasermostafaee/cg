@@ -1,6 +1,8 @@
 {
   "locale": "fa",
   "interface": {
+    "Layers side by side": "نمایش لایه‌ها کنار هم",
+    "Regular layers": "لایه‌های معمولی",
     "Effects": "افکت‌ها",
     "Collapse all sections": "جمع کردن همهٔ بخش‌ها",
     "Expand all sections": "باز کردن همهٔ بخش‌ها",

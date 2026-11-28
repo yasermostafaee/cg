@@ -9,3 +9,6 @@
 - [ ] Record carrying Linux Playwright verification.
 
 - [x] Windows Chromium verified that the reset is available in General, is disabled at the shipped default, is absent from the Layers header, and restores the default panel layout.
+- [x] Add an optional side-by-side layout for regular and live layers and retain it with UI profiles.
+- [x] Windows Chromium verified the two columns, shared filtering, retained selection, narrow
+      fallback, restored profile and reload, and the column order in Persian.

@@ -1,7 +1,7 @@
 import { feedback, feedbackFailure, useUiText } from '../../i18n/locale.js';
 import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.js';
 import { localizeEngineWording, useEngineName } from '../../ui/engineWording.js';
-import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { silenceHasTarget } from './panicReport.js';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
@@ -23,6 +23,8 @@ import {
 } from '../sources/sourceStore.js';
 import {
   CircleArrowOutDownRight,
+  Columns2,
+  Layers,
   LayoutGrid,
   LoaderCircle,
   PanelRight,
@@ -53,7 +55,7 @@ import {
   sourceDisplayName,
   type OperatorRowName,
 } from '../../ui/operatorNaming.js';
-import type { ShellLayout } from '../../hooks/useShellLayout.js';
+import type { ConfigurableShellLayout, ShellLayout } from '../../hooks/useShellLayout.js';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -96,7 +98,7 @@ import { RowErrorsBadge } from './RowErrorsBadge.js';
 import { onRowFocus } from './rowFocus.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
-import { ROW_GEOMETRY, resolveDensity } from './layerTable.js';
+import { ROW_GEOMETRY, minWidthFor, resolveDensity } from './layerTable.js';
 import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
@@ -119,7 +121,7 @@ interface Props {
   onUpdate: (itemId: string) => Promise<{ accepted: boolean; errorCode?: string | undefined }>;
   independentPreview?: boolean;
   /** R-028 part B — the operator's workspace geometry (see `useShellLayout`). */
-  layout: ShellLayout;
+  layout: ShellLayout & Partial<Pick<ConfigurableShellLayout, 'positions' | 'setPositions'>>;
   /** Narrow screens only: is the Inspector overlay showing? */
   inspectorOpen: boolean;
   onToggleInspector: () => void;
@@ -174,6 +176,10 @@ const NO_ORPHANS: readonly OrphanLayer[] = [];
 const AWAITING_PANEL_NOTICE =
   'Layer states have not arrived yet — rows fill in as soon as the bridge answers.';
 
+const GROUP_DIVIDER_PX = 1;
+// The tight row preserves every verb but allows the name to shrink to zero.
+const SIDE_BY_SIDE_MIN_COLUMN_PX = minWidthFor('tight') + 80;
+
 const styles = {
   /**
    * The channel's scroll area. The STICKY column header lives INSIDE it (below
@@ -181,6 +187,14 @@ const styles = {
    * the header scrolling away with them.
    */
   list: { overflowY: 'auto' as const, minHeight: 0, flex: 1 },
+  sideBySideList: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  },
+  liveGroupColumn: {
+    borderInlineStart: `${String(GROUP_DIVIDER_PX)}px solid ${cssVars['--r-border-strong']}`,
+  },
+  groupHeading: { position: 'sticky' as const, top: 0, zIndex: 2 },
   compactCompanion: { display: 'flex', minWidth: 0, flex: 1 },
   compactList: {
     minWidth: 0,
@@ -490,7 +504,7 @@ export function LayersPanel({
    * cramped table on every mount.
    */
   const { ref: listRef, width: listWidth } = useElementWidth<HTMLDivElement>();
-  const density = listWidth === null ? 'full' : resolveDensity(listWidth);
+  const sideBySideRequested = layout.positions?.layerGroups === 'side-by-side';
 
   /*
     `B-212` — "take me to that row". A refusal elsewhere (the template picker's
@@ -676,6 +690,19 @@ export function LayersPanel({
           ),
     [bank, channelRowBindings],
   );
+  // Search and Hide empty can empty either column without changing their arrangement.
+  const hasBothLayerGroups =
+    bank !== null &&
+    rowBindings.some(({ slot }) => !isLowBankLayer(bank, slot.layer)) &&
+    rowBindings.some(({ slot }) => isLowBankLayer(bank, slot.layer));
+  const columnWidth = (listWidth ?? 0) / 2 - GROUP_DIVIDER_PX;
+  const sideBySide =
+    !selectedOnly &&
+    sideBySideRequested &&
+    hasBothLayerGroups &&
+    columnWidth >= SIDE_BY_SIDE_MIN_COLUMN_PX;
+  const density =
+    listWidth === null ? 'full' : resolveDensity(sideBySide ? columnWidth : listWidth);
   /** How many rows do not yet know what they carry. Zero hides the notice. */
   const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
 
@@ -1217,22 +1244,13 @@ export function LayersPanel({
     },
   ];
 
-  const renderLayerList = (
+  const renderLayerRows = (
     layerBank: NonNullable<typeof bank>,
-    entries = shownRowBindings,
-    hidden = false,
-  ): JSX.Element => (
-    <div
-      hidden={hidden}
-      data-layer-list={hidden ? undefined : ''}
-      data-layer-shortcut-controls={hidden ? '' : undefined}
-      style={hidden ? undefined : selectedOnly ? styles.compactList : styles.list}
-      ref={hidden ? undefined : listRef}
-    >
-      {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-      {!hidden && !selectedOnly && <LayerTableHeader density={density} />}
-      {entries.map(({ slot, binding }, index) => {
-        /*
+    entries: typeof shownRowBindings,
+    hidden: boolean,
+  ): JSX.Element[] =>
+    entries.map(({ slot, binding }) => {
+      /*
           THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
           naming because it reads as harmless: a bound slot whose item had
           not arrived became `null`, which is the SAME value an unbound
@@ -1250,52 +1268,30 @@ export function LayersPanel({
           let the VERBS go on conflating "unbound" with "not yet known"
           after the state cell had stopped.
         */
-        const item = binding.kind === 'bound' ? binding.item : null;
-        // `CHANNEL-TEMPLATES-01` — the row's own channel's version.
-        const template =
-          item !== null ? (templates.get(item.templateId, slot.channel) ?? null) : null;
-        /*
-          `single-clock-look-switch` — THE GROUP BREAK, drawn once, at the first
-          bed row.
-
-          The list is descending by layer and the beds are the lowest layers, so
-          they already fall at the bottom — which is also where they are on air.
-          What is missing without this is any statement that the bottom of the
-          list is a DIFFERENT KIND of row: `wrong-bank` refuses a load across the
-          line, and a refusal about a boundary nobody can see is not actionable.
-
-          Derived from the canonical predicate against the previous row rather
-          than from a layer number, so it stays correct for a station whose bed
-          rows are not 1–9.
-        */
-        // Against the VISIBLE list — the break belongs above the first bed row the
-        // operator can actually see, not above one a filter has removed.
-        const previous = entries[index - 1];
-        const startsBedGroup =
-          !hidden &&
-          !selectedOnly &&
-          isLowBankLayer(layerBank, slot.layer) &&
-          (previous === undefined || !isLowBankLayer(layerBank, previous.slot.layer));
-        const row = (
-          <LayerRow
-            key={`${String(slot.channel)}:${String(slot.layer)}`}
-            shortcutOnly={hidden}
-            slot={slot}
-            binding={binding}
-            template={template}
-            sharedFolderAvailable={capabilities?.sharedTemplateFolder === true}
-            templateThumbnailsAvailable={capabilities?.templateThumbnails === true}
-            // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
-            // a filter can never renumber it, because it is not a position at all.
-            displayPosition={slot.layer}
-            // …and so is the default name's number (`Layer 99`, `Bed 59`).
-            defaultAlias={defaultLayerDisplayName(layerBank, slot.layer, localizeUi)}
-            // The SAME predicate the group break above is drawn from, and the
-            // same one the bridge refuses on — one derivation, three readers.
-            acceptsBank={isLowBankLayer(layerBank, slot.layer) ? 'low' : 'high'}
-            density={density}
-            selected={item !== null && item.itemId === selectedId}
-            /*
+      const item = binding.kind === 'bound' ? binding.item : null;
+      // `CHANNEL-TEMPLATES-01` — the row's own channel's version.
+      const template =
+        item !== null ? (templates.get(item.templateId, slot.channel) ?? null) : null;
+      return (
+        <LayerRow
+          key={`${String(slot.channel)}:${String(slot.layer)}`}
+          shortcutOnly={hidden}
+          slot={slot}
+          binding={binding}
+          template={template}
+          sharedFolderAvailable={capabilities?.sharedTemplateFolder === true}
+          templateThumbnailsAvailable={capabilities?.templateThumbnails === true}
+          // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
+          // a filter can never renumber it, because it is not a position at all.
+          displayPosition={slot.layer}
+          // …and so is the default name's number (`Layer 99`, `Bed 59`).
+          defaultAlias={defaultLayerDisplayName(layerBank, slot.layer, localizeUi)}
+          // The SAME predicate the groups are drawn from, and the
+          // same one the bridge refuses on — one derivation, three readers.
+          acceptsBank={isLowBankLayer(layerBank, slot.layer) ? 'low' : 'high'}
+          density={density}
+          selected={item !== null && item.itemId === selectedId}
+          /*
               `B-232` (owner) — mark the rows the notice above is about, so the
               operator can SEE which rows one press of PUT BACK ON AIR would
               restore instead of carrying their names down from the strip.
@@ -1303,8 +1299,8 @@ export function LayersPanel({
               (`emptiedAir.restore({ itemIds })`), so the mark and the press can
               never disagree about the set.
             */
-            emptiedAir={item !== null && emptiedAirItemIds.has(item.itemId)}
-            /*
+          emptiedAir={item !== null && emptiedAirItemIds.has(item.itemId)}
+          /*
               B-139 — the applied-plate baseline is SUPPLIED, through the
               canonical `appliedPlateSources` the Inspector already uses.
               Omitting it used to collapse every plate's baseline to `''`,
@@ -1313,29 +1309,29 @@ export function LayersPanel({
               boolean, refused an un-assignment the operator had staged.
               The chip and the verb answer ONE question and take ONE value.
             */
-            dirty={
-              item !== null &&
-              isItemDirty(
-                item.itemId,
-                item.fields,
-                appliedPlateSources(
-                  item.templateId,
-                  template?.liveSources?.sources ?? [],
-                  itemChannelOf(item, slots, defaultsChannel),
-                ),
-                item.lookSourceOverride,
-                appliedPositionOf(item, template?.liveSources?.defaultPosition),
-                item.timingOverride,
-              )
-            }
-            rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
-            previewOnly={
-              item !== null &&
-              isRehearsing(rehearsals, item.itemId) &&
-              !isRehearsalInterlocked(rehearsals, item.itemId)
-            }
-            independentPreview={independentPreview}
-            /*
+          dirty={
+            item !== null &&
+            isItemDirty(
+              item.itemId,
+              item.fields,
+              appliedPlateSources(
+                item.templateId,
+                template?.liveSources?.sources ?? [],
+                itemChannelOf(item, slots, defaultsChannel),
+              ),
+              item.lookSourceOverride,
+              appliedPositionOf(item, template?.liveSources?.defaultPosition),
+              item.timingOverride,
+            )
+          }
+          rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
+          previewOnly={
+            item !== null &&
+            isRehearsing(rehearsals, item.itemId) &&
+            !isRehearsalInterlocked(rehearsals, item.itemId)
+          }
+          independentPreview={independentPreview}
+          /*
               `add-multibox-audio` — the plates this row's item actually OWNS, for
               the read-only audio summary.
 
@@ -1352,49 +1348,105 @@ export function LayersPanel({
               denominator is what the ACTIVE LOOK SHOWS and its numerator is
               AUDIBILITY rather than intent. Same rows, same pass, two questions.
             */
-            seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
-            audioLockedOf={
-              item === null
-                ? undefined
-                : (plateId: string) => liveSourceLocked(item.itemId, plateId)
-            }
-            audioSourceNameOf={
-              item === null ? undefined : (plateId) => audioSourceName(item.itemId, plateId)
-            }
-            // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
-            // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
-            holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
-            /*
+          seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
+          audioLockedOf={
+            item === null ? undefined : (plateId: string) => liveSourceLocked(item.itemId, plateId)
+          }
+          audioSourceNameOf={
+            item === null ? undefined : (plateId) => audioSourceName(item.itemId, plateId)
+          }
+          // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
+          // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
+          holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
+          /*
               Golden rule 11 — the row's operator name for its audio dialog, through
               the ONE composition, from the bank and the registry this panel holds.
             */
-            operatorName={
-              item === null
-                ? undefined
-                : operatorRowName(
-                    { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
-                    layerBank,
-                    templates,
-                    localizeUi,
-                  )
-            }
-            onSelect={selectRow}
-            onUpdate={onUpdate}
-          />
-        );
-        if (!startsBedGroup) return row;
-        return (
-          <Fragment key={`${String(slot.channel)}:${String(slot.layer)}`}>
-            <h3 style={styles.bedGroupHead} data-bed-group-head="">
-              <Icon icon={LayoutGrid} size={14} />
-              {localizeUi('Live layers')}
-            </h3>
-            {row}
-          </Fragment>
-        );
-      })}
-    </div>
-  );
+          operatorName={
+            item === null
+              ? undefined
+              : operatorRowName(
+                  { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
+                  layerBank,
+                  templates,
+                  localizeUi,
+                )
+          }
+          onSelect={selectRow}
+          onUpdate={onUpdate}
+        />
+      );
+    });
+
+  const renderLayerList = (
+    layerBank: NonNullable<typeof bank>,
+    entries = shownRowBindings,
+    hidden = false,
+  ): JSX.Element => {
+    if (hidden || selectedOnly) {
+      return (
+        <div
+          hidden={hidden}
+          data-layer-list={hidden ? undefined : ''}
+          data-layer-shortcut-controls={hidden ? '' : undefined}
+          style={hidden ? undefined : styles.compactList}
+          ref={hidden ? undefined : listRef}
+        >
+          {renderLayerRows(layerBank, entries, hidden)}
+        </div>
+      );
+    }
+
+    const regular: typeof entries = [];
+    const live: typeof entries = [];
+    for (const entry of entries) {
+      (isLowBankLayer(layerBank, entry.slot.layer) ? live : regular).push(entry);
+    }
+    const liveHeading = (
+      <h3 style={styles.bedGroupHead} data-bed-group-head="">
+        <Icon icon={LayoutGrid} size={14} />
+        {localizeUi('Live layers')}
+      </h3>
+    );
+    // Keep the same row parents when switching orientation to preserve row-local action state.
+    return (
+      <div
+        data-layer-list=""
+        data-layer-groups-layout={sideBySide ? 'side-by-side' : 'stacked'}
+        style={{
+          ...styles.list,
+          ...(sideBySideRequested && hasBothLayerGroups && { scrollbarGutter: 'stable' }),
+          ...(sideBySide && styles.sideBySideList),
+        }}
+        ref={listRef}
+      >
+        {!sideBySide && <LayerTableHeader density={density} />}
+        <div data-layer-group="regular">
+          {sideBySide && (
+            <div style={styles.groupHeading}>
+              <h3 style={styles.bedGroupHead}>
+                <Icon icon={Layers} size={14} />
+                {localizeUi('Regular layers')}
+              </h3>
+              <LayerTableHeader density={density} />
+            </div>
+          )}
+          {renderLayerRows(layerBank, regular, false)}
+        </div>
+        <div data-layer-group="live" style={sideBySide ? styles.liveGroupColumn : undefined}>
+          {sideBySide ? (
+            <div style={styles.groupHeading}>
+              {liveHeading}
+              <LayerTableHeader density={density} />
+            </div>
+          ) : (
+            live.length > 0 && liveHeading
+          )}
+          {renderLayerRows(layerBank, live, false)}
+        </div>
+      </div>
+    );
+  };
 
   const renderHiddenShortcutRows = (): JSX.Element | null => {
     if (!shortcutsEnabled || !selectedHeld || !listReady || bank === null) return null;
@@ -1874,6 +1926,22 @@ export function LayersPanel({
                   />
                   {localizeUi('Hide empty')}
                 </label>
+                {hasBothLayerGroups && layout.setPositions !== undefined && (
+                  <Button
+                    variant="icon"
+                    active={sideBySideRequested}
+                    aria-label={localizeUi('Layers side by side')}
+                    aria-pressed={sideBySideRequested}
+                    title={localizeUi('Layers side by side')}
+                    onClick={() =>
+                      layout.setPositions?.({
+                        layerGroups: sideBySideRequested ? undefined : 'side-by-side',
+                      })
+                    }
+                  >
+                    <Icon icon={Columns2} size={14} />
+                  </Button>
+                )}
                 {/*
                   🔴 THE AWAITING LIVE REGION, on a line that exists either way.
 

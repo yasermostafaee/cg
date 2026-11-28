@@ -111,6 +111,7 @@ export interface WorkspacePositions {
   monitorOrder: 'pvw-first' | 'pgm-first';
   layerPosition: 'below' | 'above';
   inspectorSide: 'right' | 'left';
+  layerGroups?: 'side-by-side' | undefined;
 }
 
 export const DEFAULT_WORKSPACE_POSITIONS: Readonly<WorkspacePositions> = {
@@ -181,7 +182,7 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 function positionsOf(value: unknown): WorkspacePositions {
-  const { monitorOrder, layerPosition, inspectorSide } = record(value);
+  const { monitorOrder, layerPosition, inspectorSide, layerGroups } = record(value);
   return {
     monitorOrder:
       monitorOrder === 'pgm-first' ? monitorOrder : DEFAULT_WORKSPACE_POSITIONS.monitorOrder,
@@ -189,6 +190,7 @@ function positionsOf(value: unknown): WorkspacePositions {
       layerPosition === 'above' ? layerPosition : DEFAULT_WORKSPACE_POSITIONS.layerPosition,
     inspectorSide:
       inspectorSide === 'left' ? inspectorSide : DEFAULT_WORKSPACE_POSITIONS.inspectorSide,
+    ...(layerGroups === 'side-by-side' && { layerGroups }),
   };
 }
 
@@ -196,12 +198,14 @@ function isDefaultPosition({
   monitorOrder,
   layerPosition,
   inspectorSide,
+  layerGroups,
 }: WorkspacePositions): boolean {
   const defaults = DEFAULT_WORKSPACE_POSITIONS;
   return (
     monitorOrder === defaults.monitorOrder &&
     layerPosition === defaults.layerPosition &&
-    inspectorSide === defaults.inspectorSide
+    inspectorSide === defaults.inspectorSide &&
+    layerGroups === undefined
   );
 }
 

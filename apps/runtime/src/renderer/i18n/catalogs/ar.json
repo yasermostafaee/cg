@@ -1,6 +1,8 @@
 {
   "locale": "ar",
   "interface": {
+    "Layers side by side": "عرض الطبقات جنبًا إلى جنب",
+    "Regular layers": "الطبقات العادية",
     "Effects": "التأثيرات",
     "Collapse all sections": "طيّ جميع الأقسام",
     "Expand all sections": "توسيع جميع الأقسام",

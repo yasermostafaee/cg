@@ -5450,13 +5450,19 @@ meter empty. Media clips and stills have no meter in the layout or input picker.
 
 ## [~] R-124 — Arrange CG Control panels and save UI profiles ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/configure-control-workspace/`
 
-**What:** Choose the physical monitor order, whether layers are above or below monitors, and the Inspector side. Save and restore those positions and panel dimensions in local UI profiles.
+**What:** Choose the physical monitor order, whether layers are above or below monitors, and the
+Inspector side. Choose stacked or side-by-side regular and live layers from the Layers panel.
+Save and restore these settings and panel dimensions in local UI profiles.
 
 **Acceptance:**
 
 - WHEN a workspace option is changed THEN its panel moves and current previews and selected layers stay active.
 - WHEN a UI profile is loaded in any supported interface language THEN the saved physical positions and dimensions return.
 - WHEN an operator wants to restore the default panel arrangement THEN they can reset it in Settings → General → Workspace.
+- WHEN the Layers panel has room and the operator chooses side-by-side groups THEN regular
+  and live layers appear in separate columns with their own headers and the existing layer actions.
+- WHEN the Layers panel becomes too narrow THEN it displays the groups in one list while
+  retaining the operator's layout preference.
 
 ## [~] R-125 — Control local video preview per plate ⟨priority: medium — owner, 2026-11-23⟩ — `openspec/changes/author-live-layouts/`
 
