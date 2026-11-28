@@ -11,6 +11,7 @@ import {
   controlLiveLayoutFocusRect,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutIsFrameInPreset,
+  controlLiveLayoutLegacyOverlayFocus,
   controlLiveLayoutMovePresetFrame,
   controlLiveLayoutPaintFrames,
   controlLiveLayoutPlateAspect,
@@ -387,6 +388,31 @@ describe('authored plate overlays', () => {
     background: { kind: 'none' },
     effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   };
+
+  it('identifies only previously generated overlay Focus looks as legacy', () => {
+    expect(
+      controlLiveLayoutLegacyOverlayFocus(
+        layout,
+        controlLiveLayoutFocusLookId(panel.id, overlay.id),
+      ),
+    ).toEqual({ presetId: panel.id, frameId: overlay.id });
+    expect(
+      controlLiveLayoutLegacyOverlayFocus(layout, controlLiveLayoutFocusLookId(panel.id, 'host')),
+    ).toBeUndefined();
+    expect(controlLiveLayoutLegacyOverlayFocus(layout, panel.id)).toBeUndefined();
+    expect(
+      controlLiveLayoutLegacyOverlayFocus(
+        layout,
+        controlLiveLayoutFocusLookId('deleted-preset', overlay.id),
+      ),
+    ).toBeUndefined();
+    expect(
+      controlLiveLayoutLegacyOverlayFocus(
+        undefined,
+        controlLiveLayoutFocusLookId(panel.id, overlay.id),
+      ),
+    ).toBeUndefined();
+  });
 
   it('retains the independent source and mask and scales the same overlay placement across presets', () => {
     const saved = ControlLiveLayoutSchema.parse(JSON.parse(JSON.stringify(layout)));

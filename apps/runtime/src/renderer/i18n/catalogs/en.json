@@ -2197,6 +2197,9 @@
     "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.": "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG."
   },
   "feedback": {
+    "An overlay follows its base plate and cannot be focused separately.": "An overlay follows its base plate and cannot be focused separately.",
+    "The preset effect stopped. The previous preset was restored.": "The preset effect stopped. The previous preset was restored.",
+    "The preset effect could not be confirmed. Check the programme picture.": "The preset effect could not be confirmed. Check the programme picture.",
     "Plate {number}": "Plate {number}",
     "For {plates}, no source is assigned.": "For {plates}, no source is assigned.",
     "The sources assigned to {plates} are no longer available on this station.": "The sources assigned to {plates} are no longer available on this station.",

@@ -22,7 +22,6 @@ import { feedback, feedbackFailure, FeedbackError } from '../../i18n/locale.js';
  */
 
 import { getRefusal, onRefusal, raiseRefusal } from './refusalStore.js';
-import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 
 type Listener = (message: string) => void;
 type NoticeListener = (message: string, owner: Document) => void;
@@ -108,25 +107,12 @@ export function reportCommandNotice(message: string, owner: Document): void {
  * promise (e.g. the link is `disconnected`) is reported, never swallowed and
  * never treated as success.
  */
-export function runCommand(
-  label: string,
-  promise: Promise<{
-    accepted: boolean;
-    errorCode?: string | undefined;
-    message?: string | undefined;
-  }>,
-): void {
+export function runCommand(label: string, promise: Promise<{ accepted: boolean }>): void {
   promise.then(
     (res) => {
-      if (res.accepted) return;
-      if (res.errorCode === undefined && res.message === undefined) {
+      if (!res.accepted) {
         reportCommandError(feedback('{action} was not accepted.', { action: label }));
-        return;
       }
-      reportCommandError(refusalFeedback({ code: res.errorCode, message: res.message }), {
-        code: res.errorCode ?? null,
-        detail: res.message ?? null,
-      });
     },
     (err: unknown) => {
       if (!(err instanceof Error)) {

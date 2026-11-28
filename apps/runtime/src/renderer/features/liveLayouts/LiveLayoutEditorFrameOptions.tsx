@@ -75,7 +75,7 @@ export function LiveLayoutEditorFrameOptions({
   borderVisibility?:
     | {
         showInPreset: boolean;
-        showInFocus: boolean;
+        showInFocus: boolean | undefined;
         belongsToPreset: boolean;
         onPresetChange: (show: boolean) => void;
         onFocusChange: (show: boolean) => void;
@@ -343,14 +343,16 @@ export function LiveLayoutEditorFrameOptions({
                 />
                 {localizeUi('Show border in preset')}
               </label>
-              <label className="cg-live-layout-frame-option-check" htmlFor={id + '-border-focus'}>
-                <Checkbox
-                  id={id + '-border-focus'}
-                  checked={borderVisibility.showInFocus}
-                  onChange={borderVisibility.onFocusChange}
-                />
-                {localizeUi('Show border in Focus')}
-              </label>
+              {borderVisibility.showInFocus !== undefined && (
+                <label className="cg-live-layout-frame-option-check" htmlFor={id + '-border-focus'}>
+                  <Checkbox
+                    id={id + '-border-focus'}
+                    checked={borderVisibility.showInFocus}
+                    onChange={borderVisibility.onFocusChange}
+                  />
+                  {localizeUi('Show border in Focus')}
+                </label>
+              )}
             </div>
           )}
         </section>

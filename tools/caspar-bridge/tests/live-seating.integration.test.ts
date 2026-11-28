@@ -4381,8 +4381,8 @@ it('keeps a linked overlay mask with its picture and artwork through Take, prese
     layout,
     controlLiveLayoutRects(layout, resized),
   );
-  const focusedId = controlLiveLayoutFocusLookId(resized.id, 'overlay');
-  const focusedRects = { overlay: FULL_FRAME };
+  const focusedId = controlLiveLayoutFocusLookId(resized.id, 'base');
+  const legacyFocusId = controlLiveLayoutFocusLookId(resized.id, 'overlay');
   const look = (id: string, name: string, rects: Record<string, typeof BOX>) => ({
     id,
     name,
@@ -4411,17 +4411,23 @@ it('keeps a linked overlay mask with its picture and artwork through Take, prese
   );
   const wide = look(preset.id, preset.name, rects);
   const large = look(resized.id, resized.name, resizedRects);
-  const focus = look(focusedId, 'Focus overlay', focusedRects);
-  const r = await boot({
-    template: {
-      ...info,
-      controlLiveLayout: layout,
-      liveSources: {
-        ...info.liveSources!,
-        defaultLookId: preset.id,
-        looks: [wide, large, focus],
-      },
+  const focus = look(focusedId, 'Focus base', { base: FULL_FRAME });
+  const legacyFocus = look(legacyFocusId, 'Focus overlay', { overlay: FULL_FRAME });
+  const legacyTemplate = {
+    ...info,
+    liveSources: {
+      ...info.liveSources!,
+      defaultLookId: preset.id,
+      looks: [wide, large, focus, legacyFocus],
     },
+  };
+  const currentTemplate = { ...legacyTemplate, controlLiveLayout: layout };
+  const r = await boot({
+    template: currentTemplate,
+    assignments: assign([
+      ['base', 'src-a'],
+      ['overlay', 'src-b'],
+    ]),
     html: PRESET_ARTWORK_FADE_HTML,
   });
 
@@ -4468,8 +4474,75 @@ it('keeps a linked overlay mask with its picture and artwork through Take, prese
     });
   };
   await assertMotion(wide, large, '0.3125 0.3125 0.375 0.375', '0.40625 0.40625 0.1875 0.1875');
-  await assertMotion(large, focus, '0 0 1 1', '0.25 0.25 0.5 0.5');
-  await assertMotion(focus, large, '0.3125 0.3125 0.375 0.375', '0.40625 0.40625 0.1875 0.1875');
+  const assertOverlayRefused = async () => {
+    const before = (await recvLines()).length;
+    expect(await r.setActiveLook('item-1', legacyFocusId, focusMotion)).toMatchObject({
+      ok: false,
+      reason: 'focus-overlay-unavailable',
+    });
+    expect(r.activeLookId('item-1')).toBe(resized.id);
+    expect((await recvLines()).slice(before)).toEqual([]);
+  };
+  const visiblePlates = () =>
+    (r.liveLayers().get('item-1') ?? [])
+      .filter((plate) => plate.held !== true)
+      .map((plate) => plate.sourceId)
+      .sort();
+
+  await assertOverlayRefused();
+  expect(await r.setActiveLook('item-1', focusedId, focusMotion)).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(focusedId);
+  expect(visiblePlates()).toEqual(['base']);
+  expect(await r.setActiveLook('item-1', resized.id, focusMotion)).toEqual({ ok: true });
+  expect(visiblePlates()).toEqual(['base', 'overlay']);
+
+  expect(await r.out('item-1')).toMatchObject({ accepted: true });
+  const saved = retainedFromStackItem(r.stackSnapshot().find(({ itemId }) => itemId === 'item-1')!);
+  expect(await r.remove('item-1')).toMatchObject({ accepted: true });
+  const legacySaved = { ...saved, activeLookId: legacyFocusId };
+  expect(await r.restore([legacySaved])).toMatchObject({ restored: 1 });
+  await assertOverlayRefused();
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  expect(r.activeLookId('item-1')).toBe(resized.id);
+  expect(visiblePlates()).toEqual(['base', 'overlay']);
+
+  // Stage the formerly valid look on the wire before introducing the linked-plate metadata.
+  expect(await r.out('item-1')).toMatchObject({ accepted: true });
+  expect(await r.remove('item-1')).toMatchObject({ accepted: true });
+  expect(r.templateImport(legacyTemplate, PRESET_ARTWORK_FADE_HTML, 1).registered).toBe(true);
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.setActiveLook('item-1', legacyFocusId)).toEqual({ ok: true });
+  expect(visiblePlates()).toEqual(['overlay']);
+
+  const retainedSource = r.templateSourcePut(Buffer.from('linked layout').toString('base64'));
+  expect(retainedSource.stored).toBe(true);
+  const sourceSha256 = retainedSource.sha256!;
+  expect(
+    r.templateImport(
+      { ...currentTemplate, controlLiveLayoutSource: sourceSha256 },
+      PRESET_ARTWORK_FADE_HTML,
+      1,
+      { sourceSha256 },
+    ).registered,
+  ).toBe(true);
+  expect(r.activeLookId('item-1')).toBe(legacyFocusId);
+  expect(visiblePlates()).toEqual(['overlay']);
+
+  const beforeRecovery = (await recvLines()).length;
+  expect(
+    await r.setActiveLook('item-1', focusedId, focusMotion, {
+      mode: 'push',
+      direction: 'left',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(focusedId);
+  expect(visiblePlates()).toEqual(['base']);
+  const recovery = (await recvLines()).slice(beforeRecovery);
+  const controls = recovery.flatMap((line) => nativeBorderControl(line) ?? []);
+  expect(controls.some((control) => control.look === focusedId)).toBe(true);
+  expect(controls.every((control) => control.frameTransition == null)).toBe(true);
+  expect(recovery.some((line) => / [1-9]\d* easeinoutquad DEFER$/.test(line))).toBe(false);
 });
 
 it('seats inputs for a future overlapping Look without replaying them when that Look is entered', async () => {

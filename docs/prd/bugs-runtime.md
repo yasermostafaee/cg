@@ -14315,3 +14315,15 @@ configured feedback language. Translate from structured outcomes and interpolate
 names, layer numbers, source names, and paths afterward. Keep untranslated wire diagnostics
 in technical details or the audit record. Use a localized summary when the response has no
 recognized operator wording.
+
+## [~] B-460 — Keep linked overlays out of independent Focus ⟨priority: high — owner, 2026-11-28⟩ — `openspec/changes/author-live-layouts/`
+
+**Repro.** In build `f5ccfa6a`, load a preset with a linked masked overlay. Its plate number
+appears in the Focus strip. Taking that Focus shows the masked overlay alone. A later Focus
+can fail with a preset effect rollback while the overlay stays on Programme.
+
+**Expected.** Focus lists only independent plates in the editor, Preview and Programme.
+Switching between base Focus views and returning to the authored preset works with the
+linked overlay. Previously published overlay-only Focus targets are rejected before taking
+Programme. A row already showing a legacy overlay Focus can leave it by an explicit switch
+or Return. In plate settings, Overlay on follows Focus label.

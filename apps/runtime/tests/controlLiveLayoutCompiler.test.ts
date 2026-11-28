@@ -133,6 +133,11 @@ describe('CG Control authored live layouts', () => {
     expect(pair?.rects[overlayId]).toBeUndefined();
     expect(pair?.allowOperatorAutoLayout).toBe(true);
     expect(Object.keys(focus?.rects ?? {})).toEqual([baseId]);
+    for (const preset of layout.presets) {
+      expect(
+        carrier.looks?.some(({ id }) => id === controlLiveLayoutFocusLookId(preset.id, overlayId)),
+      ).toBe(false);
+    }
     const baseIn = (lookId: string) =>
       scene.compositions
         ?.find(({ id }) => id === `layout-look-${lookId}-contents`)

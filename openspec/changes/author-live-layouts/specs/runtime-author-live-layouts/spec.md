@@ -197,3 +197,16 @@ base whenever the base belongs to an authored preset, without using a separate g
 - **AND** the separate Focus action keeps its established solo behaviour
 - **AND** when moving between looks, the mask, border, title and artwork move with their plate
   through the transition.
+
+#### Scenario: Focus a preset containing a linked overlay
+
+- **WHEN** a preset has a base plate with one or more linked overlays
+- **THEN** Edit live layout, PVW and Programme offer Focus only for independent plates
+- **AND** Return restores the preset with its linked overlays
+- **AND** Overlay on appears under Focus label when editing a plate.
+
+#### Scenario: Leave a legacy overlay-only Focus
+
+- **WHEN** a layout package compiled on an older version contains an independent overlay Focus
+- **THEN** CG Bridge refuses a request to enter that look without changing Programme
+- **AND** an existing on-air row in that look can switch to an independent Focus or return to the originating preset.

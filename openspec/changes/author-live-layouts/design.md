@@ -78,5 +78,8 @@ author preview and preset thumbnails use the same derived rectangles and paint o
 Linking an existing plate keeps its current placement when it lies within the chosen base.
 The plate settings can adjust the relative rectangle. Removing the linkage makes the
 plate independent and preserves its displayed placement in the affected presets.
-Explicit Focus continues to show a single selected plate. Generated looks with overlays
-keep their authored arrangement when the operator views them.
+Explicit Focus shows an independent plate on its own. Compile Focus destinations only for
+independent plates. Older packages can contain an overlay-only Focus. Its identifier still
+resolves for the originating preset and current Programme geometry, and the operator can
+switch away from it. A new command to enter that destination is refused before output changes.
+The plate settings place Overlay on immediately below Focus label.

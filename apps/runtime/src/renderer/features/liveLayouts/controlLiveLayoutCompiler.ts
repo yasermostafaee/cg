@@ -730,6 +730,7 @@ export function buildControlLiveLayoutScene(
     const focusRect = controlLiveLayoutFocusRect(layout, preset);
     if (focusRect === undefined) throw new Error('Focus margins must fit within the output.');
     frames.forEach((frame, index) => {
+      if (frame.overlay !== undefined) return;
       addLook(
         controlLiveLayoutFocusLookId(preset.id, frame.id),
         'Focus · Plate ' + (index + 1),

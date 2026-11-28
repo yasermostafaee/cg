@@ -5537,6 +5537,8 @@ relative to the base once, with the upper plate's existing independent source an
 - WHEN the base plate is moved or resized in another preset THEN the overlay follows its relative placement and keeps the same mask.
 - WHEN the base plate is omitted from a preset THEN its overlays are omitted automatically.
 - WHEN the layout is saved, reopened or rehearsed THEN the link, source, mask, placement and foreground order agree with Programme.
-- WHEN the operator invokes Focus THEN the existing solo Focus view remains available.
+- WHEN the operator invokes Focus THEN only independent plates are offered for a solo view. A linked overlay returns with its base on Return to the preset.
+- WHEN an existing row is showing a legacy overlay-only Focus THEN the operator can return to its original preset or select a valid Focus.
+- WHEN the operator edits a plate THEN Overlay on is below Focus label.
 - WHEN a plate moves or resizes during a preset or Focus transition THEN its mask, border,
   title and attached artwork travel with it through the transition.

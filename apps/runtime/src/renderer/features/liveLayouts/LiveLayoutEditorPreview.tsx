@@ -567,7 +567,7 @@ export function LiveLayoutEditorPreview({
   const raster = layout.resolution;
   const full: LiveSourceRect = { x: 0, y: 0, width: raster.width, height: raster.height };
   const frameOrder = controlLiveLayoutPresetFrameIds(preset);
-  const focusOrder = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
+  const visiblePresetFrames = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
   const editorFrames = controlLiveLayoutPaintFrames(layout).map((input) => {
     const number = String(layout.frames.indexOf(input) + 1);
     const alias = input.focusAlias?.trim();
@@ -575,14 +575,14 @@ export function LiveLayoutEditorPreview({
       input,
       number,
       position: frameOrder.indexOf(input.id) + 1,
-      focusPosition: focusOrder.indexOf(input.id) + 1,
       focusLabel: alias || number,
       focusName: alias
         ? localizeUi('Focus plate {number}: {alias}', { number, alias })
         : localizeUi('Focus plate {number}', { number }),
     };
   });
-  const soloFrameId = focusOrder.length === 1 ? focusOrder[0] : undefined;
+  const focusOptions = editorFrames.filter(({ input }) => input.overlay === undefined);
+  const soloFrameId = visiblePresetFrames.length === 1 ? visiblePresetFrames[0] : undefined;
   const activeSingle = focused ?? soloFrameId;
   const visible: Rects =
     focused === undefined
@@ -637,7 +637,7 @@ export function LiveLayoutEditorPreview({
             fromFocus,
             Object.keys(before.rects).length,
           ),
-          controlLiveLayoutTitleHidden(preset, id, toFocus, focusOrder.length),
+          controlLiveLayoutTitleHidden(preset, id, toFocus, visiblePresetFrames.length),
         ],
         [
           '[data-shot-border]',
@@ -814,7 +814,7 @@ export function LiveLayoutEditorPreview({
             preset,
             id,
             focused !== undefined,
-            focusOrder.length,
+            visiblePresetFrames.length,
           );
           const borderHidden = controlLiveLayoutBorderHidden(preset, id, focused !== undefined);
           const graphics = controlLiveLayoutFrameAttachments(layout, preset, id);
@@ -946,18 +946,21 @@ export function LiveLayoutEditorPreview({
                   />
                 </div>
               )}
-              {activeSingle === undefined && activeShot && stagePlacementEditor === undefined && (
-                <Button
-                  className="cg-live-layout-focus-action"
-                  variant="neutral"
-                  aria-label={focusName}
-                  title={focusName}
-                  data-layout-focus={id}
-                  onClick={() => onFocus(id)}
-                >
-                  <Icon icon={Maximize2} size={13} /> <IsolatedName>{focusLabel}</IsolatedName>
-                </Button>
-              )}
+              {activeSingle === undefined &&
+                activeShot &&
+                input.overlay === undefined &&
+                stagePlacementEditor === undefined && (
+                  <Button
+                    className="cg-live-layout-focus-action"
+                    variant="neutral"
+                    aria-label={focusName}
+                    title={focusName}
+                    data-layout-focus={id}
+                    onClick={() => onFocus(id)}
+                  >
+                    <Icon icon={Maximize2} size={13} /> <IsolatedName>{focusLabel}</IsolatedName>
+                  </Button>
+                )}
               {activeShot && selectedFrameId === id && placementEditor}
             </div>
           );
@@ -972,17 +975,15 @@ export function LiveLayoutEditorPreview({
           />
         )}
       </div>
-      {activeSingle !== undefined && layout.frames.length > 1 && (
+      {activeSingle !== undefined && focusOptions.length > 1 && (
         <div
           className="cg-live-layout-switch"
           role="group"
           aria-label={localizeUi('Switch focused plate')}
         >
-          {[...editorFrames]
+          {focusOptions
             .sort(
-              (a, b) =>
-                (a.focusPosition || layout.frames.length) -
-                (b.focusPosition || layout.frames.length),
+              (a, b) => (a.position || layout.frames.length) - (b.position || layout.frames.length),
             )
             .map(({ input: { id }, focusLabel, focusName }) => (
               <Button

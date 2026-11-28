@@ -912,6 +912,7 @@ export function LiveLayoutEditor({
   }
 
   function focusFrame(id: string): void {
+    if (!layout.frames.some((frame) => frame.id === id && frame.overlay === undefined)) return;
     setCropEditFrameId(undefined);
     setPlacementEditing(false);
     if (focusId === undefined) {
@@ -1604,6 +1605,53 @@ export function LiveLayoutEditor({
                         <Icon icon={Trash2} size={15} /> {localizeUi('Delete plate')}
                       </Button>
                     </div>
+                    <div className="cg-form-field cg-form-field--inline cg-live-layout-frame-field">
+                      <label htmlFor={`${fieldsId}-input`}>{localizeUi('Input')}</label>
+                      <SourcePicker
+                        id={`${fieldsId}-input`}
+                        aria-label={localizeUi('Plate input')}
+                        channel={channel}
+                        value={frame.sourceId ?? ''}
+                        choices={[{ value: '', label: localizeUi('Unassigned') }]}
+                        onChange={(sourceId) =>
+                          updateFrame(({ sourceId: _old, ...candidate }) =>
+                            sourceId === '' ? candidate : { ...candidate, sourceId },
+                          )
+                        }
+                      />
+                    </div>
+                    <label
+                      className="cg-form-field cg-form-field--inline cg-live-layout-frame-field"
+                      htmlFor={`${fieldsId}-title`}
+                    >
+                      {localizeUi('Title')}
+                      <TextInput
+                        id={`${fieldsId}-title`}
+                        ref={titleInput}
+                        value={frame.title}
+                        dir="auto"
+                        maxLength={120}
+                        onChange={(title) => updateFrame((candidate) => ({ ...candidate, title }))}
+                      />
+                    </label>
+                    <label
+                      className="cg-form-field cg-form-field--inline cg-live-layout-frame-field cg-live-layout-focus-label"
+                      htmlFor={`${fieldsId}-focus-label`}
+                      title={localizeUi('Label on Focus buttons')}
+                    >
+                      {localizeUi('Focus label')}
+                      <TextInput
+                        id={`${fieldsId}-focus-label`}
+                        value={frame.focusAlias ?? ''}
+                        placeholder={String(frameNumber)}
+                        dir="auto"
+                        disabled={overlay !== undefined}
+                        maxLength={CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH}
+                        onChange={(focusAlias) =>
+                          updateFrame((candidate) => ({ ...candidate, focusAlias }))
+                        }
+                      />
+                    </label>
                     {(baseOptions.length > 0 || frame.overlay !== undefined) && (
                       <label className="cg-form-field cg-form-field--inline cg-live-layout-frame-field">
                         {localizeUi('Overlay on')}
@@ -1678,52 +1726,6 @@ export function LiveLayoutEditor({
                         })}
                       </fieldset>
                     )}
-                    <div className="cg-form-field cg-form-field--inline cg-live-layout-frame-field">
-                      <label htmlFor={`${fieldsId}-input`}>{localizeUi('Input')}</label>
-                      <SourcePicker
-                        id={`${fieldsId}-input`}
-                        aria-label={localizeUi('Plate input')}
-                        channel={channel}
-                        value={frame.sourceId ?? ''}
-                        choices={[{ value: '', label: localizeUi('Unassigned') }]}
-                        onChange={(sourceId) =>
-                          updateFrame(({ sourceId: _old, ...candidate }) =>
-                            sourceId === '' ? candidate : { ...candidate, sourceId },
-                          )
-                        }
-                      />
-                    </div>
-                    <label
-                      className="cg-form-field cg-form-field--inline cg-live-layout-frame-field"
-                      htmlFor={`${fieldsId}-title`}
-                    >
-                      {localizeUi('Title')}
-                      <TextInput
-                        id={`${fieldsId}-title`}
-                        ref={titleInput}
-                        value={frame.title}
-                        dir="auto"
-                        maxLength={120}
-                        onChange={(title) => updateFrame((candidate) => ({ ...candidate, title }))}
-                      />
-                    </label>
-                    <label
-                      className="cg-form-field cg-form-field--inline cg-live-layout-frame-field cg-live-layout-focus-label"
-                      htmlFor={`${fieldsId}-focus-label`}
-                      title={localizeUi('Label on Focus buttons')}
-                    >
-                      {localizeUi('Focus label')}
-                      <TextInput
-                        id={`${fieldsId}-focus-label`}
-                        value={frame.focusAlias ?? ''}
-                        placeholder={String(frameNumber)}
-                        dir="auto"
-                        maxLength={CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH}
-                        onChange={(focusAlias) =>
-                          updateFrame((candidate) => ({ ...candidate, focusAlias }))
-                        }
-                      />
-                    </label>
                     {preset !== undefined && framePosition >= 0 && presetFrameIds.length > 1 && (
                       <div className="cg-form-field cg-form-field--inline cg-live-layout-position-picker">
                         <span id={`${fieldsId}-position-label`}>
@@ -1797,25 +1799,27 @@ export function LiveLayoutEditor({
                           />
                           {localizeUi('Show title in preset')}
                         </label>
-                        <label
-                          className="cg-live-layout-toggle"
-                          htmlFor={`${fieldsId}-title-focus`}
-                        >
-                          <Checkbox
-                            id={`${fieldsId}-title-focus`}
-                            checked={!preset.hiddenFocusTitles.includes(frame.id)}
-                            onChange={(show) =>
-                              updatePreset({
-                                hiddenFocusTitles: setVisibility(
-                                  preset.hiddenFocusTitles,
-                                  frame.id,
-                                  show,
-                                ),
-                              })
-                            }
-                          />
-                          {localizeUi('Show title in Focus')}
-                        </label>
+                        {overlay === undefined && (
+                          <label
+                            className="cg-live-layout-toggle"
+                            htmlFor={`${fieldsId}-title-focus`}
+                          >
+                            <Checkbox
+                              id={`${fieldsId}-title-focus`}
+                              checked={!preset.hiddenFocusTitles.includes(frame.id)}
+                              onChange={(show) =>
+                                updatePreset({
+                                  hiddenFocusTitles: setVisibility(
+                                    preset.hiddenFocusTitles,
+                                    frame.id,
+                                    show,
+                                  ),
+                                })
+                              }
+                            />
+                            {localizeUi('Show title in Focus')}
+                          </label>
+                        )}
                       </div>
                     )}
                     <LiveLayoutEditorTexts
@@ -1859,7 +1863,10 @@ export function LiveLayoutEditor({
                           ? undefined
                           : {
                               showInPreset: !controlLiveLayoutBorderHidden(preset, frame.id, false),
-                              showInFocus: !controlLiveLayoutBorderHidden(preset, frame.id, true),
+                              showInFocus:
+                                overlay === undefined
+                                  ? !controlLiveLayoutBorderHidden(preset, frame.id, true)
+                                  : undefined,
                               belongsToPreset: controlLiveLayoutIsFrameInPreset(frame, preset),
                               onPresetChange: (show) =>
                                 updatePreset({

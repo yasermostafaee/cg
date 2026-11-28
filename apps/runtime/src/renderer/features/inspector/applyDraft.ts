@@ -83,7 +83,6 @@ export function applyDraft(
         field: first.label,
         reason: first.line,
       }),
-      { code: first.code },
     );
     return Promise.resolve({ accepted: false, errorCode: first.code });
   }
@@ -333,10 +332,14 @@ async function applyPreviewCropDrafts(
       crop.accept('guide');
       return true;
     }
-    reportCommandError(
-      feedbackProblem(result.message, 'CG Bridge did not confirm the preview framing update.'),
-      { detail: result.message ?? null },
-    );
+    if (result.message === undefined) {
+      reportCommandError(feedback('CG Bridge did not confirm the preview framing update.'));
+    } else {
+      reportCommandError(
+        feedbackProblem(result.message, 'CG Bridge did not confirm the preview framing update.'),
+        { detail: result.message },
+      );
+    }
   } catch (error) {
     reportCommandError(feedbackFailure(error, 'The preview framing update failed.'));
   }

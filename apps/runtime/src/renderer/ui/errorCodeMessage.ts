@@ -108,6 +108,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'upcoming-programs-on-air': 'Stop the row before preparing its upcoming programs.',
   'upcoming-programs-invalid': 'The upcoming program list is not valid for this template.',
   'upcoming-program-media-unavailable': 'The selected program media is unavailable.',
+  'focus-overlay-unavailable':
+    'An overlay follows its base plate and cannot be focused separately.',
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
   // than transient failures, so neither suggests retrying: the answer will not change
   // until the CONFIG does.

@@ -2197,6 +2197,9 @@
     "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.": "شغّل إصدارًا مطابقًا من CG Bridge. تعمل بقية العمليات كالمعتاد، ولم يُرسَل أي أمر إلى CasparCG."
   },
   "feedback": {
+    "An overlay follows its base plate and cannot be focused separately.": "يتبع الإطار المتراكب إطاره الأساسي ولا يمكن التركيز عليه منفردًا.",
+    "The preset effect stopped. The previous preset was restored.": "توقّف تأثير تبديل الإعداد المسبق. استُعيد الإعداد السابق.",
+    "The preset effect could not be confirmed. Check the programme picture.": "تعذّر تأكيد تأثير تبديل الإعداد المسبق. تحقّق من صورة البرنامج.",
     "Plate {number}": "الإطار {number}",
     "For {plates}, no source is assigned.": "لا يوجد مصدر معيّن في {plates}.",
     "The sources assigned to {plates} are no longer available on this station.": "لم تعد المصادر المسندة إلى {plates} متاحةً في هذه المحطة.",

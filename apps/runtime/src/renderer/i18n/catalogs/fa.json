@@ -2197,6 +2197,9 @@
     "Restart the bridge with a matching build. Everything else works normally, and nothing has been sent to CasparCG.": "CG Bridge را با نسخهٔ همسان راه‌اندازی کنید. سایر عملیات عادی است و هیچ فرمانی به CasparCG ارسال نشده است."
   },
   "feedback": {
+    "An overlay follows its base plate and cannot be focused separately.": "قاب رویی به قاب پایه متصل است و فوکوس جداگانه ندارد.",
+    "The preset effect stopped. The previous preset was restored.": "افکت تغییر پریست متوقف شد. پریست قبلی بازگردانی شد.",
+    "The preset effect could not be confirmed. Check the programme picture.": "اجرای افکت تغییر پریست تأیید نشد. تصویر برنامه را بررسی کنید.",
     "Plate {number}": "قاب {number}",
     "For {plates}, no source is assigned.": "منبع {plates} تعیین نشده است.",
     "The sources assigned to {plates} are no longer available on this station.": "منبع انتخاب‌شده برای {plates} دیگر در این ایستگاه در دسترس نیست.",

@@ -370,6 +370,12 @@ test('a masked overlay keeps its relative placement in every preset containing i
       dialog.getByRole('checkbox', { name: `Plate ${number} in preset`, exact: true });
     const overlayOn = (dialog: Locator) =>
       dialog.getByRole('combobox', { name: 'Overlay on', exact: true });
+    const expectOverlayBelowFocusLabel = async (dialog: Locator) => {
+      const focusLabel = dialog.getByRole('textbox', { name: 'Focus label', exact: true });
+      const top = (locator: Locator) =>
+        locator.evaluate((node) => node.getBoundingClientRect().top);
+      expect(await top(overlayOn(dialog))).toBeGreaterThan(await top(focusLabel));
+    };
     const shot = (dialog: Locator, number: number) =>
       dialog.locator(`[data-layout-preview-shot][data-frame-number="${number}"]`);
     const choosePreset = (dialog: Locator, name: string) =>
@@ -446,6 +452,7 @@ test('a masked overlay keeps its relative placement in every preset containing i
     await editor.getByText('Layout effects', { exact: true }).click();
     await editor.getByRole('combobox', { name: 'Motion', exact: true }).selectOption('linear');
     await setNumber(editor.getByLabel('Focus duration (ms)', { exact: true }), '1000');
+    await expectOverlayBelowFocusLabel(editor);
     await overlayOn(editor).selectOption({ label: 'Plate 1' });
     await expect(inPreset(editor, 2)).toBeDisabled();
     await expect(inPreset(editor, 2)).toBeChecked();
@@ -515,10 +522,19 @@ test('a masked overlay keeps its relative placement in every preset containing i
     await expectDecorationsMoveWithPlate();
     await choosePreset(editor, 'Stacked');
     await expectDecorationsMoveWithPlate();
-    await upperPlate.getByRole('button', { name: /^Focus plate 2/ }).click();
-    await expectDecorationsMoveWithPlate();
+    await expect(upperPlate.getByRole('button', { name: /^Focus plate 2/ })).toHaveCount(0);
+    await shot(editor, 1)
+      .getByRole('button', { name: /^Focus plate 1/ })
+      .click();
+    const switchFocus = editor.getByRole('group', { name: 'Switch focused plate' });
+    await expect(switchFocus.getByRole('button', { name: /^Focus plate 2/ })).toHaveCount(0);
+    await switchFocus.getByRole('button', { name: /^Focus plate 3/ }).click();
+    await expect(switchFocus.getByRole('button', { name: /^Focus plate 3/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await editor.getByRole('button', { name: /^Return to / }).click();
-    await expectDecorationsMoveWithPlate();
+    await expectAttachedGeometry(editor, 0.55);
     await choosePreset(editor, 'Stacked');
     await newPreset('Third only');
     await inPreset(editor, 1).uncheck();
@@ -539,6 +555,7 @@ test('a masked overlay keeps its relative placement in every preset containing i
     await choosePreset(restored, 'Manual');
     await editPlate(restored, 2);
     await expect(overlayOn(restored).locator('option:checked')).toHaveText('Plate 1');
+    await expectOverlayBelowFocusLabel(restored);
     await expectAttachedGeometry(restored, 0.55);
     await choosePreset(restored, 'Stacked');
     await expectAttachedGeometry(restored, 0.55);
@@ -582,6 +599,21 @@ test('a masked overlay keeps its relative placement in every preset containing i
     const overlayRect = await rect(overlayPlate);
     expect((overlayRect.x - baseRect.x) / baseRect.width).toBeCloseTo(0.55, 4);
     expect(overlayRect.width / baseRect.width).toBeCloseTo(0.3, 4);
+    const previewFocus = preview.getByRole('group', { name: 'Preview Focus', exact: true });
+    await expect(
+      previewFocus.getByRole('button', { name: /^Focus plate 2 in Preview/ }),
+    ).toHaveCount(0);
+    await previewFocus.getByRole('button', { name: /^Focus plate 1 in Preview/ }).click();
+    await expect(previewFocus.getByRole('button', { name: /^Return to / })).toBeVisible();
+    await expect(
+      previewFocus.getByRole('button', { name: /^Focus plate 2 in Preview/ }),
+    ).toHaveCount(0);
+    await previewFocus.getByRole('button', { name: /^Focus plate 3 in Preview/ }).click();
+    await expect(
+      previewFocus.getByRole('button', { name: /^Focus plate 3 in Preview/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await previewFocus.getByRole('button', { name: /^Return to / }).click();
+    await expect(overlayPlate).toBeVisible();
   } finally {
     await bridge?.close();
     await engine.stop();

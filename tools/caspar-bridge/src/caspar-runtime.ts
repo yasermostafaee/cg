@@ -41,6 +41,7 @@ import {
   LiveRevealRectSchema,
   MAX_PREVIEW_PLATE_CROPS,
   controlLiveLayoutFocusTarget,
+  controlLiveLayoutLegacyOverlayFocus,
   controlLiveLayoutPlateBorder,
   controlLiveLayoutShowFallback,
   controlLiveLayoutSoloTarget,
@@ -5298,6 +5299,7 @@ export class CasparRuntime {
       */
       if (item.activeLookId !== undefined) {
         this.#activeLooks.set(item.itemId, item.activeLookId);
+        if (!isRetainedOnAir(restoredState)) this.#recoverInactiveOverlayFocus(item.itemId);
       }
       /*
         🔴 `TIMING-WIRE-22` (d) — THE PASS TIMING, re-applied HERE for the same reason as its
@@ -6151,6 +6153,7 @@ export class CasparRuntime {
       */
       // `markLayersEmptied` resets only a record with play evidence, so a `loaded` row passes
       // through it untouched and only a row restored ON AIR comes back in the list.
+      this.#recoverInactiveOverlayFocus(itemId);
       emptiedOnAir.add(adoptionKey(slot));
       this.#markDirty(itemId);
     }
@@ -8527,6 +8530,7 @@ export class CasparRuntime {
       );
       return { accepted: false, ...noLooks };
     }
+    this.#recoverInactiveOverlayFocus(itemId);
 
     /*
       §14 (LOOKS) phase 3 — A TAKE IS THE FIRST RECONCILE, AGAINST AN EMPTY PRIOR SET.
@@ -14164,7 +14168,8 @@ export class CasparRuntime {
    */
   #activeLookOf(itemId: string): TemplateLook | undefined {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
-    const carrier = this.#templateOfItem(itemId, templateId)?.liveSources;
+    const template = this.#templateOfItem(itemId, templateId);
+    const carrier = template?.liveSources;
     if (carrier === undefined) return undefined;
     /*
       🔴 `B-151` — THE FALLBACK CHAIN MOVED TO `@cg/shared-ipc`'s `activeLookOf`, and this
@@ -14177,7 +14182,32 @@ export class CasparRuntime {
       the look from one function. What stays here is the only part that is genuinely the
       bridge's: which item, and what this bridge has recorded for it.
     */
-    return activeLookOf(carrier, this.#activeLooks.get(itemId));
+    const selected = this.#activeLooks.get(itemId);
+    const previousOverlayFocus = controlLiveLayoutLegacyOverlayFocus(
+      template?.controlLiveLayout,
+      selected,
+    );
+    return activeLookOf(
+      carrier,
+      previousOverlayFocus !== undefined && !carrier.looks?.some(({ id }) => id === selected)
+        ? previousOverlayFocus.presetId
+        : selected,
+    );
+  }
+
+  /** Restore the originating preset once there is no on-air page to preserve. */
+  #recoverInactiveOverlayFocus(itemId: string): void {
+    const selected = this.#activeLooks.get(itemId);
+    if (selected === undefined) return;
+    const item = this.#reconciler.get(itemId);
+    if (item === null) return;
+    const template = this.#templateOfItem(itemId, item.templateId);
+    const previousOverlayFocus = controlLiveLayoutLegacyOverlayFocus(
+      template?.controlLiveLayout,
+      selected,
+    );
+    if (previousOverlayFocus !== undefined)
+      this.#recordActiveLook(itemId, previousOverlayFocus.presetId);
   }
 
   #pgmCropCandidates(itemId: string): PgmCropCandidate[] {
@@ -19475,6 +19505,14 @@ export class CasparRuntime {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
     const template = this.#templates.getOn(slot.channel, templateId);
+    const layout = template?.controlLiveLayout;
+    if (controlLiveLayoutLegacyOverlayFocus(layout, lookId) !== undefined) {
+      return {
+        ok: false,
+        reason: 'focus-overlay-unavailable',
+        message: 'An overlay follows its base plate and cannot be focused separately.',
+      };
+    }
     const looks = template?.liveSources?.looks ?? [];
     const look = looks.find((l) => l.id === lookId);
     if (look === undefined) {
@@ -19526,14 +19564,17 @@ export class CasparRuntime {
     */
     return this.#withLiveSeatLock(itemId, async () => {
       const previousLookId = this.activeLookId(itemId);
-      const layout = template?.controlLiveLayout;
       const carrier = template?.liveSources;
+      const previousOverlayFocus = controlLiveLayoutLegacyOverlayFocus(layout, previousLookId);
       const fromFocus =
         layout === undefined
           ? templateFocusTarget(carrier, layout, previousLookId)
-          : controlLiveLayoutSoloTarget(layout, previousLookId);
+          : previousOverlayFocus === undefined
+            ? controlLiveLayoutSoloTarget(layout, previousLookId)
+            : undefined;
       const toFocus = templateFocusTarget(carrier, layout, lookId);
-      if (toFocus !== undefined && (fromFocus?.presetId ?? previousLookId) !== toFocus.presetId) {
+      const currentPreset = previousOverlayFocus?.presetId ?? fromFocus?.presetId ?? previousLookId;
+      if (toFocus !== undefined && currentPreset !== toFocus.presetId) {
         return {
           ok: false,
           reason: 'focus-preset-changed',
@@ -19552,32 +19593,36 @@ export class CasparRuntime {
       const authoredSwitch = directFocus ? designerEffects?.switch : undefined;
       const inputOverride = directFocus ? focusInputTransition : undefined;
       const focusSlide =
-        inputOverride === undefined
-          ? (requestedFocusSlide ??
-            (authoredSwitch?.mode === 'push' || authoredSwitch?.mode === 'slide-over'
-              ? { ...authoredSwitch, mode: authoredSwitch.mode }
-              : undefined))
-          : isInputSlideMode(inputOverride.mode)
-            ? { ...inputOverride, mode: inputOverride.mode }
-            : undefined;
+        previousOverlayFocus !== undefined
+          ? undefined
+          : inputOverride === undefined
+            ? (requestedFocusSlide ??
+              (authoredSwitch?.mode === 'push' || authoredSwitch?.mode === 'slide-over'
+                ? { ...authoredSwitch, mode: authoredSwitch.mode }
+                : undefined))
+            : isInputSlideMode(inputOverride.mode)
+              ? { ...inputOverride, mode: inputOverride.mode }
+              : undefined;
       const transition: FrameTransition | undefined =
-        inputOverride === undefined
-          ? (requestedTransition ??
-            (authoredSwitch?.mode === 'cut' || authoredSwitch?.mode === 'fade'
-              ? {
-                  motion: 'cut',
-                  fade: authoredSwitch.mode === 'fade',
-                  durationMs: authoredSwitch.durationMs,
-                }
-              : authoredSwitch?.mode === 'motion' && designerEffects !== undefined
-                ? { ...designerEffects.focus, durationMs: authoredSwitch.durationMs }
-                : designerEffects?.focus) ??
-            (layout === undefined ? authoredLookEffect(look.entered) : undefined))
-          : {
-              motion: 'cut',
-              fade: inputOverride.mode === 'fade',
-              durationMs: inputOverride.durationMs,
-            };
+        previousOverlayFocus !== undefined
+          ? undefined
+          : inputOverride === undefined
+            ? (requestedTransition ??
+              (authoredSwitch?.mode === 'cut' || authoredSwitch?.mode === 'fade'
+                ? {
+                    motion: 'cut',
+                    fade: authoredSwitch.mode === 'fade',
+                    durationMs: authoredSwitch.durationMs,
+                  }
+                : authoredSwitch?.mode === 'motion' && designerEffects !== undefined
+                  ? { ...designerEffects.focus, durationMs: authoredSwitch.durationMs }
+                  : designerEffects?.focus) ??
+              (layout === undefined ? authoredLookEffect(look.entered) : undefined))
+            : {
+                motion: 'cut',
+                fade: inputOverride.mode === 'fade',
+                durationMs: inputOverride.durationMs,
+              };
       const focusDissolve =
         directFocus &&
         focusSlide === undefined &&

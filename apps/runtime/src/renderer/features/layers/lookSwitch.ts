@@ -1,4 +1,5 @@
 import type { MissingPlateSources } from '@cg/shared-ipc';
+import { feedbackLocale } from '../../i18n/locale.js';
 import { refusalFeedback } from '../../ui/errorCodeMessage.js';
 
 /**
@@ -24,8 +25,16 @@ import { refusalFeedback } from '../../ui/errorCodeMessage.js';
  * path: the code's sentence is the FALLBACK. When a missing-source refusal carries
  * plate positions, `lookSwitchBanner` uses them with the selected feedback language.
  */
-export function lookSwitchRefusal(reason: string | undefined, message: string | undefined): string {
-  return refusalFeedback({ code: reason, message }, 'The look switch was not accepted.');
+export function lookSwitchRefusal(
+  reason: string | undefined,
+  message: string | undefined,
+  missingPlateSources?: MissingPlateSources,
+): string {
+  if (feedbackLocale() === 'en' && message?.trim()) return message;
+  return refusalFeedback(
+    { code: reason, message, missingPlateSources },
+    'The look switch was not accepted.',
+  );
 }
 
 /**
@@ -47,10 +56,7 @@ export function lookSwitchBanner(res: {
   readonly refusalOnRow?: true | undefined;
 }): string | null {
   if (res.ok || res.refusalOnRow === true) return null;
-  return refusalFeedback(
-    { code: res.reason, message: res.message, missingPlateSources: res.missingPlateSources },
-    'The look switch was not accepted.',
-  );
+  return lookSwitchRefusal(res.reason, res.message, res.missingPlateSources);
 }
 
 /**

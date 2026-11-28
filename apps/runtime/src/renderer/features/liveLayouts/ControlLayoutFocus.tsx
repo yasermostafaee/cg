@@ -4,6 +4,7 @@ import { CornerUpLeft } from 'lucide-react';
 import {
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
+  controlLiveLayoutPresetFrameIds,
   controlLiveLayoutPresetVisibleFrameIds,
   type ControlLiveLayout,
 } from '@cg/shared-schema';
@@ -56,8 +57,9 @@ export function ControlLayoutFocus({
     layout.presets.find(({ id }) => id === (focus?.presetId ?? current)) ??
     layout.presets.find(({ id }) => id === layout.defaultPresetId);
   if (preset === undefined) return <></>;
-  const presetFrames = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
-  const soloFrame = focus?.frameId ?? (presetFrames.length === 1 ? presetFrames[0] : undefined);
+  const presetFrames = controlLiveLayoutPresetFrameIds(preset);
+  const visibleFrames = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
+  const soloFrame = focus?.frameId ?? (visibleFrames.length === 1 ? visibleFrames[0] : undefined);
   const frameIds =
     soloFrame === undefined
       ? presetFrames
@@ -70,7 +72,7 @@ export function ControlLayoutFocus({
   );
   const options = frameIds.flatMap((id) => {
     const option = frames.get(id);
-    if (option === undefined) return [];
+    if (option === undefined || option.frame.overlay !== undefined) return [];
     const { frame, number } = option;
     const alias = frame.focusAlias?.trim() || undefined;
     const label = frame.title.trim() || localizeUi('Plate {number}', { number });

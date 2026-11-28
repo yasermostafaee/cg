@@ -451,6 +451,7 @@ export function controlLiveLayoutFocusLookId(presetId: string, frameId: string):
   return FOCUS_LOOK_PREFIX + presetId + ':' + frameId;
 }
 
+/** Decode a look ID, including overlay looks already compiled by older versions. */
 export function controlLiveLayoutFocusTarget(
   layout: ControlLiveLayout,
   lookId: string | undefined,
@@ -464,6 +465,19 @@ export function controlLiveLayoutFocusTarget(
   )
     return undefined;
   return { presetId, frameId };
+}
+
+/** Identify an old overlay Focus so a resident look can be left without offering it again. */
+export function controlLiveLayoutLegacyOverlayFocus(
+  layout: ControlLiveLayout | undefined,
+  lookId: string | undefined,
+): { presetId: string; frameId: string } | undefined {
+  if (layout === undefined) return undefined;
+  const target = controlLiveLayoutFocusTarget(layout, lookId);
+  return target !== undefined &&
+    layout.frames.some(({ id, overlay }) => id === target.frameId && overlay !== undefined)
+    ? target
+    : undefined;
 }
 
 /** A single displayed frame, whether selected through Focus or authored as a preset. */
