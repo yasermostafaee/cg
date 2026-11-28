@@ -18,10 +18,12 @@ import {
   controlLiveLayoutBorderHidden,
   controlLiveLayoutFocusRect,
   controlLiveLayoutFrameAttachments,
+  controlLiveLayoutPaintFrames,
   controlLiveLayoutPlateBorder,
   controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
+  controlLiveLayoutPresetVisibleFrameIds,
   controlLiveLayoutTitleHidden,
   fitPictureToBox,
   frameTransitionPhases,
@@ -565,20 +567,22 @@ export function LiveLayoutEditorPreview({
   const raster = layout.resolution;
   const full: LiveSourceRect = { x: 0, y: 0, width: raster.width, height: raster.height };
   const frameOrder = controlLiveLayoutPresetFrameIds(preset);
-  const editorFrames = layout.frames.map((input, index) => {
-    const number = String(index + 1);
+  const focusOrder = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
+  const editorFrames = controlLiveLayoutPaintFrames(layout).map((input) => {
+    const number = String(layout.frames.indexOf(input) + 1);
     const alias = input.focusAlias?.trim();
     return {
       input,
       number,
       position: frameOrder.indexOf(input.id) + 1,
+      focusPosition: focusOrder.indexOf(input.id) + 1,
       focusLabel: alias || number,
       focusName: alias
         ? localizeUi('Focus plate {number}: {alias}', { number, alias })
         : localizeUi('Focus plate {number}', { number }),
     };
   });
-  const soloFrameId = frameOrder.length === 1 ? frameOrder[0] : undefined;
+  const soloFrameId = focusOrder.length === 1 ? focusOrder[0] : undefined;
   const activeSingle = focused ?? soloFrameId;
   const visible: Rects =
     focused === undefined
@@ -622,12 +626,27 @@ export function LiveLayoutEditorPreview({
     const animateDecorations = (shot: HTMLElement, id: string, duration: number): void => {
       if (before.rects[id] === undefined || duration <= 0) return;
       const leaves = visible[id] === undefined;
-      for (const [selector, hidden] of [
-        ['[data-shot-title]', controlLiveLayoutTitleHidden],
-        ['[data-shot-border]', controlLiveLayoutBorderHidden],
+      const fromFocus = before.focused !== undefined;
+      const toFocus = focused !== undefined;
+      for (const [selector, wasHidden, isHidden] of [
+        [
+          '[data-shot-title]',
+          controlLiveLayoutTitleHidden(
+            before.preset,
+            id,
+            fromFocus,
+            Object.keys(before.rects).length,
+          ),
+          controlLiveLayoutTitleHidden(preset, id, toFocus, focusOrder.length),
+        ],
+        [
+          '[data-shot-border]',
+          controlLiveLayoutBorderHidden(before.preset, id, fromFocus),
+          controlLiveLayoutBorderHidden(preset, id, toFocus),
+        ],
       ] as const) {
-        const from = hidden(before.preset, id, before.focused !== undefined) ? 0 : 1;
-        const authored = hidden(preset, id, focused !== undefined) ? 0 : 1;
+        const from = wasHidden ? 0 : 1;
+        const authored = isHidden ? 0 : 1;
         if (from === authored) continue;
         const node = shot.querySelector<HTMLElement>(selector);
         if (typeof node?.animate !== 'function') continue;
@@ -685,6 +704,12 @@ export function LiveLayoutEditorPreview({
       width: raster.width * 0.25,
       height: raster.height * 0.25,
     };
+    const motionLayer = (id: string): number => {
+      const shared = before.rects[id] !== undefined && visible[id] !== undefined;
+      const activeFocus =
+        focused === id || (before.focused === id && before.preset.id === preset.id);
+      return activeFocus || shared ? 3 : visible[id] !== undefined ? 2 : 1;
+    };
     for (const shot of shots) {
       const id = shot.dataset.layoutPreviewShot;
       if (id === undefined || (before.rects[id] === undefined && visible[id] === undefined))
@@ -699,10 +724,12 @@ export function LiveLayoutEditorPreview({
         !shownAfter && effect.exitDirection !== undefined
           ? presetDepartureRect(from, effect.exitDirection, raster)
           : (visible[id] ?? geometry[id] ?? collapsed);
-      const shared = shownBefore && shownAfter;
-      const activeFocus =
-        focused === id || (before.focused === id && before.preset.id === preset.id);
-      const zIndex = activeFocus || shared ? '3' : shownAfter ? '2' : '1';
+      const baseId = layout.frames.find((frame) => frame.id === id)?.overlay?.frameId;
+      // Returning from solo Focus can introduce the overlay while its base is retained.
+      // At the same motion layer the authored DOM order keeps the overlay above the base.
+      const zIndex = String(
+        Math.max(motionLayer(id), baseId === undefined ? 0 : motionLayer(baseId)),
+      );
       const previousFit = before.fits.get(id) ?? DEFAULT_SHOT_FIT;
       const nextFit = fits.get(id) ?? DEFAULT_SHOT_FIT;
       const { keys, duration } = motionKeys(
@@ -783,7 +810,12 @@ export function LiveLayoutEditorPreview({
               : passive?.sourceId === sourceId
                 ? passive
                 : undefined;
-          const titleHidden = controlLiveLayoutTitleHidden(preset, id, focused !== undefined);
+          const titleHidden = controlLiveLayoutTitleHidden(
+            preset,
+            id,
+            focused !== undefined,
+            focusOrder.length,
+          );
           const borderHidden = controlLiveLayoutBorderHidden(preset, id, focused !== undefined);
           const graphics = controlLiveLayoutFrameAttachments(layout, preset, id);
           const graphicWithInput = graphics.find(
@@ -948,7 +980,9 @@ export function LiveLayoutEditorPreview({
         >
           {[...editorFrames]
             .sort(
-              (a, b) => (a.position || layout.frames.length) - (b.position || layout.frames.length),
+              (a, b) =>
+                (a.focusPosition || layout.frames.length) -
+                (b.focusPosition || layout.frames.length),
             )
             .map(({ input: { id }, focusLabel, focusName }) => (
               <Button

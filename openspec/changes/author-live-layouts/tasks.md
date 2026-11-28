@@ -63,3 +63,11 @@
 - [x] Verify Arrange Reset restores the selected preset's factory values and preserves the assigned NDI input and clip. Windows Chromium passed.
 - [x] Windows Chromium decoded both draft plate posters before Play; the existing manual editor and PVW checks also passed.
 - [ ] Record the Linux E2E run.
+
+## Linked plates across presets
+
+- [x] Windows Chromium verified that the masked overlay follows its base through different preset sizes and placements, disappears without the base, and preserves geometry after Save, Edit and PVW Play.
+- [x] Sampled the relative bounds of the mask, border, title and graphic at the start, midpoint and end of preset switches, Focus and Return in Windows Chromium.
+- [x] The compiler round-trip and Bridge AMCP mock verified preset and Focus geometry, independent source bindings, mask and native Programme layer order.
+- [x] The AMCP mock verified matching mixer easing and pacing for plate and mask through a preset resize, Focus and Return, with the corresponding artwork frame motion.
+- [ ] Record the target Playout and carrying Linux results.

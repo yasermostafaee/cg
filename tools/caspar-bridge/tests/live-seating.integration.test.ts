@@ -35,6 +35,7 @@ import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   controlLiveLayoutFocusLookId,
   controlLiveLayoutRects,
+  controlLiveLayoutWithOverlays,
   RetainedStackItemSchema,
   retainedFromStackItem,
   readCgControl,
@@ -4330,6 +4331,145 @@ it('takes an opted-in overlapping layout in authored order and keeps the foregro
       expect.stringMatching(/^CG 1-32 ADD /),
     ]),
   );
+});
+
+it('keeps a linked overlay mask with its picture and artwork through Take, presets and Focus', async () => {
+  const mask = { mode: 'inside' as const, rects: [{ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }] };
+  const preset = {
+    id: 'panel',
+    name: 'Panel',
+    frameIds: ['base'],
+    arrangement: 'custom' as const,
+    customRects: { base: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 } },
+    horizontalGap: 0,
+    verticalGap: 0,
+    hiddenTitles: [],
+    hiddenFocusTitles: [],
+    reverse: false,
+  };
+  const resized = {
+    ...preset,
+    id: 'resized',
+    name: 'Resized',
+    customRects: { base: { x: 0.125, y: 0.125, width: 0.75, height: 0.75 } },
+  };
+  const layout: ControlLiveLayout = {
+    id: 'lower-third',
+    name: 'Linked overlay',
+    resolution: SCENE,
+    frameRate: 25,
+    frames: [
+      {
+        id: 'overlay',
+        title: 'Overlay',
+        sourceId: 'src-b',
+        overlay: {
+          frameId: 'base',
+          rect: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+        },
+        liveMask: mask,
+      },
+      { id: 'base', title: 'Base', sourceId: 'src-a' },
+    ],
+    presets: [preset, resized],
+    defaultPresetId: preset.id,
+    background: { kind: 'color', color: '#000000' },
+    effects: structuredClone(CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS),
+  };
+  const rects = controlLiveLayoutWithOverlays(layout, controlLiveLayoutRects(layout, preset));
+  const resizedRects = controlLiveLayoutWithOverlays(
+    layout,
+    controlLiveLayoutRects(layout, resized),
+  );
+  const focusedId = controlLiveLayoutFocusLookId(resized.id, 'overlay');
+  const focusedRects = { overlay: FULL_FRAME };
+  const look = (id: string, name: string, rects: Record<string, typeof BOX>) => ({
+    id,
+    name,
+    entered: { mode: 'cut' as const },
+    rects,
+    platePaintOrder: Object.keys(rects),
+    transitionPaintOrder: Object.keys(rects),
+    transitionFrames: Object.fromEntries(
+      Object.keys(rects).map((idOfPlate) => [
+        idOfPlate,
+        {
+          frameKey: id + '/' + idOfPlate,
+          elementId: 'el-' + idOfPlate,
+          artworkId: 'art-' + idOfPlate,
+        },
+      ]),
+    ),
+    transitionDepartureGroups: Object.fromEntries(
+      Object.keys(rects).map((idOfPlate) => [id + '/' + idOfPlate, [idOfPlate]]),
+    ),
+    masks: { overlay: mask },
+  });
+  const info = template(
+    Object.entries(rects).map(([id, rect]) => ({ id, rect })),
+    true,
+  );
+  const wide = look(preset.id, preset.name, rects);
+  const large = look(resized.id, resized.name, resizedRects);
+  const focus = look(focusedId, 'Focus overlay', focusedRects);
+  const r = await boot({
+    template: {
+      ...info,
+      controlLiveLayout: layout,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: preset.id,
+        looks: [wide, large, focus],
+      },
+    },
+    html: PRESET_ARTWORK_FADE_HTML,
+  });
+
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await recvLines()).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/^PLAY 1-30 "route:\/\/2"/),
+      expect.stringMatching(/^PLAY 1-31 "route:\/\/3"/),
+      'MIXER 1-30 CLIP 0.25 0.25 0.5 0.5 DEFER',
+      'MIXER 1-31 CLIP 0.4375 0.4375 0.125 0.125 DEFER',
+      expect.stringMatching(/^CG 1-32 ADD /),
+    ]),
+  );
+
+  const assertMotion = async (
+    from: ReturnType<typeof look>,
+    to: ReturnType<typeof look>,
+    fill: string,
+    clip: string,
+  ) => {
+    const mark = (await recvLines()).length;
+    expect(await r.setActiveLook('item-1', to.id, focusMotion)).toEqual({ ok: true });
+    const lines = (await recvLines()).slice(mark);
+    const move = lines.findIndex(
+      (line) =>
+        line.startsWith('MIXER 1-31 FILL ' + fill + ' ') &&
+        / [1-9]\d* easeinoutquad DEFER$/.test(line),
+    );
+    expect(move).toBeGreaterThanOrEqual(0);
+    const pacing = lines[move]!.match(/ [1-9]\d* easeinoutquad DEFER$/)![0];
+    const commit = 'MIXER 1 COMMIT';
+    const batch = lines.slice(lines.lastIndexOf(commit, move) + 1, lines.indexOf(commit, move));
+    expect(batch).toContain('MIXER 1-31 CLIP ' + clip + pacing);
+    const artworkFrames = lines.flatMap(
+      (line) => nativeBorderControl(line)?.frameTransition?.frames ?? [],
+    );
+    expect(artworkFrames).toContainEqual({
+      frameKey: from.id + '/overlay',
+      lookId: from.id,
+      from: from.rects.overlay,
+      to: to.rects.overlay,
+      fromOpacity: 1,
+      toOpacity: 1,
+    });
+  };
+  await assertMotion(wide, large, '0.3125 0.3125 0.375 0.375', '0.40625 0.40625 0.1875 0.1875');
+  await assertMotion(large, focus, '0 0 1 1', '0.25 0.25 0.5 0.5');
+  await assertMotion(focus, large, '0.3125 0.3125 0.375 0.375', '0.40625 0.40625 0.1875 0.1875');
 });
 
 it('seats inputs for a future overlapping Look without replaying them when that Look is entered', async () => {

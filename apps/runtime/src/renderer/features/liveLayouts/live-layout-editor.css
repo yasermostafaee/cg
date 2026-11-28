@@ -186,6 +186,19 @@
   color: var(--r-accent);
   visibility: hidden;
 }
+.cg-live-layout-overlay-position {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--r-space-2);
+  min-width: 0;
+  padding: var(--r-space-2);
+  border: 1px solid var(--r-border-soft);
+  border-radius: var(--r-radius-sm);
+}
+.cg-live-layout-overlay-position legend {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+}
 
 [aria-pressed='true'] > .cg-live-layout-selection-mark {
   visibility: visible;

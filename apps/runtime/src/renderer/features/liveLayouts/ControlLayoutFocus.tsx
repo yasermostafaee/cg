@@ -4,7 +4,7 @@ import { CornerUpLeft } from 'lucide-react';
 import {
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
-  controlLiveLayoutPresetFrameIds,
+  controlLiveLayoutPresetVisibleFrameIds,
   type ControlLiveLayout,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
@@ -56,7 +56,7 @@ export function ControlLayoutFocus({
     layout.presets.find(({ id }) => id === (focus?.presetId ?? current)) ??
     layout.presets.find(({ id }) => id === layout.defaultPresetId);
   if (preset === undefined) return <></>;
-  const presetFrames = controlLiveLayoutPresetFrameIds(preset);
+  const presetFrames = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
   const soloFrame = focus?.frameId ?? (presetFrames.length === 1 ? presetFrames[0] : undefined);
   const frameIds =
     soloFrame === undefined

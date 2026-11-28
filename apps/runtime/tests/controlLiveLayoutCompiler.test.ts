@@ -70,6 +70,79 @@ function layoutFixture(): ControlLiveLayout {
 }
 
 describe('CG Control authored live layouts', () => {
+  it('compiles an independently masked linked plate above its base without a grid seat', async () => {
+    const baseline = layoutFixture();
+    const baseId = 'frame-anchor';
+    const overlayId = 'frame-overlay';
+    const single: ControlLiveLayoutPreset = {
+      ...baseline.presets[0]!,
+      id: 'preset-base',
+      name: 'Base and overlay',
+      frameIds: [baseId],
+      hiddenTitles: [],
+      hiddenFocusTitles: [baseId],
+    };
+    const mask: LivePlateMask = {
+      mode: 'inside',
+      rects: [{ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }],
+    };
+    const layout: ControlLiveLayout = {
+      ...baseline,
+      frames: [
+        {
+          id: overlayId,
+          title: 'Overlay',
+          sourceId: 'overlay-clip',
+          liveMask: mask,
+          overlay: {
+            frameId: baseId,
+            rect: { x: 0.125, y: 0.25, width: 0.5, height: 0.5 },
+          },
+        },
+        ...baseline.frames,
+      ],
+      presets: [...baseline.presets, single],
+    };
+    const bytes = await compileControlLiveLayout(layout);
+    const { scene } = await unpack(bytes);
+    const carrier = buildTemplateLiveSources(scene);
+    const panel = carrier.looks?.find(({ id }) => id === layout.defaultPresetId);
+    const pair = carrier.looks?.find(({ id }) => id === 'preset-pair');
+    const focus = carrier.looks?.find(
+      ({ id }) => id === controlLiveLayoutFocusLookId(layout.defaultPresetId, baseId),
+    );
+    const base = controlLiveLayoutRects(baseline, baseline.presets[0]!)[baseId]!;
+
+    expect(panel?.rects[baseId]).toEqual({
+      x: expect.closeTo(base.x, 8),
+      y: expect.closeTo(base.y, 8),
+      width: expect.closeTo(base.width, 8),
+      height: expect.closeTo(base.height, 8),
+    });
+    expect(panel?.rects[overlayId]).toEqual({
+      x: expect.closeTo(base.x + base.width * 0.125, 8),
+      y: expect.closeTo(base.y + base.height * 0.25, 8),
+      width: expect.closeTo(base.width * 0.5, 8),
+      height: expect.closeTo(base.height * 0.5, 8),
+    });
+    expect(panel?.platePaintOrder).toEqual([baseId, overlayId, 'frame-left', 'frame-right']);
+    expect(panel?.masks?.[overlayId]).toEqual(mask);
+    expect(panel?.masks?.[baseId]).toBeUndefined();
+    expect(panel?.allowOperatorAutoLayout).toBe(false);
+    expect(carrier.sources.filter(({ sourceId }) => sourceId === overlayId)).toHaveLength(1);
+    expect(pair?.rects[overlayId]).toBeUndefined();
+    expect(pair?.allowOperatorAutoLayout).toBe(true);
+    expect(Object.keys(focus?.rects ?? {})).toEqual([baseId]);
+    const baseIn = (lookId: string) =>
+      scene.compositions
+        ?.find(({ id }) => id === `layout-look-${lookId}-contents`)
+        ?.layers[0]?.children.find(({ id }) => id === `instance-${baseId}`);
+    expect(baseIn(single.id)).toBeDefined();
+    expect(baseIn(single.id)).not.toHaveProperty('hiddenTextIds');
+    expect(baseIn(controlLiveLayoutFocusLookId(single.id, baseId))).toHaveProperty('hiddenTextIds');
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+  });
+
   it('keeps legacy plates transparent on Programme and applies authored fallback per plate', async () => {
     const layout = layoutFixture();
     const [bars, color, legacy] = layout.frames;

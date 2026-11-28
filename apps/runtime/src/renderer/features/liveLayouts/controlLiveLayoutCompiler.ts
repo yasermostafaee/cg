@@ -14,12 +14,14 @@ import {
   controlLiveLayoutFocusRect,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
+  controlLiveLayoutPaintFrames,
   controlLiveLayoutPlateBorder,
   controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutRects,
   controlLiveLayoutShowFallback,
   controlLiveLayoutTitleHidden,
+  controlLiveLayoutWithOverlays,
   liveRevealSceneRect,
   requiredRuntimeVersionForScene,
   type AssetEntry,
@@ -588,6 +590,7 @@ export function buildControlLiveLayoutScene(
 ): Scene {
   const layout = ControlLiveLayoutSchema.parse(authored);
   const { resolution, frames } = layout;
+  const paintFrames = controlLiveLayoutPaintFrames(layout);
   const fullFrame = { x: 0, y: 0, ...resolution };
   const allAttachments = controlLiveLayoutAttachments(layout);
   const sharedAttachmentIds = (layout.frameAttachments ?? []).map(({ id }) => id);
@@ -633,7 +636,8 @@ export function buildControlLiveLayoutScene(
     const instanceId = 'layout-look-' + id;
     const plateFits: Record<string, LiveFitMode> = {};
     const plateCropFocuses: Record<string, LiveCropFocus> = {};
-    const children = frames.flatMap((frame, index): CompositionElement[] => {
+    const visibleFrameCount = Object.keys(rects).length;
+    const children = paintFrames.flatMap((frame, index): CompositionElement[] => {
       const rect = rects[frame.id];
       if (rect === undefined) return [];
       const fit = controlLiveLayoutPlateFit(preset, frame);
@@ -669,7 +673,12 @@ export function buildControlLiveLayoutScene(
         const cropFocus = controlLiveLayoutPlateCropFocus(preset, frame.id);
         if (cropFocus !== undefined) plateCropFocuses[frame.id] = cropFocus;
       }
-      const hiddenTextIds = controlLiveLayoutTitleHidden(preset, frame.id, focused)
+      const hiddenTextIds = controlLiveLayoutTitleHidden(
+        preset,
+        frame.id,
+        focused,
+        visibleFrameCount,
+      )
         ? frameCompositions
             .get(frame.id)
             ?.layers[0]?.children.flatMap((element) =>
@@ -704,14 +713,20 @@ export function buildControlLiveLayoutScene(
       name,
       instanceId,
       entered: CUT_LOOK_TRANSITION,
-      allowOperatorAutoLayout: true,
+      allowOperatorAutoLayout: focused || visibleFrameCount === preset.frameIds.length,
       ...(Object.keys(plateFits).length > 0 && { plateFits }),
       ...(Object.keys(plateCropFocuses).length > 0 && { plateCropFocuses }),
     });
   };
 
   for (const preset of layout.presets) {
-    addLook(preset.id, preset.name, controlLiveLayoutRects(layout, preset), preset, false);
+    addLook(
+      preset.id,
+      preset.name,
+      controlLiveLayoutWithOverlays(layout, controlLiveLayoutRects(layout, preset)),
+      preset,
+      false,
+    );
   }
   for (const preset of layout.presets) {
     const focusRect = controlLiveLayoutFocusRect(layout, preset);

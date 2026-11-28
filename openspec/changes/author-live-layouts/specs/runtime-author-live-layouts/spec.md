@@ -177,3 +177,23 @@ command.
 - **WHEN** the operator edits gaps, margins, aspect, fit or custom placement and selects Reset to defaults in Arrange
 - **THEN** the selected preset returns to the standard arrangement for its plate count, with the standard gaps, margins, fit and aspect
 - **AND** the layout retains the selected preset's sources, artwork and plate-specific settings.
+
+### Requirement: A linked overlay follows a base plate in all authored presets
+
+The layout SHALL store a linked plate's base and relative rectangle with that plate. Its source
+and mask SHALL remain independently editable. A linked plate SHALL be composited above the
+base whenever the base belongs to an authored preset, without using a separate grid slot.
+
+#### Scenario: Link an already placed and masked plate
+
+- **WHEN** the operator places an upper plate inside a base plate, adds a mask and selects that base in Overlay on
+- **THEN** the current relative rectangle and mask carry to each preset with the base, including one-base presets
+- **AND** a preset without that base does not show the upper plate.
+
+#### Scenario: Save, rehearse and play a linked overlay
+
+- **WHEN** the operator saves the layout and switches between presets using the base plate
+- **THEN** Edit live layout, PVW and Programme use the same placement and foreground order with two independent sources
+- **AND** the separate Focus action keeps its established solo behaviour
+- **AND** when moving between looks, the mask, border, title and artwork move with their plate
+  through the transition.

@@ -335,6 +335,259 @@ test('live layout settings tabs keep preset diagrams, count-based arrangements a
   }
 });
 
+test('a masked overlay keeps its relative placement in every preset containing its base plate', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000);
+  const directory = testInfo.outputPath('linked-overlay-bridge');
+  fs.mkdirSync(directory, { recursive: true });
+  const engine = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+  let bridge: BridgeHandle | undefined;
+  try {
+    bridge = await createBridge({
+      port: 0,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: engine.amcpPort, oscPort: 0 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      fixedLayers: { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } },
+      sourceCatalog: catalog,
+      stackPath: path.join(directory, 'stack.json'),
+      templatesDir: path.join(directory, 'templates'),
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addInitScript((url) => {
+      Object.assign(window, { __CG_BRIDGE_URL__: url, __CG_SPLASH_DISABLED__: true });
+    }, bridge.url);
+    await page.goto('/');
+    await openNewLiveLayout(page);
+    const editor = page.getByRole('dialog', { name: 'New live layout', exact: true });
+
+    const editPlate = (dialog: Locator, number: number) =>
+      dialog.getByRole('button', { name: `Edit plate ${number}`, exact: true }).click();
+    const inPreset = (dialog: Locator, number: number) =>
+      dialog.getByRole('checkbox', { name: `Plate ${number} in preset`, exact: true });
+    const overlayOn = (dialog: Locator) =>
+      dialog.getByRole('combobox', { name: 'Overlay on', exact: true });
+    const shot = (dialog: Locator, number: number) =>
+      dialog.locator(`[data-layout-preview-shot][data-frame-number="${number}"]`);
+    const choosePreset = (dialog: Locator, name: string) =>
+      dialog
+        .getByRole('group', { name: 'Presets', exact: true })
+        .getByRole('button', { name, exact: true })
+        .click();
+    const newPreset = async (name: string) => {
+      await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
+      await editor.getByRole('textbox', { name: 'Preset name', exact: true }).fill(name);
+    };
+    const setNumber = async (field: Locator, value: string) => {
+      await field.fill(value);
+      await field.press('Tab');
+    };
+    const rect = (frame: Locator) =>
+      frame.evaluate((node: HTMLElement) => {
+        const { left, top, width, height } = node.style;
+        return {
+          x: Number.parseFloat(left),
+          y: Number.parseFloat(top),
+          width: Number.parseFloat(width),
+          height: Number.parseFloat(height),
+        };
+      });
+    const expectAttachedGeometry = async (dialog: Locator, offset: number) => {
+      await expect(shot(dialog, 1)).toHaveAttribute('aria-hidden', 'false');
+      await expect(shot(dialog, 2)).toHaveAttribute('aria-hidden', 'false');
+      const lower = await rect(shot(dialog, 1));
+      const upper = await rect(shot(dialog, 2));
+      expect((upper.x - lower.x) / lower.width).toBeCloseTo(offset, 4);
+      expect((upper.y - lower.y) / lower.height).toBeCloseTo(0.1, 4);
+      expect(upper.width / lower.width).toBeCloseTo(0.3, 4);
+      expect(upper.height / lower.height).toBeCloseTo(0.4, 4);
+      const mask = shot(dialog, 2).locator('.cg-live-layout-shot-placeholder');
+      await expect(mask).toHaveCount(1);
+      expect((await rect(mask)).width).toBeCloseTo(50, 4);
+      expect((await rect(mask)).height).toBeCloseTo(50, 4);
+      return lower;
+    };
+
+    await editor.getByRole('textbox', { name: 'Layout name', exact: true }).fill('Linked inset');
+    for (let i = 0; i < 3; i++) {
+      await editor.getByRole('button', { name: 'Add plate', exact: true }).click();
+    }
+    await newPreset('Manual');
+    const arrangement = editor.getByRole('group', { name: 'Arrangement', exact: true });
+    await arrangement.getByRole('button', { name: 'Custom', exact: true }).click();
+    const numeric = editor.getByRole('group', { name: 'Plate position and size (px)' });
+    const setPlateRect = async (number: number, values: [string, string, string, string]) => {
+      await editPlate(editor, number);
+      for (const [i, key] of ['X', 'Y', 'Width', 'Height'].entries()) {
+        await setNumber(numeric.getByLabel(key, { exact: true }), values[i]!);
+      }
+    };
+    await setPlateRect(1, ['0', '0', '960', '540']);
+    await setPlateRect(2, ['576', '54', '288', '216']);
+    await editor.getByRole('textbox', { name: 'Title', exact: true }).fill('Inset title');
+    await editor.getByText('Advanced plate controls', { exact: true }).click();
+    await editor.getByRole('button', { name: 'Add mask window', exact: true }).click();
+    await setNumber(editor.getByLabel('Border width (px)', { exact: true }), '12');
+    await editor.getByText('Plate graphics', { exact: true }).click();
+    const [graphicPicker] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      editor.getByRole('button', { name: 'Add .vcg graphic', exact: true }).click(),
+    ]);
+    await graphicPicker.setFiles({
+      name: 'inset-graphic.vcg',
+      mimeType: 'application/zip',
+      buffer: Buffer.from(await frameGraphic()),
+    });
+    const upperPlate = shot(editor, 2);
+    await expect(upperPlate.locator('[data-layout-frame-graphic]')).toBeVisible();
+    await editor.getByText('Layout effects', { exact: true }).click();
+    await editor.getByRole('combobox', { name: 'Motion', exact: true }).selectOption('linear');
+    await setNumber(editor.getByLabel('Focus duration (ms)', { exact: true }), '1000');
+    await overlayOn(editor).selectOption({ label: 'Plate 1' });
+    await expect(inPreset(editor, 2)).toBeDisabled();
+    await expect(inPreset(editor, 2)).toBeChecked();
+    await expectAttachedGeometry(editor, 0.6);
+    const relative = editor.getByRole('group', { name: 'Overlay position (%)', exact: true });
+    await expect(relative.getByLabel('X', { exact: true })).toHaveValue('60');
+    await setNumber(relative.getByLabel('X', { exact: true }), '55');
+    const manualLower = await expectAttachedGeometry(editor, 0.55);
+
+    await newPreset('Stacked');
+    await arrangement.getByRole('button', { name: 'Top and bottom', exact: true }).click();
+    const stackedLower = await expectAttachedGeometry(editor, 0.55);
+    expect(stackedLower).not.toEqual(manualLower);
+
+    async function expectDecorationsMoveWithPlate() {
+      const sample = await upperPlate.evaluate((plate) => {
+        const animation = plate.getAnimations().find(({ effect }) => {
+          if (!(effect instanceof KeyframeEffect)) return false;
+          const keys = effect.getKeyframes();
+          return keys[0]?.left !== keys.at(-1)?.left || keys[0]?.top !== keys.at(-1)?.top;
+        });
+        if (animation?.effect === null || animation === undefined)
+          throw new Error('Missing upper-plate movement');
+        const duration = Number(animation.effect.getTiming().duration);
+        const children = [
+          '.cg-live-layout-shot-placeholder',
+          '[data-shot-border]',
+          '.cg-live-layout-shot-title',
+          '[data-layout-frame-graphic]',
+        ].map((selector) => {
+          const child = plate.querySelector(selector);
+          if (child === null) throw new Error('Missing decoration: ' + selector);
+          return child;
+        });
+        animation.pause();
+        const samples = [0, 0.5, 1].map((fraction) => {
+          animation.currentTime = duration * fraction;
+          const frame = plate.getBoundingClientRect();
+          return {
+            x: frame.x,
+            y: frame.y,
+            decorations: children.map((child) => {
+              const rect = child.getBoundingClientRect();
+              return [
+                (rect.x - frame.x) / frame.width,
+                (rect.y - frame.y) / frame.height,
+                rect.width / frame.width,
+                rect.height / frame.height,
+              ];
+            }),
+          };
+        });
+        animation.finish();
+        return samples;
+      });
+      const [start, across, end] = sample;
+      expect(Math.hypot(across!.x - start!.x, across!.y - start!.y)).toBeGreaterThan(1);
+      expect(Math.hypot(across!.x - end!.x, across!.y - end!.y)).toBeGreaterThan(1);
+      for (const [index, values] of start!.decorations.entries()) {
+        for (const [axis, startValue] of values.entries()) {
+          expect(across!.decorations[index]![axis]).toBeCloseTo(startValue, 2);
+          expect(end!.decorations[index]![axis]).toBeCloseTo(startValue, 2);
+        }
+      }
+    }
+    await choosePreset(editor, 'Manual');
+    await expectDecorationsMoveWithPlate();
+    await choosePreset(editor, 'Stacked');
+    await expectDecorationsMoveWithPlate();
+    await upperPlate.getByRole('button', { name: /^Focus plate 2/ }).click();
+    await expectDecorationsMoveWithPlate();
+    await editor.getByRole('button', { name: /^Return to / }).click();
+    await expectDecorationsMoveWithPlate();
+    await choosePreset(editor, 'Stacked');
+    await newPreset('Third only');
+    await inPreset(editor, 1).uncheck();
+    await expect(inPreset(editor, 2)).toBeDisabled();
+    await expect(inPreset(editor, 2)).not.toBeChecked();
+    await expect(shot(editor, 2).and(page.locator('[aria-hidden="false"]'))).toHaveCount(0);
+    await expect(shot(editor, 3)).toHaveAttribute('aria-hidden', 'false');
+
+    await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
+    await expect(editor).toBeHidden();
+    const library = page.getByRole('dialog', { name: 'Templates · CH 1', exact: true });
+    if (!(await library.isVisible())) {
+      await page.getByRole('button', { name: 'Open templates', exact: true }).click();
+    }
+    await library.getByRole('button', { name: 'Select Linked inset', exact: true }).click();
+    await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    const restored = page.getByRole('dialog', { name: 'Edit live layout', exact: true });
+    await choosePreset(restored, 'Manual');
+    await editPlate(restored, 2);
+    await expect(overlayOn(restored).locator('option:checked')).toHaveText('Plate 1');
+    await expectAttachedGeometry(restored, 0.55);
+    await choosePreset(restored, 'Stacked');
+    await expectAttachedGeometry(restored, 0.55);
+    await choosePreset(restored, 'Third only');
+    await expect(inPreset(restored, 2)).not.toBeChecked();
+    await expect(shot(restored, 2).and(page.locator('[aria-hidden="false"]'))).toHaveCount(0);
+    await restored.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeLiveLayoutCatalogue(page);
+
+    const template = bridge.runtime.templateList(1).find(({ name }) => name === 'Linked inset');
+    const frames = template?.controlLiveLayout?.frames;
+    const baseId = frames?.[0]?.id;
+    const overlayId = frames?.[1]?.id;
+    if (template === undefined || baseId === undefined || overlayId === undefined)
+      throw new Error('The linked layout or its plates did not save.');
+    const loaded = await page.evaluate(
+      (templateId) =>
+        window.cg.fixedLayers.load({
+          channel: 1,
+          templateId,
+          layer: 59,
+          itemId: 'linked-inset',
+          fields: {},
+        }),
+      template.templateId,
+    );
+    expect(loaded).toMatchObject({ accepted: true });
+    await page
+      .locator('[data-layer="59"]')
+      .getByRole('button', { name: /^ON PVW/ })
+      .click();
+    const showMonitors = page.getByRole('button', { name: 'Show monitors' });
+    if (await showMonitors.isVisible()) await showMonitors.click();
+    const preview = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+    await preview.getByRole('button', { name: 'PLAY', exact: true }).click();
+    const basePlate = preview.locator(`[data-live-plate="${baseId}"]`);
+    const overlayPlate = preview.locator(`[data-live-plate="${overlayId}"]`);
+    await expect(basePlate).toBeVisible();
+    await expect(overlayPlate).toBeVisible();
+    const baseRect = await rect(basePlate);
+    const overlayRect = await rect(overlayPlate);
+    expect((overlayRect.x - baseRect.x) / baseRect.width).toBeCloseTo(0.55, 4);
+    expect(overlayRect.width / baseRect.width).toBeCloseTo(0.3, 4);
+  } finally {
+    await bridge?.close();
+    await engine.stop();
+  }
+});
+
 test('per-plate fallback previews survive save and reopen with an independent on-air toggle', async ({
   page,
 }, testInfo) => {

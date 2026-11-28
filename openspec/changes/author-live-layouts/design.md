@@ -67,3 +67,16 @@ legacy attachments unless incompatible masked placements would change a preset's
 The editor mounts the same plate player as PVW. Each instance leases only its own clip on Play
 and paints decoded pixels through the editor's existing shot crop and mask. A pause or reset
 changes the local player clock. Changing the source or closing the editor releases its session.
+
+## Linked overlay plates
+
+Store the base plate ID and a normalized rectangle on the linked plate. The linkage belongs
+to the layout. When the base is part of a preset, its output rectangle supplies the overlay's
+position and size, while the overlaid source and mask keep their own frame IDs. The compiler,
+author preview and preset thumbnails use the same derived rectangles and paint order.
+
+Linking an existing plate keeps its current placement when it lies within the chosen base.
+The plate settings can adjust the relative rectangle. Removing the linkage makes the
+plate independent and preserves its displayed placement in the affected presets.
+Explicit Focus continues to show a single selected plate. Generated looks with overlays
+keep their authored arrangement when the operator views them.

@@ -5523,3 +5523,18 @@ video and audio when it docked, detached, maximized, restored and redocked the s
 panel window. The detached close guard held an independent close request. The prototype used
 one display. The installed-workspace verification also covers playback continuity across detach
 and redock, with two displays when available.
+
+## [~] R-130 — Carry a masked overlay with its base plate across presets ⟨priority: medium — owner, 2026-11-28⟩ — `openspec/changes/author-live-layouts/`
+
+**What:** In New/Edit live layout, link a live plate to another plate. Store its placement
+relative to the base once, with the upper plate's existing independent source and shared mask.
+
+**Acceptance:**
+
+- WHEN a preset includes the base plate THEN the linked plate appears above it and takes no separate arrangement slot.
+- WHEN the base plate is moved or resized in another preset THEN the overlay follows its relative placement and keeps the same mask.
+- WHEN the base plate is omitted from a preset THEN its overlays are omitted automatically.
+- WHEN the layout is saved, reopened or rehearsed THEN the link, source, mask, placement and foreground order agree with Programme.
+- WHEN the operator invokes Focus THEN the existing solo Focus view remains available.
+- WHEN a plate moves or resizes during a preset or Focus transition THEN its mask, border,
+  title and attached artwork travel with it through the transition.

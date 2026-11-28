@@ -125,6 +125,10 @@ const ControlLiveLayoutFrameSchema = z.object({
   id: ControlLiveLayoutFrameIdSchema,
   /** Catalog id chosen by the operator. The logical frame id stays stable across all presets. */
   sourceId: z.string().min(1).max(64).or(PlayoutMediaSourceIdSchema).optional(),
+  /** An independently sourced plate positioned in normalized coordinates over a base frame. */
+  overlay: z
+    .object({ frameId: ControlLiveLayoutFrameIdSchema, rect: LiveRevealRectSchema })
+    .optional(),
   title: z.string().max(120),
   /** A short button caption. An empty caption uses the layout's frame number. */
   focusAlias: z.string().trim().max(CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH).optional(),
@@ -337,7 +341,7 @@ export const ControlLiveLayoutSchema = z
     effects: ControlLiveLayoutEffectsSchema,
   })
   .superRefine((layout, ctx) => {
-    const frameIds = new Set(layout.frames.map(({ id }) => id));
+    const framesById = new Map(layout.frames.map((frame) => [frame.id, frame]));
     const presetIds = new Set(layout.presets.map(({ id }) => id));
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
@@ -358,17 +362,23 @@ export const ControlLiveLayoutSchema = z
       validateFont(style ?? undefined, ['additionalTextStyles', index]),
     );
     layout.frames.forEach((frame, index) => {
+      if (frame.overlay !== undefined) {
+        const base = framesById.get(frame.overlay.frameId);
+        if (base === undefined || base.id === frame.id || base.overlay !== undefined)
+          issue(['frames', index, 'overlay', 'frameId'], 'An overlay must refer to a base plate.');
+      }
       validateFont(frame.titleStyle, ['frames', index, 'titleStyle']);
       frame.additionalTexts?.forEach((entry, textIndex) =>
         validateFont(entry.style, ['frames', index, 'additionalTexts', textIndex, 'style']),
       );
     });
 
-    if (frameIds.size !== layout.frames.length) issue(['frames'], 'Frames must have distinct ids.');
+    if (framesById.size !== layout.frames.length)
+      issue(['frames'], 'Frames must have distinct ids.');
     const sharedAttachments = layout.frameAttachments ?? [];
     if (new Set(sharedAttachments.map(({ id }) => id)).size !== sharedAttachments.length)
       issue(['frameAttachments'], 'Frame attachments must have distinct ids.');
-    if (sharedAttachments.some(({ frameId }) => !frameIds.has(frameId)))
+    if (sharedAttachments.some(({ frameId }) => !framesById.has(frameId)))
       issue(['frameAttachments'], 'Frame attachments must belong to a frame in this layout.');
     if (presetIds.size !== layout.presets.length)
       issue(['presets'], 'Presets must have distinct ids.');
@@ -386,19 +396,25 @@ export const ControlLiveLayoutSchema = z
         if (ids === undefined) continue;
         if (new Set(ids).size !== ids.length)
           issue(['presets', index, key], 'A frame can occur only once in this list.');
-        if (ids.some((id) => !frameIds.has(id)))
+        if (ids.some((id) => !framesById.has(id)))
           issue(['presets', index, key], 'This preset refers to a removed frame.');
       }
-      if (Object.keys(preset.plateOverrides ?? {}).some((id) => !preset.frameIds.includes(id)))
+      if (preset.frameIds.some((id) => framesById.get(id)?.overlay !== undefined))
+        issue(['presets', index, 'frameIds'], 'An overlay inherits its base plate’s presets.');
+      const included = (id: string) => {
+        const frame = framesById.get(id);
+        return frame !== undefined && controlLiveLayoutIsFrameInPreset(frame, preset);
+      };
+      if (Object.keys(preset.plateOverrides ?? {}).some((id) => !included(id)))
         issue(['presets', index, 'plateOverrides'], 'Plate overrides must belong to this preset.');
-      if (Object.keys(preset.customRects ?? {}).some((id) => !frameIds.has(id)))
+      if (Object.keys(preset.customRects ?? {}).some((id) => !framesById.has(id)))
         issue(['presets', index, 'customRects'], 'Custom positions must belong to this layout.');
       if (controlLiveLayoutFocusRect(layout, preset) === undefined)
         issue(['presets', index, 'focusMargins'], 'Focus margins must leave room for a plate.');
       const attachments = preset.frameAttachments ?? [];
       if (new Set(attachments.map(({ id }) => id)).size !== attachments.length)
         issue(['presets', index, 'frameAttachments'], 'Frame attachments must have distinct ids.');
-      if (attachments.some(({ frameId }) => !preset.frameIds.includes(frameId)))
+      if (attachments.some(({ frameId }) => !included(frameId)))
         issue(
           ['presets', index, 'frameAttachments'],
           'Attach a template to a frame in this preset.',
@@ -458,8 +474,9 @@ export function controlLiveLayoutSoloTarget(
   const focus = controlLiveLayoutFocusTarget(layout, lookId);
   if (focus !== undefined) return focus;
   const preset = layout.presets.find(({ id }) => id === lookId);
-  const frameId = preset?.frameIds[0];
-  return preset?.frameIds.length === 1 && frameId !== undefined
+  if (preset === undefined) return undefined;
+  const [frameId, ...otherFrames] = controlLiveLayoutPresetVisibleFrameIds(layout, preset);
+  return frameId !== undefined && otherFrames.length === 0
     ? { presetId: preset.id, frameId }
     : undefined;
 }
@@ -469,10 +486,11 @@ export function controlLiveLayoutTitleHidden(
   preset: ControlLiveLayoutPreset,
   frameId: string,
   focused: boolean,
+  visibleFrameCount: number = preset.frameIds.length,
 ): boolean {
   const hiddenInFocus = preset.hiddenFocusTitles.includes(frameId);
   if (focused) return hiddenInFocus;
-  return preset.hiddenTitles.includes(frameId) || (preset.frameIds.length === 1 && hiddenInFocus);
+  return preset.hiddenTitles.includes(frameId) || (visibleFrameCount === 1 && hiddenInFocus);
 }
 
 /** Each named preset and its Focus destinations can hide the shared border independently. */
@@ -503,6 +521,10 @@ export function controlLiveLayoutDecorationOpacity(
   const from = layout.presets.find(({ id }) => id === (fromFocus?.presetId ?? fromLookId));
   const to = layout.presets.find(({ id }) => id === (toFocus?.presetId ?? toLookId));
   if (!from || !to) return [];
+  const fromFrames = fromFocus
+    ? [fromFocus.frameId]
+    : controlLiveLayoutPresetVisibleFrameIds(layout, from);
+  const toFrames = toFocus ? [toFocus.frameId] : controlLiveLayoutPresetVisibleFrameIds(layout, to);
   const segment = (wasHidden: boolean, isHidden: boolean) =>
     wasHidden === isHidden
       ? undefined
@@ -511,18 +533,14 @@ export function controlLiveLayoutDecorationOpacity(
           toOpacity: wasHidden ? endFraction : 1 - endFraction,
         };
   return plateIds.flatMap((plateId) => {
-    if (
-      !(fromFocus ? fromFocus.frameId === plateId : from.frameIds.includes(plateId)) ||
-      !(toFocus ? toFocus.frameId === plateId : to.frameIds.includes(plateId))
-    )
-      return [];
+    if (!fromFrames.includes(plateId) || !toFrames.includes(plateId)) return [];
     const border = segment(
       controlLiveLayoutBorderHidden(from, plateId, fromFocus !== undefined),
       controlLiveLayoutBorderHidden(to, plateId, toFocus !== undefined),
     );
     const title = segment(
-      controlLiveLayoutTitleHidden(from, plateId, fromFocus !== undefined),
-      controlLiveLayoutTitleHidden(to, plateId, toFocus !== undefined),
+      controlLiveLayoutTitleHidden(from, plateId, fromFocus !== undefined, fromFrames.length),
+      controlLiveLayoutTitleHidden(to, plateId, toFocus !== undefined, toFrames.length),
     );
     return border || title ? [{ plateId, ...(border && { border }), ...(title && { title }) }] : [];
   });
@@ -535,6 +553,32 @@ export function controlLiveLayoutPresetFrameIds({
 }: Pick<ControlLiveLayoutPreset, 'frameIds' | 'reverse'>): string[] {
   const ids = [...frameIds];
   return reverse ? ids.reverse() : ids;
+}
+
+/** An attached plate inherits its base plate's preset membership. */
+export function controlLiveLayoutIsFrameInPreset(
+  { id, overlay }: Pick<ControlLiveLayoutFrame, 'id' | 'overlay'>,
+  preset: Pick<ControlLiveLayoutPreset, 'frameIds'>,
+): boolean {
+  return preset.frameIds.includes(overlay?.frameId ?? id);
+}
+
+function overlaysOf(
+  frames: readonly ControlLiveLayoutFrame[],
+  baseId: string,
+): ControlLiveLayoutFrame[] {
+  return frames.filter(({ overlay }) => overlay?.frameId === baseId);
+}
+
+/** The preset's base plate order with each attached plate listed next to its base. */
+export function controlLiveLayoutPresetVisibleFrameIds(
+  { frames }: Pick<ControlLiveLayout, 'frames'>,
+  preset: Pick<ControlLiveLayoutPreset, 'frameIds' | 'reverse'>,
+): string[] {
+  return controlLiveLayoutPresetFrameIds(preset).flatMap((id) => [
+    id,
+    ...overlaysOf(frames, id).map((frame) => frame.id),
+  ]);
 }
 
 /** Swap the requested frame into a zero-based on-screen seat, keeping Reverse unchanged. */
@@ -560,6 +604,36 @@ export function controlLiveLayoutFocusRect(
   return liveSourceLayoutBounds(
     resolution,
     liveSourceLayoutMargins(resolution, preset.focusMargins, 0),
+  );
+}
+
+/** Expand preset membership with attached plates after placing the base plates. */
+export function controlLiveLayoutWithOverlays(
+  { frames }: Pick<ControlLiveLayout, 'frames'>,
+  baseRects: Readonly<Record<string, LiveSourceRect>>,
+): Record<string, LiveSourceRect> {
+  const rects = Object.assign(Object.create(null) as Record<string, LiveSourceRect>, baseRects);
+  for (const { id, overlay } of frames) {
+    if (overlay === undefined) continue;
+    const base = baseRects[overlay.frameId];
+    if (base === undefined) continue;
+    const { x, y, width, height } = overlay.rect;
+    rects[id] = {
+      x: base.x + x * base.width,
+      y: base.y + y * base.height,
+      width: width * base.width,
+      height: height * base.height,
+    };
+  }
+  return rects;
+}
+
+/** Keep each attached plate above its base for both browser and native paint order. */
+export function controlLiveLayoutPaintFrames({
+  frames,
+}: Pick<ControlLiveLayout, 'frames'>): ControlLiveLayoutFrame[] {
+  return frames.flatMap((base) =>
+    base.overlay !== undefined ? [] : [base, ...overlaysOf(frames, base.id)],
   );
 }
 

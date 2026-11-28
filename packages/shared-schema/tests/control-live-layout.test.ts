@@ -10,12 +10,18 @@ import {
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusRect,
   controlLiveLayoutFrameAttachments,
+  controlLiveLayoutIsFrameInPreset,
   controlLiveLayoutMovePresetFrame,
+  controlLiveLayoutPaintFrames,
   controlLiveLayoutPlateAspect,
   controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
+  controlLiveLayoutPresetVisibleFrameIds,
   controlLiveLayoutRects,
+  controlLiveLayoutSoloTarget,
+  controlLiveLayoutWithOverlays,
+  type ControlLiveLayout,
   type ControlLiveLayoutArrangement,
   type ControlLiveLayoutFrameAttachment,
   type ControlLiveLayoutPreset,
@@ -335,6 +341,169 @@ describe('live layout margins and custom placement', () => {
             customRects: { removed: custom.customRects?.['host'] },
           },
         ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('authored plate overlays', () => {
+  const rect = { x: 0.5, y: 0, width: 0.5, height: 0.25 };
+  const overlay = {
+    id: 'upper',
+    title: 'Upper camera',
+    sourceId: 'upper-camera',
+    overlay: { frameId: 'host', rect },
+    liveMask: { mode: 'inside' as const, rects: [{ ...rect, x: 0 }] },
+  };
+  const panel: ControlLiveLayoutPreset = {
+    ...preset,
+    frameIds: ['host', 'guest-a'],
+    arrangement: 'custom',
+    customRects: { host: { x: 0.125, y: 0.25, width: 0.5, height: 0.5 } },
+  };
+  const hostOnly = {
+    ...preset,
+    id: 'host-only',
+    frameIds: ['host'],
+  };
+  const guestOnly = {
+    ...preset,
+    id: 'guest-only',
+    frameIds: ['guest-a'],
+  };
+  const layout: ControlLiveLayout = {
+    id: 'layout-overlays',
+    name: 'Overlay layout',
+    resolution,
+    frameRate: 25,
+    frames: [
+      overlay,
+      { id: 'host', title: 'Presenter', sourceId: 'host-camera' },
+      { id: 'guest-a', title: 'Guest' },
+      { id: 'upper-2', title: 'Second upper camera', overlay: { frameId: 'host', rect } },
+    ],
+    presets: [panel, hostOnly, guestOnly],
+    defaultPresetId: panel.id,
+    background: { kind: 'none' },
+    effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  };
+
+  it('retains the independent source and mask and scales the same overlay placement across presets', () => {
+    const saved = ControlLiveLayoutSchema.parse(JSON.parse(JSON.stringify(layout)));
+    expect(saved.frames[0]).toEqual(overlay);
+    const render = (candidate: ControlLiveLayoutPreset) => {
+      const baseRects = controlLiveLayoutRects(saved, candidate);
+      const rects = controlLiveLayoutWithOverlays(saved, baseRects);
+      expect(Object.keys(baseRects)).toEqual(candidate.frameIds);
+      return rects;
+    };
+    expect(render(panel)['upper']).toEqual({ x: 720, y: 270, width: 480, height: 135 });
+    expect(render(hostOnly)['upper']).toEqual({ x: 960, y: 0, width: 960, height: 270 });
+    expect(render(guestOnly)).toEqual({ 'guest-a': { x: 0, y: 0, ...resolution } });
+    expect(controlLiveLayoutIsFrameInPreset(overlay, hostOnly)).toBe(true);
+    expect(controlLiveLayoutIsFrameInPreset(overlay, guestOnly)).toBe(false);
+    expect(controlLiveLayoutPresetVisibleFrameIds(saved, { ...panel, reverse: true })).toEqual([
+      'guest-a',
+      'host',
+      'upper',
+      'upper-2',
+    ]);
+    expect(controlLiveLayoutPaintFrames(saved).map(({ id }) => id)).toEqual([
+      'host',
+      'upper',
+      'upper-2',
+      'guest-a',
+    ]);
+  });
+
+  it('keeps explicit Focus solo and recognizes the extra picture in a linked single-base preset', () => {
+    expect(controlLiveLayoutSoloTarget(layout, hostOnly.id)).toBeUndefined();
+    expect(controlLiveLayoutSoloTarget(layout, guestOnly.id)).toEqual({
+      presetId: guestOnly.id,
+      frameId: 'guest-a',
+    });
+    for (const frameId of ['host', 'upper'])
+      expect(
+        controlLiveLayoutSoloTarget(layout, controlLiveLayoutFocusLookId(hostOnly.id, frameId)),
+      ).toEqual({ presetId: hostOnly.id, frameId });
+  });
+
+  it('uses normal preset decoration visibility for both plates of a linked pair', () => {
+    const narrowed = {
+      ...hostOnly,
+      hiddenTitles: ['upper'],
+      hiddenFocusTitles: ['host'],
+      hiddenBorders: ['upper'],
+    };
+    const saved = ControlLiveLayoutSchema.parse({
+      ...layout,
+      presets: [panel, narrowed, guestOnly],
+    });
+    expect(
+      controlLiveLayoutDecorationOpacity(saved, panel.id, narrowed.id, ['host', 'upper']),
+    ).toEqual([
+      {
+        plateId: 'upper',
+        border: { fromOpacity: 1, toOpacity: 0 },
+        title: { fromOpacity: 1, toOpacity: 0 },
+      },
+    ]);
+  });
+
+  it('keeps preset-specific fit and graphics whenever the overlay inherits membership', () => {
+    const settings = {
+      plateOverrides: { upper: { fitMode: 'contain' } },
+      frameAttachments: [
+        { id: 'art', frameId: 'upper', sourceId: '0'.repeat(64), name: 'Art', rect },
+      ],
+    };
+    expect(
+      ControlLiveLayoutSchema.safeParse({
+        ...layout,
+        presets: [panel, { ...hostOnly, ...settings }, guestOnly],
+      }).success,
+    ).toBe(true);
+    const result = ControlLiveLayoutSchema.safeParse({
+      ...layout,
+      presets: [panel, hostOnly, { ...guestOnly, ...settings }],
+    });
+    if (result.success) throw new Error('Preset accepted styling for an absent overlay');
+    expect(result.error.issues.map(({ path }) => path)).toEqual([
+      ['presets', 2, 'plateOverrides'],
+      ['presets', 2, 'frameAttachments'],
+    ]);
+  });
+
+  it.each(['upper', 'removed-frame', 'upper-2'])(
+    'refuses overlay links to %s instead of a base plate',
+    (frameId) => {
+      const result = ControlLiveLayoutSchema.safeParse({
+        ...layout,
+        frames: [{ ...overlay, overlay: { frameId, rect } }, ...layout.frames.slice(1)],
+      });
+      if (result.success) throw new Error('Invalid overlay was accepted');
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: ['frames', 0, 'overlay', 'frameId'] }),
+        ]),
+      );
+    },
+  );
+
+  it('refuses overlay placement outside its base and explicit preset membership', () => {
+    expect(
+      ControlLiveLayoutSchema.safeParse({
+        ...layout,
+        frames: [
+          { ...overlay, overlay: { frameId: 'host', rect: { ...rect, width: 0.51 } } },
+          ...layout.frames.slice(1),
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      ControlLiveLayoutSchema.safeParse({
+        ...layout,
+        presets: [{ ...panel, frameIds: [...panel.frameIds, 'upper'] }],
       }).success,
     ).toBe(false);
   });

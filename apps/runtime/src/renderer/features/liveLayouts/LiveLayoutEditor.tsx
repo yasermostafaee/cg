@@ -26,11 +26,13 @@ import {
   controlLiveLayoutFontFamily,
   controlLiveLayoutFocusRect,
   controlLiveLayoutFrameAttachments,
+  controlLiveLayoutIsFrameInPreset,
   controlLiveLayoutMovePresetFrame,
   controlLiveLayoutPlateCropFocus,
   controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
+  controlLiveLayoutWithOverlays,
   sameLiveMaskRect,
   type ControlLiveLayout,
   type ControlLiveLayoutBackground,
@@ -53,6 +55,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { useModalForeground } from '../../ui/modalForeground.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { SelectInput } from '../../ui/SelectInput.js';
 import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { uuid } from '../../lib/uuid.js';
@@ -77,6 +80,7 @@ import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
 import { LiveLayoutEditorFrameAttachments } from './LiveLayoutEditorFrameAttachments.js';
 import { LiveLayoutEditorFrameOptions } from './LiveLayoutEditorFrameOptions.js';
+import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import {
   promoteFrameAttachments,
   readControlLiveLayoutFrameAttachment,
@@ -186,6 +190,26 @@ function normalizePlacement(rect: LiveSourceRect, resolution: Resolution): LiveR
     width: Math.min(1 - x, rect.width / resolution.width),
     height: Math.min(1 - y, rect.height / resolution.height),
   };
+}
+
+const DEFAULT_OVERLAY_RECT = { x: 0.6, y: 0.05, width: 0.35, height: 0.35 };
+
+function relativeOverlayRect(
+  upper: LiveSourceRect | undefined,
+  base: LiveSourceRect | undefined,
+): LiveRevealRect {
+  if (upper === undefined || base === undefined) return DEFAULT_OVERLAY_RECT;
+  const x = upper.x - base.x;
+  const y = upper.y - base.y;
+  const tolerance = 0.001;
+  if (
+    x < -tolerance ||
+    y < -tolerance ||
+    x + upper.width > base.width + tolerance ||
+    y + upper.height > base.height + tolerance
+  )
+    return DEFAULT_OVERLAY_RECT;
+  return normalizePlacement({ ...upper, x: Math.max(0, x), y: Math.max(0, y) }, base);
 }
 
 function forgetPlacement(
@@ -344,10 +368,22 @@ export function LiveLayoutEditor({
   const preset = layout.presets.find(({ id }) => id === presetId) ?? layout.presets[0];
   const frame = layout.frames.find(({ id }) => id === frameId) ?? layout.frames[0];
   const frameNumber = frame === undefined ? 0 : layout.frames.indexOf(frame) + 1;
+  const overlay = frame?.overlay;
   const presetFrameIds = preset === undefined ? [] : controlLiveLayoutPresetFrameIds(preset);
   const framePosition = frame === undefined ? -1 : presetFrameIds.indexOf(frame.id);
   const geometry: ReturnType<typeof controlLiveLayoutRects> =
     preset === undefined ? {} : controlLiveLayoutRects(layout, preset);
+  const paintedGeometry = controlLiveLayoutWithOverlays(layout, geometry);
+  const hasOverlays =
+    frame !== undefined && layout.frames.some(({ overlay }) => overlay?.frameId === frame.id);
+  const baseOptions = layout.frames.filter(
+    (candidate) => candidate.id !== frame?.id && candidate.overlay === undefined,
+  );
+  const soleGridFrame =
+    frame !== undefined &&
+    layout.presets.some(
+      (candidate) => candidate.frameIds.length === 1 && candidate.frameIds[0] === frame.id,
+    );
   const selectedPlateRect = frame === undefined ? undefined : geometry[frame.id];
   const customPlacement = preset?.arrangement === 'custom';
   const editingPlacement = customPlacement && placementEditing && focusId === undefined && !busy;
@@ -366,13 +402,13 @@ export function LiveLayoutEditor({
   });
   const frameShown =
     frame !== undefined &&
-    (focusId === undefined ? geometry[frame.id] !== undefined : focusId === frame.id);
+    (focusId === undefined ? paintedGeometry[frame.id] !== undefined : focusId === frame.id);
   const frameAttachments =
     frame === undefined ? [] : controlLiveLayoutFrameAttachments(layout, preset, frame.id);
   function canCropPlate(candidate: ControlLiveLayoutFrame): boolean {
     return (
       preset !== undefined &&
-      preset.frameIds.includes(candidate.id) &&
+      controlLiveLayoutIsFrameInPreset(candidate, preset) &&
       controlLiveLayoutPlateFit(preset, candidate) === 'cover' &&
       candidate.liveMask === undefined &&
       !controlLiveLayoutFrameAttachments(layout, preset, candidate.id).some(
@@ -474,7 +510,12 @@ export function LiveLayoutEditor({
   }
 
   function updatePlateOverride(patch: ControlLiveLayoutPlateOverride): void {
-    if (preset === undefined || frame === undefined || !preset.frameIds.includes(frame.id)) return;
+    if (
+      preset === undefined ||
+      frame === undefined ||
+      !controlLiveLayoutIsFrameInPreset(frame, preset)
+    )
+      return;
     const selection = { ...preset.plateOverrides?.[frame.id], ...patch };
     const changes =
       selection.aspectRatio === undefined &&
@@ -517,14 +558,14 @@ export function LiveLayoutEditor({
     setPlacementEditing(next.arrangement === 'custom');
     setAttachmentEditing(false);
     setPresetId(next.id);
-    if (frameId === undefined || !next.frameIds.includes(frameId))
+    if (frame === undefined || !controlLiveLayoutIsFrameInPreset(frame, next))
       setFrameId(controlLiveLayoutPresetFrameIds(next)[0]);
   }
 
   function appendPreset(): void {
     const next: ControlLiveLayoutPreset = {
       ...(preset ?? {
-        frameIds: layout.frames.map(({ id }) => id),
+        frameIds: layout.frames.flatMap(({ id, overlay }) => (overlay === undefined ? [id] : [])),
         arrangement: 'side-by-side',
         horizontalGap: initial.presets[0]?.horizontalGap ?? 0,
         verticalGap: initial.presets[0]?.verticalGap ?? 0,
@@ -594,9 +635,12 @@ export function LiveLayoutEditor({
   }
 
   function deleteFrame(): void {
-    if (frame === undefined || (mode !== 'create' && layout.frames.length <= 1)) return;
+    if (frame === undefined || hasOverlays || (mode !== 'create' && layout.frames.length <= 1))
+      return;
     const frames = layout.frames.filter(({ id }) => id !== frame.id);
     const next = frames[Math.min(layout.frames.indexOf(frame), frames.length - 1)];
+    const nextGridFrame =
+      next?.overlay === undefined ? next : frames.find(({ overlay }) => overlay === undefined);
     if (fallbackRead.current?.id === frame.id) {
       fallbackRead.current = undefined;
       setReadingFallback(false);
@@ -614,7 +658,9 @@ export function LiveLayoutEditor({
       presets: current.presets.map((candidate) => {
         const remaining = candidate.frameIds.filter((id) => id !== frame.id);
         const frameIds =
-          remaining.length === 0 && next !== undefined && mode !== 'create' ? [next.id] : remaining;
+          remaining.length === 0 && nextGridFrame !== undefined && mode !== 'create'
+            ? [nextGridFrame.id]
+            : remaining;
         return {
           ...arrangeMembership(
             { ...candidate, ...forgetPlacement(candidate, frame.id) },
@@ -647,14 +693,83 @@ export function LiveLayoutEditor({
     const frameIds = included
       ? [...preset.frameIds, id]
       : preset.frameIds.filter((value) => value !== id);
+    const leaving = new Set([
+      id,
+      ...layout.frames.flatMap((frame) => (frame.overlay?.frameId === id ? [frame.id] : [])),
+    ]);
+    const overrides = Object.fromEntries(
+      Object.entries(preset.plateOverrides ?? {}).filter(([id]) => !leaving.has(id)),
+    );
     rebuildArrangement({
       ...arrangeMembership(preset, frameIds, layout.resolution),
-      ...(!included && omitPlateOverride(preset, id)),
+      ...(!included && {
+        plateOverrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+      }),
       ...(!included &&
         preset.frameAttachments !== undefined && {
-          frameAttachments: preset.frameAttachments.filter(({ frameId }) => frameId !== id),
+          frameAttachments: preset.frameAttachments.filter(({ frameId }) => !leaving.has(frameId)),
         }),
     });
+  }
+
+  function setOverlayBase(baseId: string): void {
+    if (frame === undefined) return;
+    const priorBase = frame.overlay?.frameId;
+    if (baseId === '' && priorBase === undefined) return;
+    if (
+      baseId !== '' &&
+      (hasOverlays || soleGridFrame || !baseOptions.some(({ id }) => id === baseId))
+    )
+      return;
+    const rect = relativeOverlayRect(paintedGeometry[frame.id], geometry[baseId]);
+    setLayout((current) => ({
+      ...current,
+      frames: current.frames.map((candidate) =>
+        candidate.id === frame.id
+          ? { ...candidate, overlay: baseId === '' ? undefined : { frameId: baseId, rect } }
+          : candidate,
+      ),
+      presets: current.presets.map((candidate) => {
+        if (baseId === '') {
+          if (priorBase === undefined || !candidate.frameIds.includes(priorBase)) return candidate;
+          const positions = controlLiveLayoutWithOverlays(
+            current,
+            controlLiveLayoutRects(current, candidate),
+          );
+          const frameIds = [...candidate.frameIds, frame.id];
+          const customRects = Object.fromEntries(
+            frameIds.flatMap((id) => {
+              const position = positions[id];
+              return position === undefined
+                ? []
+                : [[id, normalizePlacement(position, current.resolution)]];
+            }),
+          );
+          return Object.keys(customRects).length === frameIds.length
+            ? { ...candidate, frameIds, arrangement: 'custom', customRects }
+            : arrangeMembership(candidate, frameIds, current.resolution);
+        }
+        const next = candidate.frameIds.includes(frame.id)
+          ? arrangeMembership(
+              { ...candidate, ...forgetPlacement(candidate, frame.id) },
+              candidate.frameIds.filter((id) => id !== frame.id),
+              current.resolution,
+            )
+          : candidate;
+        if (candidate.frameIds.includes(baseId)) return next;
+        return {
+          ...next,
+          ...omitPlateOverride(candidate, frame.id),
+          ...(candidate.frameAttachments !== undefined && {
+            frameAttachments: candidate.frameAttachments.filter(
+              ({ frameId }) => frameId !== frame.id,
+            ),
+          }),
+        };
+      }),
+    }));
+    setFocusId(undefined);
+    setPlacementEditing(false);
   }
 
   function changeAttachments(
@@ -1121,7 +1236,7 @@ export function LiveLayoutEditor({
               channel={channel}
               layout={layout}
               preset={preset}
-              geometry={geometry}
+              geometry={paintedGeometry}
               selectedFrameId={frame.id}
               focused={focusId}
               backgroundUrl={assetUrl}
@@ -1361,7 +1476,18 @@ export function LiveLayoutEditor({
                         candidate.title.trim() ||
                         localizeUi('Plate {number}', { number: index + 1 });
                       const position = presetFrameIds.indexOf(candidate.id) + 1;
-                      const included = position > 0;
+                      const included =
+                        preset !== undefined && controlLiveLayoutIsFrameInPreset(candidate, preset);
+                      const baseNumber =
+                        layout.frames.findIndex(({ id }) => id === candidate.overlay?.frameId) + 1;
+                      const positionNote =
+                        baseNumber > 0
+                          ? localizeUi('Overlay on {plate}', {
+                              plate: localizeUi('Plate {number}', { number: baseNumber }),
+                            })
+                          : position > 0
+                            ? localizeUi('Pos {number}', { number: position })
+                            : undefined;
                       const positionId = `${fieldsId}-position-${String(index + 1)}`;
                       const picture = sourceFrames.get(candidate.sourceId ?? '')?.jpegBase64;
                       const source = labelledSource(candidate.sourceId);
@@ -1373,7 +1499,7 @@ export function LiveLayoutEditor({
                       );
                       const presenceId = `${positionId}-source-presence`;
                       const frameDescription = [
-                        included ? positionId : undefined,
+                        positionNote === undefined ? undefined : positionId,
                         presenceDescription === undefined ? undefined : presenceId,
                       ]
                         .filter(Boolean)
@@ -1382,7 +1508,7 @@ export function LiveLayoutEditor({
                         <div
                           className="cg-live-layout-frame-row"
                           key={candidate.id}
-                          data-preset-position={included ? position : undefined}
+                          data-preset-position={position > 0 ? position : undefined}
                         >
                           <Button
                             className="cg-live-layout-frame-choice"
@@ -1425,15 +1551,19 @@ export function LiveLayoutEditor({
                                 </span>
                               )}
                             </span>
-                            {included && (
+                            {positionNote !== undefined && (
                               <span
                                 className="cg-live-layout-frame-position-marker"
                                 id={positionId}
-                                title={localizeUi('Position {number} in this preset', {
-                                  number: position,
-                                })}
+                                title={
+                                  baseNumber > 0
+                                    ? positionNote
+                                    : localizeUi('Position {number} in this preset', {
+                                        number: position,
+                                      })
+                                }
                               >
-                                {localizeUi('Pos {number}', { number: position })}
+                                {positionNote}
                               </span>
                             )}
                             <span className="cg-live-layout-selection-mark" aria-hidden="true">
@@ -1444,7 +1574,8 @@ export function LiveLayoutEditor({
                             <Checkbox
                               checked={included}
                               disabled={
-                                mode !== 'create' && included && preset.frameIds.length <= 1
+                                candidate.overlay !== undefined ||
+                                (mode !== 'create' && included && preset.frameIds.length <= 1)
                               }
                               onChange={(next) => includeFrame(candidate.id, next)}
                               aria-label={localizeUi('Plate {number} in preset', {
@@ -1464,12 +1595,91 @@ export function LiveLayoutEditor({
                       <Button
                         className="cg-live-layout-delete"
                         variant="danger"
-                        disabled={mode !== 'create' && layout.frames.length <= 1}
+                        disabled={hasOverlays || (mode !== 'create' && layout.frames.length <= 1)}
+                        title={
+                          hasOverlays
+                            ? localizeUi('Detach overlay plates before deleting this plate.')
+                            : undefined
+                        }
                         onClick={deleteFrame}
                       >
                         <Icon icon={Trash2} size={15} /> {localizeUi('Delete plate')}
                       </Button>
                     </div>
+                    {(baseOptions.length > 0 || frame.overlay !== undefined) && (
+                      <label className="cg-form-field cg-form-field--inline cg-live-layout-frame-field">
+                        {localizeUi('Overlay on')}
+                        <SelectInput
+                          value={frame.overlay?.frameId ?? ''}
+                          disabled={hasOverlays || soleGridFrame}
+                          title={
+                            soleGridFrame
+                              ? localizeUi('This plate is the only independent plate in a preset.')
+                              : undefined
+                          }
+                          onChange={(event) => setOverlayBase(event.currentTarget.value)}
+                        >
+                          <option value="">{localizeUi('None')}</option>
+                          {baseOptions.map((candidate) => (
+                            <option value={candidate.id} key={candidate.id}>
+                              {candidate.title.trim() ||
+                                localizeUi('Plate {number}', {
+                                  number: layout.frames.indexOf(candidate) + 1,
+                                })}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </label>
+                    )}
+                    {overlay !== undefined && (
+                      <fieldset className="cg-live-layout-overlay-position">
+                        <legend>{localizeUi('Overlay position (%)')}</legend>
+                        {(['x', 'y', 'width', 'height'] as const).map((key) => {
+                          const value = overlay.rect[key];
+                          const companion = {
+                            x: 'width',
+                            y: 'height',
+                            width: 'x',
+                            height: 'y',
+                          } as const;
+                          const label = {
+                            x: 'X',
+                            y: 'Y',
+                            width: 'Width',
+                            height: 'Height',
+                          } as const;
+                          return (
+                            <LiveLayoutEditorNumber
+                              key={frame.id + ':' + key}
+                              label={
+                                key === 'x' || key === 'y' ? label[key] : localizeUi(label[key])
+                              }
+                              value={Math.round(value * 10_000) / 100}
+                              min={key === 'width' || key === 'height' ? 0.01 : 0}
+                              max={
+                                Math.floor((1 - overlay.rect[companion[key]]) * 10_000 + 1e-8) / 100
+                              }
+                              decimal
+                              onChange={(value) =>
+                                updateFrame((candidate) => {
+                                  if (candidate.overlay === undefined) return candidate;
+                                  const rect = LiveRevealRectSchema.safeParse({
+                                    ...candidate.overlay.rect,
+                                    [key]: value / 100,
+                                  });
+                                  return rect.success
+                                    ? {
+                                        ...candidate,
+                                        overlay: { ...candidate.overlay, rect: rect.data },
+                                      }
+                                    : candidate;
+                                })
+                              }
+                            />
+                          );
+                        })}
+                      </fieldset>
+                    )}
                     <div className="cg-form-field cg-form-field--inline cg-live-layout-frame-field">
                       <label htmlFor={`${fieldsId}-input`}>{localizeUi('Input')}</label>
                       <SourcePicker
@@ -1632,7 +1842,7 @@ export function LiveLayoutEditor({
                         onPick: (file) => void pickFallback(file),
                       }}
                       presetOverrides={
-                        preset === undefined || !preset.frameIds.includes(frame.id)
+                        preset === undefined || !controlLiveLayoutIsFrameInPreset(frame, preset)
                           ? undefined
                           : {
                               id: preset.id,
@@ -1641,7 +1851,8 @@ export function LiveLayoutEditor({
                                 preset.plateAspectRatio ??
                                 layout.resolution.width / layout.resolution.height,
                               inheritedFit: preset.plateFitMode ?? frame.fitMode,
-                              geometryControls: !customPlacement && preset.fill !== true,
+                              geometryControls:
+                                overlay === undefined && !customPlacement && preset.fill !== true,
                               onChange: updatePlateOverride,
                             }
                       }
@@ -1651,7 +1862,7 @@ export function LiveLayoutEditor({
                           : {
                               showInPreset: !controlLiveLayoutBorderHidden(preset, frame.id, false),
                               showInFocus: !controlLiveLayoutBorderHidden(preset, frame.id, true),
-                              belongsToPreset: framePosition >= 0,
+                              belongsToPreset: controlLiveLayoutIsFrameInPreset(frame, preset),
                               onPresetChange: (show) =>
                                 updatePreset({
                                   hiddenBorders: setVisibility(

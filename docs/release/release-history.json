@@ -327,6 +327,11 @@
           "fa": "در PVW، صدای هر ورودی قابل شنیدن از روی قاب کنترل می‌شود و آیکون قاب با کنترل صدای نوار PVW هماهنگ است. کلیپ‌ها در ابتدا متوقف و بی‌صدا هستند و هر قاب Play/Pause جداگانه دارد.",
           "en": "In PVW, playable input audio can be controlled from its frame and the toolbar reflects the same listening state. Clips start paused and muted, with independent Play/Pause controls on their own frames.",
           "ar": "يمكن التحكم في سماع صوت كل مصدر يدعم التشغيل من إطاره في PVW، ويعكس شريط PVW حالة الاستماع. تبدأ المقاطع متوقفة مؤقتًا ومكتومة الصوت، ولكل إطار زر تشغيل وإيقاف مؤقت مستقل."
+        },
+        {
+          "fa": "در ویرایش چیدمان زنده، «نمایش روی قاب» یک قاب و ماسکش را به قاب زیرین پیوند می‌دهد. هر پریستِ دارای قاب زیرین، همان موقعیت و اندازهٔ نسبی را به کار می‌برد.",
+          "en": "In the live layout editor, Overlay on links a plate and its mask to a base plate. Every preset containing the base uses the same relative position and size.",
+          "ar": "في محرر الترتيب الحي، يربط خيار «وضع فوق إطار» الإطار وقناعه بإطار أساسي. يستخدم كل إعداد مسبق يتضمن الإطار الأساسي الموضع والحجم النسبيَّين نفسهما."
         }
       ],
       "fixes": [
